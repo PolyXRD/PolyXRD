@@ -4,7 +4,7 @@
   <p>
     <b>多晶 X 射线衍射 (XRD) 图谱综合分析套件</b>
     <br />
-    峰检测 &nbsp;·&nbsp; 多物相定性检索 &nbsp;·&nbsp; 晶胞精修 (Le Bail) &nbsp;·&nbsp; 全谱拟合 &nbsp;·&nbsp; COD 无机物库接入
+    峰检测 &nbsp;·&nbsp; 多物相定性检索 &nbsp;·&nbsp; Rietveld 结构精修 &nbsp;·&nbsp; Le Bail 晶胞精修 &nbsp;·&nbsp; 全谱拟合 &nbsp;·&nbsp; COD 无机物库接入
   </p>
   <p>
     <a href="https://github.com/PolyXRD/PolyXRD/releases/tag/v0.8.21"><img src="https://img.shields.io/badge/Release-v0.8.21-blue?style=flat-square" /></a>
@@ -23,7 +23,7 @@
 
 ## 📖 项目说明
 
-**PolyXRD** 是一个面向材料学 / 化学 / 晶体学研究者的 **多晶 X 射线衍射 (XRD) 图谱综合分析桌面软件**。它把"**加载原始 XRD 数据 → 预处理 → 峰检测 → 多物相定性检索 → 晶胞精修 → 全谱拟合 → 出报告**"整条工作流集成在一个统一的、带 **中文/英文/日文** 三语言界面的 PySide6 (Qt6) 桌面应用里。
+**PolyXRD** 是一个面向材料学 / 化学 / 晶体学研究者的 **多晶 X 射线衍射 (XRD) 图谱综合分析桌面软件**。它把"**加载原始 XRD 数据 → 预处理 → 峰检测 → 多物相定性检索 → Rietveld 结构精修 → 晶胞精修 → 全谱拟合 → 出报告**"整条工作流集成在一个统一的、带 **中文/英文/日文** 三语言界面的 PySide6 (Qt6) 桌面应用里。
 
 核心设计哲学：
 - **无需 Python 环境** — 一键安装包 (`PolyXRD-Setup-v0.8.21.exe`) 内置完整 Python 3.10 + PySide6 + pymatgen + scipy，目标机器开箱即用。
@@ -51,7 +51,8 @@
 - 多物相联合拟合：生成计算谱 → 与实验谱最小二乘 → 各相 **质量分数 (%)**
 
 ### ③ 晶相与晶体学
-- **Le Bail 晶胞参数精修**：固定物相 → 精修 a/b/c/α/β/γ
+- **Rietveld 结构精修**：基于 COD 数据库 CIF 文件（原子占位 / 空间群 / 晶胞参数），支持 GSAS-II / powerxrd / 内置引擎，顺序/自动/手动三种精修策略，全谱拟合原子坐标与热参数
+- **Le Bail 晶胞参数精修**：仅精修 a/b/c/α/β/γ，无需原子占位，适用于未知结构的晶胞测定
 - 结构模拟：从空间群/原子占位 → 计算 XRD 图谱 (Lorentz-Polarization 校正 + B 因子)
 - hkl 指标化 (d→hkl)，230 种空间群标准化 (spglib)
 
@@ -82,23 +83,43 @@ PolyXRD/
 │   ├── appstate.py             # 全局状态 (当前项目/图谱)
 │   ├── i18n/                   # 多语言翻译 (zh_CN / en_US / ja_JP)
 │   ├── resources/              # 图标 / 周期表数据 / 样式表
-│   ├── models/                 # 数据模型: XRD 图谱、物相、峰、项目文件
+│   ├── models/                 # 数据模型
+│   │   ├── xrd_data.py           # XRD 图谱数据模型
+│   │   ├── phase.py              # 物相模型 (含晶胞参数)
+│   │   ├── peak.py               # 峰模型
+│   │   └── refinement.py         # Rietveld 精修结果模型
+│   ├── viewmodels/             # MVVM 视图模型层
+│   │   ├── main_vm.py            # 主窗口视图模型
+│   │   ├── data_vm.py            # 数据视图模型
+│   │   ├── phase_vm.py           # 物相检索视图模型
+│   │   └── refinement_vm.py      # ★ Rietveld 精修视图模型
+│   ├── utils/                  # 工具函数
+│   │   ├── resources.py          # 资源路径解析
+│   │   ├── formula_parser.py     # 化学式解析
+│   │   ├── math_utils.py         # 数学工具
+│   │   └── validators.py         # 输入校验
 │   ├── services/               # 核心算法服务 (无 UI, 可独立单元测试)
-│   │   ├── data_loader.py          # 多格式 XRD 加载
-│   │   ├── preprocessor.py         # 背景/平滑/归一化/Kα2 剥离
-│   │   ├── peak_detector.py        # 峰检测 & 峰拟合
+│   │   ├── data_loader.py          # 多格式 XRD 加载 (xrdml/raw/txt/csv/prf)
+│   │   ├── data_preprocessor.py    # 背景扣除 / 平滑 / Kα2 剥离
+│   │   ├── peak_finder.py          # 峰检测 (2 阶导数 + 自动阈值)
+│   │   ├── peak_fitter.py          # 峰拟合 (PV/PVII/Split-PV, LMFit)
 │   │   ├── phase_identifier.py     # 多物相检索 + 联合拟合
-│   │   ├── cif_database.py         # COD 无机物库服务 (71,199 物相)
-│   │   ├── le_bail_refiner.py      # Le Bail 晶胞精修
+│   │   ├── cod_searcher.py         # COD 在线检索 + CIF 抓取
+│   │   ├── cif_database.py         # COD 无机物库 SQLite 服务 (71,199 物相)
+│   │   ├── rietveld_refiner.py     # ★ Rietveld 结构精修 (GSAS-II / powerxrd / 内置)
+│   │   ├── refinement_templates.py # Rietveld 精修预设模板管理
 │   │   ├── profile_fitting.py      # 全谱拟合 (PV/PVII)
-│   │   ├── structure_simulator.py  # 计算 XRD 图谱
-│   │   ├── project_service.py      # .polyxrd 读写
-│   │   └── exporter.py             # CSV/PNG/PDF 报告导出
+│   │   ├── structure_simulator.py  # 计算 XRD 图谱 (Lorentz-Polarization + B 因子)
+│   │   ├── project_service.py      # .polyxrd 项目读写
+│   │   └── export_service.py       # CSV/PNG/SVG/PDF 报告导出
 │   └── views/                  # UI 视图层 (PySide6)
 │       ├── main_window.py          # 主窗口 / 菜单 / 工具栏
-│       ├── panels/                 # 可停靠面板: 预处理 / 峰检测 / 物相检索 / 精修
-│       ├── widgets/                # 自定义控件: 周期表 / 元素选择器 / 2θ 画布
-│       └── dialogs/                # 对话框: 导入数据库 / 导出 / 批处理
+│       ├── data_view.py            # 数据视图
+│       ├── phase_view.py           # 物相检索视图
+│       ├── refinement_view.py      # ★ Rietveld 精修视图
+│       ├── refinement_wizard.py    # 精修向导 (逐步引导)
+│       ├── report_view.py          # 报告视图
+│       ├── widgets/                # 自定义控件: 周期表 / 元素选择器 / 画布 / 峰表
 │
 ├── scripts/                    # 交付性构建脚本 (8 个, 不含调试/临时)
 │   ├── build_cod_sqlite.py         # COD CIF → SQLite 数据库构建
@@ -172,7 +193,9 @@ pyinstaller --clean PolyXRD.spec        # → dist/PolyXRD/
 ③ 峰检测: 自动阈值 → 搜索
 ④ 物相检索: 勾 "COD 无机物库" → 必须元素 [Mg, Al, O] → 搜索
    → Top 候选: MgAl₂O₄ Spinel ✅
-⑤ 导出: 文件 → 保存项目 (.polyxrd) 或 导出报告 (CSV/PDF)
+⑤ Rietveld 精修: 选中共存相 → 精修向导 → GSAS-II 引擎 → 顺序策略
+   → 精修完成, RWP ≈ 5.2% ✅
+⑥ 导出: 文件 → 保存项目 (.polyxrd) 或 导出报告 (CSV/PDF)
 ```
 
 ---
@@ -195,7 +218,8 @@ PolyXRD 基于以下高质量开源项目构建，感谢各位维护者及贡献
 | [Matplotlib](https://matplotlib.org/) | 静态 2D 绘图 & 报告图 | PSF-based |
 | [PyQtGraph](https://www.pyqtgraph.org/) | 交互式 XRD 主图 / 残差图 | MIT |
 | [LMFIT](https://lmfit.github.io/lmfit-py/) | 非线性最小二乘 (L-BFGS-B 等) | BSD-3 |
-| [powerxrd](https://github.com/andrewrgarcia/powerxrd/) | XRD 峰形模型辅助 | MIT |
+| [GSAS-II](https://gsas-ii.net/) | ★ Rietveld 结构精修主引擎 (GSASIIscriptable API) | Free for academic/non-commercial |
+| [powerxrd](https://github.com/andrewrgarcia/powerxrd/) | XRD 峰形模型 & 轻量 Rietveld 辅助 | MIT |
 | [platformdirs](https://github.com/platformdirs/platformdirs) | 跨平台用户数据路径 | MIT |
 | [Crystallography Open Database](https://www.crystallography.net/cod/) | 无机物相数据源 (71,199 entries, 独立外挂包) | CC BY / Public Domain 混合 |
 

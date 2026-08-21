@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PolyXRD V0.8.21 PyInstaller spec (onedir mode)."""
+"""PolyXRD V0.8.22 PyInstaller spec (onedir mode)."""
 import os
 from pathlib import Path
 from PyInstaller.utils.hooks import collect_all, collect_submodules
