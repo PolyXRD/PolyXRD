@@ -1,0 +1,205 @@
+"""
+峰列表控件
+==========
+显示检测到的峰列表。
+"""
+from __future__ import annotations
+
+from typing import Optional
+
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import (
+    QWidget,
+    QVBoxLayout,
+    QTableWidget,
+    QTableWidgetItem,
+    QHeaderView,
+    QToolBar,
+    QAbstractItemView,
+)
+
+from polyxrd.models.peak import Peak
+
+
+class PeakTable(QWidget):
+    """峰列表表格控件
+
+    Features:
+    - 显示峰的2θ、d-spacing、强度、FWHM、hkl等信息
+    - 支持排序、筛选
+    - 支持选择单个或多个峰
+    - 支持编辑峰的hkl和物相
+    - 支持删除峰
+    - 支持导出CSV
+
+    Signals:
+        peak_selected: 选中峰
+        peak_deleted: 峰被删除
+    """
+
+    peak_selected = Signal(object)
+    peak_deleted = Signal(object)
+
+    COLUMNS = [
+        "编号", "2θ (°)", "d (Å)", "强度", "FWHM (°)", "hkl", "物相",
+    ]
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self._peaks: list[Peak] = []
+        self._setup_ui()
+
+    def _setup_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        # 工具栏
+        toolbar = QToolBar()
+        toolbar.addAction("删除选中", self._on_delete_selected)
+        toolbar.addAction("清空", self._on_clear)
+        toolbar.addAction("导出CSV", self._on_export_csv)
+        layout.addWidget(toolbar)
+
+        # 表格
+        self._table = QTableWidget(0, len(self.COLUMNS))
+        self._table.setHorizontalHeaderLabels(self.COLUMNS)
+        self._table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self._table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self._table.setEditTriggers(QAbstractItemView.DoubleClicked)
+        self._table.setSortingEnabled(True)
+        self._table.itemSelectionChanged.connect(self._on_selection_changed)
+        self._table.cellChanged.connect(self._on_cell_changed)
+
+        layout.addWidget(self._table)
+
+    # ------------------------------------------------------------------
+    # 公共方法
+    # ------------------------------------------------------------------
+
+    def set_peaks(self, peaks: list[Peak]) -> None:
+        """设置峰列表"""
+        self._peaks = peaks
+        self._reload_table()
+
+    def add_peak(self, peak: Peak) -> None:
+        """添加单个峰"""
+        self._peaks.append(peak)
+        self._reload_table()
+
+    def get_selected_peaks(self) -> list[Peak]:
+        """获取选中的峰"""
+        selected_rows = set()
+        for item in self._table.selectedItems():
+            selected_rows.add(item.row())
+
+        return [self._peaks[row] for row in selected_rows if row < len(self._peaks)]
+
+    def get_all_peaks(self) -> list[Peak]:
+        """获取所有峰"""
+        return self._peaks.copy()
+
+    # ------------------------------------------------------------------
+    # 内部方法
+    # ------------------------------------------------------------------
+
+    def _reload_table(self) -> None:
+        """重新加载表格"""
+        self._table.setRowCount(len(self._peaks))
+
+        for row, peak in enumerate(self._peaks):
+            self._set_table_item(row, 0, str(row + 1))
+            self._set_table_item(row, 1, f"{peak.two_theta:.4f}")
+            self._set_table_item(row, 2, f"{peak.d_spacing:.4f}")
+            self._set_table_item(row, 3, f"{peak.intensity:.1f}")
+            self._set_table_item(row, 4, f"{peak.fwhm:.4f}")
+            self._set_table_item(row, 5, peak.hkl_str)
+            self._set_table_item(row, 6, peak.phase)
+
+    def _set_table_item(self, row: int, col: int, text: str) -> None:
+        """设置单元格内容"""
+        item = QTableWidgetItem(text)
+        if col == 0:
+            item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        self._table.setItem(row, col, item)
+
+    def _on_selection_changed(self) -> None:
+        """选中变更"""
+        selected = self.get_selected_peaks()
+        if selected:
+            self.peak_selected.emit(selected[0])
+
+    def _on_cell_changed(self, row: int, col: int) -> None:
+        """单元格内容变更"""
+        if row >= len(self._peaks):
+            return
+
+        item = self._table.item(row, col)
+        if item is None:
+            return
+
+        text = item.text()
+        peak = self._peaks[row]
+
+        # 更新峰属性
+        try:
+            if col == 5:  # hkl
+                hkl = self._parse_hkl(text)
+                if hkl:
+                    peak.hkl = hkl
+            elif col == 6:  # phase
+                peak.phase = text
+        except Exception:
+            pass
+
+    def _on_delete_selected(self) -> None:
+        """删除选中峰"""
+        selected_rows = sorted(set(
+            item.row() for item in self._table.selectedItems()
+        ), reverse=True)
+
+        for row in selected_rows:
+            if row < len(self._peaks):
+                self.peak_deleted.emit(self._peaks[row])
+                del self._peaks[row]
+
+        self._reload_table()
+
+    def _on_clear(self) -> None:
+        """清空所有峰"""
+        self._peaks.clear()
+        self._reload_table()
+
+    def _on_export_csv(self) -> None:
+        """导出CSV"""
+        from PySide6.QtWidgets import QFileDialog
+        import csv
+
+        path, _ = QFileDialog.getSaveFileName(
+            self, "导出峰列表", "peaks.csv", "CSV文件 (*.csv)"
+        )
+        if path:
+            with open(path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(self.COLUMNS)
+                for row, peak in enumerate(self._peaks):
+                    writer.writerow([
+                        row + 1,
+                        f"{peak.two_theta:.4f}",
+                        f"{peak.d_spacing:.4f}",
+                        f"{peak.intensity:.1f}",
+                        f"{peak.fwhm:.4f}",
+                        peak.hkl_str,
+                        peak.phase,
+                    ])
+
+    @staticmethod
+    def _parse_hkl(text: str) -> Optional[tuple[int, int, int]]:
+        """解析hkl字符串 (如 '111', '(1,0,0)')"""
+        text = text.strip().replace("(", "").replace(")", "")
+        if "," in text:
+            parts = text.split(",")
+            if len(parts) == 3:
+                return tuple(int(p.strip()) for p in parts)
+        elif len(text) == 3 and text.isdigit():
+            return (int(text[0]), int(text[1]), int(text[2]))
+        return None

@@ -1,0 +1,347 @@
+"""
+元素周期表控件
+==============
+交互式元素周期表，支持三态选择：
+- 必须 (绿色): 检测物相必须包含至少一个所选元素
+- 可能 (黄色): 元素可选，含或不含都可以
+- 不含 (红色): 检测物相必须排除这些元素
+"""
+from __future__ import annotations
+
+from enum import Enum
+from typing import Optional
+
+from PySide6.QtCore import Qt, Signal, QSize
+from PySide6.QtGui import QPainter, QColor, QBrush, QPen, QFont
+from PySide6.QtWidgets import (
+    QWidget,
+    QGridLayout,
+    QPushButton,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QFrame,
+    QToolTip,
+)
+
+
+class ElementState(Enum):
+    NONE = "none"
+    MUST = "must"
+    MAYBE = "maybe"
+    EXCLUDE = "exclude"
+
+
+STATE_COLORS = {
+    ElementState.NONE: QColor(240, 240, 240),
+    ElementState.MUST: QColor(76, 175, 80),       # 绿色
+    ElementState.MAYBE: QColor(255, 193, 7),      # 黄色
+    ElementState.EXCLUDE: QColor(244, 67, 54),    # 红色
+}
+
+STATE_TEXT_COLORS = {
+    ElementState.NONE: QColor(80, 80, 80),
+    ElementState.MUST: QColor(255, 255, 255),
+    ElementState.MAYBE: QColor(80, 60, 0),
+    ElementState.EXCLUDE: QColor(255, 255, 255),
+}
+
+STATE_HEX = {
+    ElementState.NONE: "#f0f0f0",
+    ElementState.MUST: "#4caf50",
+    ElementState.MAYBE: "#ffc107",
+    ElementState.EXCLUDE: "#f44336",
+}
+
+STATE_LABELS = {
+    ElementState.MUST: "必须",
+    ElementState.MAYBE: "可能",
+    ElementState.EXCLUDE: "不含",
+}
+
+
+# (row, col) positions in 18-column grid
+PERIODIC_TABLE = {
+    "H":  (1, 1), "He": (1, 18),
+    "Li": (2, 1), "Be": (2, 2), "B":  (2, 13), "C":  (2, 14),
+    "N":  (2, 15), "O":  (2, 16), "F":  (2, 17), "Ne": (2, 18),
+    "Na": (3, 1), "Mg": (3, 2), "Al": (3, 13), "Si": (3, 14),
+    "P":  (3, 15), "S":  (3, 16), "Cl": (3, 17), "Ar": (3, 18),
+    "K":  (4, 1), "Ca": (4, 2), "Sc": (4, 3), "Ti": (4, 4),
+    "V":  (4, 5), "Cr": (4, 6), "Mn": (4, 7), "Fe": (4, 8),
+    "Co": (4, 9), "Ni": (4, 10), "Cu": (4, 11), "Zn": (4, 12),
+    "Ga": (4, 13), "Ge": (4, 14), "As": (4, 15), "Se": (4, 16),
+    "Br": (4, 17), "Kr": (4, 18),
+    "Rb": (5, 1), "Sr": (5, 2), "Y":  (5, 3), "Zr": (5, 4),
+    "Nb": (5, 5), "Mo": (5, 6), "Tc": (5, 7), "Ru": (5, 8),
+    "Rh": (5, 9), "Pd": (5, 10), "Ag": (5, 11), "Cd": (5, 12),
+    "In": (5, 13), "Sn": (5, 14), "Sb": (5, 15), "Te": (5, 16),
+    "I":  (5, 17), "Xe": (5, 18),
+    "Cs": (6, 1), "Ba": (6, 2), "La": (6, 3), "Ce": (6, 4),
+    "Pr": (6, 5), "Nd": (6, 6), "Pm": (6, 7), "Sm": (6, 8),
+    "Eu": (6, 9), "Gd": (6, 10), "Tb": (6, 11), "Dy": (6, 12),
+    "Ho": (6, 13), "Er": (6, 14), "Tm": (6, 15), "Yb": (6, 16),
+    "Lu": (6, 17), "Hf": (6, 18), "Ta": (6, 3), "W":  (6, 4),
+    "Re": (6, 5), "Os": (6, 6), "Ir": (6, 7), "Pt": (6, 8),
+    "Au": (6, 9), "Hg": (6, 10), "Tl": (6, 11), "Pb": (6, 12),
+    "Bi": (6, 13), "Pa": (6, 14), "U":  (6, 15),
+    "Fr": (7, 1), "Ra": (7, 2), "Ac": (7, 3), "Th": (7, 4),
+    "Pa": (7, 5), "U":  (7, 6), "Np": (7, 7), "Pu": (7, 8),
+}
+
+# Lanthanide/Actinide rows (rows 9 and 10)
+LANTHANIDE_POSITIONS = {
+    "La":  (9, 3), "Ce": (9, 4), "Pr": (9, 5), "Nd": (9, 6),
+    "Pm":  (9, 7), "Sm": (9, 8), "Eu": (9, 9), "Gd": (9, 10),
+    "Tb":  (9, 11), "Dy": (9, 12), "Ho": (9, 13), "Er": (9, 14),
+    "Tm":  (9, 15), "Yb": (9, 16), "Lu": (9, 17),
+}
+
+ACTINIDE_POSITIONS = {
+    "Ac": (10, 3), "Th": (10, 4), "Pa": (10, 5), "U": (10, 6),
+    "Np": (10, 7), "Pu": (10, 8), "Am": (10, 9), "Cm": (10, 10),
+    "Bk": (10, 11), "Cf": (10, 12), "Es": (10, 13), "Fm": (10, 14),
+    "Md": (10, 15), "No": (10, 16), "Lr": (10, 17),
+}
+
+ELEMENT_NAMES = {
+    "H": "氢", "He": "氦", "Li": "锂", "Be": "铍", "B": "硼",
+    "C": "碳", "N": "氮", "O": "氧", "F": "氟", "Ne": "氖",
+    "Na": "钠", "Mg": "镁", "Al": "铝", "Si": "硅", "P": "磷",
+    "S": "硫", "Cl": "氯", "Ar": "氩", "K": "钾", "Ca": "钙",
+    "Sc": "钪", "Ti": "钛", "V": "钒", "Cr": "铬", "Mn": "锰",
+    "Fe": "铁", "Co": "钴", "Ni": "镍", "Cu": "铜", "Zn": "锌",
+    "Ga": "镓", "Ge": "锗", "As": "砷", "Se": "硒", "Br": "溴",
+    "Kr": "氪", "Rb": "铷", "Sr": "锶", "Y": "钇", "Zr": "锆",
+    "Nb": "铌", "Mo": "钼", "Tc": "锝", "Ru": "钌", "Rh": "铑",
+    "Pd": "钯", "Ag": "银", "Cd": "镉", "In": "铟", "Sn": "锡",
+    "Sb": "锑", "Te": "碲", "I": "碘", "Xe": "氙", "Cs": "铯",
+    "Ba": "钡", "La": "镧", "Ce": "铈", "Pr": "镨", "Nd": "钕",
+    "Pm": "钷", "Sm": "钐", "Eu": "铕", "Gd": "钆", "Tb": "铽",
+    "Dy": "镝", "Ho": "钬", "Er": "铒", "Tm": "铥", "Yb": "镱",
+    "Lu": "镥", "Hf": "铪", "Ta": "钽", "W": "钨", "Re": "铼",
+    "Os": "锇", "Ir": "铱", "Pt": "铂", "Au": "金", "Hg": "汞",
+    "Tl": "铊", "Pb": "铅", "Bi": "铋", "Pa": "镤", "U": "铀",
+    "Fr": "钫", "Ra": "镭", "Ac": "锕", "Th": "钍", "Np": "镎",
+    "Pu": "钚", "Am": "镅", "Cm": "锔", "Bk": "锫", "Cf": "锎",
+    "Es": "锿", "Fm": "镄", "Md": "钔", "No": "锘", "Lr": "铹",
+}
+
+# Merge all positions
+ALL_POSITIONS = {}
+for table in [PERIODIC_TABLE, LANTHANIDE_POSITIONS, ACTINIDE_POSITIONS]:
+    for elem, pos in table.items():
+        ALL_POSITIONS[elem] = pos
+
+
+class ElementButton(QPushButton):
+    """单个元素按钮，支持三态切换"""
+
+    def __init__(self, element: str, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self._element = element
+        self._state = ElementState.NONE
+        self.setFixedSize(QSize(36, 36))
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setText(element)
+        self._update_style()
+        self.setToolTip(f"{ELEMENT_NAMES.get(element, element)} ({element})")
+
+    @property
+    def element(self) -> str:
+        return self._element
+
+    @property
+    def state(self) -> ElementState:
+        return self._state
+
+    def cycle_state(self) -> ElementState:
+        if self._state == ElementState.NONE:
+            self._state = ElementState.MUST
+        elif self._state == ElementState.MUST:
+            self._state = ElementState.MAYBE
+        elif self._state == ElementState.MAYBE:
+            self._state = ElementState.EXCLUDE
+        else:
+            self._state = ElementState.NONE
+        self._update_style()
+        return self._state
+
+    def set_state(self, state: ElementState) -> None:
+        self._state = state
+        self._update_style()
+
+    def reset(self) -> None:
+        self._state = ElementState.NONE
+        self._update_style()
+
+    def _update_style(self) -> None:
+        bg = STATE_HEX[self._state]
+        fg = STATE_TEXT_COLORS[self._state].name()
+        border = "#bdbdbd" if self._state == ElementState.NONE else "#616161"
+        self.setStyleSheet(
+            f"QPushButton {{"
+            f"  background-color: {bg};"
+            f"  color: {fg};"
+            f"  border: 1px solid {border};"
+            f"  border-radius: 4px;"
+            f"  font-size: 10px;"
+            f"  font-weight: bold;"
+            f"  padding: 0px;"
+            f"}}"
+            f"QPushButton:hover {{"
+            f"  border: 2px solid #1976d2;"
+            f"}}"
+        )
+
+
+class ElementPeriodicTable(QWidget):
+    """元素周期表控件
+
+    发出信号:
+        selection_changed: 选择状态变更 (must_elements, maybe_elements, exclude_elements)
+    """
+
+    selection_changed = Signal(list, list, list)
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self._buttons: dict[str, ElementButton] = {}
+        self._setup_ui()
+
+    def _setup_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(4)
+
+        # 图例
+        legend_layout = QHBoxLayout()
+        legend_layout.setSpacing(8)
+        legend_layout.addWidget(self._make_legend_item(ElementState.MUST))
+        legend_layout.addWidget(self._make_legend_item(ElementState.MAYBE))
+        legend_layout.addWidget(self._make_legend_item(ElementState.EXCLUDE))
+        legend_layout.addStretch()
+
+        btn_layout = QHBoxLayout()
+        self._btn_reset = QPushButton("重置选择")
+        self._btn_reset.setFixedHeight(24)
+        self._btn_reset.setStyleSheet(
+            "QPushButton { font-size: 11px; padding: 2px 8px; }"
+        )
+        self._btn_reset.clicked.connect(self.reset_all)
+        btn_layout.addWidget(self._btn_reset)
+        legend_layout.addLayout(btn_layout)
+
+        layout.addLayout(legend_layout)
+
+        # 周期表网格
+        grid = QGridLayout()
+        grid.setSpacing(2)
+        grid.setContentsMargins(0, 0, 0, 0)
+
+        for element, (row, col) in ALL_POSITIONS.items():
+            btn = ElementButton(element)
+            btn.clicked.connect(lambda checked, b=btn: self._on_element_clicked(b))
+            self._buttons[element] = btn
+            grid.addWidget(btn, row, col)
+
+        layout.addLayout(grid)
+
+        # 状态标签
+        self._status_label = QLabel("")
+        self._status_label.setStyleSheet(
+            "QLabel { font-size: 11px; color: #666; padding: 2px; }"
+        )
+        layout.addWidget(self._status_label)
+
+    def _make_legend_item(self, state: ElementState) -> QWidget:
+        widget = QWidget()
+        layout = QHBoxLayout(widget)
+        layout.setContentsMargins(2, 0, 2, 0)
+        layout.setSpacing(4)
+
+        color_box = QFrame()
+        color_box.setFixedSize(16, 16)
+        color_box.setStyleSheet(
+            f"QFrame {{ background-color: {STATE_HEX[state]}; border: 1px solid #999; border-radius: 3px; }}"
+        )
+
+        label = QLabel(STATE_LABELS[state])
+        label.setStyleSheet("QLabel { font-size: 11px; }")
+
+        layout.addWidget(color_box)
+        layout.addWidget(label)
+        return widget
+
+    def _on_element_clicked(self, button: ElementButton) -> None:
+        button.cycle_state()
+        self._update_status()
+        self._emit_selection()
+
+    def _update_status(self) -> None:
+        must, maybe, exclude = self.get_selection()
+        parts = []
+        if must:
+            parts.append(f"必须: {', '.join(must)}")
+        if maybe:
+            parts.append(f"可能: {', '.join(maybe)}")
+        if exclude:
+            parts.append(f"不含: {', '.join(exclude)}")
+        self._status_label.setText(" | ".join(parts) if parts else "未选择任何元素")
+
+    def _emit_selection(self) -> None:
+        must, maybe, exclude = self.get_selection()
+        self.selection_changed.emit(must, maybe, exclude)
+
+    def get_selection(self) -> tuple[list[str], list[str], list[str]]:
+        """获取当前选择状态
+
+        Returns:
+            (must_elements, maybe_elements, exclude_elements)
+        """
+        must = []
+        maybe = []
+        exclude = []
+        for elem, btn in self._buttons.items():
+            if btn.state == ElementState.MUST:
+                must.append(elem)
+            elif btn.state == ElementState.MAYBE:
+                maybe.append(elem)
+            elif btn.state == ElementState.EXCLUDE:
+                exclude.append(elem)
+        return must, maybe, exclude
+
+    def set_selection(
+        self,
+        must: Optional[list[str]] = None,
+        maybe: Optional[list[str]] = None,
+        exclude: Optional[list[str]] = None,
+    ) -> None:
+        """设置选择状态"""
+        self.reset_all()
+        for e in (must or []):
+            if e in self._buttons:
+                self._buttons[e].set_state(ElementState.MUST)
+        for e in (maybe or []):
+            if e in self._buttons:
+                self._buttons[e].set_state(ElementState.MAYBE)
+        for e in (exclude or []):
+            if e in self._buttons:
+                self._buttons[e].set_state(ElementState.EXCLUDE)
+        self._update_status()
+
+    def reset_all(self) -> None:
+        """重置所有元素"""
+        for btn in self._buttons.values():
+            btn.reset()
+        self._update_status()
+        self._emit_selection()
+
+    def get_filter_dict(self) -> dict:
+        """获取过滤条件字典，方便传递给识别服务
+
+        Returns:
+            {"must": [...], "maybe": [...], "exclude": [...]}
+        """
+        must, maybe, exclude = self.get_selection()
+        return {"must": must, "maybe": maybe, "exclude": exclude}

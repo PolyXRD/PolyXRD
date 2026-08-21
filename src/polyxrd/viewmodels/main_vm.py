@@ -1,0 +1,275 @@
+"""
+主ViewModel
+===========
+协调所有子ViewModel，为视图提供统一接口。
+"""
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Optional
+
+from PySide6.QtCore import QObject, Signal
+
+from polyxrd.models.peak import Peak, PeakList
+from polyxrd.models.phase import Phase, PhaseMatchResult
+from polyxrd.models.refinement import RefinementResult
+from polyxrd.viewmodels.data_vm import DataViewModel
+from polyxrd.viewmodels.phase_vm import PhaseViewModel
+from polyxrd.viewmodels.refinement_vm import RefinementViewModel
+
+
+class MainViewModel(QObject):
+    """主ViewModel
+
+    协调数据、物相、精修三个子ViewModel。
+
+    Signals:
+        status_changed: 状态信息变更
+        error_occurred: 错误发生
+        data_changed: 数据变更
+        peaks_changed: 峰变更
+        phase_identified: 物相识别完成
+        refinement_completed: 精修完成
+    """
+
+    status_changed = Signal(str)
+    error_occurred = Signal(str)
+    data_changed = Signal(object)
+    peaks_changed = Signal(object)
+    phase_identified = Signal(list)
+    refinement_completed = Signal(object)
+
+    def __init__(self) -> None:
+        super().__init__()
+
+        self._data_vm = DataViewModel()
+        self._phase_vm = PhaseViewModel()
+        self._refinement_vm = RefinementViewModel()
+
+        # 连接子ViewModel的信号
+        self._data_vm.data_loaded.connect(self._on_data_loaded)
+        self._data_vm.data_updated.connect(self._on_data_updated)
+        self._data_vm.error.connect(self._on_error)
+        self._phase_vm.peaks_detected.connect(self._on_peaks_detected)
+        self._phase_vm.error.connect(self._on_error)
+        self._phase_vm.phase_identified.connect(self._on_phase_identified)
+        self._refinement_vm.refinement_completed.connect(self._on_refinement_completed)
+        self._refinement_vm.error.connect(self._on_error)
+
+    # ------------------------------------------------------------------
+    # 公共属性
+    # ------------------------------------------------------------------
+
+    @property
+    def current_data(self):
+        return self._data_vm.current_data
+
+    @property
+    def processed_data(self):
+        return self._data_vm._processed_data
+
+    @property
+    def raw_data(self):
+        return self._data_vm.raw_data
+
+    @property
+    def peaks(self):
+        return self._phase_vm.peaks
+
+    @property
+    def refinement_result(self):
+        return self._refinement_vm.result
+
+    @property
+    def selected_phases(self):
+        return self._phase_vm.selected_phases
+
+    # ------------------------------------------------------------------
+    # 公共方法 - 数据
+    # ------------------------------------------------------------------
+
+    def load_file(self, file_path: str | Path) -> None:
+        """加载数据文件"""
+        self.status_changed.emit(f"加载文件: {file_path}")
+        self._data_vm.load_file(file_path)
+
+    def subtract_background(self, method: str = "snip", **kwargs) -> None:
+        """背景扣除"""
+        self.status_changed.emit(f"执行背景扣除 ({method})")
+        self._data_vm.subtract_background(method=method, **kwargs)
+
+    def smooth_data(self, method: str = "savgol", window: int = 11, **kwargs) -> None:
+        """平滑"""
+        self.status_changed.emit(f"执行平滑 ({method})")
+        self._data_vm.smooth_data(method=method, window=window, **kwargs)
+
+    def normalize_data(self) -> None:
+        """归一化"""
+        self._data_vm.normalize()
+
+    # ------------------------------------------------------------------
+    # 公共方法 - 峰检测
+    # ------------------------------------------------------------------
+
+    def find_peaks(
+        self,
+        height: float = 0.05,
+        distance: float = 5.0,
+        prominence: float = 0.01,
+    ) -> None:
+        """峰检测"""
+        data = self.current_data
+        if data is None:
+            self.error_occurred.emit("请先加载数据")
+            return
+
+        self.status_changed.emit("执行峰检测")
+        self._phase_vm.find_peaks(data, height=height, distance=distance, prominence=prominence)
+
+    def fit_peaks(self, model: str = "voigt") -> None:
+        """峰拟合"""
+        data = self.current_data
+        if data is None:
+            self.error_occurred.emit("请先加载数据")
+            return
+
+        self.status_changed.emit(f"执行峰拟合 ({model})")
+        self._phase_vm.fit_peaks(data, model=model)
+
+    # ------------------------------------------------------------------
+    # 公共方法 - 物相识别
+    # ------------------------------------------------------------------
+
+    def identify_phases(
+        self,
+        elements: Optional[list[str]] = None,
+        element_filter: Optional[dict] = None,
+        top_n: int = 5,
+    ) -> None:
+        """传统物相识别 (需要先寻峰)"""
+        data = self.current_data
+        if data is None:
+            self.error_occurred.emit("请先加载数据")
+            return
+
+        self.status_changed.emit("执行传统Search/Match物相识别")
+        self._phase_vm.identify_phases(
+            data, elements=elements, element_filter=element_filter, top_n=top_n
+        )
+
+    def identify_phases_profile_fitting(
+        self,
+        element_filter: Optional[dict] = None,
+        top_n: int = 5,
+        fwhm: float = 0.15,
+    ) -> None:
+        """Profile Fitting物相识别 (无需寻峰)"""
+        data = self.current_data
+        if data is None:
+            self.error_occurred.emit("请先加载数据")
+            return
+
+        self.status_changed.emit("执行Profile Fitting物相识别")
+        self._phase_vm.identify_phases_profile_fitting(
+            data, element_filter=element_filter, top_n=top_n, fwhm=fwhm
+        )
+
+    def identify_multi_phase(
+        self,
+        element_filter: Optional[dict] = None,
+        max_phases: int = 5,
+        tolerance: float = 0.03,
+    ) -> None:
+        """多物相(混合)分析 - 残差剥离法(需要先寻峰)"""
+        data = self.current_data
+        if data is None:
+            self.error_occurred.emit("请先加载数据")
+            return
+
+        wl = getattr(data, "wavelength", None) or 1.5406
+        self.status_changed.emit("执行多物相(混合)分析")
+        self._phase_vm.identify_multi_phase(
+            data,
+            element_filter=element_filter,
+            max_phases=max_phases,
+            tolerance=tolerance,
+            wavelength=wl,
+        )
+
+    def select_phase(self, phase: Phase) -> None:
+        """选中物相"""
+        self._phase_vm.select_phase(phase)
+        self._refinement_vm.set_phases(self._phase_vm.selected_phases)
+
+    # ------------------------------------------------------------------
+    # 公共方法 - Rietveld精修
+    # ------------------------------------------------------------------
+
+    def refine_structure(
+        self,
+        strategy: str = "sequential",
+        engine: str = "gsas2",
+        max_cycles: int = 20,
+    ) -> None:
+        """Rietveld结构精修"""
+        data = self.current_data
+        if data is None:
+            self.error_occurred.emit("请先加载数据")
+            return
+
+        phases = self._phase_vm.selected_phases
+        if not phases:
+            # 如果没有选中物相，使用匹配分数最高的
+            matched = self._phase_vm.matched_phases
+            if matched:
+                phases = [m.phase for m in matched[:3]]
+                self._phase_vm._selected_phases = phases
+
+        if not phases:
+            self.error_occurred.emit("请先识别并选择物相")
+            return
+
+        self.status_changed.emit(f"执行Rietveld精修 ({engine})")
+        self._refinement_vm.refine(
+            data, phases, strategy=strategy, engine=engine, max_cycles=max_cycles
+        )
+
+    # ------------------------------------------------------------------
+    # 公共方法 - 导出
+    # ------------------------------------------------------------------
+
+    def export_result(self, export_dir: str, format: str = "all") -> None:
+        """导出结果"""
+        self._refinement_vm.export_result(export_dir, format=format)
+
+    # ------------------------------------------------------------------
+    # 信号处理
+    # ------------------------------------------------------------------
+
+    def _on_data_loaded(self, data) -> None:
+        self.status_changed.emit(f"数据加载完成: {len(data)} 个数据点")
+        self.data_changed.emit(data)
+
+    def _on_data_updated(self, data) -> None:
+        self.data_changed.emit(data)
+
+    def _on_peaks_detected(self, peaks: PeakList) -> None:
+        self.status_changed.emit(f"检测到 {len(peaks)} 个峰")
+        self.peaks_changed.emit(peaks)
+
+    def _on_phase_identified(self, results: list[PhaseMatchResult]) -> None:
+        if results:
+            best = results[0]
+            self.status_changed.emit(
+                f"物相识别完成: 最佳匹配 '{best.phase.name}' (分数: {best.score:.1f}%)"
+            )
+        self.phase_identified.emit(results)
+
+    def _on_refinement_completed(self, result: RefinementResult) -> None:
+        self.status_changed.emit(
+            f"精修完成: wR={result.wR:.3f}%, 物相数={len(result.phases)}"
+        )
+        self.refinement_completed.emit(result)
+
+    def _on_error(self, message: str) -> None:
+        self.error_occurred.emit(message)
