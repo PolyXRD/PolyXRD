@@ -1,0 +1,382 @@
+{
+  "date": "2026-08-17 16:06:40",
+  "wavelength": 1.5406,
+  "two_theta_range": [
+    10.0,
+    90.0
+  ],
+  "total_phases_processed": 27,
+  "generated": 23,
+  "skipped": 4,
+  "failed": 0,
+  "results": [
+    {
+      "phase_dir": "1-2_NCM_811",
+      "name": "NCM 811",
+      "cif_file": "1514993.cif",
+      "peaks_count": 5420,
+      "space_group": "P2_1/c",
+      "lattice": {
+        "a": 12.8286,
+        "b": 14.9103,
+        "c": 38.095,
+        "alpha": 90.0,
+        "beta": 96.779,
+        "gamma": 90.0
+      },
+      "status": "ok"
+    },
+    {
+      "phase_dir": "2-1_ZnO",
+      "name": "Zincite",
+      "cif_file": "1011258.cif",
+      "peaks_count": 12,
+      "space_group": "P6_3mc",
+      "lattice": {
+        "a": 3.22,
+        "b": 3.22,
+        "c": 5.2,
+        "alpha": 90.0,
+        "beta": 90.0,
+        "gamma": 120.0
+      },
+      "status": "ok"
+    },
+    {
+      "phase_dir": "2-2_CaCO3",
+      "name": "Calcite",
+      "cif_file": "1001741.cif",
+      "peaks_count": 648,
+      "space_group": "P2_1/c",
+      "lattice": {
+        "a": 6.2786,
+        "b": 9.1551,
+        "c": 14.8999,
+        "alpha": 90.0,
+        "beta": 106.22,
+        "gamma": 90.0
+      },
+      "status": "ok"
+    },
+    {
+      "phase_dir": "3-3_Al2O3",
+      "name": "Corundum",
+      "cif_file": "1000017.cif",
+      "peaks_count": 25,
+      "space_group": "R-3c",
+      "lattice": {
+        "a": 4.7606,
+        "b": 4.7606,
+        "c": 12.994,
+        "alpha": 90.0,
+        "beta": 90.0,
+        "gamma": 120.0
+      },
+      "status": "ok"
+    },
+    {
+      "phase_dir": "3-4_CaF2",
+      "name": "Fluorite",
+      "cif_file": "1000043.cif",
+      "peaks_count": 9,
+      "space_group": "Fm-3m",
+      "lattice": {
+        "a": 5.462,
+        "b": 5.462,
+        "c": 5.462,
+        "alpha": 90.0,
+        "beta": 90.0,
+        "gamma": 90.0
+      },
+      "status": "ok"
+    },
+    {
+      "phase_dir": "4-1_Mg(OH)2",
+      "name": "Brucite",
+      "cif_file": "1000054.cif",
+      "peaks_count": 16,
+      "space_group": "P-3m1",
+      "lattice": {
+        "a": 3.142,
+        "b": 3.142,
+        "c": 4.766,
+        "alpha": 90.0,
+        "beta": 90.0,
+        "gamma": 120.0
+      },
+      "status": "ok"
+    },
+    {
+      "phase_dir": "5-1_SiO2_alpha_quartz",
+      "name": "α-Quartz",
+      "cif_file": "1009000.cif",
+      "peaks_count": 58,
+      "space_group": "P3_121",
+      "lattice": {
+        "a": 4.994,
+        "b": 4.994,
+        "c": 11.3871,
+        "alpha": 90.0,
+        "beta": 90.0,
+        "gamma": 120.0
+      },
+      "status": "ok"
+    },
+    {
+      "phase_dir": "5-3_MgCO3",
+      "name": "Magnesite",
+      "cif_file": "2101057.cif",
+      "peaks_count": 78,
+      "space_group": "Cm",
+      "lattice": {
+        "a": 4.635,
+        "b": 4.635,
+        "c": 15.023,
+        "alpha": 90.0,
+        "beta": 90.0,
+        "gamma": 120.0
+      },
+      "status": "ok"
+    },
+    {
+      "phase_dir": "5-4_CaMg(CO3)2",
+      "name": "Dolomite",
+      "cif_file": "1200014.cif",
+      "peaks_count": 44,
+      "space_group": "R-3",
+      "lattice": {
+        "a": 4.812,
+        "b": 4.812,
+        "c": 16.02,
+        "alpha": 90.0,
+        "beta": 90.0,
+        "gamma": 120.0
+      },
+      "status": "ok"
+    },
+    {
+      "phase_dir": "5-5_Fe2O3",
+      "name": "Hematite",
+      "cif_file": "1010914.cif",
+      "peaks_count": 25,
+      "space_group": "R-3c",
+      "lattice": {
+        "a": 5.12,
+        "b": 5.12,
+        "c": 5.12,
+        "alpha": 55.28,
+        "beta": 55.28,
+        "gamma": 55.28
+      },
+      "status": "ok"
+    },
+    {
+      "phase_dir": "5-6_Muscovite",
+      "name": "Muscovite",
+      "cif_file": "1000042.cif",
+      "peaks_count": 373,
+      "space_group": "C2/c",
+      "lattice": {
+        "a": 5.189,
+        "b": 8.995,
+        "c": 20.097,
+        "alpha": 90.0,
+        "beta": 95.18,
+        "gamma": 90.0
+      },
+      "status": "ok"
+    },
+    {
+      "phase_dir": "5-7_Kaolinite",
+      "name": "Kaolinite",
+      "cif_file": "1011045.cif",
+      "peaks_count": 236,
+      "space_group": "Cc",
+      "lattice": {
+        "a": 5.148,
+        "b": 8.92,
+        "c": 14.535,
+        "alpha": 90.0,
+        "beta": 100.2,
+        "gamma": 90.0
+      },
+      "status": "ok"
+    },
+    {
+      "phase_dir": "7-10_Ca2Al2SiO7",
+      "name": "Gehlenite",
+      "cif_file": "1000048.cif",
+      "peaks_count": 88,
+      "space_group": "P-42_1m",
+      "lattice": {
+        "a": 7.685,
+        "b": 7.685,
+        "c": 5.0636,
+        "alpha": 90.0,
+        "beta": 90.0,
+        "gamma": 90.0
+      },
+      "status": "ok"
+    },
+    {
+      "phase_dir": "7-11_Fluorapatite",
+      "name": "Fluorapatite",
+      "cif_file": "1010996.cif",
+      "peaks_count": 108,
+      "space_group": "P6_3/m",
+      "lattice": {
+        "a": 9.37,
+        "b": 9.37,
+        "c": 6.88,
+        "alpha": 90.0,
+        "beta": 90.0,
+        "gamma": 120.0
+      },
+      "status": "ok"
+    },
+    {
+      "phase_dir": "7-1_Boehmite",
+      "name": "Boehmite",
+      "cif_file": "1533936.cif",
+      "peaks_count": 32,
+      "space_group": "I4_1/amd",
+      "lattice": {
+        "a": 5.652,
+        "b": 5.652,
+        "c": 7.871,
+        "alpha": 90.0,
+        "beta": 90.0,
+        "gamma": 90.0
+      },
+      "status": "ok"
+    },
+    {
+      "phase_dir": "7-2_Goethite",
+      "name": "Goethite",
+      "cif_file": "1008766.cif",
+      "peaks_count": 69,
+      "space_group": "Pnma",
+      "lattice": {
+        "a": 4.6188,
+        "b": 9.9528,
+        "c": 3.0236,
+        "alpha": 90.0,
+        "beta": 90.0,
+        "gamma": 90.0
+      },
+      "status": "ok"
+    },
+    {
+      "phase_dir": "7-3_Gibbsite",
+      "name": "Gibbsite",
+      "cif_file": "1011081.cif",
+      "peaks_count": 320,
+      "space_group": "P2_1/c",
+      "lattice": {
+        "a": 8.641,
+        "b": 5.07,
+        "c": 9.72,
+        "alpha": 90.0,
+        "beta": 85.43,
+        "gamma": 90.0
+      },
+      "status": "ok"
+    },
+    {
+      "phase_dir": "7-4_Feldspar",
+      "name": "Feldspar",
+      "cif_file": "1001771.cif",
+      "peaks_count": 312,
+      "space_group": "C2/m",
+      "lattice": {
+        "a": 8.82,
+        "b": 12.992,
+        "c": 7.161,
+        "alpha": 90.0,
+        "beta": 116.4,
+        "gamma": 90.0
+      },
+      "status": "ok"
+    },
+    {
+      "phase_dir": "7-5_Albite",
+      "name": "Albite",
+      "cif_file": "1544370.cif",
+      "peaks_count": 156,
+      "space_group": "Pnnm",
+      "lattice": {
+        "a": 8.24,
+        "b": 8.68,
+        "c": 4.84,
+        "alpha": 90.0,
+        "beta": 90.0,
+        "gamma": 90.0
+      },
+      "status": "ok"
+    },
+    {
+      "phase_dir": "7-6_Biotite",
+      "name": "Biotite",
+      "cif_file": "1000038.cif",
+      "peaks_count": 216,
+      "space_group": "C2/m",
+      "lattice": {
+        "a": 5.345,
+        "b": 9.258,
+        "c": 10.222,
+        "alpha": 90.0,
+        "beta": 100.23,
+        "gamma": 90.0
+      },
+      "status": "ok"
+    },
+    {
+      "phase_dir": "7-7_Clinochlore",
+      "name": "Clinochlore",
+      "cif_file": "1541186.cif",
+      "peaks_count": 303,
+      "space_group": "C2/m",
+      "lattice": {
+        "a": 5.35,
+        "b": 9.267,
+        "c": 14.27,
+        "alpha": 90.0,
+        "beta": 96.35,
+        "gamma": 90.0
+      },
+      "status": "ok"
+    },
+    {
+      "phase_dir": "7-8_Hornblende",
+      "name": "Hornblende",
+      "cif_file": "1528173.cif",
+      "peaks_count": 383,
+      "space_group": "C2/m",
+      "lattice": {
+        "a": 9.86,
+        "b": 18.07,
+        "c": 5.333,
+        "alpha": 90.0,
+        "beta": 105.48,
+        "gamma": 90.0
+      },
+      "status": "ok"
+    },
+    {
+      "phase_dir": "7-9_Zircon",
+      "name": "Zircon",
+      "cif_file": "1004026.cif",
+      "peaks_count": 33,
+      "space_group": "I4_1/amd",
+      "lattice": {
+        "a": 6.6402,
+        "b": 6.6402,
+        "c": 5.9262,
+        "alpha": 90.0,
+        "beta": 90.0,
+        "gamma": 90.0
+      },
+      "status": "ok"
+    }
+  ]
+}

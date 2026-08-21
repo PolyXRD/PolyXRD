@@ -1,0 +1,74 @@
+# ── 项目专属(2026-08-21, V0.8.21) ───────────────────────────
+# 用户指定不上传的目录
+brand_assets/
+cod_cif_download/
+test_data/
+tests/
+
+# 用户指定不上传的测试代码 (scripts 下的 test_*.py)
+scripts/test_*.py
+
+# 发布产物 (超过 100 MB / 通过 GitHub Release 分发)
+release/
+
+# 顶层 大型 7z 归档 (品牌资产原始素材)
+# 已保留在 .gitignore 上方的行,此处再加固
+*.7z
+
+# ── Python ───────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# ── 虚拟环境 / 构建 ───────────────────────────
+venv/
+.venv/
+env/
+build/
+dist/
+*.spec.bak
+
+# ── COD 无机物数据库(单独发布,不入库) ─────
+# 258 MB SQLite,超过 GitHub 100 MB 单文件限制
+cod_data/COD_inorganics.sqlite
+cod_data/cod_source/
+cod_data/downloads/
+cod_data/*.json
+cod_data/*.log
+cod_data/raw_cif/
+cod_data/_staging/
+
+# ── 安装包 / 构建临时产物 ─────────────────────
+installer_output/
+test_install/
+tools/sliksvn/
+_pyinstaller_hooks/
+
+# ── 大型归档 / 交付物 ZIP (通过 Release 发布) ─
+*.zip
+PolyXRD_*_FULL.zip
+polyxrd-brand-assets.7z
+PolyXRD-Setup-*.exe
+
+# ── 临时 / 日志 / 本地配置 ─────────────────────
+*.log
+.env
+test_db.json
+local_settings.json
+*.pid
+*.tmp
+*.bak
+.DS_Store
+Thumbs.db
+
+# ── IDE / 编辑器 ──────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
