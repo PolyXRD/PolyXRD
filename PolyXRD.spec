@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PolyXRD V0.8.22 PyInstaller spec (onedir mode)."""
+"""PolyXRD V0.8.23 PyInstaller spec (onedir mode)."""
 import os
 from pathlib import Path
 from PyInstaller.utils.hooks import collect_all, collect_submodules
@@ -20,7 +20,7 @@ hiddenimports = list(collect_submodules("polyxrd"))
 for pkg in [
     "PySide6", "matplotlib", "pymatgen", "lmfit", "scipy",
     "numpy", "pandas", "pyqtgraph", "PIL", "platformdirs",
-    "powerxrd",
+    "powerxrd", "mcp",
 ]:
     try:
         d, b, h = collect_all(pkg)
