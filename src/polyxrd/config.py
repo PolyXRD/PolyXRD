@@ -1,4 +1,4 @@
-﻿"""
+"""
 PolyXRD 包配置
 ==============
 包含应用配置、数据路径、实验参数等。
@@ -17,7 +17,7 @@ class AppConfig:
 
     # 应用信息
     app_name: str = "PolyXRD"
-    app_version: str = "0.8.22"
+    app_version: str = "0.8.23"
     app_org: str = "PolyXRD"
 
     # 窗口设置

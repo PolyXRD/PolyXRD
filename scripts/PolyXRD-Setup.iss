@@ -1,11 +1,11 @@
 ; ============================================================
-; PolyXRD V0.8.22 — Installer Script (Inno Setup 6.x)
+; PolyXRD V0.8.23 — Installer Script (Inno Setup 6.x)
 ; 独立安装包: 主程序 + 全部依赖 (不含 COD 无机物数据库)
 ; 数据库需单独下载外挂包: PolyXRD_COD_Inorganics_v0.8.21.zip
-; 本版本更新: 品牌图标/Logo, 安装向导背景
+; 本版本更新: 新增 MCP Server (AI-friendly 接口)
 ; ============================================================
 #define MyAppName      "PolyXRD"
-#define MyAppVersion   "0.8.22"
+#define MyAppVersion   "0.8.23"
 #define MyAppPublisher "PolyXRD Team"
 #define MyAppExeName   "PolyXRD.exe"
 #define MyAppUrl       "https://github.com/PolyXRD/PolyXRD"
@@ -25,7 +25,7 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 OutputDir=D:\TraeSolo\PolyXRD\release
-OutputBaseFilename=PolyXRD-Setup-v0.8.22
+OutputBaseFilename=PolyXRD-Setup-v0.8.23
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
@@ -36,7 +36,7 @@ DisableProgramGroupPage=yes
 SetupIconFile=D:\TraeSolo\PolyXRD\src\polyxrd\resources\app-icon.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 UninstallFilesDir={app}\Uninstall
-VersionInfoVersion=0.8.22.0
+VersionInfoVersion=0.8.23.0
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription=PolyXRD X-ray Diffraction Analysis Suite
 VersionInfoCopyright=Copyright (C) 2025-2026 PolyXRD Team
