@@ -1,4 +1,4 @@
-﻿"""
+"""
 物相分析视图
 ============
 物相识别和匹配的界面。
@@ -140,6 +140,17 @@ class PhaseView(QWidget):
         self._fwhm_spin.setFixedWidth(80)
         method_layout.addWidget(self._fwhm_spin)
 
+        method_layout.addWidget(QLabel("容差:"))
+        self._tolerance_spin = QDoubleSpinBox()
+        self._tolerance_spin.setRange(0.05, 1.0)
+        self._tolerance_spin.setValue(0.2)
+        self._tolerance_spin.setSingleStep(0.05)
+        self._tolerance_spin.setDecimals(2)
+        self._tolerance_spin.setSuffix("°")
+        self._tolerance_spin.setFixedWidth(80)
+        self._tolerance_spin.setToolTip("2θ 匹配容差：参考峰与实验峰的距离在此范围内视为匹配")
+        method_layout.addWidget(self._tolerance_spin)
+
         self._btn_identify = QPushButton("传统 Search/Match")
         self._btn_identify.setFixedHeight(32)
         self._btn_identify.setStyleSheet(
@@ -161,20 +172,6 @@ class PhaseView(QWidget):
         )
         self._btn_quick_identify.clicked.connect(self._on_quick_identify)
         method_layout.addWidget(self._btn_quick_identify)
-
-        self._btn_auto_mix = QPushButton("多物相分析 (混合)")
-        self._btn_auto_mix.setFixedHeight(32)
-        self._btn_auto_mix.setStyleSheet(
-            "QPushButton { background-color: #6a1b9a; color: white; font-weight: bold; padding: 4px 12px; }"
-            "QPushButton:hover { background-color: #4a148c; }"
-        )
-        self._btn_auto_mix.setToolTip(
-            "多物相(混合)分析:基于残差剥离法,在 COD 离线库\n"
-            "(71199 物相)中逐步识别混合样品的各个物相。\n"
-            "需要先进行峰检测;会给出每个物相的相对含量估算。"
-        )
-        self._btn_auto_mix.clicked.connect(self._on_auto_mix)
-        method_layout.addWidget(self._btn_auto_mix)
 
         left_panel.addLayout(method_layout)
 
@@ -204,6 +201,19 @@ class PhaseView(QWidget):
         )
         self._btn_select.clicked.connect(self._on_select_phase)
         btn_row.addWidget(self._btn_select)
+
+        self._btn_auto_mix = QPushButton("自动混合分析")
+        self._btn_auto_mix.setFixedHeight(28)
+        self._btn_auto_mix.setStyleSheet(
+            "QPushButton { background-color: #00695c; color: white; font-weight: bold; padding: 4px 12px; }"
+            "QPushButton:hover { background-color: #004d40; }"
+        )
+        self._btn_auto_mix.setToolTip(
+            "对当前候选物相进行多相线性组合拟合，\n"
+            "自动计算各物相的权重比例（wt%）"
+        )
+        self._btn_auto_mix.clicked.connect(self._on_auto_mix)
+        btn_row.addWidget(self._btn_auto_mix)
 
         self._btn_clear_sel = QPushButton("清空")
         self._btn_clear_sel.setFixedHeight(28)
@@ -311,10 +321,6 @@ class PhaseView(QWidget):
             self._method_label.setText(
                 "Profile Fitting 结果 (相关系数越接近100%越好)"
             )
-        elif method == "auto_mix":
-            self._method_label.setText(
-                "多物相分析结果 (相对含量为强度估算,非真实质量分数)"
-            )
         else:
             self._method_label.setText(
                 "Search/Match 结果 (FOM值越低越好)"
@@ -332,14 +338,6 @@ class PhaseView(QWidget):
             method = getattr(result, 'method', 'fom')
             if method == "profile_fitting":
                 label = f"{phase.name} - 匹配度: {score:.1f}% (R={r_factor:.3f}){elem_info}"
-            elif method == "auto_mix":
-                wf = getattr(phase, 'weight_fraction', 0.0)
-                cov = result.coverage if hasattr(result, 'coverage') else 0.0
-                label = (
-                    f"{phase.name} - {phase.formula} {phase.space_group} | "
-                    f"含量~{wf*100:.1f}% | 解释峰 {result.matched_peaks}/{result.total_peaks}"
-                    f"{elem_info}"
-                )
             else:
                 label = f"{phase.name} - FOM: {score:.3f}{elem_info}"
 
@@ -368,8 +366,8 @@ class PhaseView(QWidget):
 
         # 获取实验峰位 (如果有)
         exp_peaks = []
-        if self._vm.peaks:
-            exp_peaks = self._vm.peaks.peaks
+        if self._vm.phase_vm and self._vm.phase_vm.peaks:
+            exp_peaks = self._vm.phase_vm.peaks.peaks
         
         # 获取参考峰
         ref_peaks_data = phase.get_reference_peaks()
@@ -377,7 +375,7 @@ class PhaseView(QWidget):
         # 对每个参考峰，判断是否在实验中匹配到
         matched_peaks = []
         unmatched_peaks = []
-        tolerance = 0.2  # 2θ 容差 (度)
+        tolerance = self._tolerance_spin.value()  # 2θ 容差 (度)
         
         for hkl, two_theta, ref_intensity in ref_peaks_data:
             from polyxrd.models.peak import Peak
@@ -532,10 +530,116 @@ class PhaseView(QWidget):
         self._vm._phase_vm.clear_selection()
 
     def _on_auto_mix(self) -> None:
-        """多物相(混合)分析 - 残差剥离法"""
-        self._current_method = "auto_mix"
-        self._vm.identify_multi_phase(
-            element_filter=self._filter_dict if self._filter_dict else None,
-            max_phases=5,
-            tolerance=0.03,
+        """自动混合分析 - 多物相线性组合拟合
+
+        算法:
+        1. 取候选物相的前N个（最多5个）
+        2. 为每个物相生成理论XRD图谱（Gaussian峰形）
+        3. 用非负最小二乘(NNLS)求解各物相权重
+        4. 归一化为重量百分比
+        5. 绘制实验数据、混合拟合曲线、各物相贡献
+        """
+        if not self._current_results:
+            QMessageBox.warning(self, "提示", "请先执行物相识别")
+            return
+
+        data = self._vm.current_data or self._vm.processed_data
+        if not data:
+            QMessageBox.warning(self, "提示", "请先加载 XRD 数据")
+            return
+
+        n_phases = min(5, len(self._current_results))
+        phases = []
+        for result in self._current_results[:n_phases]:
+            phase = result.phase if hasattr(result, "phase") else result
+            if phase:
+                phases.append(phase)
+
+        if not phases:
+            QMessageBox.warning(self, "提示", "无可用物相进行混合分析")
+            return
+
+        from polyxrd.services.profile_fitting import ProfileFittingService
+        from polyxrd.models.xrd_data import XRDData
+        from scipy.optimize import nnls
+
+        pf = ProfileFittingService()
+        fwhm = self._fwhm_spin.value()
+        two_theta = data.two_theta
+
+        # 估计背景并扣除
+        bg = pf._estimate_background(data, 50)
+        y_exp = data.intensity - bg
+
+        # 为每个物相生成理论图谱
+        patterns = []
+        for phase in phases:
+            pattern = pf._generate_theoretical_profile(phase, two_theta, fwhm)
+            patterns.append(pattern)
+
+        # 构建系数矩阵 A (n_points x n_phases)
+        A = np.column_stack(patterns)
+
+        # 非负最小二乘: y_exp ≈ A @ w, w >= 0
+        weights, residual_norm = nnls(A, y_exp)
+
+        # 归一化为百分比
+        total_weight = np.sum(weights)
+        if total_weight > 0:
+            weight_pcts = (weights / total_weight) * 100.0
+        else:
+            weight_pcts = np.zeros_like(weights)
+
+        # 计算混合曲线和R因子
+        combined = A @ weights
+        r_factor = (
+            float(np.sum(np.abs(y_exp - combined)) / np.sum(np.abs(y_exp)))
+            if np.sum(np.abs(y_exp)) > 1e-10
+            else 1.0
         )
+
+        # 计算相关系数
+        correlation = ProfileFittingService._pearson_correlation(
+            ProfileFittingService._normalize(y_exp),
+            ProfileFittingService._normalize(combined),
+        )
+
+        # 绘图
+        self._plot.clear_plot()
+        self._plot.plot_data(data, label="实验数据", color="#2196f3")
+
+        # 绘制混合拟合曲线
+        combined_data = XRDData(
+            two_theta=two_theta.copy(),
+            intensity=combined + bg,
+            wavelength=data.wavelength,
+        )
+        self._plot.plot_data(combined_data, label="混合拟合", color="#ff5722")
+
+        # 绘制各物相贡献
+        colors = ["#4caf50", "#9c27b0", "#ff9800", "#795548", "#607d8b"]
+        for i, (phase, pattern) in enumerate(zip(phases, patterns)):
+            color = colors[i % len(colors)]
+            weighted = pattern * weights[i]
+            phase_data = XRDData(
+                two_theta=two_theta.copy(),
+                intensity=weighted,
+                wavelength=data.wavelength,
+            )
+            self._plot.plot_data(
+                phase_data,
+                label=f"{phase.name} ({weight_pcts[i]:.1f}%)",
+                color=color,
+            )
+
+        # 显示统计信息
+        phase_info = " + ".join(
+            f"{p.name}: {w:.1f}%" for p, w in zip(phases, weight_pcts)
+        )
+        info_text = (
+            f"<b>多相混合分析</b> | "
+            f"相关系数: {correlation * 100:.1f}% | "
+            f"R={r_factor:.3f} | "
+            f"{phase_info}"
+        )
+        self._plot.set_info_text(info_text)

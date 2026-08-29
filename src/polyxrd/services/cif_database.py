@@ -1,4 +1,4 @@
-﻿"""
+"""
 CIF数据库服务
 ============
 提供内置矿物CIF数据支持，包括常见矿物的晶体结构数据、
@@ -814,17 +814,63 @@ class CIFDatabase:
         db.export_cif("SiO2", "./output/")
     """
 
-    def __init__(self) -> None:
+    def __init__(self, enable_cod_local: bool = True) -> None:
         self._config = get_config()
         self._external_minerals: dict[str, dict] = {}
         self._ensure_db_dir()
+        # 本地 COD 全库数据库 (懒加载, cod_index.sqlite)
+        self._cod_db = None  # type: ignore[var-annotated]
+        self._cod_enabled = enable_cod_local
 
     def _ensure_db_dir(self) -> None:
         db_path = self._config.get_cif_db_path()
         db_path.mkdir(parents=True, exist_ok=True)
 
+    # ── 本地 COD 全库数据库 (cod_index.sqlite) 懒加载 ──────────
+    def _get_cod_db(self):
+        """Lazy load local COD full database (cod_index.sqlite).
+
+        通过 cod_local.py 的 CODLocalDatabase 类操作,支持
+        cod_entries + cod_atomic_sites 表,可动态生成 reference_peaks。
+        与上方 _get_cod_conn() 操作的 COD_inorganics.sqlite 互补:
+          - COD_inorganics.sqlite: COD 无机物库, 预计算 d-I 峰
+          - cod_index.sqlite: crystallography.net 全库, 含原子位点, 可精修
+        """
+        if self._cod_db is None and self._cod_enabled:
+            try:
+                from polyxrd.services.cod_local import CODLocalDatabase
+                self._cod_db = CODLocalDatabase()
+            except Exception:
+                self._cod_db = None
+        return self._cod_db
+
+    @property
+    def cod_ready(self) -> bool:
+        """COD 全库是否可用"""
+        db = self._get_cod_db()
+        return bool(db and db.is_ready())
+
+    @property
+    def cod_db(self):
+        """COD 全库实例 (CODLocalDatabase)"""
+        return self._get_cod_db()
+
+    def cod_stats(self) -> dict:
+        """COD 全库统计信息"""
+        db = self._get_cod_db()
+        if db is None:
+            return {"ready": False}
+        return db.stats()
+
     def __len__(self) -> int:
-        return len(_BUILTIN_MINERALS) + len(self._external_minerals)
+        total = len(_BUILTIN_MINERALS) + len(self._external_minerals)
+        db = self._get_cod_db()
+        if db is not None:
+            try:
+                total += int(db.stats().get("total", 0))
+            except Exception:
+                pass
+        return total
 
     def __contains__(self, key: str) -> bool:
         return key in _BUILTIN_MINERALS or key in self._external_minerals
@@ -1726,6 +1772,81 @@ class CIFDatabase:
             pass
 
         return results
+
+    # ── 本地 COD 全库查询 (cod_index.sqlite) ──────────────────
+
+    def search_cod_local(
+        self,
+        formula: Optional[str] = None,
+        mineral_name: Optional[str] = None,
+        space_group: Optional[str] = None,
+        elements: Optional[list[str]] = None,
+        cod_id: Optional[int] = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        """从本地 COD 全库 SQLite 索引搜索 (cod_index.sqlite)。
+
+        与 search_cod_phases() 互补:
+          - search_cod_phases(): 查 COD_inorganics.sqlite (COD 无机物库, 预计算 d-I 峰)
+          - search_cod_local():  查 cod_index.sqlite (crystallography.net 全库, 含原子位点)
+
+        Args:
+            formula: 化学式, 如 "SiO2"
+            mineral_name: 矿物名 (模糊匹配)
+            space_group: 空间群 (模糊匹配)
+            elements: 必须包含的元素列表, 如 ["Si","O"]
+            cod_id: COD 编号
+            limit: 最大返回数
+
+        Returns:
+            [{cod_id, name, formula, space_group, a, volume, source="cod_local"}, ...]
+        """
+        db = self._get_cod_db()
+        if db is None:
+            return []
+        entries = db.search(
+            formula=formula, mineral_name=mineral_name,
+            space_group=space_group, elements=elements,
+            cod_id=cod_id, limit=limit,
+        )
+        return [
+            {
+                "cod_id": e.cod_id,
+                "key": f"cod_{e.cod_id}",
+                "name": e.mineral_name or f"COD_{e.cod_id}",
+                "formula": e.formula,
+                "formula_red": e.formula_red,
+                "space_group": e.space_group,
+                "space_group_number": e.space_group_number,
+                "a": e.a, "b": e.b, "c": e.c,
+                "alpha": e.alpha, "beta": e.beta, "gamma": e.gamma,
+                "volume": e.volume,
+                "file": e.file,
+                "source": "cod_local",
+            } for e in entries
+        ]
+
+    def get_cif_from_cod_local(self, cod_id: int) -> Optional[str]:
+        """获取本地 COD 全库的 CIF 原文 (四级回退: 目录→BLOB→tar→REST)"""
+        db = self._get_cod_db()
+        if db is None:
+            return None
+        return db.get_cif(cod_id)
+
+    def load_from_cod_local(self, cod_id: int) -> Optional[Phase]:
+        """把本地 COD 全库条目加载为 Phase 对象 (含 reference_peaks + atomic_sites)。
+
+        与 get_cod_phase() 互补:
+          - get_cod_phase():     从 COD_inorganics.sqlite 取预计算 d-I 峰
+          - load_from_cod_local(): 从 cod_index.sqlite 取原子位点, 动态计算 XRD 峰
+
+        Returns:
+            Phase 对象，失败返回 None
+        """
+        db = self._get_cod_db()
+        if db is None:
+            return None
+        return db.get_phase(cod_id)
 
 
 # ──────────────────────────────────────────────────────────────

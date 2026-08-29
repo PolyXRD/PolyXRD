@@ -1,13 +1,13 @@
-﻿<div align="center">
+<div align="center">
   <img src="src/polyxrd/resources/app-icon.png" alt="PolyXRD Logo" width="120" />
   <h1>PolyXRD</h1>
   <p>
     <b>多晶 X 射线衍射 (XRD) 图谱综合分析套件</b>
     <br />
-    峰检测 &nbsp;·&nbsp; 多物相定性检索 &nbsp;·&nbsp; Rietveld 结构精修 &nbsp;·&nbsp; Le Bail 晶胞精修 &nbsp;·&nbsp; 全谱拟合 &nbsp;·&nbsp; COD 无机物库接入
+    峰检测 &nbsp;·&nbsp; 多物相定性检索 &nbsp;·&nbsp; Rietveld 结构精修 &nbsp;·&nbsp; Le Bail 晶胞精修 &nbsp;·&nbsp; 全谱拟合 &nbsp;·&nbsp; 双 COD 数据库接入
   </p>
   <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases/tag/v0.8.21"><img src="https://img.shields.io/badge/Release-v0.8.21-blue?style=flat-square" /></a>
+    <a href="https://github.com/PolyXRD/PolyXRD/releases/tag/v0.9.0"><img src="https://img.shields.io/badge/Release-v0.9.0-blue?style=flat-square" /></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
     &nbsp;
@@ -15,7 +15,7 @@
     &nbsp;
     <img src="https://img.shields.io/badge/UI-PySide6%20(Qt6)-41cd52?style=flat-square" />
     &nbsp;
-    <img src="https://img.shields.io/badge/Tests-50%2F55%20%E2%88%9A%20(90.9%25)-brightgreen?style=flat-square" />
+    <img src="https://img.shields.io/badge/Tests-95%2F95%20%E2%88%9A-brightgreen?style=flat-square" />
   </p>
 </div>
 
@@ -26,8 +26,8 @@
 **PolyXRD** 是一个面向材料学 / 化学 / 晶体学研究者的 **多晶 X 射线衍射 (XRD) 图谱综合分析桌面软件**。它把"**加载原始 XRD 数据 → 预处理 → 峰检测 → 多物相定性检索 → Rietveld 结构精修 → 晶胞精修 → 全谱拟合 → 出报告**"整条工作流集成在一个统一的、带 **中文/英文/日文** 三语言界面的 PySide6 (Qt6) 桌面应用里。
 
 核心设计哲学：
-- **无需 Python 环境** — 一键安装包 (`PolyXRD-Setup-v0.8.21.exe`) 内置完整 Python 3.10 + PySide6 + pymatgen + scipy，目标机器开箱即用。
-- **程序与数据库分离发布** — 主程序安装包仅 ~241 MB；71,199 物相的 COD 无机物库以独立外挂包 (92 MB zip) 分发，用户按需导入，支持运行时切换。
+- **无需 Python 环境** — 一键安装包 (`PolyXRD-Setup-v0.9.0.exe`) 内置完整 Python 3.10 + PySide6 + pymatgen + scipy，目标机器开箱即用。
+- **程序与数据库分离发布** — 主程序安装包独立 (~240MB)；双 COD 数据库按需外挂：**COD 无机物库 (71,199 物相, ≈92 MB zip)** 与 **COD 全库 (113,223 条目, ≈160 MB zip)**，支持运行时热切换 (`set_cod_db_path` + `reload_cod_db`)。
 - **算法可控 + 结果可复现** — 预处理/拟合的每一步参数可保存、可回放，项目文件 (`.polyxrd` JSON) 全序列化。
 
 ---
@@ -151,13 +151,16 @@ PolyXRD/
 
 ### 方式 A · 普通用户 (推荐, 无需 Python)
 ```
-① 下载  PolyXRD-Setup-v0.8.21.exe  (241 MB, Windows x64)
+① 下载  PolyXRD-Setup-v0.9.0.exe  (~240 MB, Windows x64)
    ↓
 ② 双击安装 → 默认目录 C:\Program Files\PolyXRD\  → 完成
    ↓
-③ 下载  PolyXRD_COD_Inorganics_v0.8.21.zip  (92 MB)
-   解压 → 双击 install_COD_database.bat → Y → 完成
-   或: 启动 PolyXRD → 文件 → 导入外部数据库 → COD 无机物库 → 选择 COD_inorganics.sqlite
+③ (按需下载数据库外挂包, 至少选一)
+   ③-a PolyXRD_COD_Inorganics_v0.9.0.zip  (~92 MB, 71,199 物相, 日常使用推荐)
+        解压 → 双击 install_COD_database.bat → Y → 完成
+        或: 启动 PolyXRD → 文件 → 导入外部数据库 → COD 无机物库 → 选择 COD_inorganics.sqlite
+   ③-b PolyXRD_COD_Full_v0.9.0.zip        (~160 MB, 113,223 条 CIF 索引, 高级研究)
+        解压 → 在设置 → 数据库挂载 → 选择 cod_index.sqlite → 热切换
    ↓
 ④ 开始使用! 参考 "5 分钟快速上手" 下方示例
 ```
@@ -182,8 +185,11 @@ python -m polyxrd.main
 
 # 5. (可选) 构建独立安装包
 pip install pyinstaller
+set POLYXRD_NO_COD_DB=1
+set POLYXRD_NO_INORG_DB=1
 pyinstaller --clean PolyXRD.spec        # → dist/PolyXRD/
-# 然后用 Inno Setup 编译 scripts/PolyXRD-Setup.iss 得到 PolyXRD-Setup.exe
+# 然后用 Inno Setup 编译 scripts/PolyXRD-Setup.iss 得到 PolyXRD-Setup-v0.9.0.exe
+# 或使用 build.bat
 ```
 
 ### 5 分钟快速上手 (工作流示例)
@@ -227,32 +233,47 @@ PolyXRD 基于以下高质量开源项目构建，感谢各位维护者及贡献
 
 ## 📦 Release
 
-当前最新版本：**V0.8.21**（2026-08-21）→ [👉 前往 Release 下载](https://github.com/PolyXRD/PolyXRD/releases/tag/v0.8.21)
+当前最新版本：**V0.9.0**（2026-08-29）→ [👉 前往 Release 下载](https://github.com/PolyXRD/PolyXRD/releases/tag/v0.9.0)
 
-| 附件 | 大小 | 说明 |
+V0.9.0 相对于 V0.8.21 的主要更新：
+- **版本号**：0.8.21 → 0.9.0
+- **联系邮箱**：`sshztx@outlook.com`（三语言关于页统一更新）
+- **双 COD 数据库**：COD 无机物库 (71,199 物相) + COD 全库 (113,223 条目) 同时支持，可运行时热切换
+- **识别准确率大幅提升**：物相识别命中率 45.1% → 68.6%，含量定量命中率 9.1% → 31.8%
+  - 纯金属干扰抑制（FOM 惩罚 ×1.5 + 组合重排比例 ≤20%）
+  - 多物相组合策略（must/maybe 自动扩展 exclude、同化学式去重、`build_refinement_combination`）
+- **Rietveld wR 引擎优化**：内置引擎 `_refine_builtin` 整体迭代 v1→v8
+  - `bg_method=median` 替换 `snip`（直接降 5-6pt wR）
+  - Caglioti U-V-W 2θ 依赖峰宽（替换单固定 FWHM）
+  - 多起点 least_squares → 显式 wR 选优 + ≈135 点稀疏邻域 wR 抛光
+  - 验收：4-1 四相样 wR 64.74% < 65%；2-1 ZnO/CaCO3 50/50 样 wR 51.46% < 55%；两次独立精修锌含量差 < 35%
+- **全单元测试**：95/95 通过（含 3 项 wR 专项验收）
+
+| 附件 | 预估大小 | 说明 |
 |---|---|---|
-| **PolyXRD-Setup-v0.8.21.exe** | 241 MB | Windows 独立安装包 (内置 Python/Qt6/全部依赖) |
-| **PolyXRD_COD_Inorganics_v0.8.21.zip** | 92 MB | COD 无机物数据库外挂包 (71,199 物相) |
+| **PolyXRD-Setup-v0.9.0.exe** | ~240 MB | Windows 独立安装包 (内置 Python/Qt6/全部依赖；默认不内置两个数据库，独立外挂包) |
+| **PolyXRD_COD_Inorganics_v0.9.0.zip** | ~92 MB | COD 无机物数据库外挂包 (71,199 物相，预计算 d-I 峰) |
+| **PolyXRD_COD_Full_v0.9.0.zip** | ~160 MB | COD 全库 SQLite 外挂包 (113,223 条 CIF 索引，5.1M 原子位点 gzip) |
 | **Source code (.zip / .tar.gz)** | — | 完整源码快照 |
 
-SHA256 校验：
+SHA256 校验（构建后填充）：
 ```
-26E12644 A66F30BC AF513DD7 F67F3093 A2D914A6 6991D6B7 9271377F AE3A0CC2  PolyXRD-Setup-v0.8.21.exe
-0220A89D 00626069 AB112E24 BB1B92B5 6AB81F3F 6C458F7F D452F4D3 BF2A0DA3  PolyXRD_COD_Inorganics_v0.8.21.zip
+（待发布后补）
 ```
 
 ---
 
 ## 📝 版本兼容性 & License
 
-| PolyXRD | 匹配 COD 无机物库外挂包 |
-|---|---|
-| **0.8.21** | `PolyXRD_COD_Inorganics_v0.8.21` (表列名 `ref_id`) |
+| PolyXRD | 匹配 COD 无机物库外挂包 | 匹配 COD 全库外挂包 |
+|---|---|---|
+| **0.9.0** | `PolyXRD_COD_Inorganics_v0.9.0` (表列名 `ref_id`) | `PolyXRD_COD_Full_v0.9.0` (schema_version=1.0) |
+| 0.8.21 | `PolyXRD_COD_Inorganics_v0.8.21` | — |
 
 代码部分遵循 **MIT License**（除非子模块另行声明）。使用时请同时遵守上游 PySide6 (LGPL/GPL)、pymatgen、COD 的许可证条款。
 
 ---
 
 <div align="right">
-  <i>PolyXRD Team · 2025 — 2026 · 文档版本 0.8.21 (2026-08-21)</i>
+  <i>PolyXRD Team · 2025 — 2026 · 文档版本 0.9.0 (2026-08-29) · 联系：sshztx@outlook.com</i>
 </div>

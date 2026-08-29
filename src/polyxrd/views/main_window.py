@@ -1,4 +1,4 @@
-﻿"""
+"""
 PolyXRD 主窗口
 ==============
 主应用程序界面。
@@ -796,25 +796,6 @@ class MainWindow(QMainWindow):
         self._set_action_icon(self._actions["cod_search_menu"], "cod_search")
         phase_menu.addAction(self._actions["cod_search_menu"])
 
-        phase_menu.addSeparator()
-
-        self._actions["import_cod_db"] = QAction(
-            tr("menu.phase_analysis.import_cod_db"), self
-        )
-        self._actions["import_cod_db"].setToolTip(
-            tr("menu.phase_analysis.import_cod_db_tip")
-        )
-        self._actions["import_cod_db"].triggered.connect(self._on_import_cod_db)
-        self._set_action_icon(self._actions["import_cod_db"], "target")
-        phase_menu.addAction(self._actions["import_cod_db"])
-
-        self._actions["cod_db_status"] = QAction(
-            tr("menu.phase_analysis.cod_db_status"), self
-        )
-        self._actions["cod_db_status"].triggered.connect(self._on_cod_db_status)
-        self._set_action_icon(self._actions["cod_db_status"], "view")
-        phase_menu.addAction(self._actions["cod_db_status"])
-
     def _setup_refine_menu(self) -> None:
         refine_menu = self.menuBar().addMenu(tr("menu.structure_refinement.title"))
         self._menus["refine"] = refine_menu
@@ -1005,8 +986,6 @@ class MainWindow(QMainWindow):
             "profile_fitting_menu": "menu.phase_analysis.profile_fitting",
             "cif_browser": "menu.phase_analysis.cif_browser",
             "cod_search_menu": "menu.phase_analysis.cod_search",
-            "import_cod_db": "menu.phase_analysis.import_cod_db",
-            "cod_db_status": "menu.phase_analysis.cod_db_status",
             "refine": "toolbar.refine",
             "refine_wizard": "toolbar.refine_wizard",
             "refine_wizard_menu": "menu.structure_refinement.wizard",
@@ -1144,80 +1123,6 @@ class MainWindow(QMainWindow):
     def _on_cod_search(self) -> None:
         dialog = CODSearchDialog(self)
         dialog.exec()
-
-    def _on_import_cod_db(self) -> None:
-        """导入外部 COD 无机物数据库 (.sqlite)。
-
-        数据库与 PolyXRD 主程序分离发布:用户通过此入口选择
-        下载好的 .sqlite 文件,程序持久化路径到 ~/.polyxrd/,
-        下次启动自动加载,无需重新导入。
-        """
-        # 默认打开用户主目录
-        start_dir = str(Path.home())
-        # 若已有自定义路径,定位到该目录
-        current_path = self._config.get_cod_db_path()
-        if current_path.exists():
-            start_dir = str(current_path.parent)
-
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            tr("dialog.import_cod_db_title"),
-            start_dir,
-            tr("dialog.sqlite_filter"),
-        )
-        if not file_path:
-            return
-
-        try:
-            db = CIFDatabase()
-            ok = db.set_cod_db_path(file_path)
-            if not ok:
-                QMessageBox.critical(
-                    self,
-                    tr("dialog.error"),
-                    tr("dialog.cod_db_import_failed",
-                       error="文件不存在或不可读"),
-                )
-                return
-            count = db.cod_phase_count()
-            path_display = str(Path(file_path).resolve())
-            QMessageBox.information(
-                self,
-                tr("dialog.info"),
-                tr("dialog.cod_db_import_done",
-                   count=count, path=path_display),
-            )
-            self.statusBar().showMessage(
-                tr("status.database_ready", count=count), 5000
-            )
-        except Exception as e:
-            QMessageBox.critical(
-                self,
-                tr("dialog.error"),
-                tr("dialog.cod_db_import_failed", error=str(e)),
-            )
-
-    def _on_cod_db_status(self) -> None:
-        """显示当前 COD 数据库的路径和物相数。"""
-        db = CIFDatabase()
-        path = self._config.get_cod_db_path()
-        if not path.exists():
-            QMessageBox.information(
-                self,
-                tr("dialog.info"),
-                tr("dialog.cod_db_not_loaded"),
-            )
-            return
-        count = db.cod_phase_count()
-        user_path = self._config._load_user_cod_db_path()
-        source = tr("dialog.cod_db_source_user") if user_path \
-            else tr("dialog.cod_db_source_builtin")
-        QMessageBox.information(
-            self,
-            tr("dialog.info"),
-            tr("dialog.cod_db_status_info",
-               path=str(path), count=count, source=source),
-        )
 
     def _on_phase_confirmed(self, phase) -> None:
         """物相确认后自动切换到结构精修"""

@@ -1,4 +1,4 @@
-﻿translations = {
+translations = {
     "app": {
         "name": "PolyXRD",
         "title": "PolyXRD v{version}",
@@ -35,9 +35,6 @@
             "view_database": "View Reference Database",
             "cif_browser": "Browse CIF Database",
             "cod_search": "COD Online Search",
-            "import_cod_db": "Import Phase Database...",
-            "import_cod_db_tip": "Import external COD inorganic SQLite database",
-            "cod_db_status": "Database Status",
         },
         "structure_refinement": {
             "title": "Structure Refinement",
@@ -113,7 +110,7 @@
             "</p>"
             "<hr style='border:none; border-top:1px solid #ddd; margin:12px 0;'/>"
             "<p style='margin:4px 0; font-size:11px; color:#555;'>"
-            "Contact: <a href='mailto:sshztx@shimadzu.com.cn' style='color:#2980b9; text-decoration:none;'>sshztx@shimadzu.com.cn</a>"
+            "Contact: <a href='mailto:sshztx@outlook.com' style='color:#2980b9; text-decoration:none;'>sshztx@outlook.com</a>"
             "</p>"
             "<p style='margin:8px 0 4px 0; font-size:11px; color:#888;'>© 2026 All Rights Reserved</p>"
             "</div>"
@@ -150,27 +147,6 @@
         "cif_export_failed": "Export failed.",
         "cif_import_done": "CIF file imported successfully.",
         "cif_import_failed": "Import failed: {error}",
-        "import_cod_db_title": "Import COD Inorganic Database",
-        "sqlite_filter": "SQLite Database (*.sqlite *.db);;All Files (*)",
-        "cod_db_import_done": (
-            "Database imported successfully!\n\n"
-            "Phase count: {count}\n"
-            "Path: {path}\n\n"
-            "Path persisted; will auto-load on next launch."
-        ),
-        "cod_db_import_failed": "Database import failed: {error}",
-        "cod_db_not_loaded": (
-            "No COD inorganic database is currently loaded.\n\n"
-            "Please use [Phase Analysis → Import Phase Database] to select a .sqlite file."
-        ),
-        "cod_db_status_info": (
-            "COD Inorganic Database\n\n"
-            "Path: {path}\n"
-            "Phase count: {count}\n"
-            "Source: {source}"
-        ),
-        "cod_db_source_builtin": "Built-in",
-        "cod_db_source_user": "User-imported",
         "ref_db_title": "Reference Database",
         "ref_db_info": "Offline reference database: {count} phases",
         "ref_db_phase_count": "Phase Count",

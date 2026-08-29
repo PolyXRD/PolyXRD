@@ -1,4 +1,4 @@
-# ── 项目专属(2026-08-21, V0.8.21) ───────────────────────────
+# ── 项目专属(2026-08-29, V0.9.0) ───────────────────────────
 # 用户指定不上传的目录
 brand_assets/
 cod_cif_download/
@@ -8,12 +8,30 @@ tests/
 # 用户指定不上传的测试代码 (scripts 下的 test_*.py)
 scripts/test_*.py
 
-# 发布产物 (超过 100 MB / 通过 GitHub Release 分发)
+# 发布产物 / 构建中间目录 (超过 100 MB / 通过 GitHub Release 分发)
 release/
+release_staging/
 
 # 顶层 大型 7z 归档 (品牌资产原始素材)
-# 已保留在 .gitignore 上方的行,此处再加固
 *.7z
+
+# 调试脚本 / 一次性临时脚本
+_check.py
+dbg*.py
+dbg*.ps1
+_dbg*.py
+_dbg*.ps1
+_*.py
+
+# PyInstaller 运行日志
+pyinstaller-build.log
+pyinst.log
+pyinst2.log
+pyinst3.log
+pyinst3.err.log
+
+# MCP 临时 JSON
+mcp_request.json
 
 # ── Python ───────────────────────────────────
 __pycache__/
@@ -50,6 +68,12 @@ test_install/
 tools/sliksvn/
 _pyinstaller_hooks/
 
+# 7z SFX 构建临时文件
+_PolyXRD-App-full.7z
+_sfx_src/
+_sfx_cfg.txt
+sfx-config.txt
+
 # ── 大型归档 / 交付物 ZIP (通过 Release 发布) ─
 *.zip
 PolyXRD_*_FULL.zip
@@ -72,3 +96,18 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# ── COD 全库索引 (431 MB,通过 Release 分发) ─────
+cod_index.sqlite
+cod_index.sqlite.*
+cod-cifs-mysql.*
+
+# ── 大文件/过程数据库原始归档 & 原始 CIF (不入库) ─────
+cod/
+xrd_patterns_generated/
+cod_data/cod-cifs-mysql.tar
+cod_data/cif/
+cod_data/cif_db/
+cod_data/PolyXRD_COD_Inorganics_v*.zip
+cod_data/*.sqlite*
+
