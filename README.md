@@ -256,9 +256,11 @@ V0.9.0 相对于 V0.8.21 的主要更新：
 | **PolyXRD_COD_Full_v0.9.0.zip** | ~160 MB | COD 全库 SQLite 外挂包 (113,223 条 CIF 索引，5.1M 原子位点 gzip) |
 | **Source code (.zip / .tar.gz)** | — | 完整源码快照 |
 
-SHA256 校验（构建后填充）：
+SHA256 校验：
 ```
-（待发布后补）
+DDC9AEB9 E9EFF8A5 5B9F5687 A147AD61 8EA892B7 0FB21228 A344375D 904239D5  PolyXRD-Setup-v0.9.0.exe          (231.5 MB)
+79CF22F6 12A6631D 8D9C6A14 688064D8 21F960D4 B4A3A5A5 B8937CC3 C4EC6A88  PolyXRD_COD_Inorganics_v0.9.0.zip (75.8 MB, 71,199 物相)
+3C6B5287 02731C1E CD2EBB6E AD41E253 7E9ED589 C717E4D0 ADF848EC F2D8577D  PolyXRD_COD_Full_v0.9.0.zip       (179.2 MB, 113,223 条 CIF 索引)
 ```
 
 ---
