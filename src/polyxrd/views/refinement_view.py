@@ -68,7 +68,7 @@ class RefinementView(QWidget):
         ctrl_layout = QFormLayout()
 
         self._engine_combo = QComboBox()
-        self._engine_combo.addItems(["gsas2", "powerxrd"])
+        self._engine_combo.addItems(["builtin", "gsas2", "powerxrd"])
         ctrl_layout.addRow("引擎:", self._engine_combo)
 
         self._strategy_combo = QComboBox()
@@ -79,6 +79,33 @@ class RefinementView(QWidget):
         self._max_cycles.setRange(1, 100)
         self._max_cycles.setValue(20)
         ctrl_layout.addRow("最大循环:", self._max_cycles)
+
+        # 峰形参数
+        self._peak_shape_combo = QComboBox()
+        self._peak_shape_combo.addItems(["pseudo-voigt", "voigt", "gaussian", "lorentzian"])
+        ctrl_layout.addRow("峰形:", self._peak_shape_combo)
+
+        self._fwhm_spin = QDoubleSpinBox()
+        self._fwhm_spin.setRange(0.05, 2.0)
+        self._fwhm_spin.setValue(0.15)
+        self._fwhm_spin.setSingleStep(0.01)
+        self._fwhm_spin.setDecimals(2)
+        self._fwhm_spin.setSuffix("°")
+        ctrl_layout.addRow("初始 FWHM:", self._fwhm_spin)
+
+        # 背景参数
+        self._bg_combo = QComboBox()
+        self._bg_combo.addItems(["snip", "als", "polynomial", "median", "rolling"])
+        ctrl_layout.addRow("背景方法:", self._bg_combo)
+
+        # 仪器参数
+        self._zero_shift_spin = QDoubleSpinBox()
+        self._zero_shift_spin.setRange(-2.0, 2.0)
+        self._zero_shift_spin.setValue(0.0)
+        self._zero_shift_spin.setSingleStep(0.01)
+        self._zero_shift_spin.setDecimals(3)
+        self._zero_shift_spin.setSuffix("°")
+        ctrl_layout.addRow("零点偏移:", self._zero_shift_spin)
 
         self._btn_refine = QPushButton("开始精修")
         self._btn_refine.clicked.connect(self._on_refine)
@@ -148,7 +175,12 @@ class RefinementView(QWidget):
 
         self._vm.refine_structure(
             strategy=self._strategy_combo.currentText(),
+            engine=self._engine_combo.currentText(),
             max_cycles=self._max_cycles.value(),
+            peak_shape=self._peak_shape_combo.currentText(),
+            fwhm=self._fwhm_spin.value(),
+            bg_method=self._bg_combo.currentText(),
+            zero_shift=self._zero_shift_spin.value(),
         )
 
     def _on_refinement_completed(self, result) -> None:

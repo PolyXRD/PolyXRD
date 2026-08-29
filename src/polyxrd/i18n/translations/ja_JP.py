@@ -1,4 +1,4 @@
-﻿translations = {
+translations = {
     "app": {
         "name": "PolyXRD",
         "title": "PolyXRD v{version}",
@@ -30,9 +30,6 @@
             "profile_fitting": "Profile Fitting (ピーク検出不要)",
             "cif_browser": "CIFデータベース参照",
             "cod_search": "CODオンライン検索",
-            "import_cod_db": "相データベースをインポート...",
-            "import_cod_db_tip": "外部 COD 無機物 SQLite データベースをインポート",
-            "cod_db_status": "データベース状態",
         },
         "structure_refinement": {
             "title": "結晶構造精密化",
@@ -108,7 +105,7 @@
             "</p>"
             "<hr style='border:none; border-top:1px solid #ddd; margin:12px 0;'/>"
             "<p style='margin:4px 0; font-size:11px; color:#555;'>"
-            "お問い合わせ：<a href='mailto:sshztx@shimadzu.com.cn' style='color:#2980b9; text-decoration:none;'>sshztx@shimadzu.com.cn</a>"
+            "お問い合わせ：<a href='mailto:sshztx@outlook.com' style='color:#2980b9; text-decoration:none;'>sshztx@outlook.com</a>"
             "</p>"
             "<p style='margin:8px 0 4px 0; font-size:11px; color:#888;'>© 2026 All Rights Reserved</p>"
             "</div>"
@@ -145,27 +142,6 @@
         "cif_export_failed": "エクスポートに失敗しました。",
         "cif_import_done": "CIFファイルが正常にインポートされました。",
         "cif_import_failed": "インポートに失敗しました: {error}",
-        "import_cod_db_title": "COD 無機物データベースをインポート",
-        "sqlite_filter": "SQLiteデータベース (*.sqlite *.db);;すべてのファイル (*)",
-        "cod_db_import_done": (
-            "データベースのインポートに成功しました！\n\n"
-            "相数: {count}\n"
-            "パス: {path}\n\n"
-            "パスは永続化され、次回起動時に自動読み込みされます。"
-        ),
-        "cod_db_import_failed": "データベースのインポートに失敗しました: {error}",
-        "cod_db_not_loaded": (
-            "現在 COD 無機物データベースが読み込まれていません。\n\n"
-            "メニュー [相分析 → 相データベースをインポート] から .sqlite ファイルを選択してください。"
-        ),
-        "cod_db_status_info": (
-            "COD 無機物データベース\n\n"
-            "パス: {path}\n"
-            "相数: {count}\n"
-            "ソース: {source}"
-        ),
-        "cod_db_source_builtin": "内蔵",
-        "cod_db_source_user": "ユーザーインポート",
     },
     "status": {
         "ready": "準備完了",

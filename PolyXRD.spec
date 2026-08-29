@@ -1,70 +1,76 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PolyXRD V0.8.23 PyInstaller spec (onedir mode)."""
 import os
-from pathlib import Path
-from PyInstaller.utils.hooks import collect_all, collect_submodules
+from PyInstaller.utils.hooks import collect_all
 
-PROJECT_ROOT = Path(SPECPATH).resolve()
-SRC_DIR = PROJECT_ROOT / "src"
+# ── 可选数据库打包 (通过环境变量控制) ──────────────────────
+#   POLYXRD_NO_COD_DB=1      -> 不打包 cod_index.sqlite (COD 全库, ~431 MB)
+#   POLYXRD_NO_INORG_DB=1   -> 不打包 COD_inorganics.sqlite (无机物库, ~258 MB)
+# 默认: 两个数据库都打包 (若文件存在)
+# 注意: cod_index.sqlite 首次启动会复制到 ~/.polyxrd/cif_db/, 供离线物相检索/精修使用.
+#       若打包体积敏感, 设置 POLYXRD_NO_COD_DB=1 即可跳过, 用户可从 COD REST API 按需下载.
 
-datas = [
-    (str(SRC_DIR / "polyxrd" / "i18n"), os.path.join("polyxrd", "i18n")),
-    (str(SRC_DIR / "polyxrd" / "resources"), os.path.join("polyxrd", "resources")),
+_datas_base = [
+    ('src/polyxrd/i18n', 'polyxrd/i18n'),
+    ('src/polyxrd/resources', 'polyxrd/resources'),
 ]
+
+# COD 全库 (cod_index.sqlite, crystallography.net, 113K 条目 + 5.1M 原子位点)
+if os.environ.get('POLYXRD_NO_COD_DB') != '1':
+    _cod_full = 'cod_index.sqlite'
+    if os.path.exists(_cod_full):
+        _datas_base.append((_cod_full, 'cod'))
+        print(f'[PolyXRD.spec] Bundling COD full database: {_cod_full}')
+    else:
+        print(f'[PolyXRD.spec] COD full database not found, skipping: {_cod_full}')
+
+# COD 无机物库 (COD_inorganics.sqlite, 从 COD 筛选的无机物子集, 预计算 d-I 峰)
+if os.environ.get('POLYXRD_NO_INORG_DB') != '1':
+    _cod_inorg = 'cod_data/COD_inorganics.sqlite'
+    if os.path.exists(_cod_inorg):
+        _datas_base.append((_cod_inorg, 'cod_data'))
+        print(f'[PolyXRD.spec] Bundling COD inorganics database: {_cod_inorg}')
+    else:
+        print(f'[PolyXRD.spec] COD inorganics database not found, skipping: {_cod_inorg}')
+
+datas = _datas_base
 binaries = []
-
-# All polyxrd submodules first (local package)
-hiddenimports = list(collect_submodules("polyxrd"))
-
-# Dependencies from pyproject.toml
-for pkg in [
-    "PySide6", "matplotlib", "pymatgen", "lmfit", "scipy",
-    "numpy", "pandas", "pyqtgraph", "PIL", "platformdirs",
-    "powerxrd", "mcp",
-]:
-    try:
-        d, b, h = collect_all(pkg)
-        datas += d; binaries += b; hiddenimports += h
-    except Exception as e:
-        print(f"[warn] collect_all({pkg}) failed: {e}")
-
-# Remove duplicates
-def _unique(items):
-    seen = set()
-    out = []
-    for it in items:
-        k = (it[0], it[1])
-        if k not in seen:
-            seen.add(k)
-            out.append(it)
-    return out
-
-datas = _unique(datas)
-binaries = _unique(binaries)
-hiddenimports = sorted(set(hiddenimports))
+hiddenimports = ['polyxrd', 'polyxrd.i18n', 'polyxrd.i18n.translations.zh_CN', 'polyxrd.i18n.translations.en_US', 'polyxrd.i18n.translations.ja_JP', 'polyxrd.services.project_service', 'polyxrd.services.structure_simulator', 'polyxrd.services.phase_identifier', 'polyxrd.services.profile_fitting', 'polyxrd.views.widgets.element_periodic_table', 'polyxrd.views.widgets.element_filter_dialog']
+tmp_ret = collect_all('PySide6')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('matplotlib')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('pymatgen')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('lmfit')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('scipy')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('numpy')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('pandas')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('pyqtgraph')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('spglib')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('plotly')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 
 a = Analysis(
-    [str(SRC_DIR / "polyxrd" / "main.py")],
-    pathex=[str(SRC_DIR)],
+    ['src/polyxrd/main.py'],
+    pathex=[],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[
-        # PyInstaller false positives / unused
-        "tkinter", "IPython", "jupyter", "notebook",
-        "PySide6.examples", "matplotlib.tests", "scipy.special._precompute",
-    ],
+    excludes=[],
     noarchive=False,
     optimize=0,
 )
 pyz = PYZ(a.pure)
-
-icon_path = SRC_DIR / "polyxrd" / "resources" / "app-icon.ico"
-manifest_path = PROJECT_ROOT / "app.manifest"
 
 exe = EXE(
     pyz,
@@ -75,22 +81,22 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=False,
+    upx=True,
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=str(icon_path) if icon_path.exists() else None,
-    manifest=str(manifest_path) if manifest_path.exists() else None,
+    icon=['src/polyxrd/resources/app-icon.ico'],
+    manifest='app.manifest',
 )
 coll = COLLECT(
     exe,
     a.binaries,
     a.datas,
     strip=False,
-    upx=False,
+    upx=True,
     upx_exclude=[],
     name='PolyXRD',
 )

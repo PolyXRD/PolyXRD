@@ -174,6 +174,61 @@ class PhaseIdentifier:
             top_n=top_n, tolerance=tolerance,
         )
 
+    def build_refinement_combination(
+        self,
+        matches: list,
+        expected_count: Optional[int] = None,
+        min_coverage: float = 0.5,
+    ) -> list:
+        """从物相识别结果中生成精修组合，进一步过滤冗余和噪声
+
+        在 identify_with_element_filter 返回结果基础上，进一步优化：
+          1. 剔除参考峰覆盖率低于 min_coverage 的噪声物相
+          2. 若用户给了 expected_count (预期物相数)，只取前 expected_count 个
+             且剔除 w<1% 的尾项（避免精修时引入无意义自由度）
+          3. 剔除纯金属占比超过 20% 的组合（再次防御性检查）
+          4. 返回最终 Phase 对象列表，可直接传给 RietveldRefiner.refine()
+
+        Args:
+            matches: identify_with_element_filter 的输出
+            expected_count: 预期物相数量（若已知）
+            min_coverage: 参考峰匹配覆盖率下限 (0-1)，低于此视为噪声
+
+        Returns:
+            list[Phase] - 可直接用于 Rietveld 精修的物相列表
+        """
+        _nonmetal_exclude = {"H","He","N","O","F","Ne","Cl","Ar","Br","Kr","I","Xe","Rn",
+                             "S","P","C","Si","Se","Te","As","Ge","B"}
+        def _is_pure_metal(phase) -> bool:
+            return (len(phase.elements) == 1
+                    and not (phase.elements & _nonmetal_exclude))
+
+        # 1. 过滤 coverage 低于阈值的物相
+        filtered = [m for m in matches if m.coverage >= min_coverage]
+        if not filtered:
+            filtered = list(matches)  # 若全低于阈值则回退
+
+        # 2. 若有预期数量，按 expected_count 截断
+        if expected_count and expected_count > 0:
+            filtered = filtered[:expected_count]
+
+        # 3. 纯金属比例二次防御：>20% 则从尾往前移除纯金属直至达标
+        phases_temp = [m.phase for m in filtered]
+        pm_indices = [i for i, p in enumerate(phases_temp) if _is_pure_metal(p)]
+        max_pm = max(1, int(0.2 * len(phases_temp) + 0.5))
+        if len(pm_indices) > max_pm:
+            to_remove = set(pm_indices[max_pm:])
+            phases_temp = [p for i, p in enumerate(phases_temp) if i not in to_remove]
+
+        # 4. 剔除 coverage <0.55 的纯金属（即使比例够了也删）
+        final = []
+        for m, p in zip(filtered, phases_temp):
+            if _is_pure_metal(p) and m.coverage < 0.55:
+                continue
+            final.append(p)
+
+        return final
+
     def identify_with_element_filter(
         self,
         data: XRDData,
@@ -203,6 +258,22 @@ class PhaseIdentifier:
         maybe = element_filter.get("maybe", []) if element_filter else []
         exclude = element_filter.get("exclude", []) if element_filter else []
 
+        # ── 自动扩展 exclude: must∪maybe 补集内的元素一律排除 ──────────
+        # 如果用户给了 must/maybe 但没给 exclude, 自动推导: 任何不在
+        # must+maybe 中的元素都不可能出现在试样中 (例如 must=Zn/Ca, 则 S/P/Si
+        # 等一律排除, 避免 CaSO4/CaSiO3 等干扰物相进入候选)
+        if element_filter and (must or maybe):
+            allowed = set(must) | set(maybe)
+            # 自动推导: 遍历数据库中所有物相的元素, 不在 allowed 的加入 exclude
+            extra_exclude = set()
+            for phase in self._phase_database:
+                for el in phase.elements:
+                    if el not in allowed:
+                        extra_exclude.add(el)
+            if extra_exclude:
+                exclude_set = set(exclude) | extra_exclude
+                exclude = list(exclude_set)
+
         results = []
         for phase in self._phase_database:
             if element_filter and (must or exclude):
@@ -215,6 +286,81 @@ class PhaseIdentifier:
             results.append(match_result)
 
         results.sort(key=lambda r: r.score)
+
+        # ── 组合重排: 纯金属比例限制在 20% 以内, 避免过多纯金属挤占前 top_n ──
+        _nonmetal_exclude = {"H","He","N","O","F","Ne","Cl","Ar","Br","Kr","I","Xe","Rn",
+                             "S","P","C","Si","Se","Te","As","Ge","B"}
+        def _is_pure_metal(phase) -> bool:
+            return (len(phase.elements) == 1
+                    and not (phase.elements & _nonmetal_exclude))
+
+        if len(results) > 0:
+            reordered = []
+            non_metal_stack = [r for r in results if not _is_pure_metal(r.phase)]
+            metal_stack = [r for r in results if _is_pure_metal(r.phase)]
+
+            # 贪心: 保持相对顺序, 每 5 个中纯金属不超过 1 个 (20%)
+            max_metal = max(1, int(0.2 * min(top_n, len(results))) + 0.5)
+            metal_count = 0
+            nm_i = 0
+            m_i = 0
+            total = min(len(results), top_n)
+            # 先放非金属直到不够，再考虑金属，但保持原 FOM 顺序
+            # 更简单: 结果中前 top_n, 若纯金属 >20% 则将超出的纯金属和下一位非金属交换
+            for slot in range(min(len(results), top_n + 10)):
+                if len(reordered) >= total:
+                    break
+                # 首选: FOM 最低的可用项
+                while nm_i < len(non_metal_stack) and non_metal_stack[nm_i] in reordered:
+                    nm_i += 1
+                while m_i < len(metal_stack) and metal_stack[m_i] in reordered:
+                    m_i += 1
+
+                best = None
+                if nm_i < len(non_metal_stack) and m_i < len(metal_stack):
+                    if non_metal_stack[nm_i].score <= metal_stack[m_i].score:
+                        best = non_metal_stack[nm_i]
+                        nm_i += 1
+                    elif metal_count < max_metal:
+                        best = metal_stack[m_i]
+                        m_i += 1
+                        metal_count += 1
+                    else:
+                        # 纯金属已达上限，跳过
+                        best = non_metal_stack[nm_i]
+                        nm_i += 1
+                elif nm_i < len(non_metal_stack):
+                    best = non_metal_stack[nm_i]
+                    nm_i += 1
+                elif m_i < len(metal_stack) and metal_count < max_metal:
+                    best = metal_stack[m_i]
+                    m_i += 1
+                    metal_count += 1
+                else:
+                    # 纯金属达上限但无更多非金属，依然放（结果少于 top_n 更糟）
+                    if m_i < len(metal_stack):
+                        best = metal_stack[m_i]
+                        m_i += 1
+                if best is not None:
+                    reordered.append(best)
+
+            # 若重排后结果数量充足则使用，否则回退原排序
+            if len(reordered) >= total:
+                results = reordered
+            # 否则保留 results (原排序, 仅 top_n 裁剪)
+
+        # ── 去重: 同化学式只保留 FOM 最优 (第一个) 一个 ──────────────
+        # 消除内置库中同一化学式有多个条目的问题 (如 Fluorite/CaF2 有两版本)
+        seen_formulas: dict[str, bool] = {}
+        deduped: list = []
+        for r in results:
+            formula = r.phase.formula or ""
+            key = (formula, tuple(sorted(r.phase.elements)))
+            if key not in seen_formulas:
+                seen_formulas[key] = True
+                deduped.append(r)
+        results = deduped
+
         return results[:top_n]
 
     def _match_phase_fom(
@@ -275,11 +421,30 @@ class PhaseIdentifier:
                 total_peaks=total_ref_peaks, confidence="不匹配", method="fom"
             )
 
-        fom = (sum_deviation / sum_ref_2theta) * matched * 100.0
+        # FOM = 相对偏差，未匹配参考峰按容差计入偏差 (标准 FOM 做法)
+        # 归一化用所有参考峰 2θ 之和，避免少峰物相因偶然单峰偏差小而占优
+        sum_ref_2theta_all = sum(
+            ref_2theta for _, ref_2theta, _ in reference_peaks
+        )
+        unmatched = total_ref_peaks - matched
+        sum_deviation_effective = sum_deviation + unmatched * tolerance
+        if sum_ref_2theta_all > 0:
+            fom = (sum_deviation_effective / sum_ref_2theta_all) * 100.0
+        else:
+            fom = 999.0
         match_ratio = matched / total_ref_peaks
         avg_intensity_score = total_intensity_score / matched if matched > 0 else 0
 
+        # combined_score: match_ratio 越高 -> (1-ratio*0.3) 越小 -> 分值越低(越好)
         combined_score = fom * (1.0 - match_ratio * 0.3) * (1.0 - avg_intensity_score * 0.1)
+
+        # ── 纯金属惩罚: 单元素金属物相因 reference_peaks 少易误匹配, 加 1.5x 惩罚 ──
+        # 非金属气态/固态非金属例外 (H,N,O,S,P,C,Si,Se,Te,As,Ge,B,卤素,稀有气体)
+        _nonmetal_exclude = {"H","He","N","O","F","Ne","Cl","Ar","Br","Kr","I","Xe","Rn",
+                             "S","P","C","Si","Se","Te","As","Ge","B"}
+        if len(phase.elements) == 1 and not (phase.elements & _nonmetal_exclude):
+            combined_score *= 1.5
+
         combined_score = max(combined_score, 0.01)
 
         if combined_score < 0.1:
@@ -312,8 +477,139 @@ class PhaseIdentifier:
             self._phase_database.append(phase)
 
     def get_database_info(self) -> dict:
-        return {
+        info = {
             "total_phases": len(self._phase_database),
             "has_reference_db": len(self._reference_data) > 0,
             "reference_count": len(self._reference_data),
+            "cod_local_enabled": getattr(self, "_cod_enabled", False),
+            "cod_local_ready": getattr(self, "_cod_ready", False),
         }
+        db = getattr(self, "_cod_db", None)
+        if db is not None:
+            info["cod_stats"] = db.stats()
+        return info
+
+    # ── 本地 COD 数据库集成 ──────────────────────────────────
+
+    def enable_cod_local(self, cod_db=None) -> None:
+        """启用本地 COD 数据库 (索引就绪后调用)。
+
+        - 若索引就绪: identify() 额外对 COD 前 N 条候选做 FOM 匹配，合并结果。
+        - identify 参数 use_cod_local=True 时生效 (默认仅内置 + 外部)。
+
+        Args:
+            cod_db: 已实例化的 CODLocalDatabase (None 则新建)
+        """
+        try:
+            from polyxrd.services.cod_local import CODLocalDatabase
+            self._cod_db = cod_db if cod_db is not None else CODLocalDatabase()
+            self._cod_enabled = True
+            self._cod_ready = bool(self._cod_db.is_ready())
+        except Exception:
+            self._cod_db = None
+            self._cod_enabled = False
+            self._cod_ready = False
+
+    def _search_cod_for_phases(self, peaks, elements,
+                               wavelength: float,
+                               two_theta_range,
+                               top_n_candidates: int = 50,
+                               tolerance: float = 0.15):
+        """从 COD 索引中筛选候选物相，动态生成 reference_peaks 并计算 FOM。
+
+        策略:
+          - 如 elements 有条件，先用元素过滤得到 COD 候选 (最多 top_n_candidates)
+          - 对每个候选做 FOM (计算快速，pymatgen 峰生成慢则跳过)
+          - 返回 top_n FOM 最好的 PhaseMatchResult
+        """
+        db = getattr(self, "_cod_db", None)
+        if db is None or not db.is_ready():
+            return []
+
+        # 1) 按元素和 2θ 初筛 (减少调用 pymatgen 的次数)
+        cod_entries = db.search(
+            elements=elements,
+            limit=max(top_n_candidates, 100),
+            parse_ok_only=True,
+        )
+        if not cod_entries:
+            return []
+
+        # 2) 对前 N 条尝试生成 Phase+reference_peaks 并做 FOM
+        results = []
+        import time as _t
+        t0 = _t.time()
+        processed = 0
+        budget_seconds = 30.0  # 防止长时间阻塞
+        for e in cod_entries:
+            if processed >= top_n_candidates or (_t.time() - t0) > budget_seconds:
+                break
+            # 跳过完全没有原子位点或晶胞体积异常的
+            if not e.a or not e.b or not e.c or not e.formula:
+                continue
+            phase = db.get_phase(
+                e.cod_id,
+                wavelength=wavelength,
+                two_theta_range=two_theta_range,
+                use_pymatgen_peaks=True,
+            )
+            if phase is None or not phase.reference_peaks:
+                continue
+            processed += 1
+            match = self._match_phase_fom(phase, peaks, tolerance)
+            results.append(match)
+
+        results.sort(key=lambda r: r.score)
+        return results[:top_n_candidates]
+
+    def identify_with_cod_local(
+        self,
+        data: XRDData,
+        peaks=None,
+        elements: Optional[list[str]] = None,
+        top_n: int = 5,
+        tolerance: float = 0.15,
+        cod_candidates: int = 30,
+        merge_with_builtin: bool = True,
+    ) -> list[PhaseMatchResult]:
+        """物相识别: 内置 118 物相 + 本地 COD 扩展。
+
+        Args:
+            data: XRD 数据
+            peaks: 可选峰列表 (自动检测)
+            elements: 已知元素 (大幅降低 COD 候选范围，推荐)
+            top_n: 返回候选数
+            tolerance: 2θ 容差
+            cod_candidates: 最多评估 COD 物相数 (pymatgen 峰计算较慢)
+            merge_with_builtin: True → 与内置库结果合并排序; False → 仅 COD
+        """
+        if peaks is None:
+            from polyxrd.services.peak_finder import PeakFinder
+            peaks = PeakFinder().find_peaks(data)
+
+        wavelength = self._config.default_wavelength
+        t_min, t_max = self._config.default_two_theta_range
+        t_range = (max(t_min, 5.0), min(t_max, 90.0))
+
+        combined: list[PhaseMatchResult] = []
+        if merge_with_builtin:
+            builtin = self.identify(data, peaks=peaks, elements=elements,
+                                    top_n=max(top_n, 10), tolerance=tolerance)
+            combined.extend(builtin)
+
+        # COD 部分
+        if getattr(self, "_cod_ready", False) or (
+            getattr(self, "_cod_db", None) and self._cod_db.is_ready()
+        ):
+            cod_results = self._search_cod_for_phases(
+                peaks=peaks,
+                elements=elements,
+                wavelength=wavelength,
+                two_theta_range=t_range,
+                top_n_candidates=cod_candidates,
+                tolerance=tolerance,
+            )
+            combined.extend(cod_results)
+
+        combined.sort(key=lambda r: r.score)
+        return combined[:top_n]

@@ -17,7 +17,7 @@ class AppConfig:
 
     # 应用信息
     app_name: str = "PolyXRD"
-    app_version: str = "0.8.23"
+    app_version: str = "0.9.0"
     app_org: str = "PolyXRD"
 
     # 窗口设置
@@ -56,7 +56,7 @@ class AppConfig:
     cif_db_path: Path = field(default_factory=lambda: AppConfig._PROJECT_ROOT / "cod_data" / "cif_db")
     cod_svn_path: Path = field(default_factory=lambda: AppConfig._PROJECT_ROOT / "cod_data" / "cod_svn")
     cod_index_db_path: Path = field(default_factory=lambda: AppConfig._PROJECT_ROOT / "cod_data" / "cod_index.db")
-    # COD 无机物库逆向生成的 SQLite (71199 物相,含 d-I 峰)
+    # COD 无机物库: 从 COD 筛选的无机物子集 (71199 物相,含 d-I 峰)
     # 默认指向项目内路径;允许用户通过 UI 导入外部数据库后覆盖
     cod_db_path: Path = field(default_factory=lambda: AppConfig._PROJECT_ROOT / "cod_data" / "COD_inorganics.sqlite")
     export_dir: Path = field(default_factory=lambda: Path.home() / "PolyXRD_exports")

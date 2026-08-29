@@ -175,7 +175,7 @@ class PeakFinder:
         range_2theta = 2 * fwhm
         mask = np.abs(data.two_theta - data.two_theta[index]) <= range_2theta
         if np.sum(mask) > 1:
-            return float(np.trapz(data.intensity[mask], data.two_theta[mask]))
+            return float(np.trapezoid(data.intensity[mask], data.two_theta[mask]))
         return 0.0
 
     @staticmethod
@@ -342,7 +342,7 @@ class PeakFinder:
         residuals[mask] = y - fitted_curve
 
         # 计算峰面积
-        fitted_peak.area = float(np.trapz(fitted_curve, x))
+        fitted_peak.area = float(np.trapezoid(fitted_curve, x))
 
         # 保留hkl和phase信息
         fitted_peak.hkl = peak.hkl

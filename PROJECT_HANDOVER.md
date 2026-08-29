@@ -2,7 +2,7 @@
 
 > **生成时间**: 2026-08-18  
 > **当前版本**: v0.6.0  
-> **项目路径**: `D:\TraeSolo\PolyXRD`  
+> **项目路径**: `C:\Users\Administrator\Desktop\WorkSpace\Trae\PolyXRD`  
 > **Python 版本**: 3.10.11  
 > **PySide6 版本**: Qt6
 
@@ -344,19 +344,19 @@ class PhaseMatchResult:
 
 | 文件 | 说明 |
 |------|------|
-| [main_window.py](file:///D:/TraeSolo/PolyXRD/src/polyxrd/views/main_window.py) | 主窗口，含工具栏/菜单/标签页 |
-| [phase_view.py](file:///D:/TraeSolo/PolyXRD/src/polyxrd/views/phase_view.py) | 物相分析视图（主要修改） |
-| [plot_widget.py](file:///D:/TraeSolo/PolyXRD/src/polyxrd/views/widgets/plot_widget.py) | matplotlib 绘图控件 |
-| [element_filter_dialog.py](file:///D:/TraeSolo/PolyXRD/src/polyxrd/views/widgets/element_filter_dialog.py) | 元素过滤对话框（新建） |
-| [element_periodic_table.py](file:///D:/TraeSolo/PolyXRD/src/polyxrd/views/widgets/element_periodic_table.py) | 元素周期表控件 |
-| [profile_fitting.py](file:///D:/TraeSolo/PolyXRD/src/polyxrd/services/profile_fitting.py) | Profile Fitting 算法（新建） |
-| [phase_identifier.py](file:///D:/TraeSolo/PolyXRD/src/polyxrd/services/phase_identifier.py) | 传统 FOM 物相识别 |
-| [phase.py](file:///D:/TraeSolo/PolyXRD/src/polyxrd/models/phase.py) | Phase/PhaseMatchResult 模型 |
-| [phase_vm.py](file:///D:/TraeSolo/PolyXRD/src/polyxrd/viewmodels/phase_vm.py) | 物相分析 ViewModel |
-| [i18n 三语](file:///D:/TraeSolo/PolyXRD/src/polyxrd/i18n/translations) | 国际化翻译文件 |
-| [PolyXRD.spec](file:///D:/TraeSolo/PolyXRD/PolyXRD.spec) | PyInstaller 打包配置 |
-| [build.bat](file:///D:/TraeSolo/PolyXRD/build.bat) | 一键打包脚本 |
-| [app-icon.ico](file:///D:/TraeSolo/PolyXRD/src/polyxrd/resources/app-icon.ico) | 应用图标（已修复） |
+| [main_window.py](file:///C:/Users/Administrator/Desktop/WorkSpace/Trae/PolyXRD/src/polyxrd/views/main_window.py) | 主窗口，含工具栏/菜单/标签页 |
+| [phase_view.py](file:///C:/Users/Administrator/Desktop/WorkSpace/Trae/PolyXRD/src/polyxrd/views/phase_view.py) | 物相分析视图（主要修改） |
+| [plot_widget.py](file:///C:/Users/Administrator/Desktop/WorkSpace/Trae/PolyXRD/src/polyxrd/views/widgets/plot_widget.py) | matplotlib 绘图控件 |
+| [element_filter_dialog.py](file:///C:/Users/Administrator/Desktop/WorkSpace/Trae/PolyXRD/src/polyxrd/views/widgets/element_filter_dialog.py) | 元素过滤对话框（新建） |
+| [element_periodic_table.py](file:///C:/Users/Administrator/Desktop/WorkSpace/Trae/PolyXRD/src/polyxrd/views/widgets/element_periodic_table.py) | 元素周期表控件 |
+| [profile_fitting.py](file:///C:/Users/Administrator/Desktop/WorkSpace/Trae/PolyXRD/src/polyxrd/services/profile_fitting.py) | Profile Fitting 算法（新建） |
+| [phase_identifier.py](file:///C:/Users/Administrator/Desktop/WorkSpace/Trae/PolyXRD/src/polyxrd/services/phase_identifier.py) | 传统 FOM 物相识别 |
+| [phase.py](file:///C:/Users/Administrator/Desktop/WorkSpace/Trae/PolyXRD/src/polyxrd/models/phase.py) | Phase/PhaseMatchResult 模型 |
+| [phase_vm.py](file:///C:/Users/Administrator/Desktop/WorkSpace/Trae/PolyXRD/src/polyxrd/viewmodels/phase_vm.py) | 物相分析 ViewModel |
+| [i18n 三语](file:///C:/Users/Administrator/Desktop/WorkSpace/Trae/PolyXRD/src/polyxrd/i18n/translations) | 国际化翻译文件 |
+| [PolyXRD.spec](file:///C:/Users/Administrator/Desktop/WorkSpace/Trae/PolyXRD/PolyXRD.spec) | PyInstaller 打包配置 |
+| [build.bat](file:///C:/Users/Administrator/Desktop/WorkSpace/Trae/PolyXRD/build.bat) | 一键打包脚本 |
+| [app-icon.ico](file:///C:/Users/Administrator/Desktop/WorkSpace/Trae/PolyXRD/src/polyxrd/resources/app-icon.ico) | 应用图标（已修复） |
 
 ---
 

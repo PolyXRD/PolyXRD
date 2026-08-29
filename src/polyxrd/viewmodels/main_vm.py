@@ -174,28 +174,6 @@ class MainViewModel(QObject):
             data, element_filter=element_filter, top_n=top_n, fwhm=fwhm
         )
 
-    def identify_multi_phase(
-        self,
-        element_filter: Optional[dict] = None,
-        max_phases: int = 5,
-        tolerance: float = 0.03,
-    ) -> None:
-        """多物相(混合)分析 - 残差剥离法(需要先寻峰)"""
-        data = self.current_data
-        if data is None:
-            self.error_occurred.emit("请先加载数据")
-            return
-
-        wl = getattr(data, "wavelength", None) or 1.5406
-        self.status_changed.emit("执行多物相(混合)分析")
-        self._phase_vm.identify_multi_phase(
-            data,
-            element_filter=element_filter,
-            max_phases=max_phases,
-            tolerance=tolerance,
-            wavelength=wl,
-        )
-
     def select_phase(self, phase: Phase) -> None:
         """选中物相"""
         self._phase_vm.select_phase(phase)
@@ -208,8 +186,9 @@ class MainViewModel(QObject):
     def refine_structure(
         self,
         strategy: str = "sequential",
-        engine: str = "gsas2",
+        engine: str = "builtin",
         max_cycles: int = 20,
+        **kwargs,
     ) -> None:
         """Rietveld结构精修"""
         data = self.current_data
@@ -231,7 +210,7 @@ class MainViewModel(QObject):
 
         self.status_changed.emit(f"执行Rietveld精修 ({engine})")
         self._refinement_vm.refine(
-            data, phases, strategy=strategy, engine=engine, max_cycles=max_cycles
+            data, phases, strategy=strategy, engine=engine, max_cycles=max_cycles, **kwargs
         )
 
     # ------------------------------------------------------------------

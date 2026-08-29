@@ -1,4 +1,4 @@
-﻿translations = {
+translations = {
     "app": {
         "name": "PolyXRD",
         "title": "PolyXRD v{version}",
@@ -35,9 +35,6 @@
             "view_database": "查看参考数据库",
             "cif_browser": "浏览CIF数据库",
             "cod_search": "COD在线搜索",
-            "import_cod_db": "导入物相数据库...",
-            "import_cod_db_tip": "导入外部 COD 无机物 SQLite 数据库",
-            "cod_db_status": "数据库状态",
         },
         "structure_refinement": {
             "title": "结构精修",
@@ -113,7 +110,7 @@
             "</p>"
             "<hr style='border:none; border-top:1px solid #ddd; margin:12px 0;'/>"
             "<p style='margin:4px 0; font-size:11px; color:#555;'>"
-            "联系方式：<a href='mailto:sshztx@shimadzu.com.cn' style='color:#2980b9; text-decoration:none;'>sshztx@shimadzu.com.cn</a>"
+            "联系方式：<a href='mailto:sshztx@outlook.com' style='color:#2980b9; text-decoration:none;'>sshztx@outlook.com</a>"
             "</p>"
             "<p style='margin:8px 0 4px 0; font-size:11px; color:#888;'>© 2026 版权所有</p>"
             "</div>"
@@ -150,27 +147,6 @@
         "cif_export_failed": "导出失败。",
         "cif_import_done": "CIF文件已成功导入。",
         "cif_import_failed": "导入失败：{error}",
-        "import_cod_db_title": "导入 COD 无机物数据库",
-        "sqlite_filter": "SQLite数据库 (*.sqlite *.db);;所有文件 (*)",
-        "cod_db_import_done": (
-            "数据库导入成功！\n\n"
-            "物相数量: {count}\n"
-            "路径: {path}\n\n"
-            "路径已持久化,下次启动自动加载。"
-        ),
-        "cod_db_import_failed": "数据库导入失败:{error}",
-        "cod_db_not_loaded": (
-            "当前未加载 COD 无机物数据库。\n\n"
-            "请通过菜单 [物相分析 → 导入物相数据库] 选择 .sqlite 文件。"
-        ),
-        "cod_db_status_info": (
-            "COD 无机物数据库\n\n"
-            "路径: {path}\n"
-            "物相数: {count}\n"
-            "来源: {source}"
-        ),
-        "cod_db_source_builtin": "程序内置",
-        "cod_db_source_user": "用户导入",
         "ref_db_title": "参考数据库",
         "ref_db_info": "离线参考数据库：{count}种物相",
         "ref_db_phase_count": "物相数量",

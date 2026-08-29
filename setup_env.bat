@@ -1,43 +1,22 @@
 @echo off
 chcp 65001 >nul
+title PolyXRD Environment Setup
 echo ========================================
-echo   PolyXRD 环境设置脚本
+echo   PolyXRD - Environment Setup
 echo ========================================
 echo.
 
-REM 检查Python
-where python >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [错误] 未检测到Python。请先安装Python 3.11+
-    echo 下载地址: https://www.python.org/downloads/
-    pause
-    exit /b 1
+cd /d "%~dp0"
+
+REM Use PowerShell 7 if available, otherwise Windows PowerShell
+set PWSH="C:\Program Files\PowerShell\7\pwsh.exe"
+if exist %PWSH% (
+    echo [Info] Using PowerShell 7
+    %PWSH% -ExecutionPolicy Bypass -File "%~dp0setup_env.ps1"
+) else (
+    echo [Info] Using Windows PowerShell
+    powershell -ExecutionPolicy Bypass -File "%~dp0setup_env.ps1"
 )
 
-echo [信息] 检测到Python版本:
-python --version
 echo.
-
-REM 创建虚拟环境
-if not exist "venv" (
-    echo [信息] 创建虚拟环境...
-    python -m venv venv
-)
-
-REM 激活虚拟环境
-call venv\Scripts\activate.bat
-
-REM 升级pip
-python -m pip install --upgrade pip
-
-REM 安装依赖
-echo [信息] 安装项目依赖...
-pip install -e .
-pip install pytest pytest-cov
-
-echo.
-echo ========================================
-echo   环境设置完成！
-echo   运行: venv\Scripts\python -m polyxrd.main
-echo ========================================
 pause

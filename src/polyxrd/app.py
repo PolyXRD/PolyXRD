@@ -30,7 +30,7 @@ class PolyXRDApplication:
         self._qt_app = QApplication(self._argv)
         self._qt_app.setApplicationName("PolyXRD")
         self._qt_app.setOrganizationName("PolyXRD")
-        self._qt_app.setApplicationVersion("0.3.0")
+        self._qt_app.setApplicationVersion(get_config().app_version)
 
         # 启用高DPI支持
         self._qt_app.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps, True)

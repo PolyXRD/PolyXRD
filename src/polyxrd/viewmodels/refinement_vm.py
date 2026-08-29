@@ -52,8 +52,9 @@ class RefinementViewModel(QObject):
         data,
         phases: Optional[list[Phase]] = None,
         strategy: str = "sequential",
-        engine: str = "gsas2",
+        engine: str = "builtin",
         max_cycles: int = 20,
+        **kwargs,
     ) -> None:
         """执行Rietveld精修"""
         if phases is None:
@@ -73,6 +74,7 @@ class RefinementViewModel(QObject):
                 strategy=strategy,
                 engine=engine,
                 max_cycles=max_cycles,
+                **kwargs,
             )
             self._result = result
             self.refinement_progress.emit(100)
