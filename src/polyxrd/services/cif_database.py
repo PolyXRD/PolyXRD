@@ -1409,6 +1409,7 @@ class CIFDatabase:
         min_match: int = 3,
         limit: int = 50,
         max_ref_peaks: int = 40,
+        elements_allowed: set | None = None,
     ) -> list[dict]:
         """用测得的 d 值列表在 COD 数据库中搜索匹配物相。
 
@@ -1491,7 +1492,20 @@ class CIFDatabase:
             "SELECT cod_id, ref_id, display_id, formula, space_group, n_peaks, "
             "peaks_d, peaks_i FROM phases"
         )
+        # 元素约束下推 (化学过滤在扫描层完成, 避免候选名额被无效化学
+        # 成分占用)。COD 公式为空格分隔 "元素+系数" 组 (如 "O4 Zr3")。
+        import re as _re
+        _tok_re = _re.compile(r"^([A-Z][a-z]?)(\d*\.?\d*)$")
         for row in cur:
+            if elements_allowed is not None:
+                f_str = row["formula"] or ""
+                els = {
+                    m.group(1)
+                    for tok in f_str.split()
+                    if (m := _tok_re.match(tok))
+                }
+                if not els or not els.issubset(elements_allowed):
+                    continue
             peaks_d_str = row["peaks_d"]
             peaks_i_str = row["peaks_i"]
             if not peaks_d_str or not peaks_i_str:

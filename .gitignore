@@ -111,3 +111,6 @@ cod_data/cif_db/
 cod_data/PolyXRD_COD_Inorganics_v*.zip
 cod_data/*.sqlite*
 
+
+# ── 本地工作记忆(不入库) ───────────────────────
+.workbuddy/

@@ -109,13 +109,41 @@ class PhaseViewModel(QObject):
         element_filter: Optional[dict] = None,
         top_n: int = 5,
         tolerance: float = 0.15,
+        db_source: str = "builtin",
     ) -> None:
-        """物相识别"""
+        """物相识别 (支持多数据库源)
+
+        Args:
+            db_source: 数据库源
+                - "builtin": 内置 118 物相库 (默认)
+                - "cod_inorganics": COD 无机物库 (71,199 物相, d-I Hanawalt)
+                - "cod_full": COD 全库 (113,223 条 CIF, 本地索引)
+                - "merged": 内置库 + COD 全库合并检索
+        """
         if self._peaks is None or len(self._peaks) == 0:
             self.error.emit("请先检测峰")
             return
         try:
-            if element_filter:
+            if db_source == "cod_inorganics":
+                results = self._identifier.identify_with_cod_inorganics(
+                    data,
+                    peaks=self._peaks,
+                    element_filter=element_filter,
+                    top_n=top_n,
+                    tolerance=tolerance,
+                )
+            elif db_source in ("cod_full", "merged"):
+                if not getattr(self._identifier, "_cod_ready", False):
+                    self._identifier.enable_cod_local()
+                results = self._identifier.identify_with_cod_local(
+                    data,
+                    peaks=self._peaks,
+                    elements=elements,
+                    top_n=top_n,
+                    tolerance=tolerance,
+                    merge_with_builtin=(db_source == "merged"),
+                )
+            elif element_filter:
                 results = self._identifier.identify_with_element_filter(
                     data,
                     peaks=self._peaks,
