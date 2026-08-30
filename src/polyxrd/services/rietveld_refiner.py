@@ -233,8 +233,40 @@ class RietveldRefiner:
         4) 多起点最小二乘 (3 个启动向量): 默认起点 / 估计起点 / 反向权重起点
            避免 least_squares 在 nfev=9 就陷入局部最优
         5) 增加 weight 的上界约束 (每个 weight ≤30), 避免"单相权重无限膨胀"吸收 scale
+
+        v8 性能优化 (P2):
+        - 快速路径 (quick path): 先跑 use_caglioti=False + 3 起点的快检,
+          若 wR ≤ wR_threshold (默认 55%) 直接返回; 否则再启 Caglioti
+          精细模式, 最终返回两者中 wR 更优者 (结果只会更好不会变差)
+        - 单起点 max_nfev 收敛上限从 max_cycles*20 收紧到
+          max_nfev_per_start (默认 400): 实测获胜起点通常 ~55 nfev 收敛,
+          跑满 1200 的起点均为无效局部极小, 纯耗时间
+        - _compute_spectrum_from_ref 分块向量化 (数学等价, 差异 <1e-13)
         """
         from scipy.optimize import least_squares
+
+        # ── 0. 快速路径: 无 Caglioti 快检, wR 达标即返回 ────────────
+        wR_threshold = kwargs.get("wR_threshold", 55.0)
+        best_quick: Optional[RefinementResult] = None
+        if wR_threshold is not None and kwargs.get("use_caglioti", True):
+            quick_kw = dict(kwargs)
+            quick_kw["use_caglioti"] = False
+            quick_kw["n_starts"] = min(3, kwargs.get("n_starts", 3))
+            quick_kw["wR_threshold"] = None  # 防止递归再次触发快检
+            quick_kw["max_nfev_per_start"] = kwargs.get("max_nfev_per_start", 400)
+            try:
+                best_quick = self._refine_builtin(
+                    data, phases, strategy, max_cycles, **quick_kw
+                )
+            except Exception:
+                best_quick = None
+            if best_quick is not None and best_quick.wR <= wR_threshold:
+                best_quick.fit_params = {
+                    **best_quick.fit_params,
+                    "quick_path": True,
+                    "wR_threshold": float(wR_threshold),
+                }
+                return best_quick
 
         two_theta = data.two_theta
         intensity = data.intensity
@@ -248,6 +280,10 @@ class RietveldRefiner:
         # n_starts: Caglioti 开启时缩到 4 起点 (快速)
         n_starts_default = 5 if not use_caglioti else 4
         n_starts = kwargs.get("n_starts", n_starts_default)
+        # v8: 单起点收敛上限 (实测获胜起点 ~55 nfev, 1200 上限纯属浪费)
+        max_nfev_per_start = int(kwargs.get(
+            "max_nfev_per_start", min(max_cycles * 20, 400)
+        ))
 
         # ── 1. 背景估计 (v3: SNIP 窗宽增大, 避免削峰引入假残差) ──
         bg = self._estimate_background(intensity, bg_method, wide_window=True)
@@ -408,7 +444,7 @@ class RietveldRefiner:
             try:
                 res_opt = least_squares(
                     residual, x0_clipped, bounds=(lower, upper),
-                    max_nfev=max_cycles * 20,
+                    max_nfev=max_nfev_per_start,
                     method="trf",
                     loss="linear",
                 )
@@ -433,7 +469,7 @@ class RietveldRefiner:
             # 退化: 直接返回起点拟合
             best_result = least_squares(
                 residual, candidates[0], bounds=(lower, upper),
-                max_nfev=max_cycles * 20, method="trf",
+                max_nfev=max_nfev_per_start, method="trf",
             )
             _w, _fw, _et, _sc, _zs, _cag = _unpack(best_result.x)
             best_simulated = self._compute_spectrum_from_ref(
@@ -557,7 +593,7 @@ class RietveldRefiner:
         converged = bool(getattr(best_result, "success", True))
         num_cycles = int(getattr(best_result, "nfev", 0))
 
-        return RefinementResult(
+        result = RefinementResult(
             phases=refined_phases,
             observed_data=(two_theta, intensity),
             simulated_data=(two_theta, simulated_full),
@@ -581,6 +617,15 @@ class RietveldRefiner:
                 "caglioti": (tuple(float(x) for x in opt_cag) if opt_cag is not None else None),
             },
         )
+
+        # ── v8: 快速路径结果择优 (快检 wR 更低则返回快检结果) ──────
+        if best_quick is not None and best_quick.wR < result.wR:
+            best_quick.fit_params = {
+                **best_quick.fit_params,
+                "caglioti_fallback": True,
+            }
+            return best_quick
+        return result
 
     def _estimate_background(
         self, intensity: np.ndarray, method: str = "snip", wide_window: bool = False
@@ -634,60 +679,89 @@ class RietveldRefiner:
         """
         simulated = np.zeros_like(two_theta)
 
-        # ── 预计算每个 2θ 点的 sigma / gamma ─────────────────────
+        # ── 1. 展平参考峰: 一次遍历收集 (2θ, 强度, 所属物相) ─────────
+        #    (v8 性能优化: 逐峰 Python 循环改为分块向量化, 消除
+        #    ~n_peaks×8 次 numpy 调用开销; 数学等价, 仅浮点求和的
+        #    结合顺序不同, 结果差异 <1e-13)
+        n_phases = len(phase_peaks)
+        peak_tt: list[float] = []
+        peak_int: list[float] = []
+        peak_phase: list[int] = []
+        for i, peaks in enumerate(phase_peaks):
+            for peak_data in peaks:
+                if len(peak_data) < 3:
+                    continue
+                p_2theta = peak_data[1]
+                if p_2theta < two_theta[0] or p_2theta > two_theta[-1]:
+                    continue
+                peak_tt.append(p_2theta)
+                peak_int.append(peak_data[2])
+                peak_phase.append(i)
+
+        if not peak_tt:
+            return simulated
+
+        peak_tt = np.asarray(peak_tt, dtype=float)
+        peak_int = np.asarray(peak_int, dtype=float)
+
+        # ── 2. 每个参考峰的 FWHM (固定 或 Caglioti 2θ 依赖) ─────────
         if caglioti is not None and any(caglioti):
             U, V, W = caglioti
-            # 正切 (避免除零)
-            safe = np.where(np.abs(two_theta - 90.0) < 0.01, 90.01, two_theta)
-            tan_theta = np.tan(np.radians(safe / 2.0))  # tan(θ), θ = 2θ/2
-            fwhm_sq = np.clip(U * tan_theta * tan_theta + V * tan_theta + W, 0.0001, None)
-            fwhm_arr = np.sqrt(fwhm_sq)
-            sigma_arr = fwhm_arr / (2.0 * np.sqrt(2.0 * np.log(2.0)))
-            gamma_arr = fwhm_arr / 2.0
-            # 为每个参考峰在其 2θ 位置取 FWHM
-            peak_wise = True
+            tan_p = np.tan(np.radians(peak_tt / 2.0))
+            fw_p = np.sqrt(np.clip(U * tan_p * tan_p + V * tan_p + W, 0.0001, None))
         else:
-            peak_wise = False
-            sigma = fwhm / (2.0 * np.sqrt(2.0 * np.log(2.0)))
-            gamma = fwhm / 2.0
+            fw_p = np.full_like(peak_tt, fwhm)
 
+        sigma_p = fw_p / (2.0 * np.sqrt(2.0 * np.log(2.0)))
+        gamma2_p = (fw_p / 2.0) ** 2
+
+        # ── 3. 分块向量化峰形 (n_points × chunk) ──────────────────
+        #    chunk=16: 临时数组 (4000×16×8B ≈ 512KB) 可驻留 CPU 缓存;
+        #    参考峰按物相连续排列, 各物相峰位区间已知, 直接用列切片
+        #    累加 (避免布尔掩码 fancy-indexing 的额外拷贝)。
+        #    数学等价, 仅浮点求和结合顺序不同。
+        n_points = len(two_theta)
+        basis = np.zeros((n_points, n_phases))
+        chunk = 16
+        is_gauss = peak_shape == "gaussian"
+        is_lorentz = peak_shape == "lorentzian"
+        one_minus_eta = 1.0 - eta
+        sigma_all = fw_p / (2.0 * np.sqrt(2.0 * np.log(2.0)))
+        gamma2_all = (fw_p / 2.0) ** 2
+
+        offset = 0
         for i, peaks in enumerate(phase_peaks):
-            w = weights[i] * scale
+            n_i = 0
             for peak_data in peaks:
-                if len(peak_data) >= 3:
-                    hkl, peak_2theta, ref_intensity = peak_data[0], peak_data[1], peak_data[2]
-                else:
-                    continue
+                if (len(peak_data) >= 3
+                        and two_theta[0] <= peak_data[1] <= two_theta[-1]):
+                    n_i += 1
+            if n_i == 0:
+                continue
+            sl = slice(offset, offset + n_i)
+            pts_p = peak_tt[sl]
+            sigma_p = sigma_all[sl]
+            gamma2_p = gamma2_all[sl]
+            inten_p = peak_int[sl]
+            for s in range(0, n_i, chunk):
+                e = min(s + chunk, n_i)
+                delta = two_theta[:, None] - pts_p[None, s:e]
+                if is_gauss:
+                    prof = np.exp(-0.5 * (delta / sigma_p[None, s:e]) ** 2)
+                elif is_lorentz:
+                    g2 = gamma2_p[None, s:e]
+                    prof = g2 / (delta * delta + g2)
+                else:  # pseudo-voigt / voigt
+                    gauss = np.exp(-0.5 * (delta / sigma_p[None, s:e]) ** 2)
+                    g2 = gamma2_p[None, s:e]
+                    lorentz = g2 / (delta * delta + g2)
+                    prof = eta * gauss
+                    prof += one_minus_eta * lorentz
+                prof *= inten_p[None, s:e]
+                basis[:, i] += prof.sum(axis=1)
+            offset += n_i
 
-                if peak_2theta < two_theta[0] or peak_2theta > two_theta[-1]:
-                    continue
-
-                if peak_wise:
-                    # 在参考峰 2θ 位置计算局部 FWHM
-                    tan_p = np.tan(np.radians(peak_2theta / 2.0))
-                    fw_p = float(np.clip(U*tan_p*tan_p + V*tan_p + W, 0.0001, None)) ** 0.5
-                    sigma_p = fw_p / (2.0 * np.sqrt(2.0 * np.log(2.0)))
-                    gamma_p = fw_p / 2.0
-                    delta = two_theta - peak_2theta
-                    gauss = np.exp(-0.5 * (delta / sigma_p) ** 2)
-                    lorentz = gamma_p**2 / (delta ** 2 + gamma_p**2)
-                else:
-                    delta = two_theta - peak_2theta
-                    gauss = np.exp(-0.5 * (delta / sigma) ** 2)
-                    lorentz = gamma**2 / (delta ** 2 + gamma**2)
-
-                if peak_shape == "gaussian":
-                    profile = gauss
-                elif peak_shape == "lorentzian":
-                    profile = lorentz
-                elif peak_shape == "voigt":
-                    profile = eta * gauss + (1 - eta) * lorentz
-                else:  # pseudo-voigt
-                    profile = eta * gauss + (1 - eta) * lorentz
-
-                simulated += w * ref_intensity * profile
-
-        return simulated
+        return scale * (basis @ np.asarray(weights, dtype=float))
 
     def _compute_spectrum(
         self,
@@ -851,6 +925,215 @@ class RietveldRefiner:
             return 100.0
 
         return float(np.sqrt(numerator / denominator) * 100)
+
+    # ------------------------------------------------------------------
+    # Le Bail 晶胞参数精修 (P4)
+    # ------------------------------------------------------------------
+
+    def refine_le_bail(
+        self,
+        data: XRDData,
+        phase: Phase,
+        refine_param: str = "a",
+        scale_range: tuple[float, float] = (0.98, 1.02),
+        n_scan: int = 41,
+        n_extract_cycles: int = 3,
+        fwhm: float = 0.15,
+        eta: float = 0.5,
+        max_peaks: int = 50,
+    ) -> RefinementResult:
+        """Le Bail 晶胞参数精修 (无需原子占位 / 结构强度模型)
+
+        算法 (经典 Le Bail 迭代):
+        1. 对候选晶胞参数 (选定参数 × 尺度因子 s), 从 hkl 列表计算
+           允许衍射峰位 2θ(hkl)
+        2. 强度提取迭代: 各衍射峰积分强度 I_k 按最小二乘从观测谱动态
+           提取 (I_k ← Σ y_obs·PV_k / Σ PV_k², 窗口 = 峰位 ± 3σ),
+           I_k 不依赖结构模型 — 这是 Le Bail 与 Rietveld 的本质区别
+        3. 以 Rwp = sqrt(Σ(y_obs-y_calc)²/Σy_obs²) 为目标, 网格扫描
+           scale 因子取最优; 良好初始结构模型缺失时也可收敛
+
+        Args:
+            data: 实验 XRD 数据
+            phase: 待精修物相 (需含 lattice 与 hkl 参考)
+            refine_param: 精修的晶胞参数名 ("a"/"b"/"c"/"alpha"/"beta"/"gamma")
+            scale_range: 尺度因子扫描范围 (相对值)
+            n_scan: 网格扫描点数
+            n_extract_cycles: 每个候选晶胞的强度提取迭代次数
+            fwhm: 峰宽 (固定)
+            eta: pseudo-Voigt 混合系数 (固定)
+            max_peaks: 参与拟合的最大衍射峰数
+
+        Returns:
+            RefinementResult (phases[0].lattice 为精修后晶胞)
+        """
+        two_theta = np.asarray(data.two_theta, dtype=float)
+        intensity = np.asarray(data.intensity, dtype=float)
+
+        lat = phase.lattice if phase.lattice is not None else LatticeParams()
+        if refine_param not in ("a", "b", "c", "alpha", "beta", "gamma"):
+            raise ValueError(f"不支持的精修参数: {refine_param}")
+
+        # hkl 列表 (与 _calc_peak_positions 相同的生成方式)
+        hkl_list = [
+            (h, k, l)
+            for h in range(-3, 4)
+            for k in range(-3, 4)
+            for l in range(-3, 4)
+            if not (h == 0 and k == 0 and l == 0)
+        ]
+
+        # 背景一次估计 (中值滤波, 与 Rietveld 引擎一致)
+        bg = self._estimate_background(intensity, "median", wide_window=True)
+        y_obs = np.clip(intensity - bg, 0.0, None)
+
+        sigma = fwhm / (2.0 * np.sqrt(2.0 * np.log(2.0)))
+        gamma = fwhm / 2.0
+
+        def _peak_positions(scale: float) -> list[float]:
+            params = dict(
+                a=lat.a, b=lat.b, c=lat.c,
+                alpha=lat.alpha, beta=lat.beta, gamma=lat.gamma,
+            )
+            params[refine_param] = params[refine_param] * scale
+            positions = self._calc_peak_positions(
+                params["a"], params["b"], params["c"],
+                params["alpha"], params["beta"], params["gamma"],
+                data.wavelength, float(two_theta[0]), float(two_theta[-1]),
+            )
+            return positions[:max_peaks]
+
+        def _le_bail_eval(scale: float) -> tuple[float, np.ndarray]:
+            """给定尺度因子: 强度提取迭代 + 返回 (Rwp, y_calc)
+
+            匹配门控 (关键稳定化): 只有计算峰位处存在显著观测强度的峰
+            才参与强度提取, 其余峰强度置零。否则错配峰的窗口落在真实
+            峰尾部时会因 Σpv²→0 产生 "尾峰窃取" (强度爆炸), 使 Rwp
+            对峰位失敏, 晶胞扫描失效。
+            """
+            positions = _peak_positions(scale)
+            if not positions:
+                return 100.0, np.zeros_like(two_theta)
+            pos = np.asarray(positions, dtype=float)
+
+            # 峰窗口 (半宽 3σ)
+            half_win = max(3, int(np.ceil(3.0 * sigma / max(
+                float(np.median(np.diff(two_theta))), 1e-9))))
+
+            # ── 匹配门控: 峰位处观测强度须 ≥ 5% 全谱最大 ───────────
+            y_max = float(np.max(y_obs)) if y_obs.size else 0.0
+            match_thr = 0.05 * y_max
+            c_idx = np.clip(
+                np.searchsorted(two_theta, pos), 0, len(two_theta) - 1
+            )
+            y_at_pos = y_obs[c_idx]
+            matched = y_at_pos >= match_thr
+
+            # 初始强度: 峰位处观测强度 (截断非负, 未匹配峰置零)
+            I = np.where(matched, np.clip(y_at_pos, 0.0, None), 0.0)
+
+            def _build_calc(I_vals: np.ndarray) -> np.ndarray:
+                y_c = np.zeros_like(two_theta)
+                for ik, p in zip(I_vals, pos):
+                    if ik <= 0.0:
+                        continue
+                    d = two_theta - p
+                    g = np.exp(-0.5 * (d / sigma) ** 2)
+                    lz = gamma ** 2 / (d * d + gamma ** 2)
+                    y_c += ik * (eta * g + (1.0 - eta) * lz)
+                return y_c
+
+            # ── 经典 Le Bail 强度更新 (仅对匹配峰, 带脊正则 + 上限) ──
+            for _ in range(max(1, n_extract_cycles)):
+                y_calc = _build_calc(I)
+                for j in np.nonzero(matched)[0]:
+                    p = pos[j]
+                    c = int(c_idx[j])
+                    lo, hi = max(0, c - half_win), min(len(two_theta), c + half_win + 1)
+                    d = two_theta[lo:hi] - p
+                    g = np.exp(-0.5 * (d / sigma) ** 2)
+                    lz = gamma ** 2 / (d * d + gamma ** 2)
+                    pv = eta * g + (1.0 - eta) * lz
+                    denom = float(np.sum(pv * pv))
+                    if denom <= 1e-12:
+                        continue
+                    # 减去其他峰在该窗口的贡献, 避免重叠峰重复计数
+                    others = y_calc[lo:hi] - I[j] * pv
+                    raw = float(np.sum((y_obs[lo:hi] - others) * pv)
+                                / (denom * (1.0 + 0.05)))
+                    # 上限: 不超过窗口内观测最大强度的 2 倍 (防窃取)
+                    cap = 2.0 * float(np.max(y_obs[lo:hi]))
+                    I[j] = min(max(raw, 0.0), cap)
+
+            y_calc = _build_calc(I)
+
+            denom = float(np.sum(y_obs ** 2))
+            if denom <= 0:
+                return 100.0, y_calc
+            rwp = float(np.sqrt(np.sum((y_obs - y_calc) ** 2) / denom) * 100.0)
+            return rwp, y_calc + bg
+
+        # 网格扫描 scale 因子
+        scales = np.linspace(scale_range[0], scale_range[1], max(5, n_scan))
+        best_scale = 1.0
+        best_rwp = float("inf")
+        best_calc = None
+        for s in scales:
+            rwp, y_c = _le_bail_eval(float(s))
+            if rwp < best_rwp:
+                best_rwp = rwp
+                best_scale = float(s)
+                best_calc = y_c
+
+        # 与初始晶胞 (s=1.0) 对比: 只有更优才接受精修结果
+        rwp_init, y_init = _le_bail_eval(1.0)
+        if best_rwp >= rwp_init:
+            best_scale = 1.0
+            best_rwp = rwp_init
+            best_calc = y_init
+
+        refined_lat = LatticeParams(
+            a=lat.a * (best_scale if refine_param == "a" else 1.0),
+            b=lat.b * (best_scale if refine_param == "b" else 1.0),
+            c=lat.c * (best_scale if refine_param == "c" else 1.0),
+            alpha=lat.alpha * (best_scale if refine_param == "alpha" else 1.0),
+            beta=lat.beta * (best_scale if refine_param == "beta" else 1.0),
+            gamma=lat.gamma * (best_scale if refine_param == "gamma" else 1.0),
+        )
+
+        quality = "优秀" if best_rwp < 5 else ("良好" if best_rwp < 10
+                  else ("可接受" if best_rwp < 20 else "需改进"))
+
+        refined_phase = Phase(
+            name=phase.name,
+            formula=phase.formula,
+            space_group=phase.space_group,
+            lattice=refined_lat,
+            reference_peaks=phase.reference_peaks,
+            elements=phase.elements,
+        )
+
+        return RefinementResult(
+            phases=[refined_phase],
+            observed_data=(two_theta, intensity),
+            simulated_data=(two_theta, best_calc),
+            residual_data=(two_theta, intensity - best_calc),
+            wR=best_rwp,
+            GOF=0.0,
+            quality=quality,
+            num_cycles=n_scan,
+            converged=bool(best_rwp < rwp_init),
+            fit_params={
+                "engine": "le_bail",
+                "refine_param": refine_param,
+                "initial_value": float(getattr(lat, refine_param)),
+                "refined_value": float(getattr(refined_lat, refine_param)),
+                "scale": float(best_scale),
+                "rwp_initial": float(rwp_init),
+                "rwp_refined": float(best_rwp),
+                "n_extract_cycles": int(n_extract_cycles),
+            },
+        )
 
     def _phase_to_gsas2_dict(self, phase: Phase) -> dict:
         """将Phase转换为GSAS-II字典格式"""

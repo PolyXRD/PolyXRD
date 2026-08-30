@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QSpinBox,
     QDoubleSpinBox,
+    QComboBox,
     QSizePolicy,
     QMessageBox,
     QScrollArea,
@@ -57,6 +58,8 @@ class PhaseView(QWidget):
         self._filter_dict: dict = {}
         self._current_results: list = []
         self._element_dialog: Optional[ElementFilterDialog] = None
+        # 数据库源: key 与 PhaseViewModel.identify_phases 的 db_source 对应
+        self._db_source_keys = ["builtin", "cod_inorganics", "cod_full", "merged"]
         self._setup_ui()
         self._setup_connections()
 
@@ -112,6 +115,30 @@ class PhaseView(QWidget):
         )
         self._filter_summary.setMinimumHeight(24)
         left_panel.addWidget(self._filter_summary)
+
+        # 数据库源选择 (双库切换)
+        db_row = QHBoxLayout()
+        db_row.setSpacing(6)
+        db_row.addWidget(QLabel("数据库源:"))
+        self._db_combo = QComboBox()
+        self._db_combo.addItems([
+            "内置库 (118 物相)",
+            "COD 无机物库 (71,199)",
+            "COD 全库 (113,223)",
+            "内置+COD全库合并",
+        ])
+        self._db_combo.setFixedHeight(28)
+        self._db_combo.setToolTip(
+            "选择物相检索使用的数据库:\n"
+            "· 内置库: 程序自带 118 种常见物相 (最快)\n"
+            "· COD 无机物库: 外挂 71,199 物相 (预计算 d-I 峰, Hanawalt 预筛)\n"
+            "· COD 全库: 外挂 113,223 条 CIF 索引 (本地检索)\n"
+            "· 合并: 内置库 + COD 全库结果合并排序\n"
+            "外挂数据库通过 文件 → 导入外部数据库 或设置页挂载"
+        )
+        db_row.addWidget(self._db_combo)
+        db_row.addStretch()
+        left_panel.addLayout(db_row)
 
         # 识别方法组
         method_layout = QHBoxLayout()
@@ -288,19 +315,32 @@ class PhaseView(QWidget):
     # 传统 Search/Match (需要先寻峰)
     # ------------------------------------------------------------------
 
+    def _current_db_source(self) -> str:
+        """当前选择的数据库源 key"""
+        idx = self._db_combo.currentIndex()
+        if 0 <= idx < len(self._db_source_keys):
+            return self._db_source_keys[idx]
+        return "builtin"
+
+    def _db_source_display(self) -> str:
+        """当前数据库源的显示名"""
+        return self._db_combo.currentText()
+
     def _on_traditional_identify(self) -> None:
         """传统物相识别"""
         self._current_method = "fom"
         self._vm.identify_phases(
             element_filter=self._filter_dict if self._filter_dict else None,
             top_n=10,
+            db_source=self._current_db_source(),
         )
 
     def _on_quick_identify(self) -> None:
         """快速识别（无元素过滤）"""
         self._current_method = "fom"
         self._vm.identify_phases(
-            element_filter=None, top_n=10
+            element_filter=None, top_n=10,
+            db_source=self._current_db_source(),
         )
 
     # ------------------------------------------------------------------
@@ -317,13 +357,14 @@ class PhaseView(QWidget):
             return
 
         method = phase_results[0].method if hasattr(phase_results[0], 'method') else "fom"
+        db_src = self._db_source_display()
         if method == "profile_fitting":
             self._method_label.setText(
-                "Profile Fitting 结果 (相关系数越接近100%越好)"
+                f"Profile Fitting 结果 [{db_src}] (相关系数越接近100%越好)"
             )
         else:
             self._method_label.setText(
-                "Search/Match 结果 (FOM值越低越好)"
+                f"Search/Match 结果 [{db_src}] (FOM值越低越好)"
             )
 
         for result in phase_results:

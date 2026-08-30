@@ -145,8 +145,14 @@ class MainViewModel(QObject):
         elements: Optional[list[str]] = None,
         element_filter: Optional[dict] = None,
         top_n: int = 5,
+        db_source: str = "builtin",
     ) -> None:
-        """传统物相识别 (需要先寻峰)"""
+        """传统物相识别 (需要先寻峰)
+
+        Args:
+            db_source: 数据库源 ("builtin" / "cod_inorganics" /
+                "cod_full" / "merged")
+        """
         data = self.current_data
         if data is None:
             self.error_occurred.emit("请先加载数据")
@@ -154,7 +160,8 @@ class MainViewModel(QObject):
 
         self.status_changed.emit("执行传统Search/Match物相识别")
         self._phase_vm.identify_phases(
-            data, elements=elements, element_filter=element_filter, top_n=top_n
+            data, elements=elements, element_filter=element_filter,
+            top_n=top_n, db_source=db_source,
         )
 
     def identify_phases_profile_fitting(
