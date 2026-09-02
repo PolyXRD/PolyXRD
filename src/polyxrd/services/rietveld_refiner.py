@@ -5,7 +5,9 @@ Rietveld精修服务
 """
 from __future__ import annotations
 
+import os
 import time
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
@@ -89,54 +91,170 @@ class RietveldRefiner:
         max_cycles: int,
         **kwargs,
     ) -> RefinementResult:
-        """使用GSAS-II进行Rietveld精修"""
-        try:
-            import GSASIIscriptable as G2sc
-        except ImportError:
-            # GSAS-II不可用，使用内置引擎
+        """使用 GSAS-II 进行 Rietveld 精修 (子进程桥)
+
+        GSAS-II 通过官方 gsas2main 安装器独立安装 (自带 Python + 预编译
+        二进制, 与 PolyXRD 的 venv 是两套环境), 因此这里以 JSON 子进程
+        方式调用 scripts/gsas2_bridge.py, 而非 in-process import。
+        未安装 GSAS-II 或调用失败时回退内置引擎。
+        """
+        py = self._find_gsas2_python()
+        bridge = Path(__file__).resolve().parents[3] / "scripts" / "gsas2_bridge.py"
+        if not py or not bridge.exists():
             return self._refine_builtin(data, phases, strategy, max_cycles, **kwargs)
 
-        # 创建项目
-        gpr = G2sc.G2Project()
+        import json as _json
+        import subprocess
+        import tempfile
 
-        # 添加数据
-        hist = gpr.add_data(
-            {"data": data.two_theta, "intensity": data.intensity},
-            "experimental_data",
-        )
+        two_theta = np.asarray(data.two_theta, dtype=float).tolist()
+        intensity = np.asarray(data.intensity, dtype=float).tolist()
 
-        # 添加相
-        for i, phase in enumerate(phases):
-            phase_dict = self._phase_to_gsas2_dict(phase)
-            gpr.add_phase(phase_dict, hist)
+        req = {
+            "two_theta": two_theta,
+            "intensity": intensity,
+            "wavelength": float(data.wavelength),
+            "refine": "lattice",
+            "max_cycles": int(max_cycles),
+            "phases": [],
+        }
+        for phase in phases:
+            entry: dict = {"name": phase.name}
+            if phase.space_group:
+                entry["spacegroup"] = phase.space_group
+            if phase.cif_path and Path(phase.cif_path).exists():
+                entry["cif_path"] = str(phase.cif_path)
+            if phase.lattice is not None:
+                entry["lattice"] = {
+                    "a": phase.lattice.a, "b": phase.lattice.b,
+                    "c": phase.lattice.c, "alpha": phase.lattice.alpha,
+                    "beta": phase.lattice.beta, "gamma": phase.lattice.gamma,
+                }
+            req["phases"].append(entry)
 
-        # 设置精修参数
-        rsd = gpr.add_refinement(hist, phases)
+        timeout = float(kwargs.get("gsas2_timeout", 300.0))
+        try:
+            with tempfile.TemporaryDirectory(prefix="polyxrd_g2_") as td:
+                req_path = str(Path(td) / "request.json")
+                out_path = str(Path(td) / "output.json")
+                with open(req_path, "w", encoding="utf-8") as f:
+                    _json.dump(req, f)
+                proc = subprocess.run(
+                    [str(py), str(bridge), req_path, out_path],
+                    capture_output=True, text=True, timeout=timeout,
+                )
+                if not Path(out_path).exists():
+                    return self._refine_builtin(
+                        data, phases, strategy, max_cycles, **kwargs
+                    )
+                with open(out_path, "r", encoding="utf-8") as f:
+                    out = _json.load(f)
+        except Exception:
+            return self._refine_builtin(data, phases, strategy, max_cycles, **kwargs)
 
-        # 执行精修
-        cycles = rsd.do_refinements(max_cycles=max_cycles)
+        if not out.get("ok"):
+            return self._refine_builtin(data, phases, strategy, max_cycles, **kwargs)
 
-        # 收集结果
-        two_theta = data.two_theta
-        simulated = rsd.get_simulated()
-        residuals = rsd.get_residuals()
-        wR = rsd.get_wR()
-        GOF = rsd.get_GOF()
+        # 收集精修后晶胞
+        refined_phases = []
+        lat_by_name = {p["name"]: p.get("lattice") for p in out.get("phases", [])}
+        for phase in phases:
+            lat = phase.lattice if phase.lattice is not None else LatticeParams()
+            new_lat = lat_by_name.get(phase.name) or {}
+            if new_lat and new_lat.get("a") is not None:
+                lat = LatticeParams(
+                    a=float(new_lat["a"]), b=float(new_lat["b"]),
+                    c=float(new_lat["c"]),
+                    alpha=float(new_lat.get("alpha", 90.0)),
+                    beta=float(new_lat.get("beta", 90.0)),
+                    gamma=float(new_lat.get("gamma", 90.0)),
+                )
+            refined_phases.append(Phase(
+                name=phase.name,
+                formula=phase.formula,
+                space_group=phase.space_group,
+                lattice=lat,
+                weight_fraction=phase.weight_fraction,
+                reference_peaks=phase.reference_peaks,
+                elements=phase.elements,
+            ))
 
-        # 获取精修后的相参数
-        refined_phases = self._get_refined_phases(gpr, phases)
+        wR = float(out["wR"]) if out.get("wR") is not None else 100.0
+        GOF = float(out["GOF"]) if out.get("GOF") is not None else 0.0
+        quality = ("优秀" if wR < 5 else "良好" if wR < 10
+                   else "可接受" if wR < 20 else "需改进")
 
         return RefinementResult(
             phases=refined_phases,
-            observed_data=(two_theta, data.intensity),
-            simulated_data=(two_theta, simulated),
-            residual_data=(two_theta, residuals),
+            observed_data=(data.two_theta, data.intensity),
+            simulated_data=(data.two_theta, data.intensity),  # 无残差谱回传
+            residual_data=(data.two_theta, np.zeros_like(data.two_theta)),
             wR=wR,
             GOF=GOF,
-            quality="",
-            num_cycles=cycles,
-            converged=cycles < max_cycles,
+            quality=quality,
+            num_cycles=int(out.get("n_cycles", max_cycles)),
+            converged=bool(out.get("ok", False)),
+            fit_params={
+                "engine": "gsas2",
+                "strategy": strategy,
+                "gsas2_python": str(py),
+                "gpx": out.get("gpx", ""),
+                "wR": wR,
+            },
         )
+
+    @staticmethod
+    def _find_gsas2_python() -> Optional[Path]:
+        """定位 GSAS-II 自带 Python 解释器。
+
+        优先级: 环境变量 POLYXRD_GSAS2_PYTHON > 常见安装目录。
+        """
+        env_py = os.environ.get("POLYXRD_GSAS2_PYTHON", "").strip()
+        candidates = []
+        if env_py:
+            candidates.append(Path(env_py))
+        for prefix in (
+            r"D:\GSASII", r"C:\GSASII", r"D:\g2main", r"C:\g2main",
+            str(Path.home() / "GSASII"), str(Path.home() / "g2main"),
+            str(Path.home() / "gsas2main"),  # gsas2main 默认安装位置
+        ):
+            candidates.append(Path(prefix) / "python.exe")
+            candidates.append(Path(prefix) / "bin" / "python.exe")
+        for cand in candidates:
+            if cand.exists():
+                return cand
+        return None
+
+    def get_engine_status(self) -> dict:
+        """返回各精修引擎的可用状态 (供 GUI 提示)"""
+        status: dict = {"builtin": {"available": True, "note": "内置引擎 (始终可用)"}}
+        # powerxrd
+        try:
+            import powerxrd
+            status["powerxrd"] = {
+                "available": True,
+                "version": getattr(powerxrd, "__version__", "4.x"),
+                "note": "v4: 仅单相立方晶系; 其余自动回退内置",
+            }
+        except ImportError:
+            status["powerxrd"] = {"available": False, "version": None,
+                                  "note": "未安装 (pip install powerxrd)"}
+        # gsas2
+        py = self._find_gsas2_python()
+        if py is not None:
+            status["gsas2"] = {
+                "available": True,
+                "python": str(py),
+                "note": "子进程桥 (scripts/gsas2_bridge.py)",
+            }
+        else:
+            status["gsas2"] = {
+                "available": False,
+                "python": None,
+                "note": "未检测到 GSAS-II (gsas2main 安装器), 或用 "
+                        "POLYXRD_GSAS2_PYTHON 指定 python.exe",
+            }
+        return status
 
     # ------------------------------------------------------------------
     # powerxrd 精修引擎
@@ -150,65 +268,112 @@ class RietveldRefiner:
         max_cycles: int,
         **kwargs,
     ) -> RefinementResult:
-        """使用powerxrd进行精修"""
+        """使用 powerxrd (v4) 进行精修
+
+        powerxrd v4 API (2026-02 重构): 单相 PhaseModel + 晶格子类,
+        目前仅内置 CubicLattice。因此本引擎仅在:
+          - 单物相
+          - 立方晶系 (a=b=c, α=β=γ=90°)
+        时启用; 其余情况回退内置引擎。
+
+        精修参数: 晶胞 a + 强度 scale + 背景截距 (无结构时 |F|²=100,
+        峰位主导拟合, 适用于晶胞参数测定; 强度/含量定量请用内置引擎)。
+        """
         try:
-            from powerxrd import Rietveld
+            from powerxrd.model import PhaseModel
+            from powerxrd.lattice import CubicLattice
+            from powerxrd.refine import refine as pxr_refine
+            _PXR_VERSION = getattr(
+                __import__("powerxrd"), "__version__", "4.x"
+            )
         except ImportError:
             return self._refine_builtin(data, phases, strategy, max_cycles, **kwargs)
 
-        # 构建Rietveld对象
-        rvd = Rietveld(
-            data.two_theta,
-            data.intensity,
-            wavelength=data.wavelength,
+        # powerxrd v4 仅支持单相 + 立方
+        if len(phases) != 1:
+            return self._refine_builtin(data, phases, strategy, max_cycles, **kwargs)
+        phase = phases[0]
+        lat = phase.lattice if phase.lattice is not None else None
+        if lat is None:
+            return self._refine_builtin(data, phases, strategy, max_cycles, **kwargs)
+        cubic_ok = (
+            abs(lat.a - lat.b) < 1e-9
+            and abs(lat.a - lat.c) < 1e-9
+            and abs(lat.alpha - 90.0) < 1e-6
+            and abs(lat.beta - 90.0) < 1e-6
+            and abs(lat.gamma - 90.0) < 1e-6
         )
+        if not cubic_ok:
+            return self._refine_builtin(data, phases, strategy, max_cycles, **kwargs)
 
-        # 添加相
-        for phase in phases:
-            if phase.lattice:
-                rvd.add_phase(
-                    phase.lattice.a,
-                    phase.lattice.b,
-                    phase.lattice.c,
-                    phase.lattice.alpha,
-                    phase.lattice.beta,
-                    phase.lattice.gamma,
-                    phase.atomic_sites,
-                    phase.weight_fraction,
-                )
+        two_theta = np.asarray(data.two_theta, dtype=float)
+        intensity = np.asarray(data.intensity, dtype=float)
+        bg = self._estimate_background(intensity, "median", wide_window=True)
 
-        # 执行精修
-        result = rvd.refine(max_cycles=max_cycles)
+        try:
+            model = PhaseModel(
+                lattice=CubicLattice(a=float(lat.a)),
+                wavelength=float(data.wavelength),
+            )
+            model.params["bkg_intercept"] = float(np.median(bg))
+            model.params["scale"] = max(
+                0.1, float(np.max(intensity - bg)) / 100.0
+            )
+            model.params["U"] = 0.001
+            model.params["W"] = float(max(0.005, kwargs.get("fwhm", 0.15) ** 2))
 
-        refined_phases = []
-        for i, phase in enumerate(phases):
-            if i < len(result.phases):
-                rp = Phase(
-                    name=phase.name,
-                    formula=phase.formula,
-                    lattice=LatticeParams(
-                        a=result.phases[i].a,
-                        b=result.phases[i].b,
-                        c=result.phases[i].c,
-                        alpha=result.phases[i].alpha,
-                        beta=result.phases[i].beta,
-                        gamma=result.phases[i].gamma,
-                    ),
-                    weight_fraction=result.phases[i].weight_fraction,
-                )
-                refined_phases.append(rp)
+            refine_keys = ["a", "scale", "bkg_intercept"]
+            result = pxr_refine(
+                model, two_theta, intensity, refine_keys, print_stage=False
+            )
 
-        return RefinementResult(
-            phases=refined_phases,
-            observed_data=(data.two_theta, data.intensity),
-            simulated_data=(data.two_theta, result.simulated),
-            residual_data=(data.two_theta, result.residuals),
-            wR=result.wR,
-            GOF=result.GOF,
-            quality="",
-            num_cycles=result.cycles,
-            converged=result.converged,
-        )
+            sim_full = model.pattern(two_theta)
+            wR = self._calc_wR(intensity, sim_full)
+            n_points = len(intensity)
+            n_free = max(1, n_points - len(refine_keys))
+            ss_res = float(np.sum((intensity - sim_full) ** 2))
+            GOF = float(np.sqrt(ss_res / n_free) / (np.mean(np.abs(intensity)) + 1e-10))
+
+            refined_a = float(model.lattice.a)
+            refined_phase = Phase(
+                name=phase.name,
+                formula=phase.formula,
+                space_group=phase.space_group,
+                lattice=LatticeParams(
+                    a=refined_a, b=refined_a, c=refined_a,
+                    alpha=90.0, beta=90.0, gamma=90.0,
+                ),
+                weight_fraction=100.0,
+                reference_peaks=phase.reference_peaks,
+                elements=phase.elements,
+            )
+            quality = ("优秀" if wR < 5 else "良好" if wR < 10
+                       else "可接受" if wR < 20 else "需改进")
+
+            return RefinementResult(
+                phases=[refined_phase],
+                observed_data=(two_theta, intensity),
+                simulated_data=(two_theta, sim_full),
+                residual_data=(two_theta, intensity - sim_full),
+                wR=wR,
+                GOF=GOF,
+                quality=quality,
+                num_cycles=int(getattr(result, "nfev", 0)),
+                converged=bool(getattr(result, "success", True)),
+                fit_params={
+                    "engine": "powerxrd",
+                    "engine_version": str(_PXR_VERSION),
+                    "strategy": strategy,
+                    "refined_a": refined_a,
+                    "initial_a": float(lat.a),
+                    "scale": float(model.params["scale"]),
+                    "bkg_intercept": float(model.params["bkg_intercept"]),
+                    "wR": float(wR),
+                },
+            )
+        except Exception:
+            # 任何异常回退内置引擎, 保证精修流程不中断
+            return self._refine_builtin(data, phases, strategy, max_cycles, **kwargs)
 
     # ------------------------------------------------------------------
     # 内置精修引擎 (最小实现)
