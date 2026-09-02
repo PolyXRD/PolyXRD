@@ -174,28 +174,211 @@ class PhaseIdentifier:
             top_n=top_n, tolerance=tolerance,
         )
 
-    def build_refinement_combination(
-        self,
-        matches: list,
-        expected_count: Optional[int] = None,
-        min_coverage: float = 0.5,
-    ) -> list:
-        """从物相识别结果中生成精修组合，进一步过滤冗余和噪声
+    # ── 组合选择辅助: 结构去重 / 实测峰掩码 / 分支定界 ─────────
 
-        在 identify_with_element_filter 返回结果基础上，进一步优化：
-          1. 剔除参考峰覆盖率低于 min_coverage 的噪声物相
-          2. 若用户给了 expected_count (预期物相数)，只取前 expected_count 个
-             且剔除 w<1% 的尾项（避免精修时引入无意义自由度）
-          3. 剔除纯金属占比超过 20% 的组合（再次防御性检查）
-          4. 返回最终 Phase 对象列表，可直接传给 RietveldRefiner.refine()
+    @staticmethod
+    def _phases_structurally_same(pa, pb, tol: float = 0.15) -> bool:
+        """判断两个物相是否为"同一结构的重复条目"。
 
-        Args:
-            matches: identify_with_element_filter 的输出
-            expected_count: 预期物相数量（若已知）
-            min_coverage: 参考峰匹配覆盖率下限 (0-1)，低于此视为噪声
+        旧去重逻辑按 (化学式, 元素集合) 一刀切，会把化学式相同但结构
+        不同的真正多型 (石英 vs 方石英, 均 SiO2; 锐钛矿 vs 金红石,
+        均 TiO2) 误删。这里进一步要求参考峰位高度重合 (较小峰集合中
+        ≥70% 能在另一条目的峰集中找到 tol 内的对应峰) 才视为重复。
+        """
+        a = [tt for _, tt, _ in pa.get_reference_peaks()]
+        b = [tt for _, tt, _ in pb.get_reference_peaks()]
+        if not a or not b:
+            return False
+        small, large = (a, b) if len(a) <= len(b) else (b, a)
+        hit = 0
+        for x in small:
+            for y in large:
+                if abs(x - y) <= tol:
+                    hit += 1
+                    break
+        return hit / len(small) >= 0.7
 
-        Returns:
-            list[Phase] - 可直接用于 Rietveld 精修的物相列表
+    @staticmethod
+    def _as_observed_peaks(peaks):
+        """把 PeakList / list[Peak] 归一化为 [(two_theta, intensity), ...]"""
+        items = getattr(peaks, "peaks", peaks) or []
+        out = []
+        for p in items:
+            if p is None:
+                continue
+            tt = getattr(p, "two_theta", None)
+            if tt is None:
+                continue
+            out.append((float(tt), float(getattr(p, "intensity", 1.0) or 1.0)))
+        return out
+
+    def _dedupe_results(self, results, peaks=None, tolerance: float = 0.2) -> list:
+        """结构感知 + 数据感知的同公式条目去重。
+
+        同 (formula, elements) 的多条候选, 有两种成因:
+          a) 同一结构的重复条目 (如 Fluorite/CaF2 两版本、Brucite 重复)
+             → 只留 FOM 最优 (最先出现) 一条
+          b) 结构不同的真正多型 (α-Quartz vs Cristobalite vs Tridymite 均
+             SiO2; Anatase vs Rutile 均 TiO2; Calcite vs Aragonite 均 CaCO3)
+             → 不能一律按公式合并, 否则 5-x 试样(石英+方石英并存)的预期
+               物相永远进不了候选池
+
+        数据感知规则 (peaks 提供时): 同一公式组内, 后续多型只有在"解释了
+        组内已保留成员解释不到的实测峰"时才保留; 否则视为无独立数据证据的
+        噪声 (如纯方解石试样里不会留下文石)。peaks 缺失时保守全保留多型。
+        """
+        obs_tt = None
+        if peaks is not None:
+            obs_tt = [o[0] for o in self._as_observed_peaks(peaks)]
+            if not obs_tt:
+                obs_tt = None
+
+        kept: list = []
+        for r in results:
+            formula = r.phase.formula or ""
+            group = [s for s in kept
+                     if s.phase.formula == formula
+                     and s.phase.elements == r.phase.elements]
+            if not group:
+                kept.append(r)
+                continue
+            # 同一结构重复条目 → 剔除
+            if any(self._phases_structurally_same(s.phase, r.phase)
+                   for s in group):
+                continue
+            # 无实测峰信息 → 保守保留多型
+            if obs_tt is None:
+                kept.append(r)
+                continue
+            # 数据感知: 必须解释到已保留成员解释不到的实测峰
+            r_msk = self._phase_hit_mask(r.phase, obs_tt, tolerance)
+            if r_msk == 0:
+                continue
+            group_msk = 0
+            for s in group:
+                group_msk |= self._phase_hit_mask(s.phase, obs_tt, tolerance)
+            if r_msk & ~group_msk:
+                kept.append(r)
+        return kept
+
+    @staticmethod
+    def _phase_hit_mask(phase, obs_tt, tolerance: float) -> int:
+        """物相参考峰命中的实测峰位掩码 (Python int 位集)。
+
+        每条参考峰只要在容差内命中任意实测峰即置位该实测峰对应的位；
+        同一实测峰被多条参考峰命中只算一次。
+        """
+        msk = 0
+        for _, tt, _ in phase.get_reference_peaks():
+            for j, o in enumerate(obs_tt):
+                if abs(tt - o) <= tolerance:
+                    msk |= (1 << j)
+        return msk
+
+    @staticmethod
+    def _branch_and_bound_select(masks, metal_flags, n_obs,
+                                 size_targets=None, scores=None) -> list:
+        """分支定界: 选择使"联合覆盖实测峰数"最大的物相子集。
+
+        目标函数 (对给定规模 k):
+          max  联合覆盖峰数 = |∪ masks_i|          (每峰等权)
+          平手 取 Σscore 最小 (score 为 FOM, 越低越好), 再取输入序在前者
+
+        约束:
+          - 子集内纯金属数 ≤ max(1, round(0.2·n))  (硬约束, 与旧版防御一致)
+          - size_targets=None 时自动定规模: 取"联合覆盖达到全局最大"的
+            最小 k (简约原则, 解释不了任何额外峰的冗余相自然被剔除)
+
+        n ≤ 14 时精确枚举 (可视为最坏 C(14,7)=3432 的组合, 微秒级);
+        n > 14 时用逐点边际增益最大的贪心构造 + 覆盖平手退避。
+        """
+        import itertools
+        n = len(masks)
+        if n == 0:
+            return []
+        max_pm = min(max(1, round(0.2 * n)), n)
+
+        if size_targets:
+            sizes = sorted({s for s in size_targets if 1 <= s <= n}) or [n]
+        else:
+            sizes = list(range(1, n + 1))
+
+        best_cov_k = {k: -1 for k in sizes}
+        best_combo_k = {k: None for k in sizes}
+
+        def _consider(k, combo):
+            cov = 0
+            for i in combo:
+                cov |= masks[i]
+            cov = bin(cov).count("1")
+            if cov > best_cov_k[k] or (
+                cov == best_cov_k[k] and best_combo_k[k] is not None and scores
+                and sum(scores[i] for i in combo)
+                < sum(scores[i] for i in best_combo_k[k])
+            ):
+                best_cov_k[k] = cov
+                best_combo_k[k] = tuple(combo)
+
+        def _metal_ok(combo):
+            if sum(1 for i in combo if metal_flags[i]) > max_pm:
+                return False
+            return True
+
+        if n <= 14:
+            for k in sizes:
+                for combo in itertools.combinations(range(n), k):
+                    if not _metal_ok(combo):
+                        continue
+                    _consider(k, combo)
+        else:
+            # 贪心: 每次取边际增益最大的候选 (纯金属约束内)
+            for k in sizes:
+                combo = []
+                covered = 0
+                for _step in range(k):
+                    best_i, best_gain = None, -1
+                    for i in range(n):
+                        if i in combo:
+                            continue
+                        if sum(1 for j in combo if metal_flags[j]) \
+                                + (1 if metal_flags[i] else 0) > max_pm:
+                            continue
+                        gain = bin(masks[i] & ~covered).count("1")
+                        if gain > best_gain:
+                            best_gain, best_i = gain, i
+                    if best_i is None:
+                        break
+                    combo.append(best_i)
+                    covered |= masks[best_i]
+                if combo:
+                    _consider(k, combo)
+
+        if size_targets:
+            k0 = sizes[0]
+            if best_combo_k[k0] is not None:
+                return list(best_combo_k[k0])
+            # 目标规模不可行 (纯金属约束过紧) → 放松约束再选
+            relaxed = PhaseIdentifier._branch_and_bound_select(
+                masks, [False] * n, n_obs, size_targets, scores
+            )
+            return relaxed
+
+        # 自动规模: 最小 k 达到全局最大联合覆盖
+        maxcov = max(best_cov_k.values()) if best_cov_k else -1
+        if maxcov <= 0:
+            return []
+        for k in sizes:
+            if best_cov_k[k] == maxcov and best_combo_k[k] is not None:
+                return list(best_combo_k[k])
+        return []
+
+    def _legacy_refinement_combination(self, kept: list,
+                                       expected_count: Optional[int]) -> list:
+        """旧版启发式 (peaks 未提供时的回退路径)。
+
+        语义与 v0.9.x build_refinement_combination 一致:
+        coverage 过滤已完成; 这里做 expected_count 截断 + 纯金属比例防御
+        + 低覆盖率纯金属剔除。
         """
         _nonmetal_exclude = {"H","He","N","O","F","Ne","Cl","Ar","Br","Kr","I","Xe","Rn",
                              "S","P","C","Si","Se","Te","As","Ge","B"}
@@ -203,31 +386,115 @@ class PhaseIdentifier:
             return (len(phase.elements) == 1
                     and not (phase.elements & _nonmetal_exclude))
 
-        # 1. 过滤 coverage 低于阈值的物相
-        filtered = [m for m in matches if m.coverage >= min_coverage]
-        if not filtered:
-            filtered = list(matches)  # 若全低于阈值则回退
-
-        # 2. 若有预期数量，按 expected_count 截断
+        sel = list(kept)
         if expected_count and expected_count > 0:
-            filtered = filtered[:expected_count]
-
-        # 3. 纯金属比例二次防御：>20% 则从尾往前移除纯金属直至达标
-        phases_temp = [m.phase for m in filtered]
-        pm_indices = [i for i, p in enumerate(phases_temp) if _is_pure_metal(p)]
-        max_pm = max(1, int(0.2 * len(phases_temp) + 0.5))
-        if len(pm_indices) > max_pm:
-            to_remove = set(pm_indices[max_pm:])
-            phases_temp = [p for i, p in enumerate(phases_temp) if i not in to_remove]
-
-        # 4. 剔除 coverage <0.55 的纯金属（即使比例够了也删）
-        final = []
-        for m, p in zip(filtered, phases_temp):
-            if _is_pure_metal(p) and m.coverage < 0.55:
+            sel = sel[:expected_count]
+        pm_idx = [i for i, m in enumerate(sel) if _is_pure_metal(m.phase)]
+        cap = max(1, round(0.2 * len(sel)))
+        if len(pm_idx) > cap:
+            drop = set(pm_idx[cap:])
+            sel = [m for i, m in enumerate(sel) if i not in drop]
+        out = []
+        for m in sel:
+            if _is_pure_metal(m.phase) and m.coverage < 0.55:
                 continue
-            final.append(p)
+            out.append(m.phase)
+        return out
 
-        return final
+    def build_refinement_combination(
+        self,
+        matches: list,
+        expected_count: Optional[int] = None,
+        min_coverage: float = 0.5,
+        peaks=None,
+        tolerance: float = 0.2,
+    ) -> list:
+        """从物相识别结果中生成精修组合 (分支定界全局搜索)
+
+        旧实现是"覆盖率过滤 + expected_count 截断 + 纯金属防御"的贪心
+        流水线, 只能沿 FOM 排序从前往后截断, 无法处理多相间的局部重复/
+        干扰 (Task #7):
+          - 两个候选解释同一批实测峰时, 截断可能丢真相留冗余;
+          - 5+ 相试样上"FOM 排序"≠"联合解释能力排序"。
+
+        v0.10 起基于实测峰联合覆盖做分支定界 (B&B):
+          1. 预处理 (与旧版一致): 结构去重 / coverage 过滤(全低回退) /
+             低覆盖率纯金属剔除
+          2. 未提供 peaks → 无法评估联合覆盖, 回退旧启发式
+          3. 提供 peaks → 每个候选映射为"命中实测峰的掩码", 以子集联合
+             覆盖最多实测峰为目标做全局搜索
+             - expected_count 已知 → 恰好该规模、联合覆盖最优的子集
+             - expected_count 未知 → 取覆盖不再增长的最小规模 (简约)
+             - 纯金属数量上限作为硬约束参与搜索 (而非事后截断)
+
+        Args:
+            matches: identify_with_element_filter 的输出 (按 score 升序)
+            expected_count: 预期物相数量 (若已知)
+            min_coverage: 参考峰匹配覆盖率下限, 低于此视为噪声
+                (注意: 与 v0.9.x 口径一致, 与 coverage(%) 百分比比较)
+            peaks: 实测峰列表 (PeakList / list[Peak]); 提供后启用 B&B
+            tolerance: 参考峰与实测峰匹配容差 (度); 默认 0.2 与主流
+                identify_with_element_filter(tolerance=0.2) 调用一致
+
+        Returns:
+            list[Phase] - 可直接用于 Rietveld 精修的物相列表 (原 FOM 顺序)
+        """
+        _nonmetal_exclude = {"H","He","N","O","F","Ne","Cl","Ar","Br","Kr","I","Xe","Rn",
+                             "S","P","C","Si","Se","Te","As","Ge","B"}
+        def _is_pure_metal(phase) -> bool:
+            return (len(phase.elements) == 1
+                    and not (phase.elements & _nonmetal_exclude))
+
+        # 1. 结构/数据感知去重 + coverage 过滤 (全部低于阈值则回退全量)
+        filtered = self._dedupe_results(matches, peaks, tolerance)
+        kept = [m for m in filtered if m.coverage >= min_coverage]
+        if not kept:
+            kept = filtered
+        if not kept:
+            return []
+
+        # 2. 无实测峰 → 无法评估联合覆盖, 回退旧启发式
+        if peaks is None:
+            return self._legacy_refinement_combination(kept, expected_count)
+
+        obs = self._as_observed_peaks(peaks)
+        if not obs:
+            return self._legacy_refinement_combination(kept, expected_count)
+        obs_tt = [o[0] for o in obs]
+
+        # 3. 候选 → 命中掩码; 低覆盖率纯金属与"解释不了任何实测峰"者剔除
+        pool: list = []
+        masks: list[int] = []
+        for m in kept:
+            if _is_pure_metal(m.phase) and m.coverage < 0.55:
+                continue
+            msk = self._phase_hit_mask(m.phase, obs_tt, tolerance)
+            if msk == 0:
+                continue
+            pool.append(m)
+            masks.append(msk)
+        if not pool:
+            return []
+
+        # 4. B&B 全局选择
+        metal_flags = [_is_pure_metal(m.phase) for m in pool]
+        if expected_count and expected_count > 0:
+            size_targets = [min(expected_count, len(pool))]
+        else:
+            size_targets = None
+        scores = [m.score for m in pool]
+
+        # 规模退化: 若 expected_count > 池内可解释候选数, 池全选
+        if size_targets and size_targets[0] >= len(pool):
+            return [m.phase for m in pool]
+
+        selected = self._branch_and_bound_select(
+            masks, metal_flags, len(obs_tt), size_targets, scores,
+        )
+        chosen = [pool[i].phase for i in selected]
+        if not chosen:
+            return self._legacy_refinement_combination(kept, expected_count)
+        return chosen
 
     def identify_with_element_filter(
         self,
@@ -349,17 +616,14 @@ class PhaseIdentifier:
                 results = reordered
             # 否则保留 results (原排序, 仅 top_n 裁剪)
 
-        # ── 去重: 同化学式只保留 FOM 最优 (第一个) 一个 ──────────────
-        # 消除内置库中同一化学式有多个条目的问题 (如 Fluorite/CaF2 有两版本)
-        seen_formulas: dict[str, bool] = {}
-        deduped: list = []
-        for r in results:
-            formula = r.phase.formula or ""
-            key = (formula, tuple(sorted(r.phase.elements)))
-            if key not in seen_formulas:
-                seen_formulas[key] = True
-                deduped.append(r)
-        results = deduped
+        # ── 去重: 结构感知 + 数据感知 (Task #7) ────────────────
+        # 内置库中同一化学式可能有多条目:
+        #   a) 真重复 (同一结构, 如 CaF2 两版本) → 合并, 只留 FOM 最优
+        #   b) 真正多型 (石英 vs 方石英; 锐钛矿 vs 金红石; 方解石 vs 文石)
+        #      → 旧实现按 (formula, elements) 一刀切会误删, 使 5-x 等含
+        #        石英+方石英试样的预期物相无法进入候选。现改为: 多型仅在
+        #        解释了实测峰中本组已保留成员解释不到的峰时才保留。
+        results = self._dedupe_results(results, peaks, tolerance)
 
         return results[:top_n]
 
