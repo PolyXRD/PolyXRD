@@ -59,6 +59,22 @@ class RietveldRefiner:
         """
         start_time = time.time()
 
+        # ── M14 options 前处理: 择优取向 (参考峰强度) / 零点初值 ──
+        phases_use = phases
+        opts = kwargs.get("options")
+        if opts is not None:
+            po = getattr(opts, "preferred_orientation", None)
+            if po and abs(float(po.get("r", 1.0)) - 1.0) > 1e-9:
+                d = tuple(po.get("direction", (0, 0, 1)))
+                phases_use = [
+                    self.apply_preferred_orientation(p, d, float(po["r"]))
+                    for p in phases
+                ]
+            zs = float(getattr(opts, "zero_shift_init", 0.0) or 0.0)
+            if abs(zs) > 1e-12:
+                kwargs.setdefault("zero_shift", zs)
+        kwargs.pop("options", None)
+
         engines = {
             "gsas2": self._refine_gsas2,
             "powerxrd": self._refine_powerxrd,
@@ -71,10 +87,10 @@ class RietveldRefiner:
             refine_func = self._refine_builtin
 
         try:
-            result = refine_func(data, phases, strategy, max_cycles, **kwargs)
+            result = refine_func(data, phases_use, strategy, max_cycles, **kwargs)
         except Exception:
             # 任何引擎失败时使用内置精修
-            result = self._refine_builtin(data, phases, strategy, max_cycles, **kwargs)
+            result = self._refine_builtin(data, phases_use, strategy, max_cycles, **kwargs)
 
         result.time_seconds = time.time() - start_time
         return result
@@ -1406,3 +1422,158 @@ class RietveldRefiner:
                 "file": e.file,
             } for e in entries
         ]
+
+    # ─────────────────────────────────────────────────────────────
+    # M14: 择优取向 / DoC / 内标定量 / 选项入口
+    # ─────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def march_dollase_intensity_factor(
+        alpha_deg: float, r: float = 1.0
+    ) -> float:
+        """March-Dollase 择优取向强度修正因子 G(α)。
+
+        G(α) = (r²·cos²α + (1/r)·sin²α)^(−3/2),  α = 散射矢量与该晶面法线
+        同择优轴的夹角 (度), r = 取向参数。
+
+        约定 (r=1 时 G=1, 恒无取向):
+          r>1 → 与择优轴近垂直的晶面 (α≈90°) 相对增强 (板状织构典型);
+          r<1 → 与择优轴近平行的晶面 (α≈0°) 相对增强。
+        """
+        a = np.radians(float(alpha_deg))
+        ca, sa = np.cos(a), np.sin(a)
+        denom = r * r * ca * ca + (1.0 / r) * sa * sa
+        if denom <= 0:
+            return 1.0
+        return float(denom ** (-1.5))
+
+    @staticmethod
+    def _hkl_angle(hkl: tuple, direction: tuple) -> float:
+        """hkl 散射矢量与择优轴方向的夹角 (度); 退化方向返回 90。"""
+        h = np.asarray([float(v) for v in hkl], dtype=float)
+        d = np.asarray([float(v) for v in direction], dtype=float)
+        if np.linalg.norm(h) < 1e-12 or np.linalg.norm(d) < 1e-12:
+            return 90.0
+        cosv = float(np.dot(h, d) / (np.linalg.norm(h) * np.linalg.norm(d)))
+        cosv = float(np.clip(cosv, -1.0, 1.0))
+        return float(np.degrees(np.arccos(cosv)))
+
+    @classmethod
+    def apply_preferred_orientation(
+        cls, phase: Phase, direction=(0, 0, 1), r: float = 1.0
+    ) -> Phase:
+        """返回应用了 March-Dollase 择优取向修正的物相副本。
+
+        参考峰强度 × G(α); 无 hkl 信息的峰不变。不修改入参。
+        """
+        if r is None or abs(float(r) - 1.0) < 1e-9:
+            return Phase.from_dict(phase.to_dict())
+        refs = []
+        for hkl, tt, i in phase.get_reference_peaks():
+            if hkl and any(hkl):
+                g = cls.march_dollase_intensity_factor(
+                    cls._hkl_angle(hkl, direction), float(r))
+                refs.append((tuple(hkl), float(tt), float(i) * g))
+            else:
+                refs.append((tuple(hkl), float(tt), float(i)))
+        out = Phase.from_dict(phase.to_dict())
+        out.reference_peaks = refs
+        return out
+
+    @staticmethod
+    def degree_of_crystallinity(
+        crystalline: np.ndarray,
+        amorphous: np.ndarray,
+        two_theta: Optional[np.ndarray] = None,
+    ) -> float:
+        """结晶度 DoC = 晶相面积 / (晶相面积 + 非晶面积)。
+
+        crystalline/amorphous 为同一 2θ 轴上"扣背景后"的分离模型曲线
+        (晶峰模型 与 非晶宽隆模型)。返回 0~1 的分数 (×100 = %)。
+        """
+        c = np.asarray(crystalline, dtype=float)
+        a = np.asarray(amorphous, dtype=float)
+        if len(c) != len(a):
+            raise ValueError("crystalline 与 amorphous 长度必须一致")
+        if two_theta is not None:
+            area_c = float(np.trapezoid(np.maximum(c, 0.0), two_theta))
+            area_a = float(np.trapezoid(np.maximum(a, 0.0), two_theta))
+        else:
+            area_c = float(np.trapezoid(np.maximum(c, 0.0)))
+            area_a = float(np.trapezoid(np.maximum(a, 0.0)))
+        total = area_c + area_a
+        return area_c / total if total > 0 else 0.0
+
+    @staticmethod
+    def internal_standard_scale(
+        phases_with_weights: list,
+        std_name: str,
+        std_wt_pct: float,
+    ) -> Optional[float]:
+        """由精修结果求内标定标系数 scale = std_wt_pct / w'_std。
+
+        Returns:
+            scale 系数; 内标份额为 0/缺失时返回 None (无法定标)。
+        """
+        w_std = 0.0
+        for p in phases_with_weights:
+            if p.name == std_name:
+                w_std = float(getattr(p, "weight_fraction", 0.0) or 0.0)
+                break
+        if w_std <= 0:
+            return None
+        return float(std_wt_pct) / w_std
+
+    def refine_with_internal_standard(
+        self,
+        data: XRDData,
+        phases: list[Phase],
+        std_phase: Phase,
+        std_wt_pct: float,
+        engine: str = "builtin",
+        max_cycles: int = 20,
+        **kwargs,
+    ) -> RefinementResult:
+        """掺入已知含量内标的 Rietveld 定量。
+
+        流程: phases+内标 一起精修 → 得到内标相对份额 w'_std →
+        scale = std_wt_pct / w'_std → 各相绝对含量 (wt% of sample)。
+
+        Returns:
+            RefinementResult (phases 中不含内标; weight_fraction 为绝对 wt%;
+            fit_params["internal_standard"] 记录定标信息)
+        """
+        combined = [p for p in phases if p is not None]
+        if std_phase is None:
+            raise ValueError("std_phase 不能为 None")
+        combined.append(std_phase)
+        result = self.refine(data, combined, engine=engine,
+                             max_cycles=max_cycles, **kwargs)
+        std_name = std_phase.name or ""
+        scale = self.internal_standard_scale(
+            result.phases, std_name, float(std_wt_pct))
+        if scale is None:
+            return result  # 内标份额为 0, 无法定标 (原样返回并交由上层判断)
+
+        abs_phases = []
+        for p in result.phases:
+            if p.name == std_name:
+                continue
+            np2 = Phase.from_dict(p.to_dict())
+            np2.weight_fraction = round(float(p.weight_fraction or 0.0) * scale, 3)
+            abs_phases.append(np2)
+
+        from dataclasses import replace
+        new_result = replace(
+            result,
+            phases=abs_phases,
+            fit_params={
+                **dict(result.fit_params or {}),
+                "internal_standard": {
+                    "std_phase": std_name,
+                    "std_wt_pct": float(std_wt_pct),
+                    "scale": round(scale, 5),
+                },
+            },
+        )
+        return new_result
