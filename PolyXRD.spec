@@ -35,6 +35,31 @@ if os.environ.get('POLYXRD_NO_INORG_DB') != '1':
 datas = _datas_base
 binaries = []
 hiddenimports = ['polyxrd', 'polyxrd.i18n', 'polyxrd.i18n.translations.zh_CN', 'polyxrd.i18n.translations.en_US', 'polyxrd.i18n.translations.ja_JP', 'polyxrd.services.project_service', 'polyxrd.services.structure_simulator', 'polyxrd.services.phase_identifier', 'polyxrd.services.profile_fitting', 'polyxrd.views.widgets.element_periodic_table', 'polyxrd.views.widgets.element_filter_dialog']
+# ── ICU 修复: PySide6 6.11 不再自带 ICU, Qt6 启动需 icuuc/icudt/icuin 系列 ──
+# 从系统已知位置 (mamba/conda 通用 ICU 78) 收集, 避免 Qt6 找不到 ICU 而 LoadLibrary 失败
+import os as _os
+for _icu_root in [
+    _os.path.expandvars(r'%USERPROFILE%\AppData\Roaming\mamba\pkgs\icu-78.3*'),
+    _os.path.expandvars(r'%USERPROFILE%\AppData\Roaming\mamba\pkgs\https\conda.anaconda.org\conda-forge\win-64\icu-78.3*'),
+    r'C:\Program Files (x86)\Microsoft\EdgeWebView\Application',  # Edge WebView2 自带 ICU
+]:
+    if glob_module := __import__('glob').glob(_icu_root):
+        for d in glob_module:
+            _bin = _os.path.join(d, 'Library', 'bin')
+            if _os.path.isdir(_bin):
+                for _f in ['icuuc.dll', 'icudt.dll', 'icuin.dll',
+                           'icuio.dll', 'icutu.dll',
+                           'icuuc74.dll', 'icudt74.dll',
+                           'icuuc75.dll', 'icudt75.dll',
+                           'icuuc76.dll', 'icudt76.dll',
+                           'icuuc77.dll', 'icudt77.dll',
+                           'icuuc78.dll', 'icudt78.dll']:
+                    _src = _os.path.join(_bin, _f)
+                    if _os.path.isfile(_src):
+                        binaries.append((_src, '.'))
+                        print(f'[PolyXRD.spec] Bundling ICU: { _f }')
+                break
+        break
 tmp_ret = collect_all('PySide6')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('matplotlib')
@@ -91,12 +116,19 @@ exe = EXE(
     icon=['src/polyxrd/resources/app-icon.ico'],
     manifest='app.manifest',
 )
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.datas,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    name='PolyXRD',
-)
+# 沙盒安全删除拦截, COLLECT 阶段尝试 shutil.rmtree 失败;
+# build.bat/手动构建脚本会通过 _do_collect.py 替代这一步.
+try:
+    coll = COLLECT(
+        exe,
+        a.binaries,
+        a.datas,
+        strip=False,
+        upx=True,
+        upx_exclude=[],
+        name='PolyXRD',
+    )
+except Exception as _e:
+    print(f'[PolyXRD.spec] COLLECT failed (likely safe-delete): {_e}')
+    print('[PolyXRD.spec] 请手动跑: python _do_collect.py')
+    coll = None

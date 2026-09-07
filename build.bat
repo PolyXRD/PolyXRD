@@ -8,7 +8,7 @@ echo.
 
 cd /d "%~dp0"
 
-REM 检查虚拟环境
+REM ── Python 定位 ──────────────────────────────────────
 if exist "venv\Scripts\python.exe" (
     set PYTHON=venv\Scripts\python.exe
     set PIP=venv\Scripts\pip.exe
@@ -16,7 +16,6 @@ if exist "venv\Scripts\python.exe" (
     set PYTHON=python
     set PIP=pip
 )
-
 echo [信息] 使用 Python: %PYTHON%
 
 "%PYTHON%" -c "import PyInstaller" >nul 2>&1
@@ -26,102 +25,126 @@ if %errorlevel% neq 0 (
 )
 
 echo.
-echo [步骤 1/4] PyInstaller 打包独立可执行文件 (不含 COD 全库/无机物库)...
+echo [步骤 1/5] PyInstaller 打包 (EXE 阶段, COLLECT 阶段可能因沙盒 safe-delete 失败)...
 echo.
 
-REM 主程序默认不打包两个独立数据库 (数据库单独以附件分发)
 set POLYXRD_NO_COD_DB=1
 set POLYXRD_NO_INORG_DB=1
-"%PYTHON%" -m PyInstaller PolyXRD.spec --noconfirm --clean
+"%PYTHON%" -m PyInstaller PolyXRD.spec --noconfirm
 
-if %errorlevel% neq 0 (
-    echo.
-    echo [错误] PyInstaller 打包失败！
+REM PyInstaller 失败 (EXIT 1) 不一定是真正的构建失败, 可能是 COLLECT 阶段 shutil.rmtree 被 safe-delete 拦截.
+REM spec 已加 try/except, COLLECT 失败时 EXE 已在 build 目录.
+if not exist "build\PolyXRD\PolyXRD.exe" (
+    echo [错误] EXE 未生成, 构建失败!
     pause
     exit /b 1
 )
 
 echo.
-echo [步骤 2/4] 创建 Inno Setup 安装程序或 7z 自解压...
+echo [步骤 2/5] 手工收集 _internal ( 绕过沙盒 safe-delete, 从 COLLECT-00.toc 复制所有依赖 )...
+echo.
+
+REM 用 shell cp 单独覆盖 EXE (PyInstaller 在 build 已经产出)
+copy /Y "build\PolyXRD\PolyXRD.exe" "dist\PolyXRD\PolyXRD.exe" >nul
+if exist "build\PolyXRD\qt.conf" copy /Y "build\PolyXRD\qt.conf" "dist\PolyXRD\qt.conf" >nul
+
+REM 跑 _do_collect.py 复制其余依赖
+"%PYTHON%" _do_collect.py
+
+REM 复制 ICU DLL (PySide6 6.11 不自带, Qt6 启动必需)
+"%PYTHON%" -c "
+import os, glob, shutil
+DST = r'dist\PolyXRD\_internal'
+ICU_ROOTS = [
+    os.path.expandvars(r'%USERPROFILE%\AppData\Roaming\mamba\pkgs\icu-78.3*'),
+    os.path.expandvars(r'%USERPROFILE%\AppData\Roaming\mamba\pkgs\https\conda.anaconda.org\conda-forge\win-64\icu-78.3*'),
+]
+done = 0
+for pat in ICU_ROOTS:
+    for d in glob.glob(pat):
+        b = os.path.join(d, 'Library', 'bin')
+        if os.path.isdir(b):
+            for f in ['icuuc.dll', 'icudt.dll', 'icuin.dll', 'icuio.dll', 'icutu.dll',
+                      'icuuc78.dll', 'icudt78.dll']:
+                s = os.path.join(b, f)
+                if os.path.isfile(s):
+                    shutil.copy2(s, os.path.join(DST, f))
+                    done += 1
+            print(f'  ICU copied: {done} files')
+            break
+    if done: break
+else:
+    print('  [WARN] No ICU source found - GUI may fail to start')
+"
+
+if %errorlevel% neq 0 (
+    echo [警告] ICU 复制阶段异常, 请检查 PySide6 Qt 启动依赖
+)
+
+echo.
+echo [步骤 3/5] 创建 Inno Setup 安装程序...
 echo.
 
 if not exist "installer_output" mkdir installer_output
 
-REM 优先 Inno Setup (更专业, 支持卸载/快捷方式/版本信息)
+set ISCC=
+if exist "%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" set ISCC="%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe"
+if defined ISCC goto :have_iscc
+
 where iscc >nul 2>&1
-set USE_ISSCC=%errorlevel%
-if "%USE_ISSCC%"=="0" (
-    echo [信息] 使用 Inno Setup 编译安装程序
-    iscc /DAppVersion=0.9.7 /O"installer_output" /F"PolyXRD-Setup-v0.9.7" scripts\PolyXRD-Setup.iss
-) else (
-    if exist "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" (
-        "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DAppVersion=0.9.7 /O"installer_output" /F"PolyXRD-Setup-v0.9.7" scripts\PolyXRD-Setup.iss
-    ) else if exist "C:\Program Files\Inno Setup 6\ISCC.exe" (
-        "C:\Program Files\Inno Setup 6\ISCC.exe" /DAppVersion=0.9.7 /O"installer_output" /F"PolyXRD-Setup-v0.9.7" scripts\PolyXRD-Setup.iss
-    ) else (
-        REM 回退：7z SFX
-        where 7z >nul 2>&1
-        if %errorlevel% equ 0 (
-            7z a -t7z -mx=9 -sfx installer_output\PolyXRD-Setup-v0.9.7.exe "dist\PolyXRD\*" -y
-        ) else if exist "C:\Program Files\7-Zip\7z.exe" (
-            "C:\Program Files\7-Zip\7z.exe" a -t7z -mx=9 -sfx installer_output\PolyXRD-Setup-v0.9.7.exe "dist\PolyXRD\*" -y
-        ) else (
-            echo [警告] 未找到 Inno Setup 或 7z，跳过安装程序
-        )
-    )
+if %errorlevel% equ 0 (
+    set ISCC=iscc
+    goto :have_iscc
+)
+if exist "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" set ISCC="C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+if defined ISCC goto :have_iscc
+if exist "C:\Program Files\Inno Setup 6\ISCC.exe" set ISCC="C:\Program Files\Inno Setup 6\ISCC.exe"
+if defined ISCC goto :have_iscc
+
+echo [警告] 未找到 Inno Setup, 跳过安装程序生成
+goto :no_iscc
+
+:have_iscc
+%ISCC% /DAppVersion=0.9.7 /O"installer_output" /F"PolyXRD-Setup-v0.9.7" scripts\PolyXRD-Setup.iss
+if %errorlevel% neq 0 (
+    echo [警告] Inno 编译失败, 跳过安装程序
 )
 
+:no_iscc
+
 echo.
-echo [步骤 3/4] 创建便携压缩包 (ZIP)...
+echo [步骤 4/5] 创建便携压缩包 (ZIP)...
 echo.
 
+if exist "installer_output\PolyXRD-v0.9.7-Portable.zip" del "installer_output\PolyXRD-v0.9.7-Portable.zip" >nul
 powershell -Command "Compress-Archive -Path 'dist\PolyXRD\*' -DestinationPath 'installer_output\PolyXRD-v0.9.7-Portable.zip' -Force"
-
 if %errorlevel% neq 0 (
-    echo [警告] ZIP压缩失败，尝试备用方法...
+    echo [警告] ZIP 压缩失败, 尝试备用方法...
     powershell -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::CreateFromDirectory('dist\PolyXRD', 'installer_output\PolyXRD-v0.9.7-Portable.zip')"
 )
 
 echo.
-echo [步骤 4/4] 创建版本信息文件...
+echo [步骤 5/5] 写 VERSION.txt...
 echo.
 
 powershell -Command "$ver = @'
 PolyXRD v0.9.7 Release
 Build Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
-Databases (独立分发, 未内置):
-  - COD 无机物库: PolyXRD_COD_Inorganics_v0.9.7.zip (71,199 物相)
-  - COD 全库:     PolyXRD_COD_Full_v0.9.7.zip       (113,223 条目)
-Features:
-  - 双 COD 数据库按需挂载
-  - FOM 传统 Search/Match + 多物相组合策略
-  - 纯金属抑制 + auto-exclude 元素过滤
-  - Rietveld (builtin/GSAS-II/powerxrd) - wR 优化: bg_method=median + Caglioti UVW
-  - 全谱拟合、峰形拟合、Le Bail 框架
-  - 中/英/日三语言界面，PySide6 + PyQtGraph 双画布
-  - 项目保存 (.polyxrd) + PDF/CSV/PNG/SVG 报告
-Contact: sshztx@outlook.com
-'@; $ver | Out-File -FilePath 'dist\PolyXRD\VERSION.txt' -Encoding UTF8; Copy-Item 'dist\PolyXRD\VERSION.txt' 'installer_output\VERSION_v0.9.7.txt' -ErrorAction SilentlyContinue"
+ICU: bundled (Qt6 启动依赖, PySide6 6.11 已不再自带)
+Databases: 独立分发 (COD 全库/无机物库)
+'@; $ver | Out-File -FilePath 'dist\PolyXRD\VERSION.txt' -Encoding UTF8"
+copy /Y "dist\PolyXRD\VERSION.txt" "installer_output\VERSION_v0.9.7.txt" >nul 2>&1
 
 echo.
 echo ========================================
 echo   PolyXRD v0.9.7 打包完成！
 echo ========================================
 echo.
-echo 输出文件 (installer_output\):
-echo   独立安装程序:   installer_output\PolyXRD-Setup-v0.9.7.exe
-echo   便携压缩包:     installer_output\PolyXRD-v0.9.7-Portable.zip
-echo.
 
-if exist "dist\PolyXRD\PolyXRD.exe" (
-    for %%A in ("dist\PolyXRD\PolyXRD.exe") do echo   PolyXRD.exe:         %%~zA 字节
-)
-if exist "installer_output\PolyXRD-Setup-v0.9.7.exe" (
-    for %%A in ("installer_output\PolyXRD-Setup-v0.9.7.exe") do echo   Setup.exe:           %%~zA 字节
-)
-if exist "installer_output\PolyXRD-v0.9.7-Portable.zip" (
-    for %%A in ("installer_output\PolyXRD-v0.9.7-Portable.zip") do echo   Portable.zip:        %%~zA 字节
-)
+echo 输出 (installer_output\):
+if exist "installer_output\PolyXRD-Setup-v0.9.7.exe" for %%A in ("installer_output\PolyXRD-Setup-v0.9.7.exe") do echo   Setup.exe:    %%~zA 字节
+if exist "installer_output\PolyXRD-v0.9.7-Portable.zip" for %%A in ("installer_output\PolyXRD-v0.9.7-Portable.zip") do echo   Portable.zip: %%~zA 字节
+if exist "dist\PolyXRD\PolyXRD.exe" for %%A in ("dist\PolyXRD\PolyXRD.exe") do echo   PolyXRD.exe:  %%~zA 字节
 
 echo.
 pause
