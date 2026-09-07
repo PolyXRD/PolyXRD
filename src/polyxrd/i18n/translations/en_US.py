@@ -24,6 +24,7 @@ translations = {
             "background": "Background Subtraction",
             "smooth": "Smooth",
             "kalpha2": "Strip Kα2",
+            "reset": "Reset to Raw Data",
             "normalize": "Normalize",
         },
         "phase_analysis": {
@@ -67,6 +68,7 @@ translations = {
         "background": "Background Subtraction",
         "smooth": "Smooth",
         "find_peaks": "Find Peaks",
+        "reset": "Reset to Raw Data",
         "identify": "Search/Match",
         "identify_tip": "Traditional phase identification based on FOM algorithm",
         "profile_fitting": "Profile Fitting",

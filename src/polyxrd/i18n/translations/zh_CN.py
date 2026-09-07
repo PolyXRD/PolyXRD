@@ -25,6 +25,7 @@ translations = {
             "smooth": "平滑",
             "kalpha2": "Kα2剥离",
             "normalize": "归一化",
+            "reset": "重置为原始数据",
         },
         "phase_analysis": {
             "title": "物相分析",
@@ -67,6 +68,7 @@ translations = {
         "background": "背景扣除",
         "smooth": "平滑",
         "find_peaks": "峰检测",
+        "reset": "重置为原始数据",
         "identify": "传统Search/Match",
         "identify_tip": "基于FOM算法的传统物相识别",
         "profile_fitting": "Profile Fitting",
