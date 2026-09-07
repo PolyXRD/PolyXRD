@@ -182,21 +182,32 @@ class PhaseIdentifier:
 
         旧去重逻辑按 (化学式, 元素集合) 一刀切，会把化学式相同但结构
         不同的真正多型 (石英 vs 方石英, 均 SiO2; 锐钛矿 vs 金红石,
-        均 TiO2) 误删。这里进一步要求参考峰位高度重合 (较小峰集合中
-        ≥70% 能在另一条目的峰集中找到 tol 内的对应峰) 才视为重复。
+        均 TiO2) 误删。这里改为参考峰位的**双向覆盖**判定:
+          A→B 覆盖 ≥70% 且 B→A 覆盖 ≥70% 才视为同一结构。
+
+        只做单向会误判: 峰位稀疏的相 (如纯金属 ~6 峰) 每条峰几乎总能
+        在峰位密集的相 (如 Calcite ~98 峰) 中找到 ±tol 配对 → 单向 100%
+        "命中" 实为包含而非同构。双向后嵌套情形的一方覆盖仅 ~6% 被拒。
         """
         a = [tt for _, tt, _ in pa.get_reference_peaks()]
         b = [tt for _, tt, _ in pb.get_reference_peaks()]
         if not a or not b:
             return False
-        small, large = (a, b) if len(a) <= len(b) else (b, a)
-        hit = 0
-        for x in small:
-            for y in large:
-                if abs(x - y) <= tol:
+        aa = np.sort(np.asarray(a, dtype=float))
+        bb = np.sort(np.asarray(b, dtype=float))
+
+        def _cov(x, y) -> float:
+            # x 中多少比例的峰在 y 中存在 ±tol 对应
+            hit = 0
+            for v in x:
+                i = int(np.searchsorted(y, v))
+                if i < len(y) and abs(y[i] - v) <= tol:
                     hit += 1
-                    break
-        return hit / len(small) >= 0.7
+                elif i > 0 and abs(y[i - 1] - v) <= tol:
+                    hit += 1
+            return hit / len(x)
+
+        return _cov(aa, bb) >= 0.7 and _cov(bb, aa) >= 0.7
 
     @staticmethod
     def _as_observed_peaks(peaks):
