@@ -543,10 +543,17 @@ class MainWindow(QMainWindow):
         self._set_action_icon(self._actions["strip_kalpha2"], "kalpha2")
         toolbar.addAction(self._actions["strip_kalpha2"])
 
+        # M20: 重置为原始数据 (对比预处理效果)
+        self._actions["reset"] = QAction(tr("toolbar.reset"), self)
+        self._actions["reset"].triggered.connect(self._on_reset_data)
+        self._actions["reset"].setShortcut(QKeySequence("Ctrl+R"))
+        toolbar.addAction(self._actions["reset"])
+
         toolbar.addSeparator()
 
         self._actions["find_peaks"] = QAction(tr("toolbar.find_peaks"), self)
         self._actions["find_peaks"].triggered.connect(self._on_find_peaks)
+        self._actions["find_peaks"].setShortcut(QKeySequence("F2"))
         self._set_action_icon(self._actions["find_peaks"], "find_peaks")
         toolbar.addAction(self._actions["find_peaks"])
 
@@ -772,6 +779,7 @@ class MainWindow(QMainWindow):
         self._actions["normalize"].triggered.connect(self._on_normalize)
         self._set_action_icon(self._actions["normalize"], "smooth")
         process_menu.addAction(self._actions["normalize"])
+        process_menu.addAction(self._actions["reset"])
 
     def _setup_phase_menu(self) -> None:
         phase_menu = self.menuBar().addMenu(tr("menu.phase_analysis.title"))
@@ -1093,7 +1101,11 @@ class MainWindow(QMainWindow):
         )
 
     def _on_strip_kalpha2(self) -> None:
-        self._vm.status_changed.emit(tr("status.kalpha2_strip"))
+        # M20: 接真实 Kα2 剥离管线 (此前仅为状态提示)
+        self._vm.strip_kalpha2()
+
+    def _on_reset_data(self) -> None:
+        self._vm.reset_data()
 
     def _on_normalize(self) -> None:
         self._vm.normalize_data()

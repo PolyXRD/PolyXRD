@@ -107,6 +107,16 @@ class MainViewModel(QObject):
         """归一化"""
         self._data_vm.normalize()
 
+    def strip_kalpha2(self) -> None:
+        """Kα2 剥离 (M20: 工具栏按钮真实接处理管线)"""
+        self.status_changed.emit("执行 Kα2 剥离")
+        self._data_vm.strip_ka_alpha2()
+
+    def reset_data(self) -> None:
+        """重置为原始数据 (便于对比预处理效果)"""
+        self.status_changed.emit("重置为原始数据")
+        self._data_vm.reset_to_raw()
+
     # ------------------------------------------------------------------
     # 公共方法 - 峰检测
     # ------------------------------------------------------------------
@@ -116,6 +126,8 @@ class MainViewModel(QObject):
         height: float = 0.05,
         distance: float = 5.0,
         prominence: float = 0.01,
+        detect_shoulders: bool = False,
+        sensitivity: Optional[float] = None,
     ) -> None:
         """峰检测"""
         data = self.current_data
@@ -124,7 +136,10 @@ class MainViewModel(QObject):
             return
 
         self.status_changed.emit("执行峰检测")
-        self._phase_vm.find_peaks(data, height=height, distance=distance, prominence=prominence)
+        self._phase_vm.find_peaks(
+            data, height=height, distance=distance, prominence=prominence,
+            detect_shoulders=detect_shoulders, sensitivity=sensitivity,
+        )
 
     def fit_peaks(self, model: str = "voigt") -> None:
         """峰拟合"""

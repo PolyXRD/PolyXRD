@@ -70,14 +70,18 @@ class PhaseViewModel(QObject):
         height: float = 0.05,
         distance: float = 5.0,
         prominence: float = 0.01,
+        detect_shoulders: bool = False,
+        sensitivity: Optional[float] = None,
     ) -> None:
-        """自动峰检测"""
+        """自动峰检测 (M20: 支持 M05 增强参数)"""
         try:
             peaks = self._peak_finder.find_peaks(
                 data,
                 height=height,
                 distance=distance,
                 prominence=prominence,
+                detect_shoulders=detect_shoulders,
+                sensitivity=sensitivity,
             )
             self._peaks = peaks
             self.peaks_detected.emit(peaks)
