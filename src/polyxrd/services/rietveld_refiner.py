@@ -964,97 +964,17 @@ class RietveldRefiner:
         peak_shape: str = "pseudo-voigt",
         caglioti: tuple = None,  # (U, V, W) FWHM² = U tan²θ + V tanθ + W；None 时退化为固定 FWHM
     ) -> np.ndarray:
-        """从参考峰计算模拟谱
+        """从参考峰计算模拟谱 (薄壳, 核心见 phase_display.spectrum_from_refs)
 
-        v6: 支持 Caglioti 峰宽函数 (仪器展宽 + 样品展宽 2θ 依赖)
-        FWHM(2θ) = sqrt(U tan²θ + V tanθ + W)
-        若 U=V=0，则 FWHM=sqrt(W) 等价固定 FWHM；与旧代码一致
+        M21 重构: 谱合成内核提取到 phase_display 复用 (物相分析 v2 叠加显示
+        与精修共用同一条路径)。数学等价, 行为不变 — 全量回归证明等价性。
         """
-        simulated = np.zeros_like(two_theta)
+        from polyxrd.services.phase_display import spectrum_from_refs
 
-        # ── 1. 展平参考峰: 一次遍历收集 (2θ, 强度, 所属物相) ─────────
-        #    (v8 性能优化: 逐峰 Python 循环改为分块向量化, 消除
-        #    ~n_peaks×8 次 numpy 调用开销; 数学等价, 仅浮点求和的
-        #    结合顺序不同, 结果差异 <1e-13)
-        n_phases = len(phase_peaks)
-        peak_tt: list[float] = []
-        peak_int: list[float] = []
-        peak_phase: list[int] = []
-        for i, peaks in enumerate(phase_peaks):
-            for peak_data in peaks:
-                if len(peak_data) < 3:
-                    continue
-                p_2theta = peak_data[1]
-                if p_2theta < two_theta[0] or p_2theta > two_theta[-1]:
-                    continue
-                peak_tt.append(p_2theta)
-                peak_int.append(peak_data[2])
-                peak_phase.append(i)
-
-        if not peak_tt:
-            return simulated
-
-        peak_tt = np.asarray(peak_tt, dtype=float)
-        peak_int = np.asarray(peak_int, dtype=float)
-
-        # ── 2. 每个参考峰的 FWHM (固定 或 Caglioti 2θ 依赖) ─────────
-        if caglioti is not None and any(caglioti):
-            U, V, W = caglioti
-            tan_p = np.tan(np.radians(peak_tt / 2.0))
-            fw_p = np.sqrt(np.clip(U * tan_p * tan_p + V * tan_p + W, 0.0001, None))
-        else:
-            fw_p = np.full_like(peak_tt, fwhm)
-
-        sigma_p = fw_p / (2.0 * np.sqrt(2.0 * np.log(2.0)))
-        gamma2_p = (fw_p / 2.0) ** 2
-
-        # ── 3. 分块向量化峰形 (n_points × chunk) ──────────────────
-        #    chunk=16: 临时数组 (4000×16×8B ≈ 512KB) 可驻留 CPU 缓存;
-        #    参考峰按物相连续排列, 各物相峰位区间已知, 直接用列切片
-        #    累加 (避免布尔掩码 fancy-indexing 的额外拷贝)。
-        #    数学等价, 仅浮点求和结合顺序不同。
-        n_points = len(two_theta)
-        basis = np.zeros((n_points, n_phases))
-        chunk = 16
-        is_gauss = peak_shape == "gaussian"
-        is_lorentz = peak_shape == "lorentzian"
-        one_minus_eta = 1.0 - eta
-        sigma_all = fw_p / (2.0 * np.sqrt(2.0 * np.log(2.0)))
-        gamma2_all = (fw_p / 2.0) ** 2
-
-        offset = 0
-        for i, peaks in enumerate(phase_peaks):
-            n_i = 0
-            for peak_data in peaks:
-                if (len(peak_data) >= 3
-                        and two_theta[0] <= peak_data[1] <= two_theta[-1]):
-                    n_i += 1
-            if n_i == 0:
-                continue
-            sl = slice(offset, offset + n_i)
-            pts_p = peak_tt[sl]
-            sigma_p = sigma_all[sl]
-            gamma2_p = gamma2_all[sl]
-            inten_p = peak_int[sl]
-            for s in range(0, n_i, chunk):
-                e = min(s + chunk, n_i)
-                delta = two_theta[:, None] - pts_p[None, s:e]
-                if is_gauss:
-                    prof = np.exp(-0.5 * (delta / sigma_p[None, s:e]) ** 2)
-                elif is_lorentz:
-                    g2 = gamma2_p[None, s:e]
-                    prof = g2 / (delta * delta + g2)
-                else:  # pseudo-voigt / voigt
-                    gauss = np.exp(-0.5 * (delta / sigma_p[None, s:e]) ** 2)
-                    g2 = gamma2_p[None, s:e]
-                    lorentz = g2 / (delta * delta + g2)
-                    prof = eta * gauss
-                    prof += one_minus_eta * lorentz
-                prof *= inten_p[None, s:e]
-                basis[:, i] += prof.sum(axis=1)
-            offset += n_i
-
-        return scale * (basis @ np.asarray(weights, dtype=float))
+        return spectrum_from_refs(
+            np.asarray(two_theta, dtype=float), phase_peaks,
+            weights, fwhm, eta, scale, peak_shape, caglioti,
+        )
 
     def _compute_spectrum(
         self,
