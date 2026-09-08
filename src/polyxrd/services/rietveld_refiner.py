@@ -73,6 +73,16 @@ class RietveldRefiner:
             zs = float(getattr(opts, "zero_shift_init", 0.0) or 0.0)
             if abs(zs) > 1e-12:
                 kwargs.setdefault("zero_shift", zs)
+            # M14 参数掩码: 把 RefineOptions 的 refine_* 开关透传给引擎。
+            # builtin 引擎已接入 scale/profile/zero_shift; background/cell 在
+            # builtin 中为 no-op (背景为预处理、晶胞固定, 无 fit 维度)。
+            kwargs["_param_mask"] = {
+                "scale": bool(getattr(opts, "refine_scale", True)),
+                "background": bool(getattr(opts, "refine_background", True)),
+                "profile": bool(getattr(opts, "refine_profile", True)),
+                "cell": bool(getattr(opts, "refine_cell", True)),
+                "zero_shift": bool(getattr(opts, "refine_zero_shift", True)),
+            }
         kwargs.pop("options", None)
 
         engines = {
@@ -651,6 +661,40 @@ class RietveldRefiner:
         lower = np.concatenate(lower_parts)
         upper = np.concatenate(upper_parts)
 
+        # ── 5b. M14 参数掩码: 关闭的组用极窄上下界, 冻结该参数 ───────────────
+        # builtin 引擎参数向量布局 (Caglioti 关闭): weights(n) + fwhm + eta + scale + zs
+        #                          (Caglioti 开启): 再加 U + V + W
+        #
+        # scipy.optimize.least_squares 要求 lb < ub 严格, 不能直接 lower=upper=init。
+        # 用极窄对称区间 [_FREEZE_EPS, _FREEZE_EPS] 包住 init 值, 实际漂移 ≤ ε
+        # (相对 XRD 仪器精度 ~0.01° 与强度动态范围, 1e-7 量级不可分辨) — 即"冻结"。
+        # 同时 ε > 后续 clip 边距 1e-8, 保证 x0_clipped 与 polish clip 仍为有效区间。
+        param_mask = kwargs.get("_param_mask") or {
+            "scale": True, "background": True, "profile": True,
+            "cell": True, "zero_shift": True,
+        }
+        init_eta = 0.5  # 所有起点的 eta 初值约定为 0.5
+        _FREEZE_EPS = 1e-7
+
+        def _freeze(idx, init_val):
+            lower[idx] = init_val - _FREEZE_EPS
+            upper[idx] = init_val + _FREEZE_EPS
+
+        if not param_mask.get("scale", True):
+            _freeze(n_phases + 2, init_scale_est)
+        if not param_mask.get("profile", True):
+            _freeze(n_phases + 0, init_fwhm)
+            _freeze(n_phases + 1, init_eta)
+            if use_caglioti:
+                _freeze(n_phases + 4, init_U)
+                _freeze(n_phases + 5, init_V)
+                _freeze(n_phases + 6, init_W)
+        if not param_mask.get("zero_shift", True):
+            _freeze(n_phases + 3, init_zero_shift)
+        # mask["background"] / mask["cell"] 在 builtin 中为 no-op:
+        #   background 由 _estimate_background 一次性预处理, 非 fit 维度;
+        #   cell 在 builtin 中固定 (未加入 fit 维度)。
+
         def _unpack(params):
             weights = params[:n_phases]
             fwhm = params[n_phases]
@@ -854,6 +898,16 @@ class RietveldRefiner:
                 "multistart": n_starts,
                 "weight_upper": weight_upper,
                 "caglioti": (tuple(float(x) for x in opt_cag) if opt_cag is not None else None),
+                # M14 参数掩码: 暴露 mask 与 init/opt, 便于测试冻结与调参
+                "param_mask": dict(param_mask),
+                "init_scale": float(init_scale_est),
+                "init_fwhm": float(init_fwhm),
+                "init_eta": float(init_eta),
+                "init_zero_shift": float(init_zero_shift),
+                "opt_scale": float(opt_scale),
+                "opt_fwhm": float(opt_fwhm),
+                "opt_eta": float(opt_eta),
+                "opt_zero_shift": float(opt_zero_shift),
             },
         )
 
