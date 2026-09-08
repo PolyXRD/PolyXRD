@@ -42,6 +42,7 @@ translations = {
             "title": "ビュー",
             "language": "言語",
             "reset_layout": "レイアウトをリセット",
+            "dark_theme": "ダークテーマ",
         },
         "report": {
             "title": "レポート",

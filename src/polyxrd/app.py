@@ -36,6 +36,18 @@ class PolyXRDApplication:
         self._qt_app.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps, True)
         self._qt_app.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling, True)
 
+        # 应用持久化主题 (M20 v2: 视图菜单可切换, QSettings 持久化)
+        from PySide6.QtCore import QSettings
+
+        from polyxrd.views.theme import apply_theme
+
+        _cfg = get_config()
+        _settings = QSettings(_cfg.app_org, _cfg.app_name)
+        apply_theme(
+            self._qt_app,
+            dark=_settings.value("view/dark_theme", False, type=bool),
+        )
+
         # 设置全局异常处理
         sys.excepthook = self._global_exception_handler
 

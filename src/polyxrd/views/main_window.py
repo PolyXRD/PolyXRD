@@ -861,6 +861,15 @@ class MainWindow(QMainWindow):
 
         view_menu.addSeparator()
 
+        # M20 v2: 浅色/深色主题切换 (QSettings 持久化, 启动时应用)
+        self._actions["toggle_theme"] = QAction(tr("menu.view.dark_theme"), self)
+        self._actions["toggle_theme"].setCheckable(True)
+        self._actions["toggle_theme"].setChecked(self._is_dark_theme())
+        self._actions["toggle_theme"].triggered.connect(self._on_toggle_theme)
+        view_menu.addAction(self._actions["toggle_theme"])
+
+        view_menu.addSeparator()
+
         self._actions["toggle_params"] = QAction(tr("params.panel_title"), self)
         self._actions["toggle_params"].setCheckable(True)
         self._actions["toggle_params"].setChecked(True)
@@ -1257,6 +1266,21 @@ class MainWindow(QMainWindow):
         self._params_dock.show()
         self._phases_dock.show()
         self.statusBar().showMessage(tr("status.layout_reset"), 3000)
+
+    # ------------------------------------------------------------------
+    # 事件处理 - 主题 (M20 v2)
+    # ------------------------------------------------------------------
+
+    def _is_dark_theme(self) -> bool:
+        return self._settings.value("view/dark_theme", False, type=bool)
+
+    def _on_toggle_theme(self, checked: bool) -> None:
+        from PySide6.QtWidgets import QApplication
+
+        from polyxrd.views.theme import apply_theme
+
+        apply_theme(QApplication.instance(), dark=checked)
+        self._settings.setValue("view/dark_theme", bool(checked))
 
     # ------------------------------------------------------------------
     # 事件处理 - 报告

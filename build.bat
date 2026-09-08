@@ -48,29 +48,35 @@ REM 用 shell cp 单独覆盖 EXE (PyInstaller 在 build 已经产出)
 copy /Y "build\PolyXRD\PolyXRD.exe" "dist\PolyXRD\PolyXRD.exe" >nul
 if exist "build\PolyXRD\qt.conf" copy /Y "build\PolyXRD\qt.conf" "dist\PolyXRD\qt.conf" >nul
 
-REM 跑 _do_collect.py 复制其余依赖
-"%PYTHON%" _do_collect.py
+REM 跑 scripts\_pyinst_collect.py 复制其余依赖 (路径自推导, 原 _do_collect.py 已并入)
+"%PYTHON%" scripts\_pyinst_collect.py
 
 REM 复制 ICU DLL (PySide6 6.11 不自带, Qt6 启动必需)
 "%PYTHON%" -c "
 import os, glob, shutil
 DST = r'dist\PolyXRD\_internal'
+ICU_FILES = ['icuuc.dll', 'icudt.dll', 'icuin.dll', 'icuio.dll', 'icutu.dll',
+             'icuuc78.dll', 'icudt78.dll', 'icuin78.dll', 'icuio78.dll', 'icutu78.dll']
 ICU_ROOTS = [
+    r'C:\ProgramData\gsas2main\Library\bin',
+    r'C:\Program Files\LibreOffice\program',
     os.path.expandvars(r'%USERPROFILE%\AppData\Roaming\mamba\pkgs\icu-78.3*'),
     os.path.expandvars(r'%USERPROFILE%\AppData\Roaming\mamba\pkgs\https\conda.anaconda.org\conda-forge\win-64\icu-78.3*'),
 ]
 done = 0
 for pat in ICU_ROOTS:
-    for d in glob.glob(pat):
+    for d in ([pat] if os.path.isdir(pat) else glob.glob(pat)):
         b = os.path.join(d, 'Library', 'bin')
-        if os.path.isdir(b):
-            for f in ['icuuc.dll', 'icudt.dll', 'icuin.dll', 'icuio.dll', 'icutu.dll',
-                      'icuuc78.dll', 'icudt78.dll']:
-                s = os.path.join(b, f)
-                if os.path.isfile(s):
-                    shutil.copy2(s, os.path.join(DST, f))
-                    done += 1
-            print(f'  ICU copied: {done} files')
+        if not os.path.isdir(b):
+            b = d
+        done = 0
+        for f in ICU_FILES:
+            s = os.path.join(b, f)
+            if os.path.isfile(s):
+                shutil.copy2(s, os.path.join(DST, f))
+                done += 1
+        if done:
+            print(f'  ICU copied: {done} files from {b}')
             break
     if done: break
 else:

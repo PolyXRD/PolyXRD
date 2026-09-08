@@ -48,6 +48,7 @@ translations = {
             "title": "View",
             "language": "Language",
             "reset_layout": "Reset Layout",
+            "dark_theme": "Dark Theme",
         },
         "report": {
             "title": "Report",
