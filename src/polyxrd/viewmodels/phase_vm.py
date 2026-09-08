@@ -32,6 +32,9 @@ class PhaseViewModel(QObject):
     phase_identified = Signal(list)
     phase_selected = Signal(object)
     error = Signal(str)
+    # M21: 勾选集合变更 (Match! 式多相叠加)
+    selection_changed = Signal(list)
+    assignment_changed = Signal(object, object)   # (assignments, ref_hit)
 
     def __init__(self) -> None:
         super().__init__()
@@ -177,6 +180,42 @@ class PhaseViewModel(QObject):
     def clear_selection(self) -> None:
         """清空选中物相"""
         self._selected_phases.clear()
+
+    # ── M21: 多选集合管理 (Match! 式勾选叠加) ───────────────
+    MAX_SELECTED = 8
+
+    def update_selection(self, phase: Phase, checked: bool) -> None:
+        """勾选/取消一个物相, 维持有序集合 (去重按 name+formula)。
+
+        勾选时若达上限则忽略 (提示由视图层负责)。变更后 emit selection_changed。
+        """
+        key = (getattr(phase, "name", ""), getattr(phase, "formula", ""))
+        idx = next((i for i, p in enumerate(self._selected_phases)
+                    if (getattr(p, "name", ""), getattr(p, "formula", "")) == key),
+                   None)
+        if checked:
+            if idx is None:
+                if len(self._selected_phases) >= self.MAX_SELECTED:
+                    return
+                self._selected_phases.append(phase)
+        else:
+            if idx is not None:
+                del self._selected_phases[idx]
+        self.selection_changed.emit(list(self._selected_phases))
+
+    def is_selected(self, phase: Phase) -> bool:
+        key = (getattr(phase, "name", ""), getattr(phase, "formula", ""))
+        return any((getattr(p, "name", ""), getattr(p, "formula", "")) == key
+                   for p in self._selected_phases)
+
+    def current_assignment(self, tolerance: float = 0.30):
+        """当前选中相 + 实测峰 → (assignments, ref_hit)。无峰/无选中 → ([], 空)。"""
+        from polyxrd.services.phase_display import assign_peaks
+
+        if not self._selected_phases or not self._peaks:
+            return [], [[] for _ in self._selected_phases]
+        return assign_peaks(self._peaks.peaks, self._selected_phases,
+                            tolerance=tolerance)
 
     def add_custom_phase(self, phase: Phase) -> None:
         """添加自定义物相"""
