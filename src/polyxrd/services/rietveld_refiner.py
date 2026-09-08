@@ -158,6 +158,7 @@ class RietveldRefiner:
                 proc = subprocess.run(
                     [str(py), str(bridge), req_path, out_path],
                     capture_output=True, text=True, timeout=timeout,
+                    env=self._gsas2_env(py),
                 )
                 if not Path(out_path).exists():
                     return self._refine_builtin(
@@ -230,6 +231,9 @@ class RietveldRefiner:
         if env_py:
             candidates.append(Path(env_py))
         for prefix in (
+            # gsas2main 安装器默认位置 (官方推荐, 优先)
+            str(Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
+                / "gsas2main"),
             r"D:\GSASII", r"C:\GSASII", r"E:\GSASII",
             r"D:\g2main", r"C:\g2main", r"E:\g2main",
             str(Path.home() / "GSASII"), str(Path.home() / "g2main"),
@@ -241,6 +245,59 @@ class RietveldRefiner:
             if cand.exists():
                 return cand
         return None
+
+    @staticmethod
+    def _gsas2_pythonpath(py: Path) -> str:
+        """返回 GSAS-II 源码目录 (含 GSASII 包的父目录)。
+
+        老版 gsas2main 会在自身 site-packages 放 .pth 完成注册, 可直接 import;
+        新版 (pixi 环境, 如 C:\\ProgramData\\gsas2main) 不自注册, 必须由调用方
+        注入 PYTHONPATH, 否则 `import GSASII` 失败。
+        """
+        seen: list[Path] = []
+        for base in (
+            py.parent,
+            py.parent.parent,
+            Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "gsas2main",
+        ):
+            for cand in (Path(base) / "GSAS-II", Path(base)):
+                if cand in seen:
+                    continue
+                seen.append(cand)
+                if (cand / "GSASII" / "GSASIIscriptable.py").exists():
+                    return str(cand)
+        return ""
+
+    @staticmethod
+    def _gsas2_env(py: Path) -> dict:
+        """构造调用 GSAS-II 桥的子进程环境。
+
+        两件事:
+        1. PYTHONPATH 注入 GSAS-II 源码目录 (pixi/新版 gsas2main 不自注册);
+        2. PATH 注入 conda 环境内 DLL 目录 —— 否则 numpy.linalg 调用
+           LAPACK 时因找不到 DLL 直接崩溃 (0xc06d007f), 表现为桥"静默失败"。
+        """
+        env = os.environ.copy()
+        src = RietveldRefiner._gsas2_pythonpath(py)
+        if src:
+            old = env.get("PYTHONPATH", "")
+            env["PYTHONPATH"] = f"{src}{os.pathsep}{old}" if old else src
+        root = Path(py).parent
+        extra_dirs = [
+            root,
+            root / "Library" / "bin",
+            root / "Library" / "mingw-w64" / "bin",
+            root / "Library" / "usr" / "bin",
+            root / "Scripts",
+            root / "bin",
+        ]
+        found = [str(d) for d in extra_dirs if d.is_dir()]
+        if found:
+            old_path = env.get("PATH", "")
+            env["PATH"] = os.pathsep.join(
+                found + ([old_path] if old_path else [])
+            )
+        return env
 
     def get_engine_status(self) -> dict:
         """返回各精修引擎的可用状态 (供 GUI 提示)"""
