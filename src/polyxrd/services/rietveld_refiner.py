@@ -230,7 +230,8 @@ class RietveldRefiner:
         if env_py:
             candidates.append(Path(env_py))
         for prefix in (
-            r"D:\GSASII", r"C:\GSASII", r"D:\g2main", r"C:\g2main",
+            r"D:\GSASII", r"C:\GSASII", r"E:\GSASII",
+            r"D:\g2main", r"C:\g2main", r"E:\g2main",
             str(Path.home() / "GSASII"), str(Path.home() / "g2main"),
             str(Path.home() / "gsas2main"),  # gsas2main 默认安装位置
         ):
