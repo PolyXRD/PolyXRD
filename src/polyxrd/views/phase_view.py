@@ -36,9 +36,13 @@ from PySide6.QtWidgets import (
 )
 
 from polyxrd.viewmodels.main_vm import MainViewModel
-from polyxrd.views.widgets.plot_widget import PlotWidget
+from polyxrd.views.widgets.pattern_display import PatternDisplayWidget
+from polyxrd.views.widgets.peak_match_table import PeakMatchTable
 from polyxrd.views.widgets.element_filter_dialog import ElementFilterDialog
 from polyxrd.services.peak_finder import PeakFinder
+from polyxrd.services.phase_display import (combined_pattern,
+                                            assign_peaks, phase_color,
+                                            PeakAssignment)
 
 
 class PhaseView(QWidget):
@@ -68,8 +72,8 @@ class PhaseView(QWidget):
         main_layout.setContentsMargins(4, 4, 4, 4)
         main_layout.setSpacing(4)
 
-        # ====== 上部: 衍射谱图 (占据主要空间) ======
-        self._plot = PlotWidget()
+        # ====== 上部: 衍射谱图 (Match! 式双区: 主谱 + 参考棒) ======
+        self._plot = PatternDisplayWidget()
         self._plot.setMinimumHeight(350)
         main_layout.addWidget(self._plot, stretch=3)
 
@@ -217,6 +221,8 @@ class PhaseView(QWidget):
         self._candidate_list = QListWidget()
         self._candidate_list.setMaximumHeight(150)
         self._candidate_list.itemClicked.connect(self._on_candidate_clicked)
+        # M21 v2: 支持勾选多选叠加 (Match! 式), itemChanged 驱动归属刷新
+        self._candidate_list.itemChanged.connect(self._on_candidate_toggled)
         right_panel.addWidget(self._candidate_list, stretch=1)
 
         btn_row = QHBoxLayout()
@@ -249,12 +255,37 @@ class PhaseView(QWidget):
 
         right_panel.addLayout(btn_row)
 
+        # 视图切换: 叠加计算谱 / 显示残差 (M21 v2)
+        view_row = QHBoxLayout()
+        self._btn_toggle_calc = QPushButton("叠加计算谱")
+        self._btn_toggle_calc.setCheckable(True)
+        self._btn_toggle_calc.setChecked(True)
+        self._btn_toggle_calc.setFixedHeight(24)
+        self._btn_toggle_calc.clicked.connect(self._refresh_overlay)
+        view_row.addWidget(self._btn_toggle_calc)
+        self._btn_toggle_resid = QPushButton("显示残差")
+        self._btn_toggle_resid.setCheckable(True)
+        self._btn_toggle_resid.setChecked(False)
+        self._btn_toggle_resid.setFixedHeight(24)
+        self._btn_toggle_resid.clicked.connect(self._refresh_overlay)
+        view_row.addWidget(self._btn_toggle_resid)
+        right_panel.addLayout(view_row)
+
         control_layout.addLayout(right_panel, stretch=1)
 
         main_layout.addWidget(control_group, stretch=1)
 
+        # ====== 底部: 峰-物相归属表 (M21 v2) ======
+        self._match_table = PeakMatchTable()
+        self._match_table.setMinimumHeight(120)
+        main_layout.addWidget(self._match_table, stretch=1)
+
     def _setup_connections(self) -> None:
         self._vm.phase_identified.connect(self._on_phases_updated)
+        self._match_table.peak_row_clicked.connect(self._flash_peak)
+        # M21: 选中相集合变更 → 刷新叠加
+        pvm = self._vm._phase_vm
+        pvm.selection_changed.connect(self._on_selection_changed)
 
     # ------------------------------------------------------------------
     # 元素过滤对话框
@@ -348,12 +379,26 @@ class PhaseView(QWidget):
     # ------------------------------------------------------------------
 
     def _on_phases_updated(self, phase_results: list) -> None:
-        """物相列表更新"""
+        """物相列表更新 (新识别 → 清空勾选与叠加, 重新列出候选)"""
+        # 阻断 itemChanged 在 clear/清勾选时触发的冗余刷新
+        try:
+            self._candidate_list.itemChanged.disconnect(self._on_candidate_toggled)
+        except RuntimeError:
+            pass
         self._candidate_list.clear()
         self._current_results = phase_results
 
+        # 清空上次勾选, 避免旧叠加残留
+        self._vm._phase_vm.clear_selection()
+
         if not phase_results:
             self._method_label.setText("未找到匹配物相")
+            self._match_table.clear_table()
+            self._refresh_overlay()
+            try:
+                self._candidate_list.itemChanged.connect(self._on_candidate_toggled)
+            except RuntimeError:
+                pass
             return
 
         method = phase_results[0].method if hasattr(phase_results[0], 'method') else "fom"
@@ -384,156 +429,134 @@ class PhaseView(QWidget):
 
             item = QListWidgetItem(label)
             item.setData(Qt.ItemDataRole.UserRole, result)
+            # M21 v2: 可勾选 (勾选=叠加到谱图)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(Qt.CheckState.Checked if self._vm._phase_vm.is_selected(phase)
+                               else Qt.CheckState.Unchecked)
             self._candidate_list.addItem(item)
 
+        # 恢复 itemChanged 连接 (屏蔽填充期间的冗余刷新)
+        try:
+            self._candidate_list.itemChanged.connect(self._on_candidate_toggled)
+        except RuntimeError:
+            pass
+        self._refresh_overlay()
+
     def _on_candidate_clicked(self, item: QListWidgetItem) -> None:
-        """选中候选物相 - 在谱图上显示匹配情况"""
+        """单击候选 (非勾选框): 若未勾选则单选叠加该相 (Match! 浏览习惯)。"""
+        if item.checkState() != Qt.CheckState.Checked:
+            result = item.data(Qt.ItemDataRole.UserRole)
+            phase = (result.phase if hasattr(result, 'phase') else result) if result else None
+            if phase and not self._vm._phase_vm.is_selected(phase):
+                item.setCheckState(Qt.CheckState.Checked)
+
+    def _on_candidate_toggled(self, item: QListWidgetItem) -> None:
+        """勾选框状态变更 → 更新选中集合 → 刷新叠加 (itemChanged 在 populate
+        时也会触发, 用 guard 避免加载结果时重复刷新; 但 setCheckState 幂等可接受)。"""
         result = item.data(Qt.ItemDataRole.UserRole)
         if not result:
             return
-        
         phase = result.phase if hasattr(result, 'phase') else result
         if not phase:
             return
+        checked = item.checkState() == Qt.CheckState.Checked
+        self._vm._phase_vm.update_selection(phase, checked)
+        # update_selection 已 emit selection_changed → _on_selection_changed 刷新
 
+    def _on_selection_changed(self, *_):
+        """选中集合变更 → 重算归属并刷新谱图 + 峰表。"""
+        self._refresh_overlay()
+
+    def _refresh_overlay(self):
+        """根据当前勾选相, 在 PatternDisplayWidget 上刷新:
+        实验黑线 + 计算谱(可选) + 参考棒区 + 归属标记; 并刷新峰归属表。"""
         data = self._vm.current_data or self._vm.processed_data
+        pvm = self._vm._phase_vm
+        phases = list(pvm.selected_phases)
         if not data:
-            QMessageBox.warning(self, "提示", "请先加载 XRD 数据")
+            self._plot.clear_plot()
+            self._match_table.clear_table()
             return
 
-        # 清除并绘制实验数据
-        self._plot.clear_plot()
-        self._plot.plot_data(data, label="实验数据", color="#2196f3")
+        two_theta = np.asarray(data.two_theta, dtype=float)
+        y_exp = np.asarray(data.intensity, dtype=float)
+        # 实验谱始终重画
+        self._plot.set_experiment(data)
 
-        # 获取实验峰位 (如果有)
-        exp_peaks = []
-        if self._vm.phase_vm and self._vm.phase_vm.peaks:
-            exp_peaks = self._vm.phase_vm.peaks.peaks
-        
-        # 获取参考峰
-        ref_peaks_data = phase.get_reference_peaks()
-        
-        # 对每个参考峰，判断是否在实验中匹配到
-        matched_peaks = []
-        unmatched_peaks = []
-        tolerance = self._tolerance_spin.value()  # 2θ 容差 (度)
-        
-        for hkl, two_theta, ref_intensity in ref_peaks_data:
-            from polyxrd.models.peak import Peak
-            peak = Peak(two_theta=two_theta, intensity=ref_intensity, hkl=hkl, phase=phase.name)
-            
-            # 查找最近的实验峰
-            is_matched = False
-            if exp_peaks:
-                for ep in exp_peaks:
-                    if abs(ep.two_theta - two_theta) <= tolerance:
-                        is_matched = True
-                        peak.intensity = ep.intensity
-                        break
-            
-            if is_matched:
-                matched_peaks.append(peak)
+        if not phases:
+            # 无选中相: 只画实验, 清峰表与棒区
+            self._plot.set_selected_phases([])
+            self._plot.set_calculated(None, None)
+            self._plot.set_peak_assignments([])
+            self._match_table.clear_table()
+            self._plot.set_info_text("<b>勾选候选物相叠加查看</b>")
+            return
+
+        tolerance = self._tolerance_spin.value()
+
+        # 1) 归属计算 (双向: 参考峰命中表 + 实验峰归属)
+        assignments, ref_hit = pvm.current_assignment(tolerance=tolerance)
+
+        # 2) 参考棒区: [(name, refs, color), ...]
+        sticks = []
+        for i, phase in enumerate(phases):
+            color = phase_color(i)
+            refs = phase.get_reference_peaks() if hasattr(
+                phase, "get_reference_peaks") else getattr(phase, "reference_peaks", [])
+            sticks.append((phase.name, refs or [], color))
+        self._plot.set_selected_phases(sticks)
+
+        # 3) 归属标记 (峰顶相色圆点 / 未解释红▼)
+        self._plot.set_peak_assignments(assignments)
+
+        # 4) 计算谱 (可选) 与残差 (可选) — 用等权合成作显示参考
+        if self._btn_toggle_calc.isChecked():
+            y_calc = combined_pattern(two_theta, phases, y_exp=y_exp)
+            self._plot.set_calculated(two_theta, y_calc)
+        else:
+            self._plot.set_calculated(None, None)
+
+        if self._btn_toggle_resid.isChecked():
+            y_calc = combined_pattern(two_theta, phases, y_exp=y_exp)
+            from polyxrd.services.phase_display import residual
+            self._plot.set_residual_curve(two_theta, residual(y_exp, y_calc))
+        else:
+            self._plot.set_residual_curve(None, None)
+
+        # 5) 峰归属表
+        self._match_table.set_assignments(assignments)
+
+        # 6) 统计信息条: 逐相覆盖率 + 未解释峰
+        info = self._coverage_summary(phases, ref_hit, assignments)
+        self._plot.set_info_text(info)
+
+    def _coverage_summary(self, phases, ref_hit, assignments):
+        """拼一段 HTML: 逐相覆盖率 | 已解释/未解释峰数。"""
+        parts = []
+        for i, ph in enumerate(phases):
+            hits = ref_hit[i]
+            if hits:
+                cov = 100.0 * sum(1 for h in hits if h) / len(hits)
             else:
-                unmatched_peaks.append(peak)
-        
-        # 显示匹配峰 (绿色) 和未匹配峰 (红色)
-        all_peaks = matched_peaks + unmatched_peaks
-        
-        # 为不同峰类型设置颜色
-        for peak in matched_peaks:
-            peak._match_type = "matched"
-        for peak in unmatched_peaks:
-            peak._match_type = "unmatched"
-        
-        # 使用 PlotWidget 的标注功能来显示
-        self._add_match_annotations(matched_peaks, unmatched_peaks)
-        
-        # 显示统计信息
-        total = len(ref_peaks_data)
-        matched_count = len(matched_peaks)
-        coverage = (matched_count / total * 100) if total > 0 else 0
-        
-        info_text = (
-            f"<b>{phase.name}</b> | "
-            f"匹配: {matched_count}/{total} ({coverage:.0f}%) | "
-            f"<span style='color:#4caf50'>● 已匹配</span> "
-            f"<span style='color:#f44336'>● 未匹配</span>"
-        )
-        self._plot.set_info_text(info_text)
+                cov = 0.0
+            parts.append(
+                f"<span style='color:{phase_color(i)}'>■ {ph.name}: {cov:.0f}%</span>")
+        explained = sum(1 for a in assignments if a.phase_index is not None)
+        unexplained = len(assignments) - explained
+        parts.append(f"峰 已解释 {explained} / 未解释 {unexplained}")
+        return " | ".join(parts)
 
-    def _add_match_annotations(self, matched_peaks, unmatched_peaks) -> None:
-        """在谱图上添加匹配/未匹配峰标注"""
-        from matplotlib.lines import Line2D
-        from matplotlib.text import Text
-        
-        # 清除旧的标注
-        for artist in getattr(self._plot, '_match_artists', []):
-            artist.remove()
-        self._plot._match_artists = []
-        
-        axes = self._plot._axes
-        
-        # 已匹配峰 - 绿色实线
-        for peak in matched_peaks:
-            line = axes.axvline(
-                peak.two_theta,
-                color="#4caf50",
-                linestyle="-",
-                linewidth=1.2,
-                alpha=0.8,
-            )
-            self._plot._match_artists.append(line)
-            
-            hkl_str = peak.hkl_str if peak.hkl else ""
-            if hkl_str:
-                annotation = axes.annotate(
-                    f"{peak.two_theta:.2f}\n{hkl_str}",
-                    xy=(peak.two_theta, peak.intensity),
-                    fontsize=6,
-                    ha="center",
-                    va="bottom",
-                    xytext=(0, 8),
-                    textcoords="offset points",
-                    bbox=dict(boxstyle="round,pad=0.2", facecolor="#c8e6c9", alpha=0.8),
-                    color="#2e7d32",
-                )
-                self._plot._match_artists.append(annotation)
-        
-        # 未匹配峰 - 红色虚线
-        for peak in unmatched_peaks:
-            line = axes.axvline(
-                peak.two_theta,
-                color="#f44336",
-                linestyle="--",
-                linewidth=1.0,
-                alpha=0.6,
-            )
-            self._plot._match_artists.append(line)
-            
-            hkl_str = peak.hkl_str if peak.hkl else ""
-            if hkl_str:
-                annotation = axes.annotate(
-                    f"{peak.two_theta:.2f}\n{hkl_str}",
-                    xy=(peak.two_theta, 0),
-                    fontsize=6,
-                    ha="center",
-                    va="bottom",
-                    xytext=(0, 4),
-                    textcoords="offset points",
-                    bbox=dict(boxstyle="round,pad=0.2", facecolor="#ffcdd2", alpha=0.7),
-                    color="#c62828",
-                )
-                self._plot._match_artists.append(annotation)
-        
-        # 添加图例
-        legend_elements = [
-            Line2D([0], [0], color="#4caf50", linewidth=1.5, label=f"已匹配 ({len(matched_peaks)})"),
-            Line2D([0], [0], color="#f44336", linewidth=1.0, linestyle="--", label=f"未匹配 ({len(unmatched_peaks)})"),
-        ]
-        legend = axes.legend(handles=legend_elements, loc="upper right", fontsize=8)
-        self._plot._match_artists.append(legend)
-        
-        self._plot._canvas.draw_idle()
+    def _flash_peak(self, two_theta: float) -> None:
+        """峰表点击 → 谱图上闪示该峰位 (x 轴居中临时放大可不做, 仅高亮提示)。"""
+        if not hasattr(self._plot, "_main_x") or self._plot._main_x.size == 0:
+            return
+        # 简单 x 轴移到该峰附近 (窗口宽 ±8°)
+        self._plot.get_axes().set_xlim(two_theta - 8, two_theta + 8)
+        self._plot.get_figure().canvas.draw_idle()
+
+    # ------------------------------------------------------------------
+    # 事件处理 - 报告
+    # ------------------------------------------------------------------
 
     def _on_select_phase(self) -> None:
         """选中物相 - 确认后切换到结构精修"""
@@ -564,11 +587,22 @@ class PhaseView(QWidget):
             self.phase_confirmed.emit(phase)
 
     def _on_clear_selection(self) -> None:
-        """清空已选物相"""
-        self._candidate_list.clear()
-        self._method_label.setText("")
-        self._plot.clear_plot()
+        """清空已选物相 (取消全部勾选, 保留候选列表)"""
         self._vm._phase_vm.clear_selection()
+        # 逐个取消勾选 (itemChanged → update_selection 幂等, 均未选则无副作用)
+        try:
+            self._candidate_list.itemChanged.disconnect(self._on_candidate_toggled)
+        except RuntimeError:
+            pass
+        for i in range(self._candidate_list.count()):
+            it = self._candidate_list.item(i)
+            if it is not None:
+                it.setCheckState(Qt.CheckState.Unchecked)
+        try:
+            self._candidate_list.itemChanged.connect(self._on_candidate_toggled)
+        except RuntimeError:
+            pass
+        self._refresh_overlay()
 
     def _on_auto_mix(self) -> None:
         """自动混合分析 - 多物相线性组合拟合
@@ -645,35 +679,30 @@ class PhaseView(QWidget):
             ProfileFittingService._normalize(combined),
         )
 
-        # 绘图
-        self._plot.clear_plot()
-        self._plot.plot_data(data, label="实验数据", color="#2196f3")
+        # 绘图 (v2 显示: 实验 + 加权计算谱 + 参考棒区)
+        self._plot.set_experiment(data)
+        # 加权计算谱 (含背景)
+        calc_full = combined + bg
+        self._plot.set_calculated(two_theta, calc_full)
+        # 残差 (bg 后基线接近 0 的区域已由实验扣除; 直接 y_exp−(combined+bg))
+        from polyxrd.services.phase_display import residual
+        self._plot.set_residual_curve(two_theta, residual(
+            np.asarray(data.intensity, float), calc_full))
+        # 棒区: 按 NNLS 权重序画选中/混合相
+        sticks = []
+        sel = self._vm._phase_vm.selected_phases
+        ordered = [ph for ph in sel if ph in phases] + \
+                  [ph for ph in phases if ph not in sel]
+        for i, ph in enumerate(ordered):
+            refs = (ph.get_reference_peaks() if hasattr(ph, "get_reference_peaks")
+                    else getattr(ph, "reference_peaks", []))
+            w_i = next((w for p, w in zip(phases, weight_pcts)
+                        if p.name == ph.name), 0.0)
+            sticks.append((f"{ph.name} ({w_i:.0f}%)", refs or [],
+                           phase_color(i)))
+        self._plot.set_selected_phases(sticks)
 
-        # 绘制混合拟合曲线
-        combined_data = XRDData(
-            two_theta=two_theta.copy(),
-            intensity=combined + bg,
-            wavelength=data.wavelength,
-        )
-        self._plot.plot_data(combined_data, label="混合拟合", color="#ff5722")
-
-        # 绘制各物相贡献
-        colors = ["#4caf50", "#9c27b0", "#ff9800", "#795548", "#607d8b"]
-        for i, (phase, pattern) in enumerate(zip(phases, patterns)):
-            color = colors[i % len(colors)]
-            weighted = pattern * weights[i]
-            phase_data = XRDData(
-                two_theta=two_theta.copy(),
-                intensity=weighted,
-                wavelength=data.wavelength,
-            )
-            self._plot.plot_data(
-                phase_data,
-                label=f"{phase.name} ({weight_pcts[i]:.1f}%)",
-                color=color,
-            )
-
-        # 显示统计信息
+        # 统计信息
         phase_info = " + ".join(
             f"{p.name}: {w:.1f}%" for p, w in zip(phases, weight_pcts)
         )
