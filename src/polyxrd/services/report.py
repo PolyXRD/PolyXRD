@@ -6,10 +6,13 @@
   - render_html_report : 单文件 HTML 报告 (SVG + 峰表 + 候选表 + 定量表)
   - export_peak_table_csv
   - export_refined_cif  (晶胞+原子位点 → CIF; 无原子则仅晶胞注释)
+  - find_libreoffice / export_via_libreoffice
+    (可选: 本机装了 LibreOffice 时把 HTML/CSV 无头转成 docx/xlsx/pdf)
 """
 from __future__ import annotations
 
 import csv
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -212,3 +215,152 @@ def export_refined_cif(phase, path) -> None:
         lines.append("# 无原子位点信息 (仅晶胞) — 如需 Rietveld 请补充结构。")
     with open(p, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
+
+
+# ── LibreOffice 无头转换 (可选: docx / xlsx / pdf) ──────────
+
+# 常见安装位置 (Windows 优先, 其余交给 PATH)
+_LIBREOFFICE_CANDIDATES = (
+    r"C:\Program Files\LibreOffice\program\soffice.exe",
+    r"C:\Program Files (x86)\LibreOffice\program\soffice.exe",
+    r"/usr/bin/soffice",
+    r"/usr/bin/libreoffice",
+    r"/Applications/LibreOffice.app/Contents/MacOS/soffice",
+)
+
+
+def find_libreoffice() -> Optional[Path]:
+    """定位 LibreOffice 可执行文件; 未安装返回 None。"""
+    for cand in _LIBREOFFICE_CANDIDATES:
+        if Path(cand).exists():
+            return Path(cand)
+    from shutil import which
+
+    for name in ("soffice", "libreoffice"):
+        hit = which(name)
+        if hit:
+            return Path(hit)
+    return None
+
+
+def _libreoffice_env(soffice: Path) -> dict:
+    """构造干净的 LibreOffice 子进程环境。
+
+    LibreOffice 无头转换在受限/沙盒环境下常因继承到父进程的环境而失败:
+      - PYTHONPATH 指向 WorkBuddy 等外部 shim 会破坏 LO 自带的 python 初始化
+        ("Could not find platform independent libraries");
+      - APPDATA 缺失会使 LO 无法落地用户配置 (registrymodifications.xcu),
+        进而所有导出过滤器都不可用 ("no export filter");
+      - MSYS/Git-Bash 会对 Windows 路径做斜杠转换, 需禁用。
+    这里移除污染变量, 必要时补全 APPDATA, 并把 PYTHONHOME/PYTHONPATH 指向
+    LO 自带的 python-core, 让过滤器配置能正常初始化。
+    """
+    env = dict(os.environ)
+    env.pop("PYTHONPATH", None)
+    env.pop("PYTHONHOME", None)
+    if not env.get("APPDATA"):
+        up = env.get("USERPROFILE") or env.get("HOME") or r"C:\Users\Administrator"
+        env["APPDATA"] = os.path.join(up, "AppData", "Roaming")
+    env["MSYS_NO_PATHCONV"] = "1"
+    # 指向 LO 自带 python-core, 避免脚本框架初始化失败
+    pchome = soffice.parent / "python-core-3.13.15"
+    if pchome.exists():
+        env["PYTHONHOME"] = str(pchome)
+        env["PYTHONPATH"] = str(pchome / "lib")
+    return env
+
+
+def _run_lo_convert(soffice, env, prog, fmt, dst_dir, src, timeout) -> bool:
+    """执行一次 LibreOffice 无头转换, 返回是否成功 (rc==0 且目标文件存在)。"""
+    import subprocess
+    import tempfile
+
+    prof = tempfile.mkdtemp(prefix="polyxrd_lo_")
+    cmd = [
+        str(soffice), "--headless", "--norestore", "--nofirststartwizard",
+        "-env:UserInstallation=file:///" + prof.replace("\\", "/"),
+        "--convert-to", fmt, "--outdir", str(dst_dir), str(src),
+    ]
+    try:
+        subprocess.run(
+            cmd, capture_output=True, text=True, timeout=timeout,
+            check=False, env=env, cwd=str(prog),
+        )
+    except Exception:
+        return False
+    finally:
+        # 尽力清理临时用户配置
+        try:
+            import shutil
+            shutil.rmtree(prof, ignore_errors=True)
+        except Exception:
+            pass
+    expected = dst_dir / f"{Path(src).stem}.{fmt}"
+    return expected.exists()
+
+
+def export_via_libreoffice(
+    source,
+    target_format: str,
+    out_dir=None,
+    timeout: float = 120.0,
+) -> Optional[Path]:
+    """用 LibreOffice 无头模式把已有报告转成 docx / xlsx / pdf。
+
+    只做格式转换, 不重新排版: 源可以是 render_html_report 产出的 HTML,
+    或 export_peak_table_csv 产出的 CSV (→ xlsx)。
+
+    坑位处理:
+      - HTML 被 LO 以 Writer/Web 模块打开, 该模块没有 docx 导出过滤器,
+        故 HTML→docx 先经 ODT 中转 (HTML→ODT 走 writerweb 过滤器可用,
+        ODT→docx 走 Office Open XML Text 可用);
+      - 子进程环境已消毒 (见 _libreoffice_env), 否则在受限环境下会
+        "no export filter" 或 python 初始化失败。
+
+    参数
+    ----
+    source : HTML / CSV 等 LibreOffice 可识别的文件
+    target_format : "docx" | "xlsx" | "pdf" | "odt" ...
+    out_dir : 输出目录, 默认与源文件同目录
+    timeout : 秒; 超时返回 None
+
+    返回
+    ----
+    输出文件路径; LibreOffice 未安装 / 转换失败 / 超时 → None
+    """
+    soffice = find_libreoffice()
+    if soffice is None:
+        return None
+
+    src = Path(source)
+    if not src.exists():
+        return None
+    dst_dir = Path(out_dir) if out_dir is not None else src.parent
+    dst_dir.mkdir(parents=True, exist_ok=True)
+
+    fmt = str(target_format).lower().lstrip(".")
+    env = _libreoffice_env(soffice)
+    prog = soffice.parent  # program 目录, 作为 cwd 更稳
+
+    # HTML → docx 必须经 ODT 中转 (Writer/Web 无 docx 过滤器)
+    is_html = src.suffix.lower() in (".html", ".htm")
+    if is_html and fmt == "docx":
+        tmp_odt = dst_dir / f"{src.stem}.odt"
+        try:
+            if not _run_lo_convert(soffice, env, prog, "odt", dst_dir, src, timeout):
+                return None
+            if not tmp_odt.exists():
+                return None
+            ok = _run_lo_convert(soffice, env, prog, fmt, dst_dir, tmp_odt, timeout)
+        finally:
+            try:
+                tmp_odt.unlink()
+            except OSError:
+                pass
+        expected = dst_dir / f"{src.stem}.{fmt}"
+        return expected if expected.exists() else None
+
+    if not _run_lo_convert(soffice, env, prog, fmt, dst_dir, src, timeout):
+        return None
+    expected = dst_dir / f"{src.stem}.{fmt}"
+    return expected if expected.exists() else None
