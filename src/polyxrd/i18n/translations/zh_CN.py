@@ -48,6 +48,7 @@ translations = {
             "title": "视图",
             "language": "切换语言",
             "reset_layout": "重置布局",
+            "dark_theme": "深色主题",
         },
         "report": {
             "title": "报告",

@@ -1,10 +1,15 @@
-"""手动复制 PyInstaller COLLECT 产物 (3-tuple: rel, src, type)."""
+"""手动复制 PyInstaller COLLECT 产物 (3-tuple: rel, src, type).
+
+路径以本脚本位置推导 (scripts/ 的上级 = 仓库根), 不再硬编码盘符 —
+盘符迁移 (D:→E:) 后依然可用。
+"""
 import os
 import re
 import shutil
 
-DST = r'D:\TEMP\PolyXRD\dist\PolyXRD\_internal'
-TOC = r'D:\TEMP\PolyXRD\build\PolyXRD\COLLECT-00.toc'
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DST = os.path.join(ROOT, 'dist', 'PolyXRD', '_internal')
+TOC = os.path.join(ROOT, 'build', 'PolyXRD', 'COLLECT-00.toc')
 
 text = open(TOC, encoding='utf-8', errors='ignore').read()
 # 三元组: ('rel', 'src', 'TYPE')

@@ -70,6 +70,10 @@ class PeakTable(QWidget):
         self._table.itemSelectionChanged.connect(self._on_selection_changed)
         self._table.cellChanged.connect(self._on_cell_changed)
 
+        # M20 v2: 右键菜单 (复制 / 删除 / 清空 / 导出)
+        self._table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._table.customContextMenuRequested.connect(self._on_context_menu)
+
         layout.addWidget(self._table)
 
     # ------------------------------------------------------------------
@@ -103,7 +107,13 @@ class PeakTable(QWidget):
     # ------------------------------------------------------------------
 
     def _reload_table(self) -> None:
-        """重新加载表格"""
+        """重新加载表格
+
+        排序必须在填充期间关闭: sortingEnabled 下逐格 setItem 会触发
+        实时重排, 导致后续 setItem 落错行 / 丢格 (显示错乱, 复制/读取
+        亦错)。填充完再恢复排序。
+        """
+        self._table.setSortingEnabled(False)
         self._table.setRowCount(len(self._peaks))
 
         for row, peak in enumerate(self._peaks):
@@ -114,6 +124,8 @@ class PeakTable(QWidget):
             self._set_table_item(row, 4, f"{peak.fwhm:.4f}")
             self._set_table_item(row, 5, peak.hkl_str)
             self._set_table_item(row, 6, peak.phase)
+
+        self._table.setSortingEnabled(True)
 
     def _set_table_item(self, row: int, col: int, text: str) -> None:
         """设置单元格内容"""
@@ -163,6 +175,46 @@ class PeakTable(QWidget):
                 del self._peaks[row]
 
         self._reload_table()
+
+    # ------------------------------------------------------------------
+    # 右键菜单 (M20 v2)
+    # ------------------------------------------------------------------
+
+    def _on_context_menu(self, pos) -> None:
+        """峰表右键菜单: 复制选中行 / 删除 / 清空 / 导出CSV。"""
+        from PySide6.QtGui import QGuiApplication
+        from PySide6.QtWidgets import QMenu
+
+        menu = QMenu(self)
+        has_sel = bool(self._table.selectedItems())
+        act_copy = menu.addAction("复制选中行")
+        act_copy.setEnabled(has_sel)
+        act_del = menu.addAction("删除选中")
+        act_del.setEnabled(has_sel)
+        menu.addSeparator()
+        menu.addAction("清空", self._on_clear)
+        menu.addSeparator()
+        menu.addAction("导出CSV", self._on_export_csv)
+
+        chosen = menu.exec(self._table.viewport().mapToGlobal(pos))
+        if chosen is act_del:
+            self._on_delete_selected()
+        elif chosen is act_copy:
+            self._copy_selected_to_clipboard()
+
+    def _copy_selected_to_clipboard(self) -> None:
+        """把选中行以 TSV 复制到剪贴板 (可直接粘贴到 Excel)。"""
+        from PySide6.QtGui import QGuiApplication
+
+        rows = sorted(set(item.row() for item in self._table.selectedItems()))
+        lines = ["\t".join(self.COLUMNS)]
+        for row in rows:
+            cells = []
+            for col in range(self._table.columnCount()):
+                item = self._table.item(row, col)
+                cells.append(item.text() if item is not None else "")
+            lines.append("\t".join(cells))
+        QGuiApplication.clipboard().setText("\n".join(lines))
 
     def _on_clear(self) -> None:
         """清空所有峰"""
