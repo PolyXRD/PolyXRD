@@ -17,8 +17,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import Qt, QSize, QSettings
-from PySide6.QtGui import QAction, QIcon, QKeySequence, QActionGroup
+from PySide6.QtCore import Qt, QSize, QSettings, QUrl
+from PySide6.QtGui import (QAction, QIcon, QKeySequence, QActionGroup,
+                            QDragEnterEvent, QDropEvent)
 from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -499,6 +500,9 @@ class MainWindow(QMainWindow):
         self.statusBar().addPermanentWidget(self._status_lang_label)
         self.statusBar().addPermanentWidget(self._status_wl_label)
         self.statusBar().showMessage(tr("status.ready"))
+
+        # M20 v2: 接受数据文件拖放 (替代点击 "打开" 的快捷交互)
+        self.setAcceptDrops(True)
 
         self._setup_toolbar()
         self._setup_docks()
@@ -1053,8 +1057,50 @@ class MainWindow(QMainWindow):
             tr("dialog.file_filter"),
         )
         if file_path:
-            self._vm.load_file(file_path)
-            self._add_recent_file(file_path)
+            self._load_file_path(file_path)
+
+    def _load_file_path(self, file_path: str) -> None:
+        """加载数据文件并加入最近列表。菜单打开与拖放共用。"""
+        self._vm.load_file(file_path)
+        self._add_recent_file(file_path)
+
+    @staticmethod
+    def _first_local_path(paths: list) -> Optional[str]:
+        """从候选路径列表中取第一个非空本地文件路径。"""
+        for p in paths:
+            if p:
+                return p
+        return None
+
+    # ------------------------------------------------------------------
+    # 事件处理 - 拖放 (M20 v2)
+    # ------------------------------------------------------------------
+
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
+        md = event.mimeData()
+        if md.hasUrls() and any(u.isLocalFile() for u in md.urls()):
+            event.acceptProposedAction()
+
+    def dragMoveEvent(self, event: QDragEnterEvent) -> None:
+        # 与 dragEnterEvent 同策略, 保证跨控件移动时仍接受
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event: QDropEvent) -> None:
+        md = event.mimeData()
+        local_paths = [u.toLocalFile() for u in md.urls() if u.isLocalFile()]
+        path = self._first_local_path(local_paths)
+        if path:
+            try:
+                self._load_file_path(path)
+                self.statusBar().showMessage(
+                    f"{tr('status.data_loaded')}: {Path(path).name}", 3000
+                )
+            except Exception as e:
+                self.statusBar().showMessage(
+                    f"{tr('error.load_failed')}: {e}", 5000
+                )
+        event.acceptProposedAction()
 
     def _on_save(self) -> None:
         QMessageBox.information(
