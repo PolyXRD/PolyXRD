@@ -239,6 +239,18 @@ class PatternDisplayWidget(QWidget):
     def export_image(self, path: str, dpi: int = 300) -> None:
         self._figure.savefig(path, dpi=dpi, bbox_inches="tight")
 
+    # ── 向后兼容别名 (供外部 main_window._on_data_changed 等调用) ──
+    def clear_plot(self) -> None:
+        """清空整个图 (含实验/棒区/标记)。"""
+        self.clear_all()
+
+    def plot_data(self, data: XRDData, label: Optional[str] = None,
+                  color: Optional[str] = None) -> None:
+        """兼容旧接口: 重置并画实验谱 (黑线)。"""
+        self.set_experiment(data)
+        if label:
+            self._ax_main.set_title(label, fontsize=10, loc="left", pad=5)
+
     def get_figure(self):
         return self._figure
 
