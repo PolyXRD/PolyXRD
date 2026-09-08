@@ -51,36 +51,21 @@ if exist "build\PolyXRD\qt.conf" copy /Y "build\PolyXRD\qt.conf" "dist\PolyXRD\q
 REM 跑 scripts\_pyinst_collect.py 复制其余依赖 (路径自推导, 原 _do_collect.py 已并入)
 "%PYTHON%" scripts\_pyinst_collect.py
 
-REM 复制 ICU DLL (PySide6 6.11 不自带, Qt6 启动必需)
+REM ICU 处理 (PySide6 6.11 wheel 不自带 ICU; Qt6Core 依赖 icuuc.dll):
+REM 实测 (2026-09-08, 本机): System32 的 icuuc.dll (29KB) 是 Windows 官方转发 shim,
+REM Qt 6.11 经其解析全部符号, 可正常启动; 而 conda/_gsas2main 的 ICU 78 独立版
+REM 反而缺 Qt 所需符号 → WinError 127 "找不到指定的程序"。
+REM 故策略 = 确保 dist 里【没有】任何 ICU 副本, 让加载器落到 OS shim。
 "%PYTHON%" -c "
-import os, glob, shutil
-DST = r'dist\PolyXRD\_internal'
-ICU_FILES = ['icuuc.dll', 'icudt.dll', 'icuin.dll', 'icuio.dll', 'icutu.dll',
-             'icuuc78.dll', 'icudt78.dll', 'icuin78.dll', 'icuio78.dll', 'icutu78.dll']
-ICU_ROOTS = [
-    r'C:\ProgramData\gsas2main\Library\bin',
-    r'C:\Program Files\LibreOffice\program',
-    os.path.expandvars(r'%USERPROFILE%\AppData\Roaming\mamba\pkgs\icu-78.3*'),
-    os.path.expandvars(r'%USERPROFILE%\AppData\Roaming\mamba\pkgs\https\conda.anaconda.org\conda-forge\win-64\icu-78.3*'),
-]
-done = 0
-for pat in ICU_ROOTS:
-    for d in ([pat] if os.path.isdir(pat) else glob.glob(pat)):
-        b = os.path.join(d, 'Library', 'bin')
-        if not os.path.isdir(b):
-            b = d
-        done = 0
-        for f in ICU_FILES:
-            s = os.path.join(b, f)
-            if os.path.isfile(s):
-                shutil.copy2(s, os.path.join(DST, f))
-                done += 1
-        if done:
-            print(f'  ICU copied: {done} files from {b}')
-            break
-    if done: break
-else:
-    print('  [WARN] No ICU source found - GUI may fail to start')
+import glob, os
+removed = 0
+for pat in [r'dist\PolyXRD\_internal\icu*.dll', r'dist\PolyXRD\_internal\PySide6\icu*.dll']:
+    for f in glob.glob(pat):
+        try:
+            os.remove(f); removed += 1
+        except OSError:
+            pass
+print(f'  ICU cleanup: removed {removed} files (依赖 OS icuuc shim)')
 "
 
 if %errorlevel% neq 0 (
