@@ -91,6 +91,41 @@ class PhaseViewModel(QObject):
         except Exception as e:
             self.error.emit(f"峰检测失败: {e}")
 
+    def find_peaks_advanced(
+        self,
+        data,
+        sigma_threshold: float = 5.0,
+        distance_deg: float = 0.12,
+        bg_window_deg: float = 2.0,
+        refine_mode: str = "fit",
+        **kwargs,
+    ) -> None:
+        """M21: 高精度峰检测 (背景扣除 + 亚步长峰位 + 联合拟合精修)。
+
+        替代 find_peaks 的低精度网格峰位; 旧方法保留。产出自带背景扣除,
+        峰位可到 ~0.001°。
+        """
+        from polyxrd.services.peak_detection import (
+            PeakDetectOptions,
+            detect_peaks_from_data,
+        )
+        try:
+            opts = PeakDetectOptions(
+                sigma_threshold=sigma_threshold,
+                distance_deg=distance_deg,
+                bg_window_deg=bg_window_deg,
+                refine_mode=refine_mode,
+                wavelength=getattr(data, "wavelength", None) or 1.5406,
+            )
+            for k, v in kwargs.items():
+                if hasattr(opts, k):
+                    setattr(opts, k, v)
+            peaks = detect_peaks_from_data(data, opts)
+            self._peaks = peaks
+            self.peaks_detected.emit(peaks)
+        except Exception as e:
+            self.error.emit(f"高精度峰检测失败: {e}")
+
     def fit_peaks(
         self,
         data,
