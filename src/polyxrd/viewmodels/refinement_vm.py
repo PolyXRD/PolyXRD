@@ -47,6 +47,11 @@ class RefinementViewModel(QObject):
         """设置待精修物相"""
         self._selected_phases = phases
 
+    def reset(self) -> None:
+        """清空精修结果与待精修物相 (换新数据/关闭时调用)。"""
+        self._result = None
+        self._selected_phases = []
+
     def refine(
         self,
         data,
