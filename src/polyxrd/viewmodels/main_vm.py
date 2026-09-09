@@ -168,6 +168,23 @@ class MainViewModel(QObject):
             detect_shoulders=detect_shoulders, sensitivity=sensitivity,
         )
 
+    def find_peaks_advanced(self, sigma_threshold: float = 5.0,
+                            distance_deg: float = 0.12,
+                            bg_window_deg: float = 2.0,
+                            refine_mode: str = "fit",
+                            **kwargs) -> None:
+        """M21: 高精度峰检测 (背景扣除 + 亚步长 + 联合拟合)。"""
+        data = self.current_data
+        if data is None:
+            self.error_occurred.emit("请先加载数据")
+            return
+        self.status_changed.emit("执行高精度峰检测 (背景扣除+亚步长精修)")
+        self._phase_vm.find_peaks_advanced(
+            data, sigma_threshold=sigma_threshold,
+            distance_deg=distance_deg, bg_window_deg=bg_window_deg,
+            refine_mode=refine_mode, **kwargs,
+        )
+
     def fit_peaks(self, model: str = "voigt") -> None:
         """峰拟合"""
         data = self.current_data
