@@ -1,8 +1,8 @@
 @echo off
 chcp 65001 >nul
-title PolyXRD v0.9.9 打包构建器
+title PolyXRD v0.9.10 打包构建器
 echo ========================================
-echo   PolyXRD v0.9.9 打包为独立安装包
+echo   PolyXRD v0.9.10 打包为独立安装包
 echo ========================================
 echo.
 
@@ -27,6 +27,10 @@ if %errorlevel% neq 0 (
 echo.
 echo [步骤 1/5] PyInstaller 打包 (EXE 阶段, COLLECT 阶段可能因沙盒 safe-delete 失败)...
 echo.
+
+REM 应用图标已由 build_icon.py 生成 (基于 crystal-mark 品牌资产, 7 档多分辨率 ICO).
+REM 如需重新生成: %PYTHON% build_icon.py
+"%PYTHON%" build_icon.py
 
 REM 两库全含 (COD 全库 432MB + 无机物库 259MB)。如需仅含无机物库, 设
 REM POLYXRD_NO_COD_DB=1; 如需全不含, 两变量都设 1。
@@ -96,7 +100,7 @@ echo [警告] 未找到 Inno Setup, 跳过安装程序生成
 goto :no_iscc
 
 :have_iscc
-%ISCC% /DAppVersion=0.9.9 /O"installer_output" /F"PolyXRD-Setup-v0.9.9" scripts\PolyXRD-Setup.iss
+%ISCC% /DAppVersion=0.9.10 /O"installer_output" /F"PolyXRD-Setup-v0.9.10" scripts\PolyXRD-Setup.iss
 if %errorlevel% neq 0 (
     echo [警告] Inno 编译失败, 跳过安装程序
 )
@@ -107,11 +111,11 @@ echo.
 echo [步骤 4/5] 创建便携压缩包 (ZIP)...
 echo.
 
-if exist "installer_output\PolyXRD-v0.9.9-Portable.zip" del "installer_output\PolyXRD-v0.9.9-Portable.zip" >nul
-powershell -Command "Compress-Archive -Path 'dist\PolyXRD\*' -DestinationPath 'installer_output\PolyXRD-v0.9.9-Portable.zip' -Force"
+if exist "installer_output\PolyXRD-v0.9.10-Portable.zip" del "installer_output\PolyXRD-v0.9.10-Portable.zip" >nul
+powershell -Command "Compress-Archive -Path 'dist\PolyXRD\*' -DestinationPath 'installer_output\PolyXRD-v0.9.10-Portable.zip' -Force"
 if %errorlevel% neq 0 (
     echo [警告] ZIP 压缩失败, 尝试备用方法...
-    powershell -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::CreateFromDirectory('dist\PolyXRD', 'installer_output\PolyXRD-v0.9.9-Portable.zip')"
+    powershell -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::CreateFromDirectory('dist\PolyXRD', 'installer_output\PolyXRD-v0.9.10-Portable.zip')"
 )
 
 echo.
@@ -119,22 +123,23 @@ echo [步骤 5/5] 写 VERSION.txt...
 echo.
 
 powershell -Command "$ver = @'
-PolyXRD v0.9.9 Release
+PolyXRD v0.9.10 Release
 Build Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
-ICU: bundled (Qt6 启动依赖, PySide6 6.11 已不再自带)
-Databases: 独立分发 (COD 全库/无机物库)
+ICU: 依赖系统 icuuc shim (PySide6 6.11 不自带 ICU)
+Databases: 内置打包 (COD 全库 + COD 无机物库)
+Icon: 品牌化应用图标 (crystal-mark + XRD 配色, 多分辨率 ICO)
 '@; $ver | Out-File -FilePath 'dist\PolyXRD\VERSION.txt' -Encoding UTF8"
-copy /Y "dist\PolyXRD\VERSION.txt" "installer_output\VERSION_v0.9.9.txt" >nul 2>&1
+copy /Y "dist\PolyXRD\VERSION.txt" "installer_output\VERSION_v0.9.10.txt" >nul 2>&1
 
 echo.
 echo ========================================
-echo   PolyXRD v0.9.9 打包完成！
+echo   PolyXRD v0.9.10 打包完成！
 echo ========================================
 echo.
 
 echo 输出 (installer_output\):
-if exist "installer_output\PolyXRD-Setup-v0.9.9.exe" for %%A in ("installer_output\PolyXRD-Setup-v0.9.9.exe") do echo   Setup.exe:    %%~zA 字节
-if exist "installer_output\PolyXRD-v0.9.9-Portable.zip" for %%A in ("installer_output\PolyXRD-v0.9.9-Portable.zip") do echo   Portable.zip: %%~zA 字节
+if exist "installer_output\PolyXRD-Setup-v0.9.10.exe" for %%A in ("installer_output\PolyXRD-Setup-v0.9.10.exe") do echo   Setup.exe:    %%~zA 字节
+if exist "installer_output\PolyXRD-v0.9.10-Portable.zip" for %%A in ("installer_output\PolyXRD-v0.9.10-Portable.zip") do echo   Portable.zip: %%~zA 字节
 if exist "dist\PolyXRD\PolyXRD.exe" for %%A in ("dist\PolyXRD\PolyXRD.exe") do echo   PolyXRD.exe:  %%~zA 字节
 
 echo.
