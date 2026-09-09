@@ -181,6 +181,16 @@ class PhaseViewModel(QObject):
         """清空选中物相"""
         self._selected_phases.clear()
 
+    def reset_analysis(self) -> None:
+        """清空全部分析状态 (峰/拟合峰/匹配结果/选中相), 换新数据时调用。
+
+        不发信号 (由主 VM 统一在数据切换后发 data_changed/peaks_changed/
+        phase_identified 空集通知各视图重绘)。"""
+        self._peaks = None
+        self._fitted_peaks = None
+        self._matched_phases = []
+        self._selected_phases = []
+
     # ── M21: 多选集合管理 (Match! 式勾选叠加) ───────────────
     MAX_SELECTED = 8
 

@@ -11,6 +11,7 @@ translations = {
             "open": "開く",
             "save": "保存",
             "save_as": "名前を付けて保存",
+            "clear_data": "データをクリア",
             "exit": "終了",
             "recent_files": "最近のファイル",
             "no_recent": "（最近のファイルなし）",
@@ -92,6 +93,7 @@ translations = {
     },
     "dialog": {
         "open_file_title": "XRDデータファイルを開く",
+        "confirm_clear_data": "現在のデータをクリアしますか？\n検出済みのピーク・物相同定・リートベルト結果も消去されます。",
         "save_as_title": "名前を付けて保存",
         "export_dir_title": "エクスポートディレクトリを選択",
         "about_title": "PolyXRDについて",

@@ -604,6 +604,25 @@ class PhaseView(QWidget):
             pass
         self._refresh_overlay()
 
+    def reset_view(self) -> None:
+        """外部数据被清除/替换时, 复位整个物相分析视图 (候选/方法标题/选中/表)。"""
+        self._vm._phase_vm.reset_analysis()
+        try:
+            self._candidate_list.itemChanged.disconnect(self._on_candidate_toggled)
+        except RuntimeError:
+            pass
+        self._candidate_list.clear()
+        self._current_results = []
+        try:
+            self._candidate_list.itemChanged.connect(self._on_candidate_toggled)
+        except RuntimeError:
+            pass
+        if hasattr(self, "_method_label"):
+            self._method_label.setText("")
+        if hasattr(self, "_match_table"):
+            self._match_table.clear_table()
+        self._refresh_overlay()
+
     def _on_auto_mix(self) -> None:
         """自动混合分析 - 多物相线性组合拟合
 

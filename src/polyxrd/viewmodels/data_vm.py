@@ -151,6 +151,18 @@ class DataViewModel(QObject):
             self._processed_data = self._raw_data.copy()
             self.data_updated.emit(self._processed_data)
 
+    def clear_all(self) -> None:
+        """清空当前数据与文件路径 (显式"关闭/清除数据"用)。
+
+        重置后 current_data=None。不发 data_loaded/data_updated 之外的自定义
+        信号 → 由调用方决定 emit 什么; 这里直接发 data_updated(None) 供视图清空。
+        """
+        self._raw_data = None
+        self._processed_data = None
+        self._background_result = None
+        self._file_path = None
+        self.data_updated.emit(None)
+
     def normalize(self) -> None:
         """归一化"""
         data = self.current_data

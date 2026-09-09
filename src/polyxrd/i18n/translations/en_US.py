@@ -14,6 +14,7 @@ translations = {
             "save_project": "Save Project",
             "load_project": "Load Project",
             "project_filter": "PolyXRD Project Files (*.pxrd)",
+            "clear_data": "Clear Data",
             "exit": "Exit",
             "recent_files": "Recent Files",
             "no_recent": "(No recent files)",
@@ -99,6 +100,7 @@ translations = {
     },
     "dialog": {
         "open_file_title": "Open XRD Data File",
+        "confirm_clear_data": "Clear the current data?\nThis also clears detected peaks, phases and refinement results.",
         "save_as_title": "Save As",
         "export_dir_title": "Select Export Directory",
         "about_title": "About PolyXRD",

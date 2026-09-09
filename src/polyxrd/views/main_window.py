@@ -757,6 +757,15 @@ class MainWindow(QMainWindow):
 
         file_menu.addSeparator()
 
+        # 清除/关闭数据: 清空当前数据与所有分析状态 (峰/物相/精修)
+        self._actions["clear_data"] = QAction(tr("menu.file.clear_data"), self)
+        self._actions["clear_data"].triggered.connect(self._on_clear_data)
+        self._set_action_icon(self._actions["clear_data"], "reset")
+        self._actions["clear_data"].setEnabled(False)  # 无数据时禁用
+        file_menu.addAction(self._actions["clear_data"])
+
+        file_menu.addSeparator()
+
         self._recent_menu = file_menu.addMenu(tr("menu.file.recent_files"))
         self._update_recent_files_menu()
 
@@ -1162,6 +1171,19 @@ class MainWindow(QMainWindow):
     def _on_reset_data(self) -> None:
         self._vm.reset_data()
 
+    def _on_clear_data(self) -> None:
+        """清除/关闭当前数据 (含峰/物相/精修等全部分析状态)。"""
+        if self._vm.current_data is None:
+            return
+        reply = QMessageBox.question(
+            self, tr("dialog.info"),
+            tr("dialog.confirm_clear_data"),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self._vm.clear_all_data()
+
     def _on_normalize(self) -> None:
         self._vm.normalize_data()
 
@@ -1367,6 +1389,12 @@ class MainWindow(QMainWindow):
         self._phase_view._plot.clear_plot()
         if data:
             self._phase_view._plot.plot_data(data, label="实验数据")
+        else:
+            # 数据被清除 → 物相分析页也清空候选/归属表/方法标题
+            self._phase_view.reset_view()
+        # 清除数据动作可用性随是否有数据切换
+        if hasattr(self, "_actions") and "clear_data" in self._actions:
+            self._actions["clear_data"].setEnabled(data is not None)
 
     def _on_peaks_changed(self, peaks) -> None:
         """峰变更 - 更新峰列表和图标注"""

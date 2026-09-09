@@ -14,6 +14,7 @@ translations = {
             "save_project": "保存项目",
             "load_project": "加载项目",
             "project_filter": "PolyXRD项目文件 (*.pxrd)",
+            "clear_data": "清除数据",
             "exit": "退出",
             "recent_files": "最近打开",
             "no_recent": "（无最近文件）",
@@ -99,6 +100,7 @@ translations = {
     },
     "dialog": {
         "open_file_title": "打开XRD数据文件",
+        "confirm_clear_data": "确定要清除当前数据吗？\n将同时清除已检测的峰、物相与精修结果。",
         "save_as_title": "另存为",
         "export_dir_title": "选择导出目录",
         "about_title": "关于 PolyXRD",

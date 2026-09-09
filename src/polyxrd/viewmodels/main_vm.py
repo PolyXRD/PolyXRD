@@ -118,6 +118,33 @@ class MainViewModel(QObject):
         self._data_vm.reset_to_raw()
 
     # ------------------------------------------------------------------
+    # 分析状态重置 / 清除数据 (M21 数据文件菜单)
+    # ------------------------------------------------------------------
+
+    def reset_analysis_state(self) -> None:
+        """清空旧数据分析状态 (峰/拟合峰/匹配/选中物相/精修), 保留当前数据。
+
+        供"打开新文件"在加载前调用, 避免旧物相/峰残留叠加到新数据上。
+        通过 peaks_changed(空)/phase_identified(空) 通知视图清空。
+        """
+        self._phase_vm.reset_analysis()
+        self._refinement_vm.reset()
+        empty_peaks = PeakList(source="auto")
+        self.peaks_changed.emit(empty_peaks)
+        self.phase_identified.emit([])
+
+    def clear_all_data(self) -> None:
+        """显式"关闭/清除数据": 清数据 + 分析状态, 回到空状态。"""
+        self.status_changed.emit("已清除当前数据")
+        self._phase_vm.reset_analysis()
+        self._refinement_vm.reset()
+        self._data_vm.clear_all()
+        # clear_all 已 emit data_updated(None) → _on_data_updated → data_changed(None)
+        empty_peaks = PeakList(source="auto")
+        self.peaks_changed.emit(empty_peaks)
+        self.phase_identified.emit([])
+
+    # ------------------------------------------------------------------
     # 公共方法 - 峰检测
     # ------------------------------------------------------------------
 
@@ -248,6 +275,11 @@ class MainViewModel(QObject):
     # ------------------------------------------------------------------
 
     def _on_data_loaded(self, data) -> None:
+        # 新文件载入 → 清掉旧数据的峰/物相/精修残留 (避免残留叠到新数据)
+        self._phase_vm.reset_analysis()
+        self._refinement_vm.reset()
+        self.peaks_changed.emit(PeakList(source="auto"))
+        self.phase_identified.emit([])
         self.status_changed.emit(f"数据加载完成: {len(data)} 个数据点")
         self.data_changed.emit(data)
 
