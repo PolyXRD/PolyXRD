@@ -346,6 +346,8 @@ translations = {
         "smooth_method": "平滑方法",
         "smooth_window": "平滑窗口",
         "peak_detect": "峰检测参数",
+        "peak_hi_precision": "高精度(背景扣除+亚步长)",
+        "peak_hi_precision_tip": "自动背景扣除 + 亚步长峰位精修 + 重叠峰联合拟合，峰位精度 ~0.001°",
         "peak_height": "最小峰高 (%)",
         "peak_distance": "最小距离",
         "mineral_name": "矿物名",

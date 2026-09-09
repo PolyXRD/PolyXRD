@@ -153,7 +153,9 @@ class PlotWidget(QWidget):
         for artist in self._peak_artists:
             artist.remove()
         self._peak_artists.clear()
-        self._peaks = peaks
+        if hasattr(peaks, "peaks"):
+            peaks = peaks.peaks
+        self._peaks = list(peaks)
 
         for peak in peaks:
             # 垂直虚线

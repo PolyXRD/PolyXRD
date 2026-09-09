@@ -310,6 +310,8 @@ translations = {
         "smooth_method": "スムージング方法",
         "smooth_window": "スムージングウィンドウ",
         "peak_detect": "ピーク検出",
+        "peak_hi_precision": "高精度（バックグラウンド除去＋サブステップ）",
+        "peak_hi_precision_tip": "自動バックグラウンド除去＋サブステップ位置精密化＋重なりピーク同時フィット、約0.001°",
         "peak_height": "最小ピーク高さ (%)",
         "peak_distance": "最小距離",
         "mineral_name": "鉱物名",

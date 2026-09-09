@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QLabel,
     QFormLayout,
+    QCheckBox,
 )
 
 from polyxrd.viewmodels.main_vm import MainViewModel
@@ -104,6 +105,13 @@ class DataView(QWidget):
         self._peak_distance.setValue(5)
         peak_layout.addRow("最小距离:", self._peak_distance)
 
+        self._peak_hi = QCheckBox("高精度(背景扣除+亚步长)")
+        self._peak_hi.setChecked(True)
+        self._peak_hi.setToolTip(
+            "启用高精度峰检测: 自动背景扣除 + 亚步长峰位精修 + 重叠峰联合拟合\n"
+            "峰位精度可达 ~0.001°, 弱峰更易检出。取消则用传统高度阈值法。")
+        peak_layout.addRow(self._peak_hi)
+
         self._btn_find_peaks = QPushButton("检测峰")
         self._btn_find_peaks.clicked.connect(self._on_find_peaks)
         peak_layout.addRow(self._btn_find_peaks)
@@ -156,11 +164,14 @@ class DataView(QWidget):
         )
 
     def _on_find_peaks(self) -> None:
-        """峰检测"""
-        self._vm.find_peaks(
-            height=self._peak_height.value() / 100.0,
-            distance=self._peak_distance.value(),
-        )
+        """峰检测 (默认高精度; 取消勾选回退传统高度阈值法)"""
+        if self._peak_hi.isChecked():
+            self._vm.find_peaks_advanced()
+        else:
+            self._vm.find_peaks(
+                height=self._peak_height.value() / 100.0,
+                distance=self._peak_distance.value(),
+            )
 
     def _on_fit_peaks(self) -> None:
         """峰拟合"""

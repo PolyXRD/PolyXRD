@@ -49,6 +49,7 @@ from PySide6.QtWidgets import (
     QSplitter,
     QMenu,
     QSizePolicy,
+    QCheckBox,
 )
 
 from polyxrd.config import AppConfig
@@ -680,6 +681,11 @@ class MainWindow(QMainWindow):
         params_layout.addRow(QLabel(""))
         params_layout.addRow(QLabel(tr("params.peak_detect")))
 
+        self._peak_hi_check = QCheckBox(tr("params.peak_hi_precision"))
+        self._peak_hi_check.setChecked(True)
+        self._peak_hi_check.setToolTip(tr("params.peak_hi_precision_tip"))
+        params_layout.addRow(self._peak_hi_check)
+
         self._peak_height_spin = QDoubleSpinBox()
         self._peak_height_spin.setRange(0.0, 100.0)
         self._peak_height_spin.setValue(self._config.default_peak_height * 100)
@@ -1192,10 +1198,13 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _on_find_peaks(self) -> None:
-        self._vm.find_peaks(
-            height=self._peak_height_spin.value() / 100.0,
-            distance=self._peak_distance_spin.value(),
-        )
+        if getattr(self, "_peak_hi_check", None) and self._peak_hi_check.isChecked():
+            self._vm.find_peaks_advanced()
+        else:
+            self._vm.find_peaks(
+                height=self._peak_height_spin.value() / 100.0,
+                distance=self._peak_distance_spin.value(),
+            )
 
     def _on_identify(self) -> None:
         self._tab_widget.setCurrentWidget(self._phase_view)
