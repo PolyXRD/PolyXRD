@@ -346,6 +346,8 @@ translations = {
         "smooth_method": "Smooth Method",
         "smooth_window": "Smooth Window",
         "peak_detect": "Peak Detection",
+        "peak_hi_precision": "High precision (BG subtract + sub-step)",
+        "peak_hi_precision_tip": "Auto background subtraction + sub-step peak position + joint fitting; ~0.001 deg",
         "peak_height": "Min Peak Height (%)",
         "peak_distance": "Min Distance",
         "mineral_name": "Mineral Name",

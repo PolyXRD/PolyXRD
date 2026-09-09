@@ -80,9 +80,11 @@ class PeakTable(QWidget):
     # 公共方法
     # ------------------------------------------------------------------
 
-    def set_peaks(self, peaks: list[Peak]) -> None:
-        """设置峰列表"""
-        self._peaks = peaks
+    def set_peaks(self, peaks) -> None:
+        """设置峰列表 (接受 PeakList 或 list[Peak])"""
+        if hasattr(peaks, "peaks"):
+            peaks = peaks.peaks
+        self._peaks = list(peaks)
         self._reload_table()
 
     def add_peak(self, peak: Peak) -> None:
