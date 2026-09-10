@@ -935,6 +935,204 @@ def _dedupe_by_tol(ds, tol_abs: float, trel: float, use_rel: bool) -> list[float
 
 
 # ──────────────────────────────────────────────────────────────
+# 预截断强峰列 (0.9.12 检索加速 第二级)
+# ──────────────────────────────────────────────────────────────
+#
+# 向量化之后实测 (见 `_parse_float_csv` 上方) 真正的瓶颈是**每相都要解析
+# 全部参考峰**, 而打分只用得上 I 最高的 ``max_ref_peaks``(默认 40) 个:
+#
+#   · COD 无机库: 266.5 峰/相 × 71,199 相 = 1,900 万个峰, 其中 85% 白解析
+#   · PDF2 库:     63.8 峰/相 × 163,834 相 — 本来就 ~64 峰, **没有收益**
+#
+# 所以建库期把每相 I 最高的前 ``_PEAK_TOP_N`` 个峰按 I 降序另存一份,
+# 检索时直接读它 (`np.frombuffer` 零拷贝), 连每相的 argsort 都省掉。
+#
+# **为什么结果仍然完全一致**: 打分逻辑只消费
+#   · `ref_d = d[order[:max_ref_peaks]]`  —— I 最高的前 40 个
+#   · `top_d = d[order[:n_top]]`, `n_top ≤ 12`      —— 同上集合的子集
+# 只要 ``max_ref_peaks ≤ _PEAK_TOP_N`` 且 ``_PEAK_TOP_N ≥ 12``,
+# 预截断数组的前缀就**逐元素等于**全长数组的前缀 (含并列时的先后,
+# 因为建库用的是同一个 `np.argsort(-i, kind="stable")[:N]`)。
+# 超出这个范围时自动回退全长解析, 不给"静默变结果"留口子。
+
+_PEAK_TOP_N = 64
+_TOP_PEAK_COLUMNS = ("peaks_top_d", "peaks_top_i")
+
+
+def has_top_peak_columns(conn) -> bool:
+    """该连接对应的 `phases` 表是否已有预截断强峰列。"""
+    try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(phases)")}
+    except Exception:
+        return False
+    return set(_TOP_PEAK_COLUMNS).issubset(cols)
+
+
+def _top_peaks_of(d: np.ndarray, i: np.ndarray,
+                  top_n: int = _PEAK_TOP_N) -> tuple[np.ndarray, np.ndarray]:
+    """取 I 最高的前 ``top_n`` 个峰, 按 I 降序返回 (d, i) —— 建库用。
+
+    与 `search_cod_by_d_peaks` 内的取法**逐元素等价**:
+    ``order = argsort(-i, kind="stable")[:top_n]``, 再按
+    ``k < len(ref_d_all)`` 过滤 (旧实现就有这道过滤, 必须保留)。
+    """
+    if d.size == 0 or i.size == 0:
+        return np.empty(0, dtype=np.float64), np.empty(0, dtype=np.float64)
+    order = np.argsort(-np.asarray(i, dtype=np.float64), kind="stable")[:top_n]
+    if i.size > d.size:
+        order = order[order < d.size]
+    return (np.asarray(d, dtype=np.float64)[order],
+            np.asarray(i, dtype=np.float64)[order])
+
+
+def build_top_peak_columns(
+    db_path,
+    *,
+    top_n: int = _PEAK_TOP_N,
+    backup: bool = True,
+    vacuum: bool = False,
+    progress=None,
+) -> dict:
+    """给 ``phases`` 表补上预截断强峰列 (幂等, 只增不改)。
+
+    新增 ``peaks_top_d`` / ``peaks_top_i`` 两列, 用 float64 二进制
+    (BLOB) 存每相 I 最高的前 ``top_n`` 个峰, 已按 I 降序。之后
+    :meth:`CIFDatabase.search_cod_by_d_peaks` 会自动改读这两列, 省掉
+    每相全部峰的字符串解析与排序。
+
+    Args:
+        db_path: SQLite 数据库路径
+        top_n: 每相保留的强峰数。必须 ≥ 12 (打分逻辑最多用到 top-12)
+        backup: 改动前是否整文件备份 (大库会慢几秒, 但强烈建议留着)
+        vacuum: 收尾是否 VACUUM 重整文件
+        progress: 可选回调 ``progress(done, total)``
+
+    Returns:
+        统计字典: ``phases`` / ``rows_filled`` / ``added_columns`` /
+        ``backup_path`` / ``seconds`` / ``db_size_mb``
+    """
+    import shutil
+    import sqlite3
+    import time as _time
+
+    if top_n < 12:
+        raise ValueError(f"top_n 必须 ≥ 12 (打分逻辑最多用到 top-12), 收到 {top_n}")
+
+    path = Path(db_path)
+    if not path.exists():
+        raise FileNotFoundError(path)
+
+    t0 = _time.perf_counter()
+
+    # 先只读探一次: 已经迁完的库直接返回, 不白做一次 269MB 的备份
+    probe = top_peak_column_stats(path)
+    if probe.get("available") and probe.get("pending", 0) == 0 \
+            and probe.get("filled") == probe.get("phases"):
+        return {
+            "db_path": str(path), "phases": probe["phases"],
+            "rows_filled": 0, "added_columns": False, "top_n": top_n,
+            "backup_path": None, "seconds": 0.0,
+            "db_size_mb": round(path.stat().st_size / 1e6, 1),
+            "skipped": "already_migrated",
+        }
+
+    backup_path = None
+    if backup:
+        stamp = _time.strftime("%Y%m%d_%H%M%S")
+        backup_path = path.with_name(f"{path.name}.bak_top_{stamp}")
+        shutil.copy2(path, backup_path)
+
+    conn = sqlite3.connect(str(path))
+    conn.row_factory = sqlite3.Row
+    try:
+        existing = {r[1] for r in conn.execute("PRAGMA table_info(phases)")}
+        added = False
+        for col in _TOP_PEAK_COLUMNS:
+            if col not in existing:
+                conn.execute(f"ALTER TABLE phases ADD COLUMN {col} BLOB")
+                added = True
+        if added:
+            conn.commit()
+
+        total = int(conn.execute("SELECT COUNT(*) FROM phases").fetchone()[0])
+        todo = conn.execute(
+            "SELECT rowid AS rid, peaks_d, peaks_i FROM phases "
+            f"WHERE {' OR '.join(c + ' IS NULL' for c in _TOP_PEAK_COLUMNS)}"
+        )
+        batch: list[tuple] = []
+        filled = 0
+        for row in todo:
+            d = _parse_float_csv(row["peaks_d"] or "")
+            i = _parse_float_csv(row["peaks_i"] or "")
+            d_top, i_top = _top_peaks_of(d, i, top_n)
+            batch.append(
+                (d_top.tobytes(), i_top.tobytes(), row["rid"])
+            )
+            if len(batch) >= 2000:
+                conn.executemany(
+                    f"UPDATE phases SET {_TOP_PEAK_COLUMNS[0]}=?, "
+                    f"{_TOP_PEAK_COLUMNS[1]}=? WHERE rowid=?", batch
+                )
+                filled += len(batch)
+                batch.clear()
+                if progress:
+                    progress(filled, total)
+        if batch:
+            conn.executemany(
+                f"UPDATE phases SET {_TOP_PEAK_COLUMNS[0]}=?, "
+                f"{_TOP_PEAK_COLUMNS[1]}=? WHERE rowid=?", batch
+            )
+            filled += len(batch)
+            if progress:
+                progress(filled, total)
+        conn.commit()
+        if vacuum:
+            conn.execute("VACUUM")
+        conn.execute("ANALYZE phases")
+        conn.commit()
+    finally:
+        conn.close()
+
+    return {
+        "db_path": str(path),
+        "phases": total,
+        "rows_filled": filled,
+        "added_columns": added,
+        "top_n": top_n,
+        "backup_path": str(backup_path) if backup_path else None,
+        "seconds": round(_time.perf_counter() - t0, 1),
+        "db_size_mb": round(path.stat().st_size / 1e6, 1),
+        "skipped": None,
+    }
+
+
+def top_peak_column_stats(db_path) -> dict:
+    """报告某库预截断强峰列的填充情况 (不修改任何数据)。"""
+    import sqlite3
+
+    path = Path(db_path)
+    if not path.exists():
+        return {"db_path": str(path), "available": False,
+                "reason": "文件不存在"}
+    conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    try:
+        if not has_top_peak_columns(conn):
+            return {"db_path": str(path), "available": False,
+                    "reason": "无预截断列", "db_size_mb":
+                        round(path.stat().st_size / 1e6, 1)}
+        total = int(conn.execute("SELECT COUNT(*) FROM phases").fetchone()[0])
+        filled = int(conn.execute(
+            f"SELECT COUNT(*) FROM phases WHERE {_TOP_PEAK_COLUMNS[0]} "
+            "IS NOT NULL"
+        ).fetchone()[0])
+        return {"db_path": str(path), "available": True, "phases": total,
+                "filled": filled, "pending": total - filled,
+                "db_size_mb": round(path.stat().st_size / 1e6, 1)}
+    finally:
+        conn.close()
+
+
+# ──────────────────────────────────────────────────────────────
 # CIFDatabase 类
 # ──────────────────────────────────────────────────────────────
 
@@ -1648,10 +1846,21 @@ class CIFDatabase:
         md = np.asarray(meas_sorted, dtype=np.float64)
         mi_np = np.asarray(meas_i_sorted, dtype=np.float64) if use_intensity else None
         results: list[dict] = []
-        cur = conn.execute(
-            "SELECT cod_id, ref_id, display_id, formula, space_group, n_peaks, "
-            "peaks_d, peaks_i FROM phases"
-        )
+        # 若库里有预截断强峰列 (0.9.12, 见 `_PEAK_TOP_N`) 且本次请求的
+        # max_ref_peaks 落在其覆盖范围内, 就只读那几列 —— 省掉 85% 的
+        # 峰串解析和每相的 argsort。结果与全长解析**完全一致**
+        # (前缀等价性证明见 `_PEAK_TOP_N` 上方注释)。
+        use_top = has_top_peak_columns(conn) and max_ref_peaks <= _PEAK_TOP_N
+        if use_top:
+            cur = conn.execute(
+                "SELECT cod_id, ref_id, display_id, formula, space_group, "
+                "n_peaks, peaks_top_d, peaks_top_i FROM phases"
+            )
+        else:
+            cur = conn.execute(
+                "SELECT cod_id, ref_id, display_id, formula, space_group, "
+                "n_peaks, peaks_d, peaks_i FROM phases"
+            )
         # 元素约束下推 (化学过滤在扫描层完成, 避免候选名额被无效化学
         # 成分占用)。COD 公式为空格分隔 "元素+系数" 组 (如 "O4 Zr3")。
         import re as _re
@@ -1666,19 +1875,25 @@ class CIFDatabase:
                 }
                 if not els or not els.issubset(elements_allowed):
                     continue
-            peaks_d_str = row["peaks_d"]
-            peaks_i_str = row["peaks_i"]
-            if not peaks_d_str or not peaks_i_str:
-                continue
-            d_np = _parse_float_csv(peaks_d_str)
-            i_np = _parse_float_csv(peaks_i_str)
+            if use_top:
+                d_np = _parse_float_csv(row["peaks_top_d"])
+                i_np = _parse_float_csv(row["peaks_top_i"])
+            else:
+                peaks_d_str = row["peaks_d"]
+                peaks_i_str = row["peaks_i"]
+                if not peaks_d_str or not peaks_i_str:
+                    continue
+                d_np = _parse_float_csv(peaks_d_str)
+                i_np = _parse_float_csv(peaks_i_str)
             if d_np.size == 0 or i_np.size == 0:
                 continue
             n_i = i_np.size
             n_d = d_np.size
             # 强度降序 (kind="stable" ⇒ 并列时保持原始先后, 与
-            # sorted(..., key=..., reverse=True) 的稳定性一致)
-            order = np.argsort(-i_np, kind="stable")
+            # sorted(..., key=..., reverse=True) 的稳定性一致)。
+            # 预截断列已按 I 降序存好 ⇒ order 恒等, 直接 arange 跳过排序。
+            order = (np.arange(n_i) if use_top
+                     else np.argsort(-i_np, kind="stable"))
             # 取 I 值最高的前 max_ref_peaks 个峰 (与原实现同样只在
             # k < len(ref_d_all) 的范围内有效)
             sel = order[:max_ref_peaks]
