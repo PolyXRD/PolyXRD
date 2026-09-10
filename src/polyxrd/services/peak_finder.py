@@ -32,7 +32,7 @@ class PeakFinder:
         self,
         data: XRDData,
         height: float = 0.05,
-        distance: float = 5.0,
+        distance: float = 0.5,
         prominence: float = 0.01,
         width: Optional[float] = None,
         sensitivity: Optional[float] = None,
@@ -49,7 +49,11 @@ class PeakFinder:
         Args:
             data: XRD数据
             height: 最小峰高 (相对最大值)
-            distance: 峰之间最小2θ距离 (度)
+            distance: 峰之间最小2θ距离 (度)。**默认 0.5°** —— XRD 峰半高宽
+                通常只有 0.05~0.5°, 旧默认 5.0° 会把间距 <5° 的相邻强线整条
+                丢弃 (例: ZnO 的 31.8°/34.4°/36.3° 三条最强线只剩 36.3°),
+                直接导致物相识别召回塌陷。仅当用户明确要"只看分离良好的峰"
+                时才应调大。
             prominence: 峰显著性 (相对最大值)
             width: 最小峰宽
             sensitivity: 灵敏度 (建议 1~10, None=不使用)。

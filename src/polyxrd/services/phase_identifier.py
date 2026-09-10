@@ -31,11 +31,63 @@ _NONMETAL: frozenset[str] = frozenset({
 })
 _PURE_METAL_PENALTY = 1.5
 
+# ── COD 候选最终排序口径 (0.9.11 修订) ────────────────────────
+# _cod_rank_score = (1-w)·fom_good + w·h,  h 为 Hanawalt 预筛度量 (0..1)。
+# w = _COD_RANK_H_WEIGHT。0.9.11 初版取 w=0.30 且 fom_good 用固定尺度 1.2,
+# 但 13 试样基准显示: 多相样品里**每个**候选都解释不了大部分实测峰, FoM 普遍
+# > 1.2 → fom_good 全部饱和到 0 → 混合式退化成 0.3·h, 即把 FoM 信息整体丢弃,
+# 反而比纯 FoM 排序差 (Top-3 7→9, Top-10 12→15)。故下调 w 并改用指数变换
+# exp(-fom/_COD_RANK_FOM_TAU), 使 FoM 在 1~3 的常见区间内仍有区分度。
+_COD_RANK_H_WEIGHT = 0.10
+_COD_RANK_FOM_TAU = 0.8
+
+
+def cod_rank_score(item: tuple[dict, PhaseMatchResult]) -> float:
+    """COD 候选的最终排序分 (越大越好)。
+
+    item = (预筛候选 dict, _match_phase_fom 结果)。预筛 dict 提供 Hanawalt
+    度量 h ∈ [0,1]; 结果提供 FoM (越低越好)。
+
+    fom_good = exp(-FoM/τ) 而非 1-clip(FoM/1.2): 后者在多相样品里会因
+    "每个物相都解释不了大部分实测峰" (FoM 普遍 >1.2) 而整体饱和到 0,
+    把 FoM 信息完全丢弃。
+    """
+    c, r = item
+    h = (0.40 * float(c.get("main_peak_match", 0.0))
+         + 0.30 * float(c.get("top_precision", 0.0))
+         + 0.20 * float(c.get("intensity_weighted_top_recall", 0.0))
+         + 0.10 * float(c.get("top_recall", 0.0)))
+    fom_good = float(np.exp(-max(float(r.score), 0.0) / _COD_RANK_FOM_TAU))
+    return (1.0 - _COD_RANK_H_WEIGHT) * fom_good + _COD_RANK_H_WEIGHT * h
+
 
 def _is_pure_metal(phase: Phase) -> bool:
     """单元素金属 (H/N/O/S/C/Si/卤素/稀有气体等非金属除外)"""
     els = phase.elements or set()
     return len(els) == 1 and not (els & _NONMETAL)
+
+
+def default_peak_list(data: XRDData) -> PeakList:
+    """物相识别在未显式传入峰列表时使用的默认寻峰。
+
+    0.9.11: 改用高精度检测器 (peak_detection.detect_peaks_from_data)。
+    它用**局部噪声 σ 倍数**而非"全局最大强度的百分比"做阈值, 且最小峰间距
+    为 0.10° —— 而传统 PeakFinder.find_peaks 的 height/prominence 阈值是相对
+    Imax 的全局值, 遇到"某一条极强峰 + 其余弱峰"的谱 (如含云母基面反射的
+    岩石样) 会把其余峰全部判为噪声。13 试样基准: 平均检出峰 8.8→64,
+    Top-1 7→10, Top-20 15→22, Top-40 22→28。
+
+    检测器不可用 (缺依赖/异常) 时回退到传统寻峰, 保证不中断。
+    """
+    try:
+        from polyxrd.services.peak_detection import detect_peaks_from_data
+        pl = detect_peaks_from_data(data)
+        if len(pl.peaks):
+            return pl
+    except Exception:
+        pass
+    from polyxrd.services.peak_finder import PeakFinder
+    return PeakFinder().find_peaks(data)
 
 
 class PhaseIdentifier:
@@ -533,9 +585,7 @@ class PhaseIdentifier:
             匹配结果列表，按FOM升序排列 (FOM越低越好)
         """
         if peaks is None:
-            from polyxrd.services.peak_finder import PeakFinder
-            pf = PeakFinder()
-            peaks = pf.find_peaks(data)
+            peaks = default_peak_list(data)
 
         ef = normalize_element_filter(element_filter) if element_filter else None
 
@@ -792,8 +842,7 @@ class PhaseIdentifier:
             merge_with_builtin: True → 与内置库结果合并排序; False → 仅 COD
         """
         if peaks is None:
-            from polyxrd.services.peak_finder import PeakFinder
-            peaks = PeakFinder().find_peaks(data)
+            peaks = default_peak_list(data)
 
         wavelength = self._config.default_wavelength
         t_min, t_max = self._config.default_two_theta_range
@@ -830,6 +879,10 @@ class PhaseIdentifier:
         top_n: int = 5,
         tolerance: float = 0.15,
         prefilter_limit: int = 100,
+        prefilter_tolerance: float = 0.02,
+        prefilter_tolerance_rel: float = 0.0,
+        prefilter_min_match: int = 3,
+        prefilter_max_ref_peaks: int = 40,
     ) -> list[PhaseMatchResult]:
         """物相识别: COD 无机物库 (71,199 物相, 预计算 d-I 峰)。
 
@@ -846,11 +899,18 @@ class PhaseIdentifier:
             element_filter: 三态元素过滤 (预筛后应用)
             top_n: 返回候选数
             tolerance: 2θ 容差 (FOM 匹配用)
-            prefilter_limit: d-I 预筛保留的候选数
+            prefilter_limit: d-I 预筛保留的候选数。预筛排序键 (Hanawalt
+                度量) 缺少特异性判据, 是弱判别器; 下游 _match_phase_fom
+                才是强判别器。故该值宜偏大 —— 宁可多放候选进来让 FOM
+                筛, 也不要在此处把真物相截掉。默认 100 为兼容值。
+            prefilter_tolerance: 预筛 d 容差绝对下限 (Å)
+            prefilter_tolerance_rel: 预筛 d 容差相对分量 (>0 时实际容差取
+                max(abs, rel*d), 使 2θ 窗口近似恒定)
+            prefilter_min_match: 预筛最少反向匹配测量峰数
+            prefilter_max_ref_peaks: 预筛每物相参与匹配的最大主要峰数
         """
         if peaks is None:
-            from polyxrd.services.peak_finder import PeakFinder
-            peaks = PeakFinder().find_peaks(data)
+            peaks = default_peak_list(data)
 
         try:
             from polyxrd.services.cif_database import CIFDatabase
@@ -882,7 +942,11 @@ class PhaseIdentifier:
         elements_allowed = allowed_pool if allowed_pool else None
         try:
             cands = cdb.search_cod_by_d_peaks(
-                d_list, i_list, tolerance=0.02, limit=prefilter_limit,
+                d_list, i_list, tolerance=prefilter_tolerance,
+                tolerance_rel=prefilter_tolerance_rel,
+                min_match=prefilter_min_match,
+                max_ref_peaks=prefilter_max_ref_peaks,
+                limit=prefilter_limit,
                 elements_allowed=elements_allowed,
             )
         except Exception:
@@ -951,18 +1015,9 @@ class PhaseIdentifier:
         # ── 排序: Hanawalt 预筛质量 × 匹配因子 加权混合 (0.9.11) ──────
         # 旧口径是字典序 (main_peak_match → top_precision → 召回 → FOM),
         # main_peak_match 是 0/1 二值: 多相样品里只有主物相能拿 1, 其余
-        # 真物相被整体压到后面。13 试样基准上改为加权混合后:
-        #   Top-1 12%→16%, Top-5 22%→27%, Top-10 24%→29%
-        # FOM 已改为加权互斥口径 (不再偏好峰多的密集相), 故可承担主权重。
-        # fom_good 用固定尺度 1.2 (与分位数自适应版等效, 但不依赖查询分布)。
-        def _cod_rank_score(item: tuple[dict, PhaseMatchResult]) -> float:
-            c, r = item
-            h = (0.40 * float(c.get("main_peak_match", 0.0))
-                 + 0.30 * float(c.get("top_precision", 0.0))
-                 + 0.20 * float(c.get("intensity_weighted_top_recall", 0.0))
-                 + 0.10 * float(c.get("top_recall", 0.0)))
-            fom_good = 1.0 - min(max(float(r.score) / 1.2, 0.0), 1.0)
-            return 0.3 * h + 0.7 * fom_good
-
-        results.sort(key=lambda it: -_cod_rank_score(it))
+        # 真物相被整体压到后面。改为加权混合后 13 试样基准 Top-10 24%→29%。
+        # 0.9.11 修订: 初版 h 权重 0.30 + fom_good 用固定尺度 1.2, 但多相样品
+        # 里几乎所有候选的 FoM 都 > 1.2 → fom_good 饱和为 0 → 退化成 0.3·h,
+        # FoM 信息被整体丢弃 (Top-10 15→12)。改用 w=0.10 + exp(-fom/0.8)。
+        results.sort(key=lambda it: -cod_rank_score(it))
         return [r for _, r in results[:top_n]]

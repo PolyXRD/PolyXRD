@@ -694,7 +694,10 @@ class MainWindow(QMainWindow):
 
         self._peak_distance_spin = QDoubleSpinBox()
         self._peak_distance_spin.setRange(0.0, 100.0)
+        self._peak_distance_spin.setDecimals(2)
+        self._peak_distance_spin.setSingleStep(0.1)
         self._peak_distance_spin.setValue(self._config.default_peak_distance)
+        self._peak_distance_spin.setToolTip(tr("params.peak_distance_tip"))
         params_layout.addRow(tr("params.peak_distance"), self._peak_distance_spin)
 
         self._params_dock.setWidget(params_widget)

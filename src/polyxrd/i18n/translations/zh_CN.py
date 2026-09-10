@@ -354,6 +354,7 @@ translations = {
         "peak_hi_precision_tip": "自动背景扣除 + 亚步长峰位精修 + 重叠峰联合拟合，峰位精度 ~0.001°",
         "peak_height": "最小峰高 (%)",
         "peak_distance": "最小距离",
+        "peak_distance_tip": "两峰最小 2θ 间距 (度)。XRD 峰半高宽通常 0.05~0.5°，建议 0.2~1.0；设得过大 (如 5°) 会丢弃间距近的强线，损害物相识别召回。",
         "mineral_name": "矿物名",
         "formula": "化学式",
         "space_group": "空间群",

@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QComboBox,
     QSpinBox,
+    QDoubleSpinBox,
     QPushButton,
     QLabel,
     QFormLayout,
@@ -100,9 +101,15 @@ class DataView(QWidget):
         self._peak_height.setSuffix(" %")
         peak_layout.addRow("最小峰高:", self._peak_height)
 
-        self._peak_distance = QSpinBox()
-        self._peak_distance.setRange(1, 100)
-        self._peak_distance.setValue(5)
+        self._peak_distance = QDoubleSpinBox()
+        self._peak_distance.setRange(0.0, 100.0)
+        self._peak_distance.setDecimals(2)
+        self._peak_distance.setSingleStep(0.1)
+        # 0.5° 而非旧值 5°: XRD 峰 FWHM 仅 0.05~0.5°, 5° 会丢弃相邻强线
+        self._peak_distance.setValue(0.5)
+        self._peak_distance.setToolTip(
+            "两峰最小 2θ 间距 (度)。XRD 峰半高宽通常 0.05~0.5°, 建议 0.2~1.0; "
+            "设得过大 (如 5°) 会丢弃间距近的强线, 损害物相识别召回。")
         peak_layout.addRow("最小距离:", self._peak_distance)
 
         self._peak_hi = QCheckBox("高精度(背景扣除+亚步长)")

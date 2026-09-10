@@ -184,7 +184,7 @@ def preprocess_data(
 @mcp.tool()
 def find_peaks(
     height: float = 0.05,
-    distance: float = 5.0,
+    distance: float = 0.5,
     prominence: float = 0.01,
     width: Optional[float] = None,
 ) -> str:

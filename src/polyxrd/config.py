@@ -42,7 +42,9 @@ class AppConfig:
 
     # 峰检测默认参数
     default_peak_height: float = 0.05
-    default_peak_distance: float = 5.0
+    # 最小峰间距 (度)。XRD 峰 FWHM 仅 0.05~0.5°, 旧值 5.0° 会丢弃相邻强线
+    # (ZnO 31.8/34.4/36.3 只剩 36.3), 严重损害物相识别召回。见 0.9.11 基准。
+    default_peak_distance: float = 0.5
     default_peak_prominence: float = 0.01
 
     # 背景扣除默认参数
