@@ -306,23 +306,30 @@ class PhaseView(QWidget):
         self._update_filter_summary()
 
     def _update_filter_summary(self) -> None:
-        """更新过滤条件摘要显示"""
+        """更新过滤条件摘要显示 (四态: 必有/含有/可能/没有)"""
+        must_have = self._filter_dict.get("must_have", [])
         must = self._filter_dict.get("must", [])
         maybe = self._filter_dict.get("maybe", [])
         exclude = self._filter_dict.get("exclude", [])
-        
+
         parts = []
+        if must_have:
+            parts.append(f"必有: {', '.join(must_have)}")
         if must:
-            parts.append(f"必须: {', '.join(must)}")
+            parts.append(f"含有: {', '.join(must)}")
         if maybe:
             parts.append(f"可能: {', '.join(maybe)}")
         if exclude:
-            parts.append(f"不含: {', '.join(exclude)}")
-        
-        if parts:
-            self._filter_summary.setText("过滤: " + " | ".join(parts))
-        else:
+            parts.append(f"没有: {', '.join(exclude)}")
+
+        if not parts:
             self._filter_summary.setText("未选择元素过滤")
+            return
+
+        text = "过滤: " + " | ".join(parts)
+        if must_have or must or maybe:
+            text += " (未勾选元素默认排除)"
+        self._filter_summary.setText(text)
 
     def _clear_filter(self) -> None:
         """清除元素过滤"""

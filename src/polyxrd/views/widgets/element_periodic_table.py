@@ -1,10 +1,15 @@
 """
 元素周期表控件
 ==============
-交互式元素周期表，支持三态选择：
-- 必须 (绿色): 检测物相必须包含至少一个所选元素
-- 可能 (黄色): 元素可选，含或不含都可以
-- 不含 (红色): 检测物相必须排除这些元素
+交互式元素周期表，支持四态选择 (0.9.11)：
+- 必有 (深绿): 物相必须**全部**含有这些元素 (AND)
+- 含有 (绿色): 物相由这些元素构成，至少含其中一个
+- 可能 (黄色): 允许出现但不要求，只放宽候选元素池
+- 没有 (红色): 物相含任一这些元素即被淘汰
+
+**未勾选的元素默认等于「没有」** (闭环)，仅在 必有/含有/可能 至少勾中
+一项时生效；三者全空 = 全库搜索，只勾「没有」= 开放世界。
+单击元素循环: 无 → 必有 → 含有 → 可能 → 没有 → 无。
 """
 from __future__ import annotations
 
@@ -24,9 +29,12 @@ from PySide6.QtWidgets import (
     QToolTip,
 )
 
+from polyxrd.utils.formula_parser import LIGHT_ELEMENTS
+
 
 class ElementState(Enum):
     NONE = "none"
+    MUST_HAVE = "must_have"
     MUST = "must"
     MAYBE = "maybe"
     EXCLUDE = "exclude"
@@ -34,13 +42,15 @@ class ElementState(Enum):
 
 STATE_COLORS = {
     ElementState.NONE: QColor(240, 240, 240),
-    ElementState.MUST: QColor(76, 175, 80),       # 绿色
-    ElementState.MAYBE: QColor(255, 193, 7),      # 黄色
-    ElementState.EXCLUDE: QColor(244, 67, 54),    # 红色
+    ElementState.MUST_HAVE: QColor(27, 94, 32),    # 深绿 (必有, AND)
+    ElementState.MUST: QColor(76, 175, 80),        # 绿色 (含有)
+    ElementState.MAYBE: QColor(255, 193, 7),       # 黄色 (可能)
+    ElementState.EXCLUDE: QColor(244, 67, 54),     # 红色 (没有)
 }
 
 STATE_TEXT_COLORS = {
     ElementState.NONE: QColor(80, 80, 80),
+    ElementState.MUST_HAVE: QColor(255, 255, 255),
     ElementState.MUST: QColor(255, 255, 255),
     ElementState.MAYBE: QColor(80, 60, 0),
     ElementState.EXCLUDE: QColor(255, 255, 255),
@@ -48,16 +58,34 @@ STATE_TEXT_COLORS = {
 
 STATE_HEX = {
     ElementState.NONE: "#f0f0f0",
+    ElementState.MUST_HAVE: "#1b5e20",
     ElementState.MUST: "#4caf50",
     ElementState.MAYBE: "#ffc107",
     ElementState.EXCLUDE: "#f44336",
 }
 
 STATE_LABELS = {
-    ElementState.MUST: "必须",
+    ElementState.MUST_HAVE: "必有",
+    ElementState.MUST: "含有",
     ElementState.MAYBE: "可能",
-    ElementState.EXCLUDE: "不含",
+    ElementState.EXCLUDE: "没有",
 }
+
+STATE_TIPS = {
+    ElementState.MUST_HAVE: "必有: 物相必须全部含有这些元素 (AND)",
+    ElementState.MUST: "含有: 物相由这些元素构成, 至少含其中一个",
+    ElementState.MAYBE: "可能: 允许出现但不要求 (只放宽候选元素池)",
+    ElementState.EXCLUDE: "没有: 含任一这些元素的物相被淘汰",
+}
+
+# 单击循环顺序
+STATE_CYCLE = (
+    ElementState.NONE,
+    ElementState.MUST_HAVE,
+    ElementState.MUST,
+    ElementState.MAYBE,
+    ElementState.EXCLUDE,
+)
 
 
 # (row, col) positions in 18-column grid
@@ -135,7 +163,7 @@ for table in [PERIODIC_TABLE, LANTHANIDE_POSITIONS, ACTINIDE_POSITIONS]:
 
 
 class ElementButton(QPushButton):
-    """单个元素按钮，支持三态切换"""
+    """单个元素按钮，支持四态切换 (无 → 必有 → 含有 → 可能 → 没有)"""
 
     def __init__(self, element: str, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -145,7 +173,7 @@ class ElementButton(QPushButton):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setText(element)
         self._update_style()
-        self.setToolTip(f"{ELEMENT_NAMES.get(element, element)} ({element})")
+        self._update_tooltip()
 
     @property
     def element(self) -> str:
@@ -156,24 +184,26 @@ class ElementButton(QPushButton):
         return self._state
 
     def cycle_state(self) -> ElementState:
-        if self._state == ElementState.NONE:
-            self._state = ElementState.MUST
-        elif self._state == ElementState.MUST:
-            self._state = ElementState.MAYBE
-        elif self._state == ElementState.MAYBE:
-            self._state = ElementState.EXCLUDE
-        else:
-            self._state = ElementState.NONE
+        idx = STATE_CYCLE.index(self._state)
+        self._state = STATE_CYCLE[(idx + 1) % len(STATE_CYCLE)]
         self._update_style()
+        self._update_tooltip()
         return self._state
 
     def set_state(self, state: ElementState) -> None:
         self._state = state
         self._update_style()
+        self._update_tooltip()
 
     def reset(self) -> None:
         self._state = ElementState.NONE
         self._update_style()
+        self._update_tooltip()
+
+    def _update_tooltip(self) -> None:
+        name = ELEMENT_NAMES.get(self._element, self._element)
+        tip = STATE_TIPS.get(self._state, "未勾选 = 没有 (默认排除)")
+        self.setToolTip(f"{name} ({self._element})\n{tip}")
 
     def _update_style(self) -> None:
         bg = STATE_HEX[self._state]
@@ -196,13 +226,14 @@ class ElementButton(QPushButton):
 
 
 class ElementPeriodicTable(QWidget):
-    """元素周期表控件
+    """元素周期表控件 (四态)
 
     发出信号:
-        selection_changed: 选择状态变更 (must_elements, maybe_elements, exclude_elements)
+        selection_changed: 选择状态变更
+            (must_have_elements, has_elements, maybe_elements, exclude_elements)
     """
 
-    selection_changed = Signal(list, list, list)
+    selection_changed = Signal(list, list, list, list)
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -217,12 +248,26 @@ class ElementPeriodicTable(QWidget):
         # 图例
         legend_layout = QHBoxLayout()
         legend_layout.setSpacing(8)
+        legend_layout.addWidget(self._make_legend_item(ElementState.MUST_HAVE))
         legend_layout.addWidget(self._make_legend_item(ElementState.MUST))
         legend_layout.addWidget(self._make_legend_item(ElementState.MAYBE))
         legend_layout.addWidget(self._make_legend_item(ElementState.EXCLUDE))
         legend_layout.addStretch()
 
         btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(6)
+        self._btn_light = QPushButton("轻元素设为含有 (O,C,H,N,S)")
+        self._btn_light.setFixedHeight(24)
+        self._btn_light.setToolTip(
+            "EDX/EDS 常测不出轻元素, 但 XRD 中氢氧化物/碳酸盐/水合物极常见。\n"
+            "一键把 O/C/H/N/S 设为「含有」, 避免它们因未勾选而被默认排除。"
+        )
+        self._btn_light.setStyleSheet(
+            "QPushButton { font-size: 11px; padding: 2px 8px; }"
+        )
+        self._btn_light.clicked.connect(self.apply_light_elements)
+        btn_layout.addWidget(self._btn_light)
+
         self._btn_reset = QPushButton("重置选择")
         self._btn_reset.setFixedHeight(24)
         self._btn_reset.setStyleSheet(
@@ -249,6 +294,7 @@ class ElementPeriodicTable(QWidget):
 
         # 状态标签
         self._status_label = QLabel("")
+        self._status_label.setWordWrap(True)
         self._status_label.setStyleSheet(
             "QLabel { font-size: 11px; color: #666; padding: 2px; }"
         )
@@ -268,6 +314,7 @@ class ElementPeriodicTable(QWidget):
 
         label = QLabel(STATE_LABELS[state])
         label.setStyleSheet("QLabel { font-size: 11px; }")
+        label.setToolTip(STATE_TIPS[state])
 
         layout.addWidget(color_box)
         layout.addWidget(label)
@@ -278,48 +325,77 @@ class ElementPeriodicTable(QWidget):
         self._update_status()
         self._emit_selection()
 
+    def apply_light_elements(self) -> None:
+        """一键把轻元素 (O,C,H,N,S) 设为「含有」(不覆盖已选中的元素)"""
+        for elem in LIGHT_ELEMENTS:
+            btn = self._buttons.get(elem)
+            if btn is not None and btn.state == ElementState.NONE:
+                btn.set_state(ElementState.MUST)
+        self._update_status()
+        self._emit_selection()
+
     def _update_status(self) -> None:
-        must, maybe, exclude = self.get_selection()
+        must_have, has, maybe, exclude = self.get_selection()
         parts = []
-        if must:
-            parts.append(f"必须: {', '.join(must)}")
+        if must_have:
+            parts.append(f"必有: {', '.join(must_have)}")
+        if has:
+            parts.append(f"含有: {', '.join(has)}")
         if maybe:
             parts.append(f"可能: {', '.join(maybe)}")
         if exclude:
-            parts.append(f"不含: {', '.join(exclude)}")
-        self._status_label.setText(" | ".join(parts) if parts else "未选择任何元素")
+            parts.append(f"没有: {', '.join(exclude)}")
+
+        if not parts:
+            self._status_label.setText("未选择任何元素 → 全库搜索 (不做元素过滤)")
+            return
+
+        text = " | ".join(parts)
+        if must_have or has or maybe:
+            # 闭环: 未勾选元素一律视为「没有」
+            excluded = sorted(set(ALL_POSITIONS) - set(must_have) - set(has) - set(maybe))
+            preview = ", ".join(excluded[:12]) + ("…" if len(excluded) > 12 else "")
+            text += f"\n未勾选 {len(excluded)} 种元素默认按「没有」排除: {preview}"
+        self._status_label.setText(text)
 
     def _emit_selection(self) -> None:
-        must, maybe, exclude = self.get_selection()
-        self.selection_changed.emit(must, maybe, exclude)
+        must_have, has, maybe, exclude = self.get_selection()
+        self.selection_changed.emit(must_have, has, maybe, exclude)
 
-    def get_selection(self) -> tuple[list[str], list[str], list[str]]:
+    def get_selection(self) -> tuple[list[str], list[str], list[str], list[str]]:
         """获取当前选择状态
 
         Returns:
-            (must_elements, maybe_elements, exclude_elements)
+            (must_have_elements, has_elements, maybe_elements, exclude_elements)
         """
-        must = []
-        maybe = []
-        exclude = []
+        must_have: list[str] = []
+        has: list[str] = []
+        maybe: list[str] = []
+        exclude: list[str] = []
         for elem, btn in self._buttons.items():
-            if btn.state == ElementState.MUST:
-                must.append(elem)
+            if btn.state == ElementState.MUST_HAVE:
+                must_have.append(elem)
+            elif btn.state == ElementState.MUST:
+                has.append(elem)
             elif btn.state == ElementState.MAYBE:
                 maybe.append(elem)
             elif btn.state == ElementState.EXCLUDE:
                 exclude.append(elem)
-        return must, maybe, exclude
+        return must_have, has, maybe, exclude
 
     def set_selection(
         self,
-        must: Optional[list[str]] = None,
+        must_have: Optional[list[str]] = None,
+        has: Optional[list[str]] = None,
         maybe: Optional[list[str]] = None,
         exclude: Optional[list[str]] = None,
     ) -> None:
         """设置选择状态"""
-        self.reset_all()
-        for e in (must or []):
+        self.reset_all(silent=True)
+        for e in (must_have or []):
+            if e in self._buttons:
+                self._buttons[e].set_state(ElementState.MUST_HAVE)
+        for e in (has or []):
             if e in self._buttons:
                 self._buttons[e].set_state(ElementState.MUST)
         for e in (maybe or []):
@@ -330,18 +406,24 @@ class ElementPeriodicTable(QWidget):
                 self._buttons[e].set_state(ElementState.EXCLUDE)
         self._update_status()
 
-    def reset_all(self) -> None:
+    def reset_all(self, silent: bool = False) -> None:
         """重置所有元素"""
         for btn in self._buttons.values():
             btn.reset()
         self._update_status()
-        self._emit_selection()
+        if not silent:
+            self._emit_selection()
 
     def get_filter_dict(self) -> dict:
         """获取过滤条件字典，方便传递给识别服务
 
         Returns:
-            {"must": [...], "maybe": [...], "exclude": [...]}
+            {"must_have": [...], "must": [...], "maybe": [...], "exclude": [...]}
         """
-        must, maybe, exclude = self.get_selection()
-        return {"must": must, "maybe": maybe, "exclude": exclude}
+        must_have, has, maybe, exclude = self.get_selection()
+        return {
+            "must_have": must_have,
+            "must": has,
+            "maybe": maybe,
+            "exclude": exclude,
+        }

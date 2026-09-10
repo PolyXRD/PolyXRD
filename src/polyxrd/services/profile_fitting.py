@@ -28,7 +28,7 @@ import numpy as np
 from polyxrd.config import get_config
 from polyxrd.models.phase import Phase, PhaseMatchResult
 from polyxrd.models.xrd_data import XRDData
-from polyxrd.utils.formula_parser import elements_match_filter
+from polyxrd.utils.formula_parser import elements_match_filter, normalize_element_filter
 from polyxrd.utils.resources import get_resource_path
 
 
@@ -131,15 +131,16 @@ class ProfileFittingService:
         # 归一化
         exp_norm = self._normalize(experimental_corrected)
 
-        must = element_filter.get("must", []) if element_filter else []
-        exclude = element_filter.get("exclude", []) if element_filter else []
-        maybe = element_filter.get("maybe", []) if element_filter else []
+        ef = normalize_element_filter(element_filter) if element_filter else None
 
         results = []
         for phase in self._phase_database:
-            if element_filter and (must or exclude):
-                if not elements_match_filter(phase.elements, must, maybe, exclude):
-                    continue
+            if ef and not elements_match_filter(
+                phase.elements,
+                has=ef["has"], maybe=ef["maybe"], exclude=ef["exclude"],
+                must_have=ef["must_have"],
+            ):
+                continue
 
             # 2. 生成理论XRD图谱
             theoretical = self._generate_theoretical_profile(
