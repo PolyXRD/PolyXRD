@@ -318,6 +318,7 @@ translations = {
         "peak_hi_precision_tip": "自動バックグラウンド除去＋サブステップ位置精密化＋重なりピーク同時フィット、約0.001°",
         "peak_height": "最小ピーク高さ (%)",
         "peak_distance": "最小距離",
+        "peak_distance_tip": "ピーク間の最小 2θ 間隔（度）。XRD の半値幅は通常 0.05~0.5° なので 0.2~1.0 を推奨。大きすぎる値（例 5）は近接した強線を捨て、相同定の再現率を損ないます。",
         "mineral_name": "鉱物名",
         "formula": "化学式",
         "space_group": "空間群",

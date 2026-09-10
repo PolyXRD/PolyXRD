@@ -38,7 +38,7 @@ class PeakDetectOptions:
     bg_smooth_poly: int = 2            # 背景基线平滑多项式阶
 
     # 检出阈值
-    sigma_threshold: float = 5.0       # 局部峰高须 > sigma_threshold × 噪声σ
+    sigma_threshold: float = 3.0       # 局部峰高须 > sigma_threshold × 噪声σ
     min_prominence_frac: float = 0.0   # 额外: 峰高须 > 该相对主峰比例 (0=关)
     min_signal_abs: float = 0.0        # 绝对强度下限 (背景扣除后), 0=关
 

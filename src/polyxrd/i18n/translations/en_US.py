@@ -354,6 +354,7 @@ translations = {
         "peak_hi_precision_tip": "Auto background subtraction + sub-step peak position + joint fitting; ~0.001 deg",
         "peak_height": "Min Peak Height (%)",
         "peak_distance": "Min Distance",
+        "peak_distance_tip": "Minimum 2theta separation between peaks (deg). XRD FWHM is typically 0.05-0.5 deg; use 0.2-1.0. Too large (e.g. 5) discards closely spaced strong lines and hurts phase-ID recall.",
         "mineral_name": "Mineral Name",
         "formula": "Formula",
         "space_group": "Space Group",

@@ -1406,6 +1406,7 @@ class CIFDatabase:
         measured_i: list[float] | None = None,
         *,
         tolerance: float = 0.02,
+        tolerance_rel: float = 0.0,
         min_match: int = 3,
         limit: int = 50,
         max_ref_peaks: int = 40,
@@ -1448,7 +1449,10 @@ class CIFDatabase:
             measured_i: 测得峰强度列表(可选,与 measured_d 等长平行)。
                 传入后启用强度加权召回率与主峰匹配判据,显著提升混合
                 样品中主物相识别正确率。None 时退化为仅按 d 值覆盖度排序。
-            tolerance: d 值匹配容差(Å),同时用作去重阈值
+            tolerance: d 值匹配容差(Å),绝对下限,同时用作去重阈值
+            tolerance_rel: d 值匹配的相对容差(比例)。>0 时实际容差取
+                max(tolerance, tolerance_rel*d),使匹配窗口在 2θ 空间近似
+                恒定(低角度放宽、高角度收紧)。默认 0 = 纯绝对容差。
             min_match: 最少反向匹配测量峰数,低于此数的物相被丢弃
             limit: 返回结果上限
             max_ref_peaks: 每个物相参与匹配的最大主要峰数(I 值最高的)
@@ -1466,6 +1470,17 @@ class CIFDatabase:
         if conn is None or not measured_d:
             return []
         import bisect
+
+        # ── 有效容差: 绝对下限 + 相对分量 (0.9.11) ────────────────
+        # 纯绝对 d 容差在 2θ 空间里极不均匀: 固定 0.02 Å 在 d=4 Å (2θ≈22°)
+        # 只对应 ~0.11° 的 2θ 窗口 (比峰宽还窄 → 漏配真峰), 而在 d=1 Å
+        # (2θ≈101°) 却对应 ~2.8° (过宽 → 误配)。相对分量 tol_rel·d 让
+        # 高角度收紧、低角度放宽, 与"恒定 2θ 窗口"的物理直觉一致。
+        _trel = float(tolerance_rel or 0.0)
+
+        def _tol(d: float) -> float:
+            return tolerance if _trel <= 0.0 else max(tolerance, _trel * d)
+
         # 预排序测量 d 值,用 bisect 加速区间匹配
         meas_sorted = sorted(measured_d)
         n_meas = len(meas_sorted)
@@ -1524,10 +1539,9 @@ class CIFDatabase:
             # 反向匹配:测量峰中被主要参考峰(前 max_ref_peaks)覆盖的数量
             matched_meas_idx: set[int] = set()
             for d in ref_d:
-                lo = d - tolerance
-                hi = d + tolerance
-                idx = bisect.bisect_left(meas_sorted, lo)
-                if idx < len(meas_sorted) and meas_sorted[idx] <= hi:
+                t = _tol(d)
+                idx = bisect.bisect_left(meas_sorted, d - t)
+                if idx < len(meas_sorted) and meas_sorted[idx] <= d + t:
                     matched_meas_idx.add(idx)
             n_matched_meas = len(matched_meas_idx)
             if n_matched_meas < min_match:
@@ -1548,15 +1562,16 @@ class CIFDatabase:
             )
             unique_top_d: list[float] = []
             for d, _i in top_pairs:
-                if not any(abs(d - ud) <= tolerance for ud in unique_top_d):
+                if not any(abs(d - ud) <= _tol(d) for ud in unique_top_d):
                     unique_top_d.append(d)
             # 测量峰中有多少落在"物相最强去重峰"内
             n_meas_in_top = 0
             # 强度加权召回率:被物相最强去重峰覆盖的测量峰强度之和
             covered_i_sum = 0.0
             for k_md, md in enumerate(meas_sorted):
-                lo = md - tolerance
-                hi = md + tolerance
+                t_md = _tol(md)
+                lo = md - t_md
+                hi = md + t_md
                 hit = False
                 for ud in unique_top_d:
                     if lo <= ud <= hi:
@@ -1574,7 +1589,10 @@ class CIFDatabase:
             # main_peak_match:物相最强去重峰是否落在样品最强峰 ±tolerance 内
             if use_intensity and unique_top_d:
                 phase_main_d = unique_top_d[0]
-                main_peak_match = 1.0 if abs(phase_main_d - main_meas_d) <= tolerance else 0.0
+                t_main = max(_tol(phase_main_d), _tol(main_meas_d))
+                main_peak_match = (
+                    1.0 if abs(phase_main_d - main_meas_d) <= t_main else 0.0
+                )
             else:
                 main_peak_match = 0.0
             # top_precision:物相最强的前 K 个去重峰中有多少"被观察到"
@@ -1583,8 +1601,9 @@ class CIFDatabase:
             top_k_d = unique_top_d[:5]
             n_top_observed = 0
             for ud in top_k_d:
-                lo = ud - tolerance
-                hi = ud + tolerance
+                t_ud = _tol(ud)
+                lo = ud - t_ud
+                hi = ud + t_ud
                 idx = bisect.bisect_left(meas_sorted, lo)
                 if idx < len(meas_sorted) and meas_sorted[idx] <= hi:
                     n_top_observed += 1
@@ -1593,8 +1612,9 @@ class CIFDatabase:
             # 正向匹配率(前 max_ref_peaks 中匹配测量峰的比例,仅参考)
             n_matched_ref = 0
             for d in ref_d:
-                lo = d - tolerance
-                hi = d + tolerance
+                t_d = _tol(d)
+                lo = d - t_d
+                hi = d + t_d
                 idx = bisect.bisect_left(meas_sorted, lo)
                 if idx < len(meas_sorted) and meas_sorted[idx] <= hi:
                     n_matched_ref += 1

@@ -71,7 +71,7 @@ class PhaseViewModel(QObject):
         self,
         data,
         height: float = 0.05,
-        distance: float = 5.0,
+        distance: float = 0.5,
         prominence: float = 0.01,
         detect_shoulders: bool = False,
         sensitivity: Optional[float] = None,
@@ -94,7 +94,7 @@ class PhaseViewModel(QObject):
     def find_peaks_advanced(
         self,
         data,
-        sigma_threshold: float = 5.0,
+        sigma_threshold: float = 3.0,
         distance_deg: float = 0.12,
         bg_window_deg: float = 2.0,
         refine_mode: str = "fit",
