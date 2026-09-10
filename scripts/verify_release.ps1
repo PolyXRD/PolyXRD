@@ -113,10 +113,13 @@ if ($SkipHash) {
     Write-Output '      (已跳过)'
 } else {
     $hashFile = Join-Path $outDir "SHA256-v$Version.txt"
-    $lines = @("PolyXRD v$Version 发布产物校验值 (SHA-256)",
-               '生成时间: ' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'),
-               '单位说明: MB = 1,048,576 字节 (资源管理器口径)',
-               '')
+    $stamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+    $lines = @(
+        "PolyXRD v$Version 发布产物校验值 (SHA-256)",
+        "生成时间: $stamp",
+        '单位说明: MB = 1,048,576 字节 (资源管理器口径)',
+        ''
+    )
     foreach ($f in @(
         (Join-Path $outDir "PolyXRD-Setup-v$Version.exe"),
         $portable, $dbZip)) {
