@@ -47,6 +47,32 @@ def parse_formula(formula: str) -> set[str]:
     return set(elements.keys())
 
 
+_DB_FORMULA_TOKEN = re.compile(r"^([A-Z][a-z]?)(\d*\.?\d*)$")
+
+
+def elements_from_db_formula(formula: str) -> set[str]:
+    """解析数据库公式字符串，返回元素集合。
+
+    COD / PDF2 索引里的 formula 字段是空格分隔的 "元素+系数" 组
+    (如 "Li1.13 Mn2 O4"、"O4 Zr3")，系数可含小数 —— 这种写法
+    parse_formula 直接吃不下，所以逐 token 解析，匹配不上的 token
+    再退回 parse_formula (兼容偶发的整串化学式)。
+
+    这是 COD 路径与 PDF2 路径的**单点实现**，勿在调用方各自复制闭包。
+    """
+    els: set[str] = set()
+    for tok in (formula or "").split():
+        m = _DB_FORMULA_TOKEN.match(tok)
+        if m:
+            els.add(m.group(1))
+        else:
+            try:
+                els |= parse_formula(tok)
+            except Exception:
+                continue
+    return els
+
+
 def parse_formula_detailed(formula: str) -> dict[str, float]:
     """解析化学式，返回元素及数量
 

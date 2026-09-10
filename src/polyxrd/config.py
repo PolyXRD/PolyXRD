@@ -61,6 +61,9 @@ class AppConfig:
     # COD 无机物库: 从 COD 筛选的无机物子集 (71199 物相,含 d-I 峰)
     # 默认指向项目内路径;允许用户通过 UI 导入外部数据库后覆盖
     cod_db_path: Path = field(default_factory=lambda: AppConfig._PROJECT_ROOT / "cod_data" / "COD_inorganics.sqlite")
+    # PDF2-2004 数据库: ICDD PDF-2 2004 版, 自用验证库
+    pdf2_raw_path: Path = field(default_factory=lambda: Path("E:/TEMP/XRD-PDF2-2004/pdf2 - 2004.dat"))
+    pdf2_db_path: Path = field(default_factory=lambda: AppConfig._PROJECT_ROOT / "cod_data" / "PDF2_2004.sqlite")
     export_dir: Path = field(default_factory=lambda: Path.home() / "PolyXRD_exports")
     log_dir: Path = field(default_factory=lambda: Path.home() / ".polyxrd" / "logs")
 
@@ -92,34 +95,66 @@ class AppConfig:
 
         传入空字符串或 None 可清除自定义路径,回退到项目内默认。
         """
+        self._update_user_db_path("cod_db_path", path)
+
+    def _user_db_paths_file(self) -> Path:
+        return Path.home() / ".polyxrd" / "user_db_paths.json"
+
+    def _load_user_db_paths(self) -> dict:
+        """读取 user_db_paths.json, 返回字典 (损坏/缺失时返回空字典)。
+
+        COD 与 PDF2 共用这一个文件, 所以**读写都必须按 key 增量合并**,
+        整体覆盖写会把另一个库的路径悄悄抹掉。
+        """
+        cfg_file = self._user_db_paths_file()
+        if not cfg_file.exists():
+            return {}
+        try:
+            data = json.loads(cfg_file.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def _update_user_db_path(self, key: str, path: str | Path | None) -> None:
+        """按 key 增量更新 user_db_paths.json (不触碰其它 key)。"""
         cfg_file = self._user_db_paths_file()
         cfg_file.parent.mkdir(parents=True, exist_ok=True)
+        data = self._load_user_db_paths()
         if not path:
-            cfg_file.write_text("{}", encoding="utf-8")
-            return
-        path = str(Path(path).resolve())
-        data = {"cod_db_path": path}
+            data.pop(key, None)
+        else:
+            data[key] = str(Path(path).resolve())
         cfg_file.write_text(
             json.dumps(data, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
 
-    def _user_db_paths_file(self) -> Path:
-        return Path.home() / ".polyxrd" / "user_db_paths.json"
-
     def _load_user_cod_db_path(self) -> Optional[str]:
         """读取用户持久化的数据库路径,返回 None 表示未设置。"""
-        cfg_file = self._user_db_paths_file()
-        if not cfg_file.exists():
-            return None
-        try:
-            data = json.loads(cfg_file.read_text(encoding="utf-8"))
-            path = data.get("cod_db_path")
-            if path and Path(path).exists():
-                return path
-        except (json.JSONDecodeError, OSError):
-            pass
+        path = self._load_user_db_paths().get("cod_db_path")
+        if path and Path(path).exists():
+            return path
         return None
+
+    # ── PDF2-2004 数据库路径 ────────────────────────────────
+
+    def get_pdf2_raw_path(self) -> Path:
+        """PDF2-2004 原始 .dat 文件路径。"""
+        return self.pdf2_raw_path
+
+    def get_pdf2_db_path(self) -> Path:
+        """获取当前 PDF2-2004 SQLite 索引路径。
+
+        优先级:用户导入的外部库 > 项目内默认路径 (与 get_cod_db_path 对称)。
+        """
+        user_path = self._load_user_db_paths().get("pdf2_db_path")
+        if user_path and Path(user_path).exists():
+            return Path(user_path)
+        return self.pdf2_db_path
+
+    def set_pdf2_db_path(self, path: str | Path) -> None:
+        """设置 PDF2-2004 SQLite 路径并持久化 (空值 = 清除, 回退默认)。"""
+        self._update_user_db_path("pdf2_db_path", path)
 
 
 # 单例模式
