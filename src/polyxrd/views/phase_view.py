@@ -63,7 +63,9 @@ class PhaseView(QWidget):
         self._current_results: list = []
         self._element_dialog: Optional[ElementFilterDialog] = None
         # 数据库源: key 与 PhaseViewModel.identify_phases 的 db_source 对应
-        self._db_source_keys = ["builtin", "cod_inorganics", "cod_full", "merged"]
+        self._db_source_keys = [
+            "builtin", "cod_inorganics", "cod_full", "merged", "pdf2",
+        ]
         self._setup_ui()
         self._setup_connections()
 
@@ -125,21 +127,10 @@ class PhaseView(QWidget):
         db_row.setSpacing(6)
         db_row.addWidget(QLabel("数据库源:"))
         self._db_combo = QComboBox()
-        self._db_combo.addItems([
-            "内置库 (118 物相)",
-            "COD 无机物库 (71,199)",
-            "COD 全库 (113,223)",
-            "内置+COD全库合并",
-        ])
+        self._db_combo.addItems(self._db_source_labels())
         self._db_combo.setFixedHeight(28)
-        self._db_combo.setToolTip(
-            "选择物相检索使用的数据库:\n"
-            "· 内置库: 程序自带 118 种常见物相 (最快)\n"
-            "· COD 无机物库: 外挂 71,199 物相 (预计算 d-I 峰, Hanawalt 预筛)\n"
-            "· COD 全库: 外挂 113,223 条 CIF 索引 (本地检索)\n"
-            "· 合并: 内置库 + COD 全库结果合并排序\n"
-            "外挂数据库通过 文件 → 导入外部数据库 或设置页挂载"
-        )
+        self._db_combo.setToolTip(self._db_combo_tooltip())
+        self._mark_unavailable_db_sources()
         db_row.addWidget(self._db_combo)
         db_row.addStretch()
         left_panel.addLayout(db_row)
@@ -364,6 +355,74 @@ class PhaseView(QWidget):
         """当前数据库源的显示名"""
         return self._db_combo.currentText()
 
+    # ── 数据源可用性 (2026-09-10: 补 PDF2-2004) ──────────────
+    def _db_source_labels(self) -> list[str]:
+        """各数据源的显示文案。PDF2 的物相数从库里实时读, 不写死。"""
+        return [
+            "内置库 (118 物相)",
+            "COD 无机物库 (71,199)",
+            "COD 全库 (113,223)",
+            "内置+COD全库合并",
+            self._pdf2_label(),
+        ]
+
+    def _pdf2_label(self) -> str:
+        try:
+            from polyxrd.services.pdf2_database import PDF2Database
+            db = PDF2Database()
+            if db.is_available():
+                return f"PDF2-2004 库 ({db.phase_count():,})"
+        except Exception:
+            pass
+        return "PDF2-2004 库 (未挂载)"
+
+    def _db_combo_tooltip(self) -> str:
+        return (
+            "选择物相检索使用的数据库 (作用于传统 Search/Match 与快速识别):\n"
+            "· 内置库: 程序自带 118 种常见物相 (最快)\n"
+            "· COD 无机物库: 外挂 71,199 物相 (预计算 d-I 峰, Hanawalt 预筛)\n"
+            "· COD 全库: 外挂 113,223 条 CIF 索引 (本地检索)\n"
+            "· 合并: 内置库 + COD 全库结果合并排序\n"
+            "· PDF2-2004: ICDD PDF-2 2004 版 163,834 物相, 自带空间群与晶胞\n"
+            "  (晶胞 81.8% / 空间群 72.8%), 命中相可直接作为精修起始结构。\n"
+            f"{self._pdf2_coverage_line()}"
+            "库文件路径在设置中挂载 (cod_data/PDF2_2004.sqlite)。"
+        )
+
+    def _pdf2_coverage_line(self) -> str:
+        """PDF2 库实际覆盖率 (可选行; 读取失败则省略)。"""
+        try:
+            from polyxrd.services.pdf2_database import PDF2Database
+            db = PDF2Database()
+            if not db.is_available():
+                return "  当前未挂载 PDF2-2004 库。\n"
+            cov = db.coverage()
+            if not cov:
+                return ""
+            return (
+                f"  本机库: {cov['total']:,} 相, 空间群 {cov['pct_space_group']}%, "
+                f"晶胞 {cov['pct_cell']}%。\n"
+            )
+        except Exception:
+            return ""
+
+    def _mark_unavailable_db_sources(self) -> None:
+        """未挂载的数据源在下拉里置灰, 避免选中后静默返回空结果。"""
+        model = self._db_combo.model()
+
+        def _disable(index: int, hint: str) -> None:
+            item = model.item(index)
+            if item is not None:
+                item.setEnabled(False)
+                item.setToolTip(hint)
+
+        try:
+            from polyxrd.services.pdf2_database import PDF2Database
+            if not PDF2Database().is_available():
+                _disable(4, "PDF2-2004 索引库未挂载 (库文件 cod_data/PDF2_2004.sqlite)")
+        except Exception:
+            _disable(4, "PDF2-2004 服务不可用")
+
     def _on_traditional_identify(self) -> None:
         """传统物相识别"""
         self._current_method = "fom"
@@ -429,13 +488,17 @@ class PhaseView(QWidget):
                 elem_info = " [" + ",".join(sorted(phase.elements)) + "]"
 
             method = getattr(result, 'method', 'fom')
+            sg_txt = self._space_group_suffix(phase)
             if method == "profile_fitting":
-                label = f"{phase.name} - 匹配度: {score:.1f}% (R={r_factor:.3f}){elem_info}"
+                label = f"{phase.name} - 匹配度: {score:.1f}% (R={r_factor:.3f}){sg_txt}{elem_info}"
             else:
-                label = f"{phase.name} - FOM: {score:.3f}{elem_info}"
+                label = f"{phase.name} - FOM: {score:.3f}{sg_txt}{elem_info}"
 
             item = QListWidgetItem(label)
             item.setData(Qt.ItemDataRole.UserRole, result)
+            tip = self._phase_detail_text(phase)
+            if tip:
+                item.setToolTip(tip)
             # M21 v2: 可勾选 (勾选=叠加到谱图)
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
             item.setCheckState(Qt.CheckState.Checked if self._vm._phase_vm.is_selected(phase)
@@ -448,6 +511,40 @@ class PhaseView(QWidget):
         except RuntimeError:
             pass
         self._refresh_overlay()
+
+    # ── 候选列表的对称性信息 (空间群 / 晶胞) ─────────────────
+    @staticmethod
+    def _space_group_suffix(phase) -> str:
+        """候选列表行尾的空间群短标记 (无则空串)。"""
+        sg = (getattr(phase, "space_group", "") or "").strip()
+        return f" · {sg}" if sg else ""
+
+    @staticmethod
+    def _phase_detail_text(phase) -> str:
+        """候选行 tooltip: 化学式 / 空间群 / 晶胞 (有则显示)。"""
+        lines: list[str] = []
+        formula = (getattr(phase, "formula", "") or "").strip()
+        if formula:
+            lines.append(f"化学式: {formula}")
+        sg = (getattr(phase, "space_group", "") or "").strip()
+        if sg:
+            lines.append(f"空间群: {sg}")
+        lat = getattr(phase, "lattice", None)
+        if lat is not None:
+            lines.append(
+                f"晶胞: a={lat.a:.4f} b={lat.b:.4f} c={lat.c:.4f} Å"
+            )
+            lines.append(
+                f"      α={lat.alpha:.2f} β={lat.beta:.2f} γ={lat.gamma:.2f}°"
+            )
+            try:
+                lines.append(f"      V={lat.volume:.2f} Å³")
+            except Exception:
+                pass
+        refs = getattr(phase, "reference_peaks", None)
+        if refs:
+            lines.append(f"参考峰: {len(refs)} 条")
+        return "\n".join(lines)
 
     def _on_candidate_clicked(self, item: QListWidgetItem) -> None:
         """单击候选 (非勾选框): 若未勾选则单选叠加该相 (Match! 浏览习惯)。"""
