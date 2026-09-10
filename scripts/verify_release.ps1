@@ -4,11 +4,16 @@
 #
 # 做三件事:
 #   1. 校验便携包 zip 可读、含 PolyXRD.exe、且**不含**任何业务数据库
-#   2. 生成「外挂数据库包」并对账 (条目数 + 解压后字节必须等于源文件之和)
-#   3. 打印三个产物的 SHA-256 到 installer_output\SHA256-v<ver>.txt
+#   2. 生成三个**独立**的外挂数据库包 (每个包一个库) 并逐包对账
+#      (条目数 + 解压后字节必须等于源文件), 同时删掉旧的合并包
+#   3. 打印所有产物的 SHA-256 到 installer_output\SHA256-v<ver>.txt
 #
 # 为什么把"含不含 .sqlite"当成断言: 0.10.0 的核心约束就是数据库外挂,
 # 一旦 spec 的 datas 被谁改回去, 便携包会悄悄胖 700 MB —— 必须让构建自己喊出来。
+#
+# 为什么三个库各自成包: 用户往往只需要其中一个 (多数人只要无机物库)。
+# 合并成一个 400 MB 的包等于强迫所有人下满全部三个; 拆开后各取所需,
+# 且与 GUI 的三个独立挂载槽位一一对应, 不会出现"下了整包不知道要不要全挂"。
 
 param(
     [Parameter(Mandatory = $true)][string]$Version,
@@ -21,7 +26,6 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 $outDir   = Join-Path $Root 'installer_output'
 $portable = Join-Path $outDir "PolyXRD-v$Version-Portable.zip"
-$dbZip    = Join-Path $outDir "PolyXRD-v$Version-Databases.zip"
 $fail     = 0
 
 function MiB([long]$bytes) { '{0:N1} MB' -f ($bytes / 1MB) }
@@ -35,6 +39,14 @@ function Fail([string]$msg) {
 $allowedSqlite = 'pymatgen/symmetry/symm_data_magnetic.sqlite'
 # 业务数据库文件名 —— 出现在包里就是构建策略被改坏了
 $bannedNames = @('cod_index.sqlite', 'COD_inorganics.sqlite', 'PDF2_2004.sqlite')
+
+# 槽位 → (源文件, 包名后缀, 包内文件名)。后缀必须与
+# polyxrd/services/db_import.py 的 DBKind.pkg_suffix 保持一致。
+$dbKinds = @(
+    [pscustomobject]@{ Name = 'COD-inorg'; Src = 'cod_data\COD_inorganics.sqlite'; File = 'COD_inorganics.sqlite' },
+    [pscustomobject]@{ Name = 'COD-full';  Src = 'cod_index.sqlite';                File = 'cod_index.sqlite' },
+    [pscustomobject]@{ Name = 'PDF2';      Src = 'cod_data\PDF2_2004.sqlite';       File = 'PDF2_2004.sqlite' }
+)
 
 # ── 1. 便携包校验 ────────────────────────────────────────────
 Write-Output "[1/3] 便携包校验: $([IO.Path]::GetFileName($portable))"
@@ -67,45 +79,52 @@ if (-not (Test-Path -LiteralPath $portable)) {
     }
 }
 
-# ── 2. 外挂数据库包 ──────────────────────────────────────────
-Write-Output '[2/3] 外挂数据库包'
-$sources = @()
-foreach ($rel in 'cod_index.sqlite', 'cod_data\COD_inorganics.sqlite', 'cod_data\PDF2_2004.sqlite') {
-    $p = Join-Path $Root $rel
-    if (Test-Path -LiteralPath $p) {
-        $sources += $p
-        Write-Output ('      源 ' + $rel + '  ' + (MiB (Get-Item -LiteralPath $p).Length))
-    } else {
-        Write-Output ('      [跳过] 缺少 ' + $rel)
+# ── 2. 三个独立外挂数据库包 ──────────────────────────────────
+Write-Output '[2/3] 外挂数据库包 (每个库独立成包)'
+
+# 清理历史产物: 合并版大包与旧后缀, 避免发布页出现两套互相矛盾的下载项
+foreach ($stale in @(
+    (Join-Path $outDir "PolyXRD-v$Version-Databases.zip"),
+    (Join-Path $outDir "PolyXRD-v$Version-Databases-fixed.zip"))) {
+    if (Test-Path -LiteralPath $stale) {
+        Remove-Item -LiteralPath $stale -Force
+        Write-Output ('      已删除旧合并包 ' + [IO.Path]::GetFileName($stale))
     }
 }
 
-if ($sources.Count -eq 0) {
-    Fail '没有任何数据库文件可打包'
-} else {
-    if (Test-Path -LiteralPath $dbZip) { Remove-Item -LiteralPath $dbZip -Force }
+$builtPkgs = @()
+foreach ($k in $dbKinds) {
+    $src = Join-Path $Root $k.Src
+    if (-not (Test-Path -LiteralPath $src)) {
+        Write-Output ('      [跳过] 缺少源文件 ' + $k.Src)
+        continue
+    }
+    $pkg = Join-Path $outDir "PolyXRD-v$Version-Databases-$($k.Name).zip"
     $t0 = Get-Date
-    Compress-Archive -LiteralPath $sources -DestinationPath $dbZip -Force
-    Write-Output ('      生成 ' + (MiB (Get-Item -LiteralPath $dbZip).Length) +
-                  ' / 耗时 ' + [int]((Get-Date) - $t0).TotalSeconds + ' s')
+    Compress-Archive -LiteralPath $src -DestinationPath $pkg -Force
+    $zipSize = (Get-Item -LiteralPath $pkg).Length
+    $srcSize = (Get-Item -LiteralPath $src).Length
+    Write-Output ('      ' + [IO.Path]::GetFileName($pkg).PadRight(38) +
+                  (MiB $zipSize).PadLeft(12) + '  (源 ' + (MiB $srcSize) + ')')
 
-    # 对账: 解压后总字节必须与源文件之和逐字节相等
-    $zip = [System.IO.Compression.ZipFile]::OpenRead($dbZip)
+    # 对账: 必须恰好 1 个条目、名字正确、解压字节等于源字节
+    $zip = [System.IO.Compression.ZipFile]::OpenRead($pkg)
     try {
-        $sum     = ($zip.Entries | Measure-Object -Property Length -Sum).Sum
-        $names   = @($zip.Entries | ForEach-Object { $_.FullName })
-        $nEntry  = $zip.Entries.Count
+        $cnt   = $zip.Entries.Count
+        $inner = @($zip.Entries | ForEach-Object { $_.Name })
+        $sum   = ($zip.Entries | Measure-Object -Property Length -Sum).Sum
     } finally { $zip.Dispose() }
-    $srcSum = ($sources | ForEach-Object { (Get-Item -LiteralPath $_).Length } | Measure-Object -Sum).Sum
 
-    Write-Output ('      条目 ' + $nEntry + ' ; 解压后 ' + $sum + ' B ; 源合计 ' + $srcSum + ' B')
-    if ($nEntry -ne $sources.Count) { Fail "包内条目数 $nEntry 与源文件数 $($sources.Count) 不符" }
-    if ($sum -ne $srcSum)            { Fail "解压后字节 $sum 与源合计 $srcSum 不符 (打包可能被截断)" }
-    if ($nEntry -eq $sources.Count -and $sum -eq $srcSum) {
-        Write-Output '      OK: 条目数与字节数逐项对账通过'
+    if ($cnt -ne 1)          { Fail "$($k.Name): 包内条目数 $cnt != 1" }
+    if ($inner[0] -ne $k.File) { Fail "$($k.Name): 包内文件 '$($inner[0])' != 期望 '$($k.File)'" }
+    if ($sum -ne $srcSize)   { Fail "$($k.Name): 解压后 $sum B != 源 $srcSize B (打包被截断?)" }
+    if ($cnt -eq 1 -and $inner[0] -eq $k.File -and $sum -eq $srcSize) {
+        Write-Output ('            OK: 1 个条目 / ' + $inner[0] + ' / 字节对账通过')
+        $builtPkgs += $pkg
     }
-    Write-Output ('      内含: ' + ($names -join ', '))
 }
+
+if ($builtPkgs.Count -eq 0) { Fail '没有生成任何数据库包' }
 
 # ── 3. SHA-256 ───────────────────────────────────────────────
 Write-Output '[3/3] SHA-256'
@@ -120,13 +139,12 @@ if ($SkipHash) {
         '单位说明: MB = 1,048,576 字节 (资源管理器口径)',
         ''
     )
-    foreach ($f in @(
-        (Join-Path $outDir "PolyXRD-Setup-v$Version.exe"),
-        $portable, $dbZip)) {
+    $targets = @((Join-Path $outDir "PolyXRD-Setup-v$Version.exe"), $portable) + $builtPkgs
+    foreach ($f in $targets) {
         if (-not (Test-Path -LiteralPath $f)) { continue }
         $item = Get-Item -LiteralPath $f
         $h = (Get-FileHash -LiteralPath $f -Algorithm SHA256).Hash.ToLower()
-        Write-Output ('      ' + $item.Name.PadRight(38) + (MiB $item.Length).PadLeft(12) + '  ' + $h)
+        Write-Output ('      ' + $item.Name.PadRight(42) + (MiB $item.Length).PadLeft(12) + '  ' + $h)
         $lines += "$h  $($item.Name)"
         $lines += ('#   size = {0:N0} bytes ({1})' -f $item.Length, (MiB $item.Length))
     }

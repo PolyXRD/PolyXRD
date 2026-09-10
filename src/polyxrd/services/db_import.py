@@ -38,6 +38,9 @@ class DBKind:
     excludes: tuple[str, ...]     # 命中任一即**排除** (用于区分同表名)
     min_rows: int = 1
     count_column: str = "cod_id"
+    # 发布用独立下载包的文件名后缀 —— 三个库各自打包, 用户按槽位挑一个下即可。
+    # 存"后缀"而不是完整文件名, 是为了不把版本号硬编码进源码。
+    pkg_suffix: str = ""
 
 
 # 顺序即优先级: 先匹配到的为准
@@ -51,6 +54,7 @@ DB_KINDS: tuple[DBKind, ...] = (
         signature=("cell_a",),
         # PDF2 的 phases 表多了 name/pearson, 用它把两者区分开
         excludes=("pearson",),
+        pkg_suffix="Databases-COD-inorg.zip",
     ),
     DBKind(
         key="pdf2",
@@ -60,6 +64,7 @@ DB_KINDS: tuple[DBKind, ...] = (
         required=("cod_id", "formula", "n_peaks", "peaks_d", "peaks_i"),
         signature=("pearson", "name"),
         excludes=(),
+        pkg_suffix="Databases-PDF2.zip",
     ),
     DBKind(
         key="cod_index",
@@ -70,10 +75,24 @@ DB_KINDS: tuple[DBKind, ...] = (
         signature=("cif_gz",),
         excludes=(),
         min_rows=1000,
+        pkg_suffix="Databases-COD-full.zip",
     ),
 )
 
 KIND_BY_KEY: dict[str, DBKind] = {k.key: k for k in DB_KINDS}
+
+# 各类库在发布包里的文件名 (决定用户该下载哪个 zip, 也用于文档/脚本对账)
+PKG_FILENAME: dict[str, str] = {
+    "cod_inorganics": "COD_inorganics.sqlite",
+    "cod_index": "cod_index.sqlite",
+    "pdf2": "PDF2_2004.sqlite",
+}
+
+
+def release_package_name(kind_key: str, version: str) -> str:
+    """某槽位对应的独立下载包文件名, 如 ``PolyXRD-v0.10.0-Databases-COD-inorg.zip``。"""
+    spec = KIND_BY_KEY[kind_key]
+    return f"PolyXRD-v{version}-{spec.pkg_suffix}"
 
 
 @dataclass
@@ -247,6 +266,7 @@ def slot_states(validate: bool = True) -> list[dict]:
     """
     out: list[dict] = []
     defaults = _default_paths()
+    version = get_config().app_version
     for kind in DB_KINDS:
         path = defaults[kind.key]
         state = {
@@ -261,6 +281,9 @@ def slot_states(validate: bool = True) -> list[dict]:
             "error": "",
             "hint": "",
             "size_mb": _size_mb(path),
+            # 该槽位对应哪个独立下载包 / 解压后是哪个文件
+            "pkg_name": release_package_name(kind.key, version),
+            "pkg_filename": PKG_FILENAME.get(kind.key, ""),
         }
         if validate and path.exists():
             ins = inspect_db_file(path)
