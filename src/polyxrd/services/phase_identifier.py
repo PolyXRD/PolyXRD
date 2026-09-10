@@ -1,9 +1,9 @@
 """
 物相识别服务
 ============
-基于FOM (Figure of Merit) 算法的物相识别。
+基于匹配因子 (FoM, 0.9.11 加权互斥版) 的物相识别。
 支持离线XRD参考数据库匹配和COD在线搜索。
-支持三态元素过滤: 必须/可能/不含。
+支持四态元素过滤: 必有/含有/可能/没有 (未勾选元素默认并入「没有」)。
 """
 from __future__ import annotations
 
@@ -14,11 +14,28 @@ from typing import Optional
 import numpy as np
 
 from polyxrd.config import get_config
+from polyxrd.models.fom import confidence_from_score
 from polyxrd.models.peak import Peak, PeakList
 from polyxrd.models.phase import Phase, PhaseMatchResult
 from polyxrd.models.xrd_data import XRDData
-from polyxrd.utils.formula_parser import parse_formula, elements_match_filter
+from polyxrd.services.foam import compute_fom
+from polyxrd.utils.formula_parser import (
+    parse_formula, elements_match_filter, normalize_element_filter,
+)
 from polyxrd.utils.resources import get_resource_path
+
+# 纯金属相惩罚: 单元素金属参考峰少易误匹配 (非金属/类金属除外)
+_NONMETAL: frozenset[str] = frozenset({
+    "H", "He", "N", "O", "F", "Ne", "Cl", "Ar", "Br", "Kr", "I", "Xe", "Rn",
+    "S", "P", "C", "Si", "Se", "Te", "As", "Ge", "B",
+})
+_PURE_METAL_PENALTY = 1.5
+
+
+def _is_pure_metal(phase: Phase) -> bool:
+    """单元素金属 (H/N/O/S/C/Si/卤素/稀有气体等非金属除外)"""
+    els = phase.elements or set()
+    return len(els) == 1 and not (els & _NONMETAL)
 
 
 class PhaseIdentifier:
@@ -391,12 +408,6 @@ class PhaseIdentifier:
         coverage 过滤已完成; 这里做 expected_count 截断 + 纯金属比例防御
         + 低覆盖率纯金属剔除。
         """
-        _nonmetal_exclude = {"H","He","N","O","F","Ne","Cl","Ar","Br","Kr","I","Xe","Rn",
-                             "S","P","C","Si","Se","Te","As","Ge","B"}
-        def _is_pure_metal(phase) -> bool:
-            return (len(phase.elements) == 1
-                    and not (phase.elements & _nonmetal_exclude))
-
         sel = list(kept)
         if expected_count and expected_count > 0:
             sel = sel[:expected_count]
@@ -450,12 +461,6 @@ class PhaseIdentifier:
         Returns:
             list[Phase] - 可直接用于 Rietveld 精修的物相列表 (原 FOM 顺序)
         """
-        _nonmetal_exclude = {"H","He","N","O","F","Ne","Cl","Ar","Br","Kr","I","Xe","Rn",
-                             "S","P","C","Si","Se","Te","As","Ge","B"}
-        def _is_pure_metal(phase) -> bool:
-            return (len(phase.elements) == 1
-                    and not (phase.elements & _nonmetal_exclude))
-
         # 1. 结构/数据感知去重 + coverage 过滤 (全部低于阈值则回退全量)
         filtered = self._dedupe_results(matches, peaks, tolerance)
         kept = [m for m in filtered if m.coverage >= min_coverage]
@@ -532,31 +537,16 @@ class PhaseIdentifier:
             pf = PeakFinder()
             peaks = pf.find_peaks(data)
 
-        must = element_filter.get("must", []) if element_filter else []
-        maybe = element_filter.get("maybe", []) if element_filter else []
-        exclude = element_filter.get("exclude", []) if element_filter else []
-
-        # ── 自动扩展 exclude: must∪maybe 补集内的元素一律排除 ──────────
-        # 如果用户给了 must/maybe 但没给 exclude, 自动推导: 任何不在
-        # must+maybe 中的元素都不可能出现在试样中 (例如 must=Zn/Ca, 则 S/P/Si
-        # 等一律排除, 避免 CaSO4/CaSiO3 等干扰物相进入候选)
-        if element_filter and (must or maybe):
-            allowed = set(must) | set(maybe)
-            # 自动推导: 遍历数据库中所有物相的元素, 不在 allowed 的加入 exclude
-            extra_exclude = set()
-            for phase in self._phase_database:
-                for el in phase.elements:
-                    if el not in allowed:
-                        extra_exclude.add(el)
-            if extra_exclude:
-                exclude_set = set(exclude) | extra_exclude
-                exclude = list(exclude_set)
+        ef = normalize_element_filter(element_filter) if element_filter else None
 
         results = []
         for phase in self._phase_database:
-            if element_filter and (must or exclude):
-                if not elements_match_filter(phase.elements, must, maybe, exclude):
-                    continue
+            if ef and not elements_match_filter(
+                phase.elements,
+                has=ef["has"], maybe=ef["maybe"], exclude=ef["exclude"],
+                must_have=ef["must_have"],
+            ):
+                continue
 
             match_result = self._match_phase_fom(
                 phase, peaks, tolerance
@@ -566,12 +556,6 @@ class PhaseIdentifier:
         results.sort(key=lambda r: r.score)
 
         # ── 组合重排: 纯金属比例限制在 20% 以内, 避免过多纯金属挤占前 top_n ──
-        _nonmetal_exclude = {"H","He","N","O","F","Ne","Cl","Ar","Br","Kr","I","Xe","Rn",
-                             "S","P","C","Si","Se","Te","As","Ge","B"}
-        def _is_pure_metal(phase) -> bool:
-            return (len(phase.elements) == 1
-                    and not (phase.elements & _nonmetal_exclude))
-
         if len(results) > 0:
             reordered = []
             non_metal_stack = [r for r in results if not _is_pure_metal(r.phase)]
@@ -644,10 +628,14 @@ class PhaseIdentifier:
         peaks: PeakList,
         tolerance: float,
     ) -> PhaseMatchResult:
-        """基于FOM算法匹配单个物相
+        """基于匹配因子 (FoM) 匹配单个物相。
 
-        FOM (Figure of Merit):
-        FOM = Σ|2θ_obs - 2θ_calc| / Σ(2θ_calc) × N_matched × 100
+        0.9.11 起统一走 :func:`polyxrd.services.foam.compute_fom`, 与 COD 路径
+        同一口径, 三点改进:
+          - 一一对应互斥匹配 (密集物相不再抢峰)
+          - 强峰加权 + Σw 归一 (消除高角度/多峰天然占优)
+          - 未解释实验峰特异性惩罚 + 匹配对强度余弦一致性
+        纯金属相额外 ×1.5 惩罚 (单元素金属参考峰少易误匹配)。
 
         Args:
             phase: 候选物相
@@ -655,88 +643,33 @@ class PhaseIdentifier:
             tolerance: 容差
 
         Returns:
-            PhaseMatchResult (score为FOM值，越低越好)
+            PhaseMatchResult (score 越低越好)
         """
         reference_peaks = phase.get_reference_peaks()
         total_ref_peaks = len(reference_peaks)
-
         if total_ref_peaks == 0:
             return PhaseMatchResult(
                 phase=phase, score=999.0, matched_peaks=0,
                 total_peaks=0, confidence="无参考数据", method="fom"
             )
 
-        matched = 0
-        sum_deviation = 0.0
-        sum_ref_2theta = 0.0
-        total_intensity_score = 0.0
-
-        for hkl, ref_2theta, ref_intensity in reference_peaks:
-            min_dist = float("inf")
-            matched_intensity = 0.0
-
-            for peak in peaks:
-                dist = abs(peak.two_theta - ref_2theta)
-                if dist < min_dist:
-                    min_dist = dist
-                    matched_intensity = peak.intensity
-
-            if min_dist <= tolerance:
-                matched += 1
-                sum_deviation += min_dist
-                sum_ref_2theta += ref_2theta
-
-                if ref_intensity > 0 and matched_intensity > 0:
-                    int_ratio = min(matched_intensity, ref_intensity) / max(matched_intensity, ref_intensity)
-                    total_intensity_score += int_ratio
-
-        if matched == 0 or sum_ref_2theta == 0:
-            return PhaseMatchResult(
-                phase=phase, score=999.0, matched_peaks=0,
-                total_peaks=total_ref_peaks, confidence="不匹配", method="fom"
-            )
-
-        # FOM = 相对偏差，未匹配参考峰按容差计入偏差 (标准 FOM 做法)
-        # 归一化用所有参考峰 2θ 之和，避免少峰物相因偶然单峰偏差小而占优
-        sum_ref_2theta_all = sum(
-            ref_2theta for _, ref_2theta, _ in reference_peaks
+        fom = compute_fom(
+            [p.two_theta for p in peaks],
+            [p.intensity for p in peaks],
+            reference_peaks,
+            tol=tolerance,
         )
-        unmatched = total_ref_peaks - matched
-        sum_deviation_effective = sum_deviation + unmatched * tolerance
-        if sum_ref_2theta_all > 0:
-            fom = (sum_deviation_effective / sum_ref_2theta_all) * 100.0
-        else:
-            fom = 999.0
-        match_ratio = matched / total_ref_peaks
-        avg_intensity_score = total_intensity_score / matched if matched > 0 else 0
-
-        # combined_score: match_ratio 越高 -> (1-ratio*0.3) 越小 -> 分值越低(越好)
-        combined_score = fom * (1.0 - match_ratio * 0.3) * (1.0 - avg_intensity_score * 0.1)
-
-        # ── 纯金属惩罚: 单元素金属物相因 reference_peaks 少易误匹配, 加 1.5x 惩罚 ──
-        # 非金属气态/固态非金属例外 (H,N,O,S,P,C,Si,Se,Te,As,Ge,B,卤素,稀有气体)
-        _nonmetal_exclude = {"H","He","N","O","F","Ne","Cl","Ar","Br","Kr","I","Xe","Rn",
-                             "S","P","C","Si","Se","Te","As","Ge","B"}
-        if len(phase.elements) == 1 and not (phase.elements & _nonmetal_exclude):
-            combined_score *= 1.5
-
-        combined_score = max(combined_score, 0.01)
-
-        if combined_score < 0.1:
-            confidence = "极好匹配"
-        elif combined_score < 0.3:
-            confidence = "良好匹配"
-        elif combined_score < 0.5:
-            confidence = "一般匹配"
-        else:
-            confidence = "可能不匹配"
+        score = float(fom.score)
+        if _is_pure_metal(phase):
+            score *= _PURE_METAL_PENALTY
+        score = max(score, 0.01)
 
         return PhaseMatchResult(
             phase=phase,
-            score=round(combined_score, 4),
-            matched_peaks=matched,
+            score=round(score, 4),
+            matched_peaks=fom.matched,
             total_peaks=total_ref_peaks,
-            confidence=confidence,
+            confidence=confidence_from_score(score),
             method="fom",
         )
 
@@ -943,10 +876,10 @@ class PhaseIdentifier:
             return []
 
         # 2. Hanawalt d-I 预筛 (元素约束下推到扫描层)
-        must = element_filter.get("must", []) if element_filter else []
-        maybe = element_filter.get("maybe", []) if element_filter else []
-        exclude = element_filter.get("exclude", []) if element_filter else []
-        elements_allowed = (set(must) | set(maybe)) if (must or maybe) else None
+        ef = normalize_element_filter(element_filter) if element_filter else None
+        # 允许池 = 必有 ∪ 含有 ∪ 可能 (闭环语义: 未勾选元素视为「没有」)
+        allowed_pool = set(ef["must_have"]) | set(ef["has"]) | set(ef["maybe"]) if ef else set()
+        elements_allowed = allowed_pool if allowed_pool else None
         try:
             cands = cdb.search_cod_by_d_peaks(
                 d_list, i_list, tolerance=0.02, limit=prefilter_limit,
@@ -1007,25 +940,29 @@ class PhaseIdentifier:
                 reference_peaks=ref_peaks,
                 elements=_elements_from_db_formula(formula),
             )
-            if must or maybe or exclude:
-                # 与内置引擎 "自动扩展 exclude" 同哲学:
-                # 物相元素须完全落在 must∪maybe 内, 且不与 exclude 相交
-                allowed = set(must) | set(maybe)
-                if not phase.elements or not phase.elements.issubset(allowed):
-                    continue
-                if any(elem in phase.elements for elem in exclude):
-                    continue
+            if ef and not elements_match_filter(
+                phase.elements,
+                has=ef["has"], maybe=ef["maybe"], exclude=ef["exclude"],
+                must_have=ef["must_have"],
+            ):
+                continue
             results.append((c, self._match_phase_fom(phase, peaks, tolerance)))
 
-        def _hanawalt_key(item: tuple[dict, PhaseMatchResult]):
+        # ── 排序: Hanawalt 预筛质量 × 匹配因子 加权混合 (0.9.11) ──────
+        # 旧口径是字典序 (main_peak_match → top_precision → 召回 → FOM),
+        # main_peak_match 是 0/1 二值: 多相样品里只有主物相能拿 1, 其余
+        # 真物相被整体压到后面。13 试样基准上改为加权混合后:
+        #   Top-1 12%→16%, Top-5 22%→27%, Top-10 24%→29%
+        # FOM 已改为加权互斥口径 (不再偏好峰多的密集相), 故可承担主权重。
+        # fom_good 用固定尺度 1.2 (与分位数自适应版等效, 但不依赖查询分布)。
+        def _cod_rank_score(item: tuple[dict, PhaseMatchResult]) -> float:
             c, r = item
-            return (
-                -float(c.get("main_peak_match", 0.0)),
-                -float(c.get("top_precision", 0.0)),
-                -float(c.get("intensity_weighted_top_recall", 0.0)),
-                -float(c.get("top_recall", 0.0)),
-                r.score,  # FOM 同分决胜 (越低越好)
-            )
+            h = (0.40 * float(c.get("main_peak_match", 0.0))
+                 + 0.30 * float(c.get("top_precision", 0.0))
+                 + 0.20 * float(c.get("intensity_weighted_top_recall", 0.0))
+                 + 0.10 * float(c.get("top_recall", 0.0)))
+            fom_good = 1.0 - min(max(float(r.score) / 1.2, 0.0), 1.0)
+            return 0.3 * h + 0.7 * fom_good
 
-        results.sort(key=_hanawalt_key)
+        results.sort(key=lambda it: -_cod_rank_score(it))
         return [r for _, r in results[:top_n]]

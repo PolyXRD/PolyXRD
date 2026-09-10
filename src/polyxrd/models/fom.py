@@ -15,12 +15,14 @@ class FoMResult:
 
     Attributes:
         score: 综合评分 (越小越好, >0)
-        matched: 命中参考峰条数
+        matched: 命中参考峰条数 (一一对应互斥匹配, 一个实验峰只算一次)
         missed: 未命中参考峰条数
-        position_penalty: 位置偏差惩罚项 (Σ|Δ2θ| + 漏峰×容差, 归一化)
-        intensity_score: 强度一致性 0~1 (1=完全一致; 0=无强度信息可用)
+        position_penalty: 位置项 bad = 加权平均位置偏差 + 加权漏峰比 (0~2)
+        intensity_score: 匹配对上的强度余弦一致性 0~1 (1=完全一致; 0=无强度信息)
         method: "fom" (峰表法) 或 "profile" (峰型匹配)
         delta_2theta: 本次使用的匹配窗口 (度)
+        unexplained_obs: 未被任何参考峰解释的实验峰条数 (特异性)
+        total_obs: 实验峰总条数
     """
     score: float = 999.0
     matched: int = 0
@@ -29,6 +31,8 @@ class FoMResult:
     intensity_score: float = 0.0
     method: str = "fom"
     delta_2theta: float = 0.15
+    unexplained_obs: int = 0
+    total_obs: int = 0
 
     @property
     def total(self) -> int:
@@ -37,6 +41,13 @@ class FoMResult:
     @property
     def match_ratio(self) -> float:
         return self.matched / self.total if self.total > 0 else 0.0
+
+    @property
+    def specificity(self) -> float:
+        """实验峰被解释的比例 (1 = 全部实验峰都能被该物相解释)"""
+        if self.total_obs > 0:
+            return 1.0 - self.unexplained_obs / self.total_obs
+        return 0.0
 
     def to_dict(self) -> dict:
         return {
@@ -47,6 +58,8 @@ class FoMResult:
             "intensity_score": self.intensity_score,
             "method": self.method,
             "delta_2theta": self.delta_2theta,
+            "unexplained_obs": self.unexplained_obs,
+            "total_obs": self.total_obs,
         }
 
     @classmethod
@@ -59,4 +72,22 @@ class FoMResult:
             intensity_score=data.get("intensity_score", 0.0),
             method=data.get("method", "fom"),
             delta_2theta=data.get("delta_2theta", 0.15),
+            unexplained_obs=data.get("unexplained_obs", 0),
+            total_obs=data.get("total_obs", 0),
         )
+
+
+# 匹配因子 → 置信度文案的统一分档 (score 越低越好)
+CONFIDENCE_BANDS: tuple[tuple[float, str], ...] = (
+    (0.15, "极好匹配"),
+    (0.40, "良好匹配"),
+    (0.70, "一般匹配"),
+)
+
+
+def confidence_from_score(score: float) -> str:
+    """把 FoM 分值映射为置信度文案 (builtin / COD / foam 三处共用)。"""
+    for limit, label in CONFIDENCE_BANDS:
+        if score < limit:
+            return label
+    return "可能不匹配"

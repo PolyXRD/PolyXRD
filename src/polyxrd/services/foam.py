@@ -16,7 +16,7 @@ from typing import Iterable, Optional
 
 import numpy as np
 
-from polyxrd.models.fom import FoMResult
+from polyxrd.models.fom import FoMResult, confidence_from_score
 from polyxrd.models.phase import Phase, PhaseMatchResult
 from polyxrd.models.search_options import SearchOptions
 
@@ -38,6 +38,12 @@ def _as_float_array(values) -> np.ndarray:
     return np.asarray([float(v) for v in values], dtype=float)
 
 
+# ── 匹配因子 (FoM) 调参常量 ────────────────────────────────
+_FOM_W_MIN = 0.3               # 参考峰基础权重 (强峰权重上限 1.0)
+_FOM_SPEC_WEIGHT = 0.30        # 未解释实验峰惩罚权重
+_FOM_INTENSITY_WEIGHT = 0.20   # 强度一致性乘性权重
+
+
 def compute_fom(
     obs_two_theta,
     obs_intensity,
@@ -45,7 +51,20 @@ def compute_fom(
     tol: float = 0.15,
     use_intensity: bool = True,
 ) -> FoMResult:
-    """物相参考峰 vs 实验峰的 FoM。
+    """物相参考峰 vs 实验峰的匹配因子 (0.9.11 加权互斥版)。
+
+    与旧口径的三点差异:
+      1. **一一对应互斥匹配**: 先枚举所有 |Δ2θ| ≤ tol 的 (参考峰, 实验峰) 对,
+         按偏差升序贪心配对, 每条参考峰与每条实验峰都最多使用一次。旧实现让
+         多条参考峰各自就近吸附到同一条实验峰, 峰多的密集物相因此被系统性高估。
+      2. **强峰加权 + 改用 Σw 归一**: 参考峰权重 w = 0.3 + 0.7·I/Imax, 漏掉
+         强峰的代价远大于漏掉弱峰; 归一化不再用 Σ2θ (旧口径使高角度、多峰物相
+         天然占优, 与"匹配好坏"无关)。
+      3. **特异性项**: 未被任何参考峰解释的实验峰按比例惩罚, 抑制"只解释少数
+         几条峰却因偏差小排在前列"的伪匹配。
+
+    ``score = (bad + 0.30·未解释比) · (1 - 0.20·强度余弦)``
+    ``bad   = [Σ_命中 w·(|Δ|/tol) + Σ_漏检 w] / Σ_all w`` ∈ [0, 2]
 
     Args:
         obs_two_theta: 实验峰 2θ (可迭代)
@@ -60,58 +79,85 @@ def compute_fom(
     if not refs:
         return FoMResult(score=999.0, matched=0, missed=0,
                          delta_2theta=float(tol))
-    obs_arr = np.asarray([float(t) for t in obs_two_theta])
-    int_arr = np.asarray([float(v) for v in obs_intensity])
-    order = np.argsort(obs_arr)
-    obs_tt = obs_arr[order]
-    obs_int = int_arr[order]
-    if len(obs_tt) == 0:
+
+    obs_arr = np.asarray([float(t) for t in obs_two_theta], dtype=float)
+    int_arr = np.asarray([float(v) for v in obs_intensity], dtype=float)
+    if obs_arr.size == 0:
         return FoMResult(score=999.0, matched=0, missed=len(refs),
                          delta_2theta=float(tol))
+    order = np.argsort(obs_arr)
+    obs_tt = obs_arr[order]
+    obs_int = int_arr[order] if int_arr.size == obs_arr.size else np.zeros_like(obs_tt)
+    tol = float(tol) if tol and float(tol) > 1e-9 else 1e-9
 
-    matched = 0
-    sum_dev = 0.0
-    int_ratios: list[float] = []
-    for tt, i in refs:
+    # ── 1. 候选配对 + 按偏差升序贪心互斥分配 ──────────────────
+    pairs: list[tuple[float, int, int]] = []
+    for ri, (tt, _) in enumerate(refs):
         pos = int(np.searchsorted(obs_tt, tt))
-        best = None
-        if pos < len(obs_tt):
-            best = obs_tt[pos]
-        if pos > 0 and (best is None or abs(obs_tt[pos - 1] - tt) < abs(best - tt)):
-            best = obs_tt[pos - 1]
-        if best is None:
-            continue
-        d = abs(best - tt)
-        if d <= tol:
-            matched += 1
-            sum_dev += d
-            if use_intensity:
-                j = int(np.argmin(np.abs(obs_tt - best)))
-                oi = float(obs_int[j]) if j < len(obs_int) else 0.0
-                if oi > 0 and i > 0:
-                    int_ratios.append(min(oi, i) / max(oi, i))
+        for j in (pos - 1, pos):
+            if 0 <= j < obs_tt.size:
+                d = abs(float(obs_tt[j]) - tt)
+                if d <= tol:
+                    pairs.append((d, ri, j))
+    pairs.sort(key=lambda p: p[0])
 
-    total = len(refs)
-    missed = total - matched
-    norm = sum(tt for tt, _ in refs) or 1.0
-    penalty = (sum_dev + missed * tol) / norm
-    avg_int = float(np.mean(int_ratios)) if int_ratios else 0.0
-    ratio = matched / total if total else 0.0
-    # 与既有 FOM 同口径 (乘性): 位置惩罚为主, 强度一致性/覆盖率作系数。
-    # 教训: 加性强度惩罚 (1-avg_int)*w 会因真实数据强度比普遍偏低 (~0.01)
-    # 而给所有候选加上近似常数项, 抹掉位置区分度 → 必须乘性。
-    if use_intensity:
-        score = penalty * (1.0 - 0.3 * ratio) * (1.0 - 0.1 * avg_int)
+    used_ref: set[int] = set()
+    used_obs: set[int] = set()
+    match_pairs: list[tuple[int, int, float]] = []
+    for d, ri, j in pairs:
+        if ri in used_ref or j in used_obs:
+            continue
+        used_ref.add(ri)
+        used_obs.add(j)
+        match_pairs.append((ri, j, d))
+
+    # ── 2. 强峰加权位置项 + 加权漏峰项 ────────────────────────
+    i_max = max((i for _, i in refs), default=0.0)
+    if i_max > 0:
+        weights = [_FOM_W_MIN + (1.0 - _FOM_W_MIN) * (i / i_max) for _, i in refs]
     else:
-        score = penalty * (1.0 - 0.3 * ratio)
+        weights = [1.0] * len(refs)
+    w_sum = float(sum(weights)) or 1.0
+
+    sum_dev = 0.0
+    for ri, _, d in match_pairs:
+        sum_dev += weights[ri] * (d / tol)
+    matched_w = float(sum(weights[ri] for ri, _, _ in match_pairs))
+    bad = (sum_dev + (w_sum - matched_w)) / w_sum
+
+    matched = len(match_pairs)
+    missed = len(refs) - matched
+
+    # ── 3. 特异性: 未被解释的实验峰 ───────────────────────────
+    n_obs = int(obs_tt.size)
+    unexplained = n_obs - len(used_obs)
+    unexp_ratio = unexplained / n_obs if n_obs else 0.0
+
+    # ── 4. 强度一致性: 匹配对上的余弦相似度 (尺度无关, 比 min/max 稳) ──
+    ic = 0.0
+    if use_intensity and matched >= 2:
+        ref_v = np.asarray([refs[ri][1] for ri, _, _ in match_pairs], dtype=float)
+        obs_v = np.asarray([obs_int[j] for _, j, _ in match_pairs], dtype=float)
+        nr = float(np.linalg.norm(ref_v))
+        no = float(np.linalg.norm(obs_v))
+        if nr > 1e-12 and no > 1e-12:
+            ic = float(np.dot(ref_v, obs_v) / (nr * no))
+            ic = min(max(ic, 0.0), 1.0)
+
+    score = bad + _FOM_SPEC_WEIGHT * unexp_ratio
+    if use_intensity:
+        score *= (1.0 - _FOM_INTENSITY_WEIGHT * ic)
+
     return FoMResult(
         score=float(max(score, 1e-4)),
         matched=matched,
         missed=missed,
-        position_penalty=float(penalty),
-        intensity_score=avg_int,
+        position_penalty=float(bad),
+        intensity_score=ic,
         method="fom",
         delta_2theta=float(tol),
+        unexplained_obs=int(unexplained),
+        total_obs=n_obs,
     )
 
 
@@ -219,14 +265,14 @@ def _name_matches(name: str, pattern: str) -> bool:
 def _passes_options(phase: Phase, opts: SearchOptions) -> bool:
     if opts.name_pattern and not _name_matches(phase.name or "", opts.name_pattern):
         return False
-    els = phase.elements or set()
-    if (opts.must or opts.maybe) and els:
-        allowed = set(opts.must) | set(opts.maybe)
-        if not els.issubset(allowed):
-            return False
-    if opts.exclude and els and (els & set(opts.exclude)):
-        return False
-    return True
+    from polyxrd.utils.formula_parser import elements_match_filter
+    return elements_match_filter(
+        phase.elements or set(),
+        has=opts.must,
+        maybe=opts.maybe,
+        exclude=opts.exclude,
+        must_have=opts.must_have,
+    )
 
 
 def search_match(
@@ -286,9 +332,7 @@ def search_match(
         if opts.score_threshold is not None and fom.score > opts.score_threshold:
             continue
 
-        conf = "极好匹配" if fom.score < 0.1 else (
-            "良好匹配" if fom.score < 0.3 else (
-                "一般匹配" if fom.score < 0.5 else "可能不匹配"))
+        conf = confidence_from_score(fom.score)
         results.append(PhaseMatchResult(
             phase=phase,
             score=round(float(fom.score), 4),

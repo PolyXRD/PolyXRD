@@ -14,13 +14,20 @@ from typing import Optional
 class SearchOptions:
     """一次 search-match 的约束与参数。
 
-    元素语义 (与内置库一致): 物相元素须 ⊆ (must∪maybe), 且与 exclude 无交集。
+    元素语义 (四类, 0.9.11): 记 S = 物相元素集合
+      - must_have (必有): P ⊆ S        每个必有元素都必须出现 (AND)
+      - must      (含有): S ∩ H ≠ ∅    至少含一个; 含有为空时 maybe 代行其职
+      - maybe     (可能): 无强制条件     仅放宽允许池
+      - exclude   (没有): S ∩ E = ∅    含任一即淘汰
+    未勾选元素默认并入「没有」(等价 S ⊆ P∪H∪M), 仅在 必有/含有/可能
+    至少勾中一项时启用; 三者全空 = 全库搜索, 只勾「没有」= 开放世界。
     score 语义: foam score 越低越好 (与既有 FOM 相同)。
     """
     # 化学组成约束
-    must: list = field(default_factory=list)
-    maybe: list = field(default_factory=list)
-    exclude: list = field(default_factory=list)
+    must_have: list = field(default_factory=list)   # 必有 (AND)
+    must: list = field(default_factory=list)        # 含有 (至少一个)
+    maybe: list = field(default_factory=list)       # 可能 (可选)
+    exclude: list = field(default_factory=list)     # 没有
     # 名称 (大小写敏感通配, 如 "*corundum*")
     name_pattern: Optional[str] = None
     # 匹配质量
