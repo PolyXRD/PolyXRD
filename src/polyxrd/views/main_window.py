@@ -17,8 +17,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import Qt, QSize, QSettings, QUrl
-from PySide6.QtGui import (QAction, QIcon, QKeySequence, QActionGroup,
+from PySide6.QtCore import Qt, QSize, QSettings, QTimer, QUrl
+from PySide6.QtGui import (QAction, QIcon, QKeySequence, QActionGroup, QDesktopServices,
                             QDragEnterEvent, QDropEvent)
 from PySide6.QtWidgets import (
     QMainWindow,
@@ -60,6 +60,7 @@ from polyxrd.views.data_view import DataView
 from polyxrd.views.phase_view import PhaseView
 from polyxrd.views.refinement_view import RefinementView
 from polyxrd.views.report_view import ReportView
+from polyxrd.views.widgets.database_dialog import DatabaseManagerDialog
 from polyxrd.services import CIFDatabase, CODSearcher
 
 
@@ -471,6 +472,22 @@ class MainWindow(QMainWindow):
         self._setup_connections()
         self._load_settings()
 
+        # 0.10.0: 数据库外挂 —— 首次启动若一个库都没挂载, 延迟到窗口显形后再提示
+        QTimer.singleShot(400, self._maybe_first_run_db_hint)
+
+    def _maybe_first_run_db_hint(self) -> None:
+        """一个库都没挂载时给出明确指引 (仅首次弹窗, 之后只留状态栏常驻提示)。"""
+        from polyxrd.services import db_import
+        if any(db_import.live_counts().values()):
+            return
+        self.statusBar().showMessage(tr("status.no_database"))
+        if self._settings.value("db/nodb_hint_shown", False, type=bool):
+            return
+        self._settings.setValue("db/nodb_hint_shown", True)
+        QMessageBox.information(
+            self, tr("db_manager.first_run_title"), tr("db_manager.first_run_body")
+        )
+
     # ------------------------------------------------------------------
     # UI 初始化
     # ------------------------------------------------------------------
@@ -743,6 +760,7 @@ class MainWindow(QMainWindow):
         self._setup_file_menu()
         self._setup_process_menu()
         self._setup_phase_menu()
+        self._setup_database_menu()
         self._setup_refine_menu()
         self._setup_view_menu()
         self._setup_report_menu()
@@ -825,6 +843,21 @@ class MainWindow(QMainWindow):
         self._actions["cod_search_menu"].triggered.connect(self._on_cod_search)
         self._set_action_icon(self._actions["cod_search_menu"], "cod_search")
         phase_menu.addAction(self._actions["cod_search_menu"])
+
+    def _setup_database_menu(self) -> None:
+        """0.10.0: 数据库外挂化 —— 发布包不含数据库, 由用户下载后在此导入。"""
+        db_menu = self.menuBar().addMenu(tr("menu.database.title"))
+        self._menus["database"] = db_menu
+
+        self._actions["db_manager"] = QAction(tr("menu.database.manage"), self)
+        self._actions["db_manager"].triggered.connect(self._on_database_manager)
+        db_menu.addAction(self._actions["db_manager"])
+
+        db_menu.addSeparator()
+
+        self._actions["db_open_dir"] = QAction(tr("menu.database.open_dir"), self)
+        self._actions["db_open_dir"].triggered.connect(self._on_open_db_dir)
+        db_menu.addAction(self._actions["db_open_dir"])
 
     def _setup_refine_menu(self) -> None:
         refine_menu = self.menuBar().addMenu(tr("menu.structure_refinement.title"))
@@ -1224,6 +1257,44 @@ class MainWindow(QMainWindow):
     def _on_cod_search(self) -> None:
         dialog = CODSearchDialog(self)
         dialog.exec()
+
+    # ------------------------------------------------------------------
+    # 事件处理 - 外挂数据库 (0.10.0)
+    # ------------------------------------------------------------------
+
+    def _on_database_manager(self) -> None:
+        """打开外挂数据库管理, 导入/取消挂载后立即刷新物相源下拉。"""
+        dialog = DatabaseManagerDialog(self)
+        dialog.databases_changed.connect(self._on_databases_changed)
+        dialog.exec()
+        # 关闭时再刷一次: 兜底覆盖"信号在某些路径下未发"的情况
+        self._on_databases_changed()
+
+    def _on_databases_changed(self) -> None:
+        try:
+            self._phase_view.refresh_db_sources()
+        except Exception:  # noqa: BLE001 - UI 刷新失败不该弹栈
+            pass
+        # PDF2 命中相可作精修起始结构, 挂载状态变化后需让精修侧重新探测
+        try:
+            self._vm.reload_databases()
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _on_open_db_dir(self) -> None:
+        """打开数据库存放目录 (方便用户把解压出来的 .sqlite 放进去)。"""
+        from polyxrd.services import db_import as _dbi
+        paths = _dbi._default_paths()
+        # 优先打开已挂载库所在目录; 都没有则退到用户可写目录
+        # (~/.polyxrd/cif_db) —— 安装目录在 Program Files 下普通用户不可写。
+        target = next((p.parent for p in paths.values() if p.exists()), None)
+        if target is None:
+            target = self._config.user_db_dir()
+        try:
+            target.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))
 
     def _on_phase_confirmed(self, phase) -> None:
         """物相确认后自动切换到结构精修"""

@@ -1,12 +1,15 @@
 @echo off
 chcp 65001 >nul
-title PolyXRD v0.9.11 打包构建器
+title PolyXRD v0.10.0 打包构建器
 echo ========================================
-echo   PolyXRD v0.9.11 打包为独立安装包
+echo   PolyXRD v0.10.0 打包为独立安装包
+echo   数据库外挂 (不随包分发)
 echo ========================================
 echo.
 
 cd /d "%~dp0"
+
+set APPVER=0.10.0
 
 REM ── Python 定位 ──────────────────────────────────────
 if exist "venv\Scripts\python.exe" (
@@ -25,15 +28,15 @@ if %errorlevel% neq 0 (
 )
 
 echo.
-echo [步骤 1/5] PyInstaller 打包 (EXE 阶段, COLLECT 阶段可能因沙盒 safe-delete 失败)...
+echo [步骤 1/6] PyInstaller 打包 (EXE 阶段, COLLECT 阶段可能因沙盒 safe-delete 失败)...
 echo.
+echo [信息] 数据库策略: 外挂。安装包不含 .sqlite, 由用户单独下载后经 GUI 导入。
+echo        若需内嵌整包, 请先 set POLYXRD_WITH_DB=1 再运行本脚本。
 
 REM 应用图标已由 build_icon.py 生成 (基于 crystal-mark 品牌资产, 7 档多分辨率 ICO).
 REM 如需重新生成: %PYTHON% build_icon.py
 "%PYTHON%" build_icon.py
 
-REM 两库全含 (COD 全库 432MB + 无机物库 259MB)。如需仅含无机物库, 设
-REM POLYXRD_NO_COD_DB=1; 如需全不含, 两变量都设 1。
 "%PYTHON%" -m PyInstaller PolyXRD.spec --noconfirm
 
 REM PyInstaller 失败 (EXIT 1) 不一定是真正的构建失败, 可能是 COLLECT 阶段 shutil.rmtree 被 safe-delete 拦截.
@@ -45,7 +48,7 @@ if not exist "build\PolyXRD\PolyXRD.exe" (
 )
 
 echo.
-echo [步骤 2/5] 手工收集 _internal ( 绕过沙盒 safe-delete, 从 COLLECT-00.toc 复制所有依赖 )...
+echo [步骤 2/6] 手工收集 _internal ( 绕过沙盒 safe-delete, 从 COLLECT-00.toc 复制所有依赖 )...
 echo.
 
 REM 用 shell cp 单独覆盖 EXE (PyInstaller 在 build 已经产出)
@@ -76,8 +79,25 @@ if %errorlevel% neq 0 (
     echo [警告] ICU 复制阶段异常, 请检查 PySide6 Qt 启动依赖
 )
 
+REM 兜底: 确认安装包里确实没有数据库 (0.10.0 的核心约束)
 echo.
-echo [步骤 3/5] 创建 Inno Setup 安装程序...
+echo [检查] 确认 dist 内不含数据库文件...
+"%PYTHON%" -c "
+import glob, os
+hits = []
+for pat in [r'dist\PolyXRD\**\*.sqlite', r'dist\PolyXRD\**\*.sqlite3',
+            r'dist\PolyXRD\**\*.db',    r'dist\PolyXRD\**\*.tar.xz']:
+    hits += glob.glob(pat, recursive=True)
+if hits:
+    print('  [警告] 发现被意外打入的数据库文件:')
+    for h in hits:
+        print('    ', h, round(os.path.getsize(h)/1e6, 1), 'MB')
+else:
+    print('  OK: 未发现数据库文件, 符合 0.10.0 外挂策略')
+"
+
+echo.
+echo [步骤 3/6] 创建 Inno Setup 安装程序...
 echo.
 
 if not exist "installer_output" mkdir installer_output
@@ -100,7 +120,7 @@ echo [警告] 未找到 Inno Setup, 跳过安装程序生成
 goto :no_iscc
 
 :have_iscc
-%ISCC% /DAppVersion=0.9.11 /O"installer_output" /F"PolyXRD-Setup-v0.9.11" scripts\PolyXRD-Setup.iss
+%ISCC% /DAppVersion=%APPVER% /O"installer_output" /F"PolyXRD-Setup-v%APPVER%" scripts\PolyXRD-Setup.iss
 if %errorlevel% neq 0 (
     echo [警告] Inno 编译失败, 跳过安装程序
 )
@@ -108,39 +128,55 @@ if %errorlevel% neq 0 (
 :no_iscc
 
 echo.
-echo [步骤 4/5] 创建便携压缩包 (ZIP)...
+echo [步骤 4/6] 创建便携压缩包 (ZIP)...
 echo.
 
-if exist "installer_output\PolyXRD-v0.9.11-Portable.zip" del "installer_output\PolyXRD-v0.9.11-Portable.zip" >nul
-powershell -Command "Compress-Archive -Path 'dist\PolyXRD\*' -DestinationPath 'installer_output\PolyXRD-v0.9.11-Portable.zip' -Force"
+if exist "installer_output\PolyXRD-v%APPVER%-Portable.zip" del "installer_output\PolyXRD-v%APPVER%-Portable.zip" >nul
+powershell -Command "Compress-Archive -Path 'dist\PolyXRD\*' -DestinationPath 'installer_output\PolyXRD-v%APPVER%-Portable.zip' -Force"
 if %errorlevel% neq 0 (
     echo [警告] ZIP 压缩失败, 尝试备用方法...
-    powershell -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::CreateFromDirectory('dist\PolyXRD', 'installer_output\PolyXRD-v0.9.11-Portable.zip')"
+    powershell -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::CreateFromDirectory('dist\PolyXRD', 'installer_output\PolyXRD-v%APPVER%-Portable.zip')"
 )
 
 echo.
-echo [步骤 5/5] 写 VERSION.txt...
+echo [步骤 5/6] 校验产物 + 打包外挂数据库 ZIP + 计算 SHA-256...
+echo.
+
+set PWSH=pwsh
+where pwsh >nul 2>&1 || set PWSH=powershell
+%PWSH% -NoProfile -ExecutionPolicy Bypass -File "scripts\verify_release.ps1" -Version %APPVER%
+if %errorlevel% neq 0 (
+    echo.
+    echo [警告] 产物校验未全部通过, 请检查上面的 FAIL 项!
+)
+
+echo.
+echo [步骤 6/6] 写 VERSION.txt...
 echo.
 
 powershell -Command "$ver = @'
-PolyXRD v0.9.11 Release
+PolyXRD v%APPVER% Release
 Build Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+Version    : %APPVER%
 ICU: 依赖系统 icuuc shim (PySide6 6.11 不自带 ICU)
-Databases: 内置打包 (COD 全库 + COD 无机物库)
+Databases: 外挂 (随包不含数据库)。请单独下载 PolyXRD-v%APPVER%-Databases.zip,
+           解压后在菜单「数据库 ▸ 外挂数据库管理…」逐库导入。
+           未导入时仅内置 118 种参考物相可用。
 Icon: 品牌化应用图标 (crystal-mark + XRD 配色, 多分辨率 ICO)
 '@; $ver | Out-File -FilePath 'dist\PolyXRD\VERSION.txt' -Encoding UTF8"
-copy /Y "dist\PolyXRD\VERSION.txt" "installer_output\VERSION_v0.9.11.txt" >nul 2>&1
+copy /Y "dist\PolyXRD\VERSION.txt" "installer_output\VERSION_v%APPVER%.txt" >nul 2>&1
 
 echo.
 echo ========================================
-echo   PolyXRD v0.9.11 打包完成！
+echo   PolyXRD v%APPVER% 打包完成！
 echo ========================================
 echo.
 
 echo 输出 (installer_output\):
-if exist "installer_output\PolyXRD-Setup-v0.9.11.exe" for %%A in ("installer_output\PolyXRD-Setup-v0.9.11.exe") do echo   Setup.exe:    %%~zA 字节
-if exist "installer_output\PolyXRD-v0.9.11-Portable.zip" for %%A in ("installer_output\PolyXRD-v0.9.11-Portable.zip") do echo   Portable.zip: %%~zA 字节
-if exist "dist\PolyXRD\PolyXRD.exe" for %%A in ("dist\PolyXRD\PolyXRD.exe") do echo   PolyXRD.exe:  %%~zA 字节
+if exist "installer_output\PolyXRD-Setup-v%APPVER%.exe" for %%A in ("installer_output\PolyXRD-Setup-v%APPVER%.exe") do echo   Setup.exe:     %%~zA 字节
+if exist "installer_output\PolyXRD-v%APPVER%-Portable.zip" for %%A in ("installer_output\PolyXRD-v%APPVER%-Portable.zip") do echo   Portable.zip:  %%~zA 字节
+if exist "installer_output\PolyXRD-v%APPVER%-Databases.zip" for %%A in ("installer_output\PolyXRD-v%APPVER%-Databases.zip") do echo   Databases.zip: %%~zA 字节
+if exist "dist\PolyXRD\PolyXRD.exe" for %%A in ("dist\PolyXRD\PolyXRD.exe") do echo   PolyXRD.exe:   %%~zA 字节
 
 echo.
 pause

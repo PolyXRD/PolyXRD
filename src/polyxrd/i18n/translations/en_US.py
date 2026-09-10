@@ -28,6 +28,11 @@ translations = {
             "reset": "Reset to Raw Data",
             "normalize": "Normalize",
         },
+        "database": {
+            "title": "Databases",
+            "manage": "Manage External Databases…",
+            "open_dir": "Open Database Folder",
+        },
         "phase_analysis": {
             "title": "Phase Analysis",
             "find_peaks": "Find Peaks",
@@ -94,6 +99,62 @@ translations = {
         "search": "Search",
         "select_all": "Select All",
         "clear": "Clear",
+    },
+    "db_manager": {
+        "title": "External Database Manager",
+        "intro": (
+            "Since 0.10.0 the installer no longer bundles any database. "
+            "Download the database archive separately, extract it, then "
+            "import it here — the path is remembered and reloaded on the "
+            "next launch.\n"
+            "The three databases are independent. With none mounted, only "
+            "the 118 built-in reference phases are available."
+        ),
+        "recheck": "Re-check",
+        "import": "Import…",
+        "clear": "Unmount",
+        "import_title": "Select Database File",
+        "import_failed": "Import Failed",
+        "import_failed_body": (
+            "This file cannot be used as a database.\n\nFile: {path}\n"
+            "Reason: {detail}"
+        ),
+        "save_failed_body": (
+            "Failed to write the configuration; the path was not saved.\n\n"
+            "{error}"
+        ),
+        "kind_mismatch": "Wrong Database Type",
+        "kind_mismatch_body": (
+            "The selected file is a “{got}”, not a “{want}”.\n\n"
+            "Import it into the “{got}” slot instead?"
+        ),
+        "import_ok": "Import Successful",
+        "import_ok_body": "Mounted {rows} records.\n{path}",
+        "clear_confirm": (
+            "Unmount “{name}”?\n"
+            "It will fall back to the default location; if that has no "
+            "database either, this data source becomes unavailable."
+        ),
+        "status_ok": "Mounted",
+        "status_bad": "Unusable",
+        "status_missing": "Not found",
+        "no_path": "(not mounted — click “Import…” and pick the extracted database file)",
+        "has_top_peaks": "includes pre-truncated strong-peak columns (faster search)",
+        "src_imported": "user-imported",
+        "src_default": "default location",
+        "kind": {
+            "cod_inorganics": "COD Inorganics Database",
+            "pdf2": "PDF2-2004 Database",
+            "cod_index": "COD Full Index",
+        },
+        "first_run_title": "No Database Imported Yet",
+        "first_run_body": (
+            "Starting with 0.10.0 the installer no longer bundles any database.\n\n"
+            "Please download the database archive separately, extract it, then "
+            "import each file via \"Database ▸ Manage External Databases…\".\n\n"
+            "Without imported databases only the 118 built-in reference phases "
+            "are available."
+        ),
     },
     "action": {
         "strip_kalpha2": "Strip Kα2",
@@ -181,6 +242,11 @@ translations = {
     },
     "status": {
         "ready": "Ready",
+        "no_database": (
+            "No external database detected — only the 118 built-in reference "
+            "phases are available. Import one via \"Database ▸ Manage External "
+            "Databases…\"."
+        ),
         "loading_file": "Loading file: {path}",
         "background_subtract": "Performing background subtraction ({method})",
         "smoothing": "Performing smoothing ({method})",
