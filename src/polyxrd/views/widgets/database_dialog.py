@@ -103,6 +103,11 @@ class DatabaseManagerDialog(QDialog):
         info.setSpacing(2)
         info.addWidget(status)
         info.addWidget(path_lbl)
+        pkg_lbl = QLabel("—")
+        pkg_lbl.setStyleSheet("color: palette(mid);")
+        pkg_lbl.setWordWrap(True)
+        pkg_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        info.addWidget(pkg_lbl)
         info_w = QWidget()
         info_w.setLayout(info)
 
@@ -123,6 +128,7 @@ class DatabaseManagerDialog(QDialog):
         grid.addWidget(btn_w, row, 2, Qt.AlignmentFlag.AlignTop)
         self._rows[kind.key] = {
             "status": status, "path": path_lbl, "clear": btn_clear,
+            "pkg": pkg_lbl,
         }
 
     # ── 刷新 ──────────────────────────────────────────────
@@ -133,6 +139,12 @@ class DatabaseManagerDialog(QDialog):
                 continue
             row["clear"].setEnabled(st["imported"])
             row["path"].setText(st["path"] or "—")
+            # 三个库各自独立打包下载 —— 把"这个槽位该下哪个包"写死在行里,
+            # 否则用户面对三个槽位只能靠文件名猜。
+            row["pkg"].setText(
+                tr("db_manager.pkg_hint",
+                   pkg=st["pkg_name"], file=st["pkg_filename"])
+            )
             if not st["exists"]:
                 row["status"].setText(f"<span style='color:#c0392b'>"
                                       f"{tr('db_manager.status_missing')}</span>")
@@ -166,6 +178,16 @@ class DatabaseManagerDialog(QDialog):
         )
         if not path:
             return
+        self._import_path(expect_kind, path)
+
+    def _import_path(self, expect_kind: str, path: str) -> bool:
+        """对给定路径执行导入 (校验 → 类型确认 → 落盘 → 刷新 → 发信号)。
+
+        与选文件解耦, 便于测试: 单测直接喂路径, 不必驱动 QFileDialog。
+
+        Returns:
+            是否真的完成了导入 (用户取消/校验失败/落盘失败都返回 False)。
+        """
         ins = inspect_db_file(path)
 
         if not ins.ok:
@@ -174,7 +196,7 @@ class DatabaseManagerDialog(QDialog):
                 self, tr("db_manager.import_failed"),
                 tr("db_manager.import_failed_body", path=path, detail=detail),
             )
-            return
+            return False
 
         if ins.kind != expect_kind:
             other = db_import.KIND_BY_KEY[ins.kind]
@@ -187,7 +209,7 @@ class DatabaseManagerDialog(QDialog):
                 QMessageBox.StandardButton.Yes,
             )
             if ans != QMessageBox.StandardButton.Yes:
-                return
+                return False
             expect_kind = ins.kind
 
         try:
@@ -197,7 +219,7 @@ class DatabaseManagerDialog(QDialog):
                 self, tr("db_manager.import_failed"),
                 tr("db_manager.save_failed_body", error=str(e)),
             )
-            return
+            return False
 
         db_import.reload_caches()
         self._refresh()
@@ -209,6 +231,7 @@ class DatabaseManagerDialog(QDialog):
             tr("db_manager.import_ok_body",
                rows=f"{ins.rows:,}", path=path) + extra,
         )
+        return True
 
     def _on_clear(self, kind_key: str) -> None:
         if QMessageBox.question(

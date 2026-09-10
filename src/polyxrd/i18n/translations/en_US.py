@@ -103,13 +103,15 @@ translations = {
     "db_manager": {
         "title": "External Database Manager",
         "intro": (
-            "Since 0.10.0 the installer no longer bundles any database. "
-            "Download the database archive separately, extract it, then "
-            "import it here — the path is remembered and reloaded on the "
-            "next launch.\n"
-            "The three databases are independent. With none mounted, only "
-            "the 118 built-in reference phases are available."
+            "Since 0.10.0 the installer no longer bundles any database. The "
+            "three databases ship as separate archives and mount "
+            "independently — installing just one of them is perfectly fine.\n"
+            "Extract the matching archive, then click “Import…” on that row "
+            "and pick the .sqlite file. The path is remembered and reloaded "
+            "on the next launch. With none mounted, only the 118 built-in "
+            "reference phases are available."
         ),
+        "pkg_hint": "Download: {pkg}  →  extracts {file}",
         "recheck": "Re-check",
         "import": "Import…",
         "clear": "Unmount",
@@ -150,8 +152,12 @@ translations = {
         "first_run_title": "No Database Imported Yet",
         "first_run_body": (
             "Starting with 0.10.0 the installer no longer bundles any database.\n\n"
-            "Please download the database archive separately, extract it, then "
-            "import each file via \"Database ▸ Manage External Databases…\".\n\n"
+            "Each database ships as its own archive — download only what you need:\n"
+            "  · COD Inorganics    …-Databases-COD-inorg.zip\n"
+            "  · COD Full Index    …-Databases-COD-full.zip\n"
+            "  · PDF2-2004         …-Databases-PDF2.zip\n\n"
+            "After extracting, import each one via "
+            "\"Database ▸ Manage External Databases…\".\n"
             "Without imported databases only the 118 built-in reference phases "
             "are available."
         ),

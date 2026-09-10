@@ -139,7 +139,12 @@ if %errorlevel% neq 0 (
 )
 
 echo.
-echo [步骤 5/6] 校验产物 + 打包外挂数据库 ZIP + 计算 SHA-256...
+echo [步骤 5/6] 校验产物 + 生成三个独立外挂数据库 ZIP + 计算 SHA-256...
+echo.
+echo [信息] 三个库各自成包 (用户按需只下一个):
+echo          PolyXRD-v%APPVER%-Databases-COD-inorg.zip  (COD 无机物库, 主检索库)
+echo          PolyXRD-v%APPVER%-Databases-COD-full.zip   (COD 全库索引)
+echo          PolyXRD-v%APPVER%-Databases-PDF2.zip       (PDF2-2004 库)
 echo.
 
 set PWSH=pwsh
@@ -159,8 +164,11 @@ PolyXRD v%APPVER% Release
 Build Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
 Version    : %APPVER%
 ICU: 依赖系统 icuuc shim (PySide6 6.11 不自带 ICU)
-Databases: 外挂 (随包不含数据库)。请单独下载 PolyXRD-v%APPVER%-Databases.zip,
-           解压后在菜单「数据库 ▸ 外挂数据库管理…」逐库导入。
+Databases: 外挂, 且三库各自独立打包 (随包不含数据库)。按需只下一个:
+           PolyXRD-v%APPVER%-Databases-COD-inorg.zip  COD 无机物库 (主检索库, 推荐)
+           PolyXRD-v%APPVER%-Databases-COD-full.zip   COD 全库索引
+           PolyXRD-v%APPVER%-Databases-PDF2.zip       PDF2-2004 库
+           解压后在菜单「数据库 ▸ 外挂数据库管理…」逐个导入 (可只挂其中一个)。
            未导入时仅内置 118 种参考物相可用。
 Icon: 品牌化应用图标 (crystal-mark + XRD 配色, 多分辨率 ICO)
 '@; $ver | Out-File -FilePath 'dist\PolyXRD\VERSION.txt' -Encoding UTF8"
@@ -175,7 +183,9 @@ echo.
 echo 输出 (installer_output\):
 if exist "installer_output\PolyXRD-Setup-v%APPVER%.exe" for %%A in ("installer_output\PolyXRD-Setup-v%APPVER%.exe") do echo   Setup.exe:     %%~zA 字节
 if exist "installer_output\PolyXRD-v%APPVER%-Portable.zip" for %%A in ("installer_output\PolyXRD-v%APPVER%-Portable.zip") do echo   Portable.zip:  %%~zA 字节
-if exist "installer_output\PolyXRD-v%APPVER%-Databases.zip" for %%A in ("installer_output\PolyXRD-v%APPVER%-Databases.zip") do echo   Databases.zip: %%~zA 字节
+if exist "installer_output\PolyXRD-v%APPVER%-Databases-COD-inorg.zip" for %%A in ("installer_output\PolyXRD-v%APPVER%-Databases-COD-inorg.zip") do echo   库-COD无机物: %%~zA 字节
+if exist "installer_output\PolyXRD-v%APPVER%-Databases-COD-full.zip" for %%A in ("installer_output\PolyXRD-v%APPVER%-Databases-COD-full.zip") do echo   库-COD全库:   %%~zA 字节
+if exist "installer_output\PolyXRD-v%APPVER%-Databases-PDF2.zip" for %%A in ("installer_output\PolyXRD-v%APPVER%-Databases-PDF2.zip") do echo   库-PDF2:      %%~zA 字节
 if exist "dist\PolyXRD\PolyXRD.exe" for %%A in ("dist\PolyXRD\PolyXRD.exe") do echo   PolyXRD.exe:   %%~zA 字节
 
 echo.
