@@ -144,6 +144,10 @@ class MainViewModel(QObject):
         self.peaks_changed.emit(empty_peaks)
         self.phase_identified.emit([])
 
+    def reload_databases(self) -> None:
+        """外挂数据库挂载状态变化后, 让检索侧丢掉指向旧路径的缓存。"""
+        self._phase_vm.reload_databases()
+
     # ------------------------------------------------------------------
     # 公共方法 - 峰检测
     # ------------------------------------------------------------------

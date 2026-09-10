@@ -17,7 +17,7 @@ class AppConfig:
 
     # 应用信息
     app_name: str = "PolyXRD"
-    app_version: str = "0.9.11"
+    app_version: str = "0.10.0"
     app_org: str = "PolyXRD"
 
     # 窗口设置
@@ -70,6 +70,41 @@ class AppConfig:
     def get_export_dir(self) -> Path:
         return self.export_dir
 
+    # ── 外挂数据库路径解析 (0.10.0) ──────────────────────────
+
+    def user_db_dir(self) -> Path:
+        """用户可写的数据库落脚目录 (``~/.polyxrd/cif_db``)。
+
+        PyInstaller 打包后 :attr:`_PROJECT_ROOT` 指向安装目录内的 ``_internal``,
+        而安装器用的是 ``PrivilegesRequired=lowest`` (装在 Program Files 时普通
+        用户无写权限)。所以"解压后随手把 .sqlite 放哪"需要一个始终可写的默认
+        落点 —— 就是这里。放在这里的库即使没走 GUI 导入也会被自动发现。
+        """
+        return Path.home() / ".polyxrd" / "cif_db"
+
+    def _resolve_db_path(self, key: str, default: Path,
+                         alt_names: tuple[str, ...]) -> Path:
+        """统一的库路径解析: 用户导入 > 默认位置 > 用户目录兜底。
+
+        默认位置**存在**时优先于用户目录兜底 —— 开发/内嵌整包场景下项目内
+        的库才是预期数据源, 不该被用户目录里同名的旧库悄悄顶掉。
+        """
+        imported = self.user_db_path(key)
+        if imported is not None:
+            return imported
+        if default.exists():
+            return default
+        for name in alt_names:
+            cand = self.user_db_dir() / name
+            if cand.exists():
+                return cand
+        return default
+
+    def get_cod_db_path(self) -> Path:
+        """获取当前 COD 无机物库路径 (支持用户导入的外部库覆盖)。"""
+        return self._resolve_db_path(
+            "cod_db_path", self.cod_db_path, ("COD_inorganics.sqlite",))
+
     def get_cif_db_path(self) -> Path:
         return self.cif_db_path
 
@@ -78,17 +113,6 @@ class AppConfig:
 
     def get_cod_index_db_path(self) -> Path:
         return self.cod_index_db_path
-
-    def get_cod_db_path(self) -> Path:
-        """获取当前 COD 数据库路径。
-
-        优先级:用户导入的外部数据库 > 项目内默认路径。
-        用户导入路径持久化在 ~/.polyxrd/user_db_paths.json。
-        """
-        user_path = self._load_user_cod_db_path()
-        if user_path:
-            return Path(user_path)
-        return self.cod_db_path
 
     def set_cod_db_path(self, path: str | Path) -> None:
         """设置用户导入的 COD 数据库路径,并持久化。
@@ -129,12 +153,21 @@ class AppConfig:
             encoding="utf-8",
         )
 
-    def _load_user_cod_db_path(self) -> Optional[str]:
-        """读取用户持久化的数据库路径,返回 None 表示未设置。"""
-        path = self._load_user_db_paths().get("cod_db_path")
-        if path and Path(path).exists():
-            return path
+    def user_db_path(self, key: str) -> Optional[Path]:
+        """读取某个数据库槽位的用户导入路径。
+
+        未设置、或设了但**文件已不存在** (用户挪走了外挂库) 都返回 None
+        —— 这样上层会自动回退到默认路径, 而不是抱一个死路径报错。
+        """
+        p = self._load_user_db_paths().get(key)
+        if p and Path(p).exists():
+            return Path(p)
         return None
+
+    def _load_user_cod_db_path(self) -> Optional[str]:
+        """读取用户持久化的 COD 路径,返回 None 表示未设置。"""
+        p = self.user_db_path("cod_db_path")
+        return str(p) if p else None
 
     # ── PDF2-2004 数据库路径 ────────────────────────────────
 
@@ -145,16 +178,32 @@ class AppConfig:
     def get_pdf2_db_path(self) -> Path:
         """获取当前 PDF2-2004 SQLite 索引路径。
 
-        优先级:用户导入的外部库 > 项目内默认路径 (与 get_cod_db_path 对称)。
+        优先级:用户导入的外部库 > 项目内默认路径 > 用户目录兜底
+        (与 :meth:`get_cod_db_path` 对称)。
         """
-        user_path = self._load_user_db_paths().get("pdf2_db_path")
-        if user_path and Path(user_path).exists():
-            return Path(user_path)
-        return self.pdf2_db_path
+        return self._resolve_db_path(
+            "pdf2_db_path", self.pdf2_db_path, ("PDF2_2004.sqlite",))
 
     def set_pdf2_db_path(self, path: str | Path) -> None:
         """设置 PDF2-2004 SQLite 路径并持久化 (空值 = 清除, 回退默认)。"""
         self._update_user_db_path("pdf2_db_path", path)
+
+    # ── COD 全库索引路径 (cod_index.sqlite) ─────────────────
+
+    def get_cod_index_sqlite_path(self) -> Optional[Path]:
+        """用户导入的 COD 全库索引 (cod_index.sqlite) 路径。
+
+        与 COD 无机物库/PDF2 不同, 这个库原本由 `cod_local` 从打包资源
+        部署到 `cif_db_path/cod_index.sqlite`, 并在多个候选目录间搜索。
+        0.10.0 起数据库改外挂, 所以这里加一条**用户导入优先**的旁路:
+        只有用户显式导入且文件确实存在时才返回, 否则返回 None 让
+        `cod_local._index_db_path()` 走原有搜索/部署逻辑。
+        """
+        return self.user_db_path("cod_index_db_path")
+
+    def set_cod_index_db_path(self, path: str | Path | None) -> None:
+        """设置用户导入的 COD 全库索引路径并持久化 (空值 = 清除)。"""
+        self._update_user_db_path("cod_index_db_path", path)
 
 
 # 单例模式

@@ -28,6 +28,11 @@ translations = {
             "normalize": "归一化",
             "reset": "重置为原始数据",
         },
+        "database": {
+            "title": "数据库",
+            "manage": "外挂数据库管理…",
+            "open_dir": "打开数据库目录",
+        },
         "phase_analysis": {
             "title": "物相分析",
             "find_peaks": "峰检测",
@@ -94,6 +99,53 @@ translations = {
         "search": "搜索",
         "select_all": "全选",
         "clear": "清除",
+    },
+    "db_manager": {
+        "title": "外挂数据库管理",
+        "intro": (
+            "从 0.10.0 起，安装包不再内置数据库。请单独下载数据库压缩包，"
+            "解压后在此导入；路径会被记住，下次启动自动加载。\n"
+            "三个库相互独立，全部留空时仅内置的 118 种参考物相可用。"
+        ),
+        "recheck": "重新检测",
+        "import": "导入…",
+        "clear": "取消挂载",
+        "import_title": "选择数据库文件",
+        "import_failed": "导入失败",
+        "import_failed_body": (
+            "该文件不能用作数据库。\n\n文件：{path}\n原因：{detail}"
+        ),
+        "save_failed_body": "写入配置失败，路径未保存。\n\n{error}",
+        "kind_mismatch": "库类型不符",
+        "kind_mismatch_body": (
+            "选中的文件是「{got}」，不是「{want}」。\n\n"
+            "要把它导入到「{got}」槽位吗？"
+        ),
+        "import_ok": "导入成功",
+        "import_ok_body": "已挂载 {rows} 条记录。\n{path}",
+        "clear_confirm": (
+            "确定要取消挂载「{name}」吗？\n"
+            "取消后将回退到默认位置；若默认位置也没有库，该数据源将不可用。"
+        ),
+        "status_ok": "已挂载",
+        "status_bad": "无法使用",
+        "status_missing": "未找到",
+        "no_path": "（尚未挂载，请点「导入…」选择已解压的数据库文件）",
+        "has_top_peaks": "含预截断强峰列（检索更快）",
+        "src_imported": "用户导入",
+        "src_default": "默认位置",
+        "kind": {
+            "cod_inorganics": "COD 无机物库",
+            "pdf2": "PDF2-2004 库",
+            "cod_index": "COD 全库索引",
+        },
+        "first_run_title": "尚未导入数据库",
+        "first_run_body": (
+            "从 0.10.0 起，安装包不再内置数据库。\n\n"
+            "请单独下载数据库压缩包，解压后从菜单\n"
+            "「数据库 ▸ 外挂数据库管理…」逐个导入。\n\n"
+            "未导入数据库时，程序仍可使用内置的 118 种参考物相。"
+        ),
     },
     "action": {
         "strip_kalpha2": "Kα2剥离",
@@ -181,6 +233,10 @@ translations = {
     },
     "status": {
         "ready": "就绪",
+        "no_database": (
+            "未检测到任何外挂数据库，当前仅内置 118 种参考物相可用。"
+            "请从菜单「数据库 ▸ 外挂数据库管理…」导入已解压的数据库文件。"
+        ),
         "loading_file": "加载文件: {path}",
         "background_subtract": "执行背景扣除 ({method})",
         "smoothing": "执行平滑 ({method})",

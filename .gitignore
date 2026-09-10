@@ -100,6 +100,8 @@ Thumbs.db
 # ── COD 全库索引 (431 MB,通过 Release 分发) ─────
 cod_index.sqlite
 cod_index.sqlite.*
+# WAL / SHM 副本以连字符结尾, 上面那条点号规则盖不住
+cod_index.sqlite-*
 cod-cifs-mysql.*
 
 # ── 大文件/过程数据库原始归档 & 原始 CIF (不入库) ─────

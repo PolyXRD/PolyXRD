@@ -2,20 +2,26 @@
 import os
 from PyInstaller.utils.hooks import collect_all
 
-# ── 可选数据库打包 (通过环境变量控制) ──────────────────────
-#   POLYXRD_NO_COD_DB=1      -> 不打包 cod_index.sqlite (COD 全库, ~431 MB)
-#   POLYXRD_NO_INORG_DB=1   -> 不打包 COD_inorganics.sqlite (无机物库, ~258 MB)
-# 默认: 两个数据库都打包 (若文件存在)
-# 注意: cod_index.sqlite 首次启动会复制到 ~/.polyxrd/cif_db/, 供离线物相检索/精修使用.
-#       若打包体积敏感, 设置 POLYXRD_NO_COD_DB=1 即可跳过, 用户可从 COD REST API 按需下载.
+# ── 数据库打包策略 (0.10.0 起: 默认【不】打包) ────────────────
+# 数据库改外挂: 单独下载 → 解压 → 在 GUI「数据库 ▸ 外挂数据库管理…」导入。
+# 好处是安装包从 ~900 MB 降到 ~150 MB, 且数据库可独立更新, 不必重发客户端。
+#
+#   POLYXRD_WITH_DB=1   -> 仍然内嵌三个库 (仅供内部/离线整包分发)
+#
+# 内嵌时各库的去向 (与运行时解析路径一致, 不要随意改):
+#   cod_index.sqlite      -> 'cod'       (cod_local._BUNDLED_COD_DB_SUBPATH)
+#   COD_inorganics.sqlite -> 'cod_data'
+#   PDF2_2004.sqlite      -> 'cod_data'
 
 _datas_base = [
     ('src/polyxrd/i18n', 'polyxrd/i18n'),
     ('src/polyxrd/resources', 'polyxrd/resources'),
 ]
 
-# COD 全库 (cod_index.sqlite, crystallography.net, 113K 条目 + 5.1M 原子位点)
-if os.environ.get('POLYXRD_NO_COD_DB') != '1':
+_WITH_DB = os.environ.get('POLYXRD_WITH_DB') == '1'
+
+if _WITH_DB:
+    # COD 全库 (cod_index.sqlite, crystallography.net, 113K 条目 + 5.1M 原子位点)
     _cod_full = 'cod_index.sqlite'
     if os.path.exists(_cod_full):
         _datas_base.append((_cod_full, 'cod'))
@@ -23,8 +29,7 @@ if os.environ.get('POLYXRD_NO_COD_DB') != '1':
     else:
         print(f'[PolyXRD.spec] COD full database not found, skipping: {_cod_full}')
 
-# COD 无机物库 (COD_inorganics.sqlite, 从 COD 筛选的无机物子集, 预计算 d-I 峰)
-if os.environ.get('POLYXRD_NO_INORG_DB') != '1':
+    # COD 无机物库 (从 COD 筛选的无机物子集, 预计算 d-I 峰)
     _cod_inorg = 'cod_data/COD_inorganics.sqlite'
     if os.path.exists(_cod_inorg):
         _datas_base.append((_cod_inorg, 'cod_data'))
@@ -32,9 +37,21 @@ if os.environ.get('POLYXRD_NO_INORG_DB') != '1':
     else:
         print(f'[PolyXRD.spec] COD inorganics database not found, skipping: {_cod_inorg}')
 
+    # PDF2-2004 库 (ICDD PDF-2 2004, 163K 物相, 带空间群/晶胞)
+    _pdf2 = 'cod_data/PDF2_2004.sqlite'
+    if os.path.exists(_pdf2):
+        _datas_base.append((_pdf2, 'cod_data'))
+        print(f'[PolyXRD.spec] Bundling PDF2-2004 database: {_pdf2}')
+    else:
+        print(f'[PolyXRD.spec] PDF2-2004 database not found, skipping: {_pdf2}')
+else:
+    print('[PolyXRD.spec] Databases EXTERNAL (0.10.0 default): '
+          'no .sqlite bundled. Import via GUI.'
+          ' Set POLYXRD_WITH_DB=1 to bundle them anyway.')
+
 datas = _datas_base
 binaries = []
-hiddenimports = ['polyxrd', 'polyxrd.i18n', 'polyxrd.i18n.translations.zh_CN', 'polyxrd.i18n.translations.en_US', 'polyxrd.i18n.translations.ja_JP', 'polyxrd.services.project_service', 'polyxrd.services.structure_simulator', 'polyxrd.services.phase_identifier', 'polyxrd.services.profile_fitting', 'polyxrd.views.widgets.element_periodic_table', 'polyxrd.views.widgets.element_filter_dialog']
+hiddenimports = ['polyxrd', 'polyxrd.i18n', 'polyxrd.i18n.translations.zh_CN', 'polyxrd.i18n.translations.en_US', 'polyxrd.i18n.translations.ja_JP', 'polyxrd.services.project_service', 'polyxrd.services.structure_simulator', 'polyxrd.services.phase_identifier', 'polyxrd.services.profile_fitting', 'polyxrd.services.db_import', 'polyxrd.services.cod_local', 'polyxrd.views.widgets.database_dialog', 'polyxrd.views.widgets.element_periodic_table', 'polyxrd.views.widgets.element_filter_dialog']
 # ── ICU 修复: PySide6 6.11 不再自带 ICU, Qt6 启动需 icuuc/icudt/icuin 系列 ──
 # 从系统已知位置 (mamba/conda 通用 ICU 78) 收集, 避免 Qt6 找不到 ICU 而 LoadLibrary 失败
 import os as _os

@@ -546,20 +546,64 @@ def deploy_bundled_cod_db_if_missing(target: Optional[Path] = None) -> Optional[
         return None
 
 
+def resolved_index_db_path(deploy: bool = True) -> Path:
+    """解析 COD 全库索引的**预期**路径。
+
+    用户导入的外挂库 > 用户库目录 ``cif_db/cod_index.sqlite``。
+
+    ``deploy=False`` 时**不做** bundled 部署 —— 这一点很关键: 开发模式下
+    ``_bundled_cod_db_source()`` 会指向项目根的 cod_index.sqlite, 一旦
+    ``deploy=True`` 就会在这里触发一次 ~400 MB 的复制。打开"外挂数据库
+    管理"对话框只是要**看一眼状态**, 不该产生这种副作用。
+    """
+    cfg = get_config()
+    user_path = cfg.get_cod_index_sqlite_path()
+    if user_path is not None:
+        return user_path
+    target = cfg.get_cif_db_path() / "cod_index.sqlite"
+    if target.exists():
+        return target
+    alt = cfg.user_db_dir() / "cod_index.sqlite"
+    if alt.exists():
+        return alt
+    if deploy:
+        deploy_bundled_cod_db_if_missing(target)
+    return target
+
+
+def existing_index_db_path() -> Optional[Path]:
+    """只读查找**当前实际存在**的 COD 全库索引文件 (不部署、不复制)。
+
+    顺序: 用户导入 → 目标位置 → 用户目录 (``~/.polyxrd/cif_db``) →
+    打包资源/开发模式自带位置 (``_bundled_cod_db_source()``)。找不到返回 None。
+
+    用途是"这个槽位现在能用吗"这类状态显示; 真正的检索路径仍由
+    :func:`_index_db_path` 决定 (它会在需要时触发首次部署)。
+    """
+    cfg = get_config()
+    user_path = cfg.get_cod_index_sqlite_path()
+    if user_path is not None:
+        return user_path
+    target = cfg.get_cif_db_path() / "cod_index.sqlite"
+    if target.exists():
+        return target
+    alt = cfg.user_db_dir() / "cod_index.sqlite"
+    if alt.exists():
+        return alt
+    return _bundled_cod_db_source()
+
+
 def _index_db_path(cod_root: Optional[Path] = None) -> Path:
     """Return path for cod_index.sqlite.
 
     - If COD root is given, place the db alongside it for portability.
     - Otherwise use the user's cif_db_path from AppConfig.
     - Before returning the user path, deploy the bundled DB if missing.
+    - 0.10.0: 用户在 GUI 里导入的 COD 全库**优先** (数据库改外挂)。
     """
     if cod_root is not None:
         return Path(cod_root).parent / "cod_index.sqlite"
-    cfg = get_config()
-    target = cfg.get_cif_db_path() / "cod_index.sqlite"
-    # 首次启动: 从打包资源复制 (~431 MB, 约 30-60 秒)
-    deploy_bundled_cod_db_if_missing(target)
-    return target
+    return resolved_index_db_path(deploy=True)
 
 
 def get_cod_root(default: Optional[Path] = None) -> Path:

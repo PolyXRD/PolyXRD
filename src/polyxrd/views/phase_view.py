@@ -36,6 +36,7 @@ from PySide6.QtWidgets import (
 )
 
 from polyxrd.viewmodels.main_vm import MainViewModel
+from polyxrd.services import db_import
 from polyxrd.views.widgets.pattern_display import PatternDisplayWidget
 from polyxrd.views.widgets.peak_match_table import PeakMatchTable
 from polyxrd.views.widgets.element_filter_dialog import ElementFilterDialog
@@ -355,26 +356,29 @@ class PhaseView(QWidget):
         """当前数据库源的显示名"""
         return self._db_combo.currentText()
 
-    # ── 数据源可用性 (2026-09-10: 补 PDF2-2004) ──────────────
+    # ── 数据源可用性 (2026-09-10: 补 PDF2-2004; 0.10.0: 库外挂化) ──
     def _db_source_labels(self) -> list[str]:
-        """各数据源的显示文案。PDF2 的物相数从库里实时读, 不写死。"""
+        """各数据源的显示文案。
+
+        0.10.0 起数据库不再随包分发, 相数一律**实时读库**而不是写死;
+        未挂载的直接标「未挂载」, 配合 ``_mark_unavailable_db_sources``
+        置灰, 避免用户选中后得到空结果却不知为何。
+        """
+        n = db_import.live_counts()
+
+        def _n(key: str) -> int:
+            return n.get(key, 0)
+
+        def _label(base: str, count: int) -> str:
+            return f"{base} ({count:,})" if count > 0 else f"{base} (未挂载)"
+
         return [
             "内置库 (118 物相)",
-            "COD 无机物库 (71,199)",
-            "COD 全库 (113,223)",
+            _label("COD 无机物库", _n("cod_inorganics")),
+            _label("COD 全库", _n("cod_index")),
             "内置+COD全库合并",
-            self._pdf2_label(),
+            _label("PDF2-2004 库", _n("pdf2")),
         ]
-
-    def _pdf2_label(self) -> str:
-        try:
-            from polyxrd.services.pdf2_database import PDF2Database
-            db = PDF2Database()
-            if db.is_available():
-                return f"PDF2-2004 库 ({db.phase_count():,})"
-        except Exception:
-            pass
-        return "PDF2-2004 库 (未挂载)"
 
     def _db_combo_tooltip(self) -> str:
         return (
@@ -386,7 +390,8 @@ class PhaseView(QWidget):
             "· PDF2-2004: ICDD PDF-2 2004 版 163,834 物相, 自带空间群与晶胞\n"
             "  (晶胞 81.8% / 空间群 72.8%), 命中相可直接作为精修起始结构。\n"
             f"{self._pdf2_coverage_line()}"
-            "库文件路径在设置中挂载 (cod_data/PDF2_2004.sqlite)。"
+            "数据库不随安装包分发, 请单独下载解压后在\n"
+            "菜单「数据库 ▸ 外挂数据库管理…」中导入。"
         )
 
     def _pdf2_coverage_line(self) -> str:
@@ -395,7 +400,7 @@ class PhaseView(QWidget):
             from polyxrd.services.pdf2_database import PDF2Database
             db = PDF2Database()
             if not db.is_available():
-                return "  当前未挂载 PDF2-2004 库。\n"
+                return ""
             cov = db.coverage()
             if not cov:
                 return ""
@@ -409,6 +414,7 @@ class PhaseView(QWidget):
     def _mark_unavailable_db_sources(self) -> None:
         """未挂载的数据源在下拉里置灰, 避免选中后静默返回空结果。"""
         model = self._db_combo.model()
+        counts = db_import.live_counts()
 
         def _disable(index: int, hint: str) -> None:
             item = model.item(index)
@@ -416,12 +422,38 @@ class PhaseView(QWidget):
                 item.setEnabled(False)
                 item.setToolTip(hint)
 
-        try:
-            from polyxrd.services.pdf2_database import PDF2Database
-            if not PDF2Database().is_available():
-                _disable(4, "PDF2-2004 索引库未挂载 (库文件 cod_data/PDF2_2004.sqlite)")
-        except Exception:
-            _disable(4, "PDF2-2004 服务不可用")
+        hint = ("该数据库未挂载。请从菜单「数据库 ▸ 外挂数据库管理…」"
+                "导入已解压的库文件。")
+        if counts.get("cod_inorganics", 0) <= 0:
+            _disable(1, hint)
+        if counts.get("cod_index", 0) <= 0:
+            # "COD 全库" 与 "合并" 都依赖 cod_index.sqlite
+            _disable(2, hint)
+            _disable(3, hint)
+        if counts.get("pdf2", 0) <= 0:
+            _disable(4, hint)
+
+        # 当前选中项若刚被置灰 → 退回内置库 (否则用户按"识别"会一无所获)
+        idx = self._db_combo.currentIndex()
+        item = model.item(idx)
+        if idx > 0 and item is not None and not item.isEnabled():
+            self._db_combo.setCurrentIndex(0)
+
+    def refresh_db_sources(self) -> None:
+        """重读三个库的挂载状态, 就地刷新下拉文案/可用性 (保留当前选择)。
+
+        由「外挂数据库管理…」对话框的 ``databases_changed`` 触发, 导入或
+        取消挂载后无需重启即可生效。
+        """
+        keep = self._current_db_source()
+        self._db_combo.blockSignals(True)
+        self._db_combo.clear()
+        self._db_combo.addItems(self._db_source_labels())
+        if keep in self._db_source_keys:
+            self._db_combo.setCurrentIndex(self._db_source_keys.index(keep))
+        self._db_combo.setToolTip(self._db_combo_tooltip())
+        self._db_combo.blockSignals(False)
+        self._mark_unavailable_db_sources()
 
     def _on_traditional_identify(self) -> None:
         """传统物相识别"""

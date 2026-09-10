@@ -63,6 +63,19 @@ class PhaseViewModel(QObject):
     def selected_phases(self) -> list[Phase]:
         return self._selected_phases
 
+    def reload_databases(self) -> None:
+        """外挂数据库被导入/取消挂载后, 丢掉持有旧路径的缓存。
+
+        `PhaseIdentifier` 会把 COD 全库连接与 "已就绪" 标志缓存下来
+        (`_cod_db` / `_cod_ready`), 不清掉的话用户换了 cod_index.sqlite
+        之后仍然查的是旧库。其余几个库里没有跨调用的缓存 (每次现开连接),
+        但 PDF2 侧有模块级实例, 一并让 `db_import.reload_caches` 处理。
+        """
+        from polyxrd.services import db_import
+        self._identifier._cod_ready = False
+        self._identifier._cod_db = None
+        db_import.reload_caches()
+
     def set_data_source(self, data):
         """设置数据源 (用于后续操作)"""
         self._current_data = data
