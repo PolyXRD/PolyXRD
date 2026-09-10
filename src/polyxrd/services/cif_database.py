@@ -13,6 +13,8 @@ import urllib.request
 from pathlib import Path
 from typing import Optional
 
+import numpy as np
+
 from polyxrd.config import get_config
 from polyxrd.models.phase import LatticeParams, Phase
 
@@ -797,6 +799,142 @@ O3 O 0.1600 0.1100 0.0000 1.00
 
 
 # ──────────────────────────────────────────────────────────────
+# d 值区间匹配 / 峰串解析 的向量化辅助 (0.9.12 检索加速)
+# ──────────────────────────────────────────────────────────────
+#
+# `CIFDatabase.search_cod_by_d_peaks` 的扫描层原本是逐相 Python 循环。
+# 对 COD 无机库全表 (71,199 相, 平均每相 266 个参考峰, 合计 1,900 万个
+# 峰值) × 50 个测量峰实测, 四个热点为:
+#   · 峰串解析 [float(x) for x in s.split(",")]        ~10.3s
+#   · 逐相 sorted(range(n), key=lambda k: i[k])         ~8s
+#   · _tol() 标量函数调用 1,367 万次                     ~5.9s
+#   · 去重 any(...) 生成器 + 逐峰 bisect_left 循环        ~5.6s
+# 下面这几个 helper 把前三项换成 NumPy 批量操作; 第四项每相最多 12 项,
+# 仍是顺序贪心, 但去掉了逐项 _tol() 调用。
+#
+# **语义必须与旧实现逐条一致** —— 包括并列时的先后、去重顺序、
+# n_matched_meas 的"最左命中下标去重"口径、以及 max() 对 NaN 的处理。
+# 由 tests/test_cod_vectorized.py 直接 import git 上一版模块作为 oracle
+# 逐字段比对守住。
+
+
+def _parse_float_csv(s) -> np.ndarray:
+    """把 ``"3.13,1.92,1.63"`` 形式的峰串解析成 float64 数组。
+
+    等价于旧实现 ``[float(x) for x in s.split(",") if x.strip()]``:
+    空字段/纯空白字段被丢弃, 字段两侧空白被忽略。
+
+    若传入 bytes/bytearray/memoryview (数据库以 BLOB 存 float64 时的形态),
+    直接 ``np.frombuffer`` 零拷贝解释, 不做文本解析。
+
+    注意不要用 ``np.fromstring(s, sep=",")`` —— 它对本函数的输入**不**
+    等价: ``"4.9,  ,2.4"`` 会被解析成 ``[4.9, -1.0, 2.4]`` (凭空注入一个
+    -1 Å 假峰), ``"4.9,,2.4"`` 则会被静默截断成 ``[4.9]``。对衍射数据
+    而言这两种失败模式都不可接受。
+    """
+    if isinstance(s, (bytes, bytearray, memoryview)):
+        return np.frombuffer(s, dtype=np.float64)
+    try:
+        return np.array(s.split(","), dtype=np.float64)
+    except ValueError:
+        # 含空字段等畸形输入 → 回退到与旧实现完全一致的逐项过滤解析
+        return np.fromiter(
+            (float(x) for x in s.split(",") if x.strip()), dtype=np.float64
+        )
+
+
+def _tol_scalar(d, tol_abs: float, trel: float, use_rel: bool) -> float:
+    """单个 d 值的有效容差。
+
+    对应旧实现 ``tolerance if _trel <= 0.0 else max(tolerance, _trel * d)``。
+    用 ``v > tol_abs`` 而不是内置 ``max()`` 之外的写法, 是为了连 NaN 的
+    行为都一致 (``max(tol, nan)`` 返回 ``tol``, 因为 ``nan > tol`` 为假)。
+    """
+    if not use_rel:
+        return tol_abs
+    v = trel * d
+    return v if v > tol_abs else tol_abs
+
+
+def _interval_hit(sorted_data, lo, hi) -> np.ndarray:
+    """对每个查询区间 ``[lo[i], hi[i]]``, 判断升序数组是否有元素落入其中。
+
+    返回长度 ``len(lo)`` 的布尔掩码。等价于旧实现的
+
+        idx = bisect.bisect_left(data, lo)
+        if idx < len(data) and data[idx] <= hi: ...
+
+    Args:
+        sorted_data: 升序排列的数据数组 (已排序, 本函数不再排序)
+        lo, hi: 查询区间下/上界, 与查询一一对应
+    """
+    data = np.asarray(sorted_data, dtype=np.float64)
+    lo_a = np.asarray(lo, dtype=np.float64)
+    hi_a = np.asarray(hi, dtype=np.float64)
+    if data.size == 0:
+        return np.zeros(lo_a.shape, dtype=bool)
+    pos = np.searchsorted(data, lo_a, side="left")
+    in_range = pos < data.size
+    # 越界下标钳到末位, 只为让下面的 gather 合法; in_range 已排除这些项
+    return in_range & (data[np.minimum(pos, data.size - 1)] <= hi_a)
+
+
+def _match_positions(sorted_data, lo, hi):
+    """同 :func:`_interval_hit`, 但额外返回每个区间的命中下标。
+
+    返回 ``(hit, pos)``:``hit`` 是布尔掩码, ``pos`` 是全长度下标数组 ——
+    只有 ``hit`` 为真的位置有意义, 其余位置的下标不可用 (被钳过)。
+
+    旧实现把 ``bisect.bisect_left(data, lo)`` (即区间内**最左**命中点的
+    下标) 收进集合再去重计数, 所以调用方只需 ``pos[hit]`` 即可复刻
+    ``len(matched_meas_idx)`` 口径 —— 多个参考峰指向同一个最左命中点时
+    只算一个。
+    """
+    data = np.asarray(sorted_data, dtype=np.float64)
+    lo_a = np.asarray(lo, dtype=np.float64)
+    hi_a = np.asarray(hi, dtype=np.float64)
+    n = data.size
+    if n == 0:
+        return (np.zeros(lo_a.shape, dtype=bool),
+                np.zeros(lo_a.shape, dtype=np.intp))
+    pos = np.searchsorted(data, lo_a, side="left")
+    hit = (pos < n) & (data[np.minimum(pos, n - 1)] <= hi_a)
+    return hit, pos
+
+
+def _dedupe_by_tol(ds, tol_abs: float, trel: float, use_rel: bool) -> list[float]:
+    """按给定顺序贪心去重近重复 d 值, 返回纯 Python list。
+
+    严格复刻旧实现:
+
+        for d, _i in top_pairs:            # 已按 I 降序
+            if not any(abs(d - ud) <= _tol(d) for ud in unique_top_d):
+                unique_top_d.append(d)
+
+    两个易错点必须保住:
+      · 容差取**候选 d 自身**的 ``_tol(d)``, 不是已保留项的 —— 判据不对称
+      · 比较是 ``<=``, 且顺序敏感 (先到者留下)
+
+    返回 list 而非 ndarray:调用方要用 ``if unique_top_d:`` 判空,
+    ndarray 的长度 >1 时真值判断会抛 ValueError。
+    """
+    tols = (
+        [tol_abs if not (trel * d > tol_abs) else trel * d for d in ds]
+        if use_rel else None
+    )
+    unique: list[float] = []
+    for i, d in enumerate(ds):
+        t = tol_abs if tols is None else tols[i]
+        for u in unique:
+            du = d - u
+            if -t <= du <= t:
+                break
+        else:
+            unique.append(d)
+    return unique
+
+
+# ──────────────────────────────────────────────────────────────
 # CIFDatabase 类
 # ──────────────────────────────────────────────────────────────
 
@@ -1469,19 +1607,19 @@ class CIFDatabase:
         conn = self._get_cod_conn()
         if conn is None or not measured_d:
             return []
-        import bisect
 
         # ── 有效容差: 绝对下限 + 相对分量 (0.9.11) ────────────────
         # 纯绝对 d 容差在 2θ 空间里极不均匀: 固定 0.02 Å 在 d=4 Å (2θ≈22°)
         # 只对应 ~0.11° 的 2θ 窗口 (比峰宽还窄 → 漏配真峰), 而在 d=1 Å
         # (2θ≈101°) 却对应 ~2.8° (过宽 → 误配)。相对分量 tol_rel·d 让
         # 高角度收紧、低角度放宽, 与"恒定 2θ 窗口"的物理直觉一致。
+        # 标量写法与数组写法两个入口分别由 _tol_scalar / np.maximum 承担,
+        # 二者对正常取值一致 (NaN 的差别见 _tol_scalar 文档)。
         _trel = float(tolerance_rel or 0.0)
+        use_rel = _trel > 0.0
+        tol_abs = float(tolerance)
 
-        def _tol(d: float) -> float:
-            return tolerance if _trel <= 0.0 else max(tolerance, _trel * d)
-
-        # 预排序测量 d 值,用 bisect 加速区间匹配
+        # 预排序测量 d 值, 区间匹配全部走 searchsorted
         meas_sorted = sorted(measured_d)
         n_meas = len(meas_sorted)
         # 若提供 measured_i,做强度加权召回与主峰匹配。需保持 d↔I 对应关系。
@@ -1502,6 +1640,13 @@ class CIFDatabase:
             meas_i_sorted = None
             total_i = 0.0
             main_meas_d = None
+        # ── 0.9.11+: 扫描层向量化 ────────────────────────────
+        # 四个热点的定位与替换策略见本模块 `_parse_float_csv` 上方的
+        # 模块级注释。语义**逐条对齐**旧实现 (含并列时的先后、去重顺序、
+        # 计数口径), 由 tests/test_cod_vectorized.py 以 git 上一版模块为
+        # oracle 逐字段比对守住。
+        md = np.asarray(meas_sorted, dtype=np.float64)
+        mi_np = np.asarray(meas_i_sorted, dtype=np.float64) if use_intensity else None
         results: list[dict] = []
         cur = conn.execute(
             "SELECT cod_id, ref_id, display_id, formula, space_group, n_peaks, "
@@ -1525,99 +1670,76 @@ class CIFDatabase:
             peaks_i_str = row["peaks_i"]
             if not peaks_d_str or not peaks_i_str:
                 continue
-            ref_d_all = [float(x) for x in peaks_d_str.split(",") if x.strip()]
-            ref_i_all = [float(x) for x in peaks_i_str.split(",") if x.strip()]
-            n_peaks = row["n_peaks"]
-            # 取 I 值最高的前 max_ref_peaks 个峰(用于广覆盖反向匹配)
-            indexed = sorted(
-                range(len(ref_i_all)),
-                key=lambda k: ref_i_all[k],
-                reverse=True,
-            )[:max_ref_peaks]
-            ref_d = [ref_d_all[k] for k in indexed if k < len(ref_d_all)]
-            n_ref_used = len(ref_d)
-            # 反向匹配:测量峰中被主要参考峰(前 max_ref_peaks)覆盖的数量
-            matched_meas_idx: set[int] = set()
-            for d in ref_d:
-                t = _tol(d)
-                idx = bisect.bisect_left(meas_sorted, d - t)
-                if idx < len(meas_sorted) and meas_sorted[idx] <= d + t:
-                    matched_meas_idx.add(idx)
-            n_matched_meas = len(matched_meas_idx)
+            d_np = _parse_float_csv(peaks_d_str)
+            i_np = _parse_float_csv(peaks_i_str)
+            if d_np.size == 0 or i_np.size == 0:
+                continue
+            n_i = i_np.size
+            n_d = d_np.size
+            # 强度降序 (kind="stable" ⇒ 并列时保持原始先后, 与
+            # sorted(..., key=..., reverse=True) 的稳定性一致)
+            order = np.argsort(-i_np, kind="stable")
+            # 取 I 值最高的前 max_ref_peaks 个峰 (与原实现同样只在
+            # k < len(ref_d_all) 的范围内有效)
+            sel = order[:max_ref_peaks]
+            if n_i > n_d:
+                sel = sel[sel < n_d]
+            ref_d = d_np[sel]
+            n_ref_used = int(ref_d.size)
+            # 反向匹配: 测量峰中被主要参考峰覆盖的数量
+            t_ref = (np.maximum(tol_abs, _trel * ref_d) if use_rel
+                     else np.full(n_ref_used, tol_abs))
+            hit_ref, pos_ref = _match_positions(md, ref_d - t_ref, ref_d + t_ref)
+            n_matched_ref = int(hit_ref.sum())
+            # 去重后 = "被覆盖的测量峰个数" (多个参考峰可命中同一测量峰;
+            # pos_ref 中未命中的位置无意义, 先按 hit_ref 掩掉)
+            n_matched_meas = int(np.unique(pos_ref[hit_ref]).size)
             if n_matched_meas < min_match:
                 continue
-            # ── top_recall:取最强的少数峰(去重后),看测量峰是否就是物相最强峰 ──
-            # 低对称物相会产出大量近重复 d 值(同一 d 的多个 hkl),
-            # 用去重后的"最强 N_top 个独立峰"判断:测得峰是否落在物相最强峰里。
-            n_top = min(len(ref_i_all), max(n_meas + 2, 8), 12)
-            top_idx = sorted(
-                range(len(ref_i_all)),
-                key=lambda k: ref_i_all[k],
-                reverse=True,
-            )[:n_top]
-            # 按 I 降序处理,保留强度更高者,丢弃 ±tolerance 内的近重复
-            top_pairs = sorted(
-                ((ref_d_all[k], ref_i_all[k]) for k in top_idx if k < len(ref_d_all)),
-                key=lambda p: -p[1],
-            )
-            unique_top_d: list[float] = []
-            for d, _i in top_pairs:
-                if not any(abs(d - ud) <= _tol(d) for ud in unique_top_d):
-                    unique_top_d.append(d)
-            # 测量峰中有多少落在"物相最强去重峰"内
-            n_meas_in_top = 0
-            # 强度加权召回率:被物相最强去重峰覆盖的测量峰强度之和
-            covered_i_sum = 0.0
-            for k_md, md in enumerate(meas_sorted):
-                t_md = _tol(md)
-                lo = md - t_md
-                hi = md + t_md
-                hit = False
-                for ud in unique_top_d:
-                    if lo <= ud <= hi:
-                        hit = True
-                        break
-                if hit:
-                    n_meas_in_top += 1
-                    if use_intensity:
-                        covered_i_sum += meas_i_sorted[k_md]
+            # ── top_recall: 物相最强的少数峰 (去重后) ──
+            n_top = min(n_i, max(n_meas + 2, 8), 12)
+            top_sel = order[:n_top]
+            if n_i > n_d:
+                top_sel = top_sel[top_sel < n_d]
+            # 按 I 降序处理 (并列保持原顺序), 丢弃 ±tolerance 内的近重复
+            top_d = d_np[top_sel[np.argsort(-i_np[top_sel], kind="stable")]]
+            unique_top_d = _dedupe_by_tol(top_d, tol_abs, _trel, use_rel)
+            # 测量峰中有多少落在"物相最强去重峰"内 (窗口以测量峰为中心)
+            if unique_top_d:
+                ud = np.asarray(unique_top_d, dtype=np.float64)
+                t_md = (np.maximum(tol_abs, _trel * md) if use_rel
+                        else np.full(n_meas, tol_abs))
+                hit_m = _interval_hit(np.sort(ud), md - t_md, md + t_md)
+                n_meas_in_top = int(hit_m.sum())
+                covered_i_sum = float(mi_np[hit_m].sum()) if use_intensity else 0.0
+                # main_peak_match: 物相最强去重峰是否落在样品最强峰窗口内
+                if use_intensity:
+                    phase_main_d = float(ud[0])
+                    t_main = max(_tol_scalar(phase_main_d, tol_abs, _trel, use_rel),
+                                 _tol_scalar(main_meas_d, tol_abs, _trel, use_rel))
+                    main_peak_match = (
+                        1.0 if abs(phase_main_d - main_meas_d) <= t_main else 0.0
+                    )
+                else:
+                    main_peak_match = 0.0
+                # top_precision: 最强前 5 个去重峰中有多少被观察到 (窗口以物相峰为中心)
+                k5 = ud[:5]
+                t5 = (np.maximum(tol_abs, _trel * k5) if use_rel
+                      else np.full(k5.size, tol_abs))
+                n_top_observed = int(_interval_hit(md, k5 - t5, k5 + t5).sum())
+                top_precision = n_top_observed / float(k5.size)
+            else:
+                n_meas_in_top = 0
+                covered_i_sum = 0.0
+                main_peak_match = 0.0
+                n_top_observed = 0
+                top_precision = 0.0
             top_recall = n_meas_in_top / n_meas if n_meas else 0.0
             # 强度加权 top_recall:加权和/总强度(0..1)
             intensity_weighted_top_recall = (
                 covered_i_sum / total_i if (use_intensity and total_i > 0) else 0.0
             )
-            # main_peak_match:物相最强去重峰是否落在样品最强峰 ±tolerance 内
-            if use_intensity and unique_top_d:
-                phase_main_d = unique_top_d[0]
-                t_main = max(_tol(phase_main_d), _tol(main_meas_d))
-                main_peak_match = (
-                    1.0 if abs(phase_main_d - main_meas_d) <= t_main else 0.0
-                )
-            else:
-                main_peak_match = 0.0
-            # top_precision:物相最强的前 K 个去重峰中有多少"被观察到"
-            # (Hanawalt 思想:最强线必须出现在样品中)。低对称/含近重复峰的
-            # 物相若最强线不在样品中,precision 低 → 不应被选为主物相。
-            top_k_d = unique_top_d[:5]
-            n_top_observed = 0
-            for ud in top_k_d:
-                t_ud = _tol(ud)
-                lo = ud - t_ud
-                hi = ud + t_ud
-                idx = bisect.bisect_left(meas_sorted, lo)
-                if idx < len(meas_sorted) and meas_sorted[idx] <= hi:
-                    n_top_observed += 1
-            top_precision = n_top_observed / len(top_k_d) if top_k_d else 0.0
             recall = n_matched_meas / n_meas if n_meas else 0.0
-            # 正向匹配率(前 max_ref_peaks 中匹配测量峰的比例,仅参考)
-            n_matched_ref = 0
-            for d in ref_d:
-                t_d = _tol(d)
-                lo = d - t_d
-                hi = d + t_d
-                idx = bisect.bisect_left(meas_sorted, lo)
-                if idx < len(meas_sorted) and meas_sorted[idx] <= hi:
-                    n_matched_ref += 1
             ref_ratio = n_matched_ref / n_ref_used if n_ref_used else 0.0
             # 主得分:top_precision(物相最强线被观察到?)占主导,top_recall 次之
             score = top_precision * 100.0 + top_recall * 10.0 + recall
@@ -1627,14 +1749,14 @@ class CIFDatabase:
                 "display_id": row["display_id"],
                 "formula": row["formula"],
                 "space_group": row["space_group"],
-                "n_peaks": n_peaks,
+                "n_peaks": row["n_peaks"],
                 "n_ref_used": n_ref_used,
                 "n_matched_ref": n_matched_ref,
                 "n_matched_meas": n_matched_meas,
                 "n_meas_in_top": n_meas_in_top,
                 "n_top_unique": len(unique_top_d),
                 "n_top_observed": n_top_observed,
-                "n_top_k": len(top_k_d),
+                "n_top_k": int(min(len(unique_top_d), 5)),
                 "top_recall": top_recall,
                 "top_precision": top_precision,
                 "intensity_weighted_top_recall": intensity_weighted_top_recall,
