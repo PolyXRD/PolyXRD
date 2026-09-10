@@ -1104,10 +1104,18 @@ class PhaseIdentifier:
                 continue
 
             formula = detail.get("formula", "") or ""
+            # 名称优先级: 矿物名 (Match! 习惯) > PDF2 主名称 > 化学式。
+            # 主名称常见 "Calcium Carbonate Oxide" 这类冗长写法, 矿物名
+            # "Calcite" 更贴近检索习惯。
+            disp_name = (
+                detail.get("mineral") or detail.get("name") or formula
+            ).strip()
             phase = Phase(
-                name=f"{formula} (PDF2 {c['cod_id']})",
+                name=f"{disp_name} (PDF2 {c['cod_id']})" if disp_name
+                else f"PDF2 {c['cod_id']}",
                 formula=formula,
-                space_group=detail.get("space_group", ""),
+                space_group=detail.get("space_group", "") or "",
+                lattice=pdb.get_lattice(c["cod_id"]),
                 reference_peaks=ref_peaks,
                 elements=elements_from_db_formula(formula),
             )
