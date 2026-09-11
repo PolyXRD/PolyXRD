@@ -494,6 +494,19 @@ class RietveldRefiner:
         """
         from scipy.optimize import least_squares
 
+        # 进度回调 (可选): 多起点与稀疏抛光都是纯 Python 嵌套循环, 累计耗时可达数十秒。
+        # 回调让 UI 层能借此周期性地泵事件 —— 否则主线程一直不处理消息, Windows 会
+        # 把窗口标成"未响应", 用户就会以为程序卡死并反复点击。
+        progress_cb = kwargs.get("progress_cb")
+
+        def _tick(done: int, total: int) -> None:
+            if progress_cb is None:
+                return
+            try:
+                progress_cb(done, total)
+            except Exception:  # noqa: BLE001 - 进度回调失败不该影响精修本身
+                pass
+
         # ── 0. 快速路径: 无 Caglioti 快检, wR 达标即返回 ────────────
         wR_threshold = kwargs.get("wR_threshold", 55.0)
         best_quick: Optional[RefinementResult] = None
@@ -722,8 +735,9 @@ class RietveldRefiner:
         best_wR = float("inf")
         best_simulated = None
 
-        for x0_i in candidates:
+        for _start_i, x0_i in enumerate(candidates):
             x0_clipped = np.clip(x0_i, lower + 1e-8, upper - 1e-8)
+            _tick(_start_i, n_starts + 1)
             try:
                 res_opt = least_squares(
                     residual, x0_clipped, bounds=(lower, upper),
@@ -762,9 +776,11 @@ class RietveldRefiner:
 
         # ── 7. v7 局部抛光 (性能+效果平衡) ───────────────────────
         #    取 24 个手工方向 + 9 个 Caglioti 调整方向，而不是 3^8 网格
+        _tick(n_starts, n_starts + 1)   # 多起点跑完, 进入抛光阶段
         try:
             cur_x = np.array(best_result.x, dtype=float)
             best_polish_x = cur_x.copy()
+            _polish_n = 0   # 抛光评估计数 (用于按固定间隔汇报进度)
             # 各参数步长（相对值）
             w_mult  = [0.9, 1.0, 1.1]
             fw_mult = [0.92, 1.0, 1.08]
@@ -823,6 +839,11 @@ class RietveldRefiner:
                                         caglioti=_ucag
                                     )
                                     wr_t = self._calc_wR(intensity, sim_t + bg)
+                                    # 每 8 次评估汇报一次: 抛光约百余次评估, 采样过密
+                                    # 会让 processEvents 本身成为开销
+                                    _polish_n += 1
+                                    if _polish_n % 8 == 0:
+                                        _tick(n_starts + 1, n_starts + 1)
                                     if wr_t < best_wR:
                                         best_wR = wr_t
                                         best_polish_x = x_t

@@ -165,6 +165,19 @@ translations = {
     "action": {
         "strip_kalpha2": "Strip Kα2",
     },
+    "busy": {
+        "title": "Please Wait",
+        "working": "Working, please wait…",
+        "hint": "The window may stop responding while this runs. Please do not click again.",
+        "progress": "Working… ({done}/{total})",
+        "peak_search": "Searching for peaks, please wait…",
+        "peak_search_hi": "High-precision peak search (background removal + sub-step refinement), please wait…",
+        "peak_fit": "Fitting peaks, please wait…",
+        "identify": "Identifying phases, please wait…",
+        "identify_profile": "Identifying phases by profile fitting, please wait…",
+        "refine": "Running Rietveld refinement, please wait…",
+        "repeat_ignored": "A task is already running; please wait for it to finish",
+    },
     "dialog": {
         "open_file_title": "Open XRD Data File",
         "confirm_clear_data": "Clear the current data?\nThis also clears detected peaks, phases and refinement results.",

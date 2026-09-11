@@ -48,6 +48,7 @@ from polyxrd.services.cif_database import CIFDatabase
 from polyxrd.services.cod_searcher import CODSearcher, CODEntry
 from polyxrd.services.refinement_templates import RefinementTemplateManager
 from polyxrd.services.rietveld_refiner import RietveldRefiner
+from polyxrd.views.widgets.busy_indicator import BusyIndicator, busy
 
 
 class RefinementWizard(QWidget):
@@ -880,48 +881,66 @@ class RefinementWizard(QWidget):
                 )
             )
 
-        try:
-            self._log(
-                tr("wizard.execute_page.log_engine", engine=config["engine"])
-            )
-            self._log(
-                tr("wizard.execute_page.log_strategy", strategy=config["strategy"])
-            )
+        # 精修是主线程同步长任务。不弹提示时用户会以为程序卡死而反复点击, 那些点击
+        # 并不会消失, 而是积压在消息队列里, 等本轮结束、按钮刚被重新启用的瞬间被
+        # 一次性投递 → 又叠起一轮精修 → "程序未响应" 乃至崩溃。闸门一直持到积压
+        # 输入被排空为止 (排空逻辑见 BusyIndicator._drain_then_hide)。
+        error_text: Optional[str] = None
+        with busy(self, tr("busy.refine")) as acquired:
+            if not acquired:  # 已有长任务在跑 → 忽略这次重复触发
+                self._log(tr("busy.repeat_ignored"))
+                return
+            try:
+                self._log(
+                    tr("wizard.execute_page.log_engine", engine=config["engine"])
+                )
+                self._log(
+                    tr("wizard.execute_page.log_strategy", strategy=config["strategy"])
+                )
 
-            self.refinement_progress.emit(10)
-            self._progress_bar.setValue(10)
+                self.refinement_progress.emit(10)
+                self._progress_bar.setValue(10)
+                BusyIndicator.pump()
 
-            result = self._refiner.refine(
-                data_to_refine,
-                self._selected_phases,
-                strategy=config["strategy"],
-                engine=config["engine"],
-                max_cycles=config["max_cycles"],
-                **config.get("params", {}),
-            )
+                refine_kwargs = dict(config.get("params", {}))
+                # 让多起点/抛光循环把轮次回吐给忙碌窗, 用户能看到"在动"
+                refine_kwargs["progress_cb"] = BusyIndicator.progress_tick
+                result = self._refiner.refine(
+                    data_to_refine,
+                    self._selected_phases,
+                    strategy=config["strategy"],
+                    engine=config["engine"],
+                    max_cycles=config["max_cycles"],
+                    **refine_kwargs,
+                )
 
-            self.refinement_progress.emit(90)
-            self._progress_bar.setValue(90)
+                self.refinement_progress.emit(90)
+                self._progress_bar.setValue(90)
+                BusyIndicator.pump()
 
-            self._display_result(result)
+                self._display_result(result)
 
-            self._progress_bar.setValue(100)
-            self._progress_status.setText(tr("wizard.execute_page.status_done"))
-            self._log(tr("wizard.execute_page.log_done"))
+                self._progress_bar.setValue(100)
+                self._progress_status.setText(tr("wizard.execute_page.status_done"))
+                self._log(tr("wizard.execute_page.log_done"))
 
-            self.refinement_finished.emit(result)
-            self.wizard_completed.emit(result)
+                self.refinement_finished.emit(result)
+                self.wizard_completed.emit(result)
 
-        except Exception as e:
-            self._progress_status.setText(tr("wizard.execute_page.status_failed"))
-            self._log(tr("wizard.execute_page.log_failed", error=str(e)))
+            except Exception as e:
+                self._progress_status.setText(tr("wizard.execute_page.status_failed"))
+                self._log(tr("wizard.execute_page.log_failed", error=str(e)))
+                # 弹窗推迟到闸门撤掉之后: 忙碌窗是置顶应用级模态, 此刻弹会被它盖住
+                error_text = str(e)
+            finally:
+                self._btn_start_refine.setEnabled(True)
+
+        if error_text is not None:
             QMessageBox.critical(
                 self,
                 tr("dialog.error"),
-                tr("error.refine_failed", error=str(e)),
+                tr("error.refine_failed", error=error_text),
             )
-        finally:
-            self._btn_start_refine.setEnabled(True)
 
     def _display_result(self, result: RefinementResult) -> None:
         self._label_wr.setText(f"{result.wR:.3f} %")

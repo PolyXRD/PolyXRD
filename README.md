@@ -129,7 +129,7 @@ PolyXRD/
 │   │   ├── structure_simulator.py  # 计算 XRD 图谱 (Lorentz-Polarization + B 因子)
 │   │   ├── rir.py                  # RIR 半定量
 │   │   ├── crystallite.py          # 微晶尺寸 / 微观应变
-│   │   ├── background.py           # 后台任务管理
+│   │   ├── background.py           # 背景估计 (SNIP / 多项式 / 控制点插值, M04)
 │   │   ├── report.py               # 报告生成
 │   │   ├── project_service.py      # .polyxrd 项目读写
 │   │   ├── export_service.py       # CSV/PNG/SVG/PDF 导出
@@ -149,7 +149,8 @@ PolyXRD/
 │           ├── pattern_display.py        # 图谱画布
 │           ├── plot_widget.py            # 绘图控件
 │           ├── peak_table.py             # 峰表
-│           └── peak_match_table.py       # 峰匹配表
+│           ├── peak_match_table.py       # 峰匹配表
+│           └── busy_indicator.py         # ★ 长任务忙碌提示 + 防重入闸门
 │
 ├── scripts/                    # 交付性构建脚本
 │   ├── PolyXRD-Setup.iss           # Inno Setup 安装脚本
