@@ -9,7 +9,7 @@ from typing import Optional
 
 import numpy as np
 
-from polyxrd.models.peak import FitResult, Peak, PeakList
+from polyxrd.models.peak import FitResult, Peak
 from polyxrd.models.xrd_data import XRDData
 
 

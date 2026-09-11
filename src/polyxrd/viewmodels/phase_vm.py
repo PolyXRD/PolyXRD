@@ -9,7 +9,7 @@ from typing import Optional
 
 from PySide6.QtCore import QObject, Signal
 
-from polyxrd.models.peak import Peak, PeakList
+from polyxrd.models.peak import PeakList
 from polyxrd.models.phase import Phase, PhaseMatchResult
 from polyxrd.services.peak_finder import PeakFinder
 from polyxrd.services.phase_identifier import PhaseIdentifier

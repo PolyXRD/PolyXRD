@@ -141,10 +141,13 @@ if %errorlevel% neq 0 (
 echo.
 echo [步骤 5/6] 校验产物 + 生成三个独立外挂数据库 ZIP + 计算 SHA-256...
 echo.
-echo [信息] 三个库各自成包 (用户按需只下一个):
+echo [信息] 库各自成包 (用户按需只下一个):
 echo          PolyXRD-v%APPVER%-Databases-COD-inorg.zip  (COD 无机物库, 主检索库)
 echo          PolyXRD-v%APPVER%-Databases-COD-full.zip   (COD 全库索引)
-echo          PolyXRD-v%APPVER%-Databases-PDF2.zip       (PDF2-2004 库)
+echo          PolyXRD-v%APPVER%-Databases-PDF2.zip       (PDF2-2004 库)  ^<-- 本地自用
+echo.
+echo [重要] PDF2-2004 是 ICDD 版权商品库: 上面这个 PDF2 包**仅作本地归档**,
+echo        永远不要上传到 GitHub / Release。发布时只传 Setup + Portable + 两个 COD 包。
 echo.
 
 set PWSH=pwsh
@@ -164,10 +167,10 @@ PolyXRD v%APPVER% Release
 Build Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
 Version    : %APPVER%
 ICU: 依赖系统 icuuc shim (PySide6 6.11 不自带 ICU)
-Databases: 外挂, 且三库各自独立打包 (随包不含数据库)。按需只下一个:
+Databases: 外挂, 且各库独立打包 (随包不含数据库)。按需只下一个:
            PolyXRD-v%APPVER%-Databases-COD-inorg.zip  COD 无机物库 (主检索库, 推荐)
            PolyXRD-v%APPVER%-Databases-COD-full.zip   COD 全库索引
-           PolyXRD-v%APPVER%-Databases-PDF2.zip       PDF2-2004 库
+           PDF2-2004: ICDD 版权库, 不随 Release 分发, 由持授权用户自行准备。
            解压后在菜单「数据库 ▸ 外挂数据库管理…」逐个导入 (可只挂其中一个)。
            未导入时仅内置 118 种参考物相可用。
 Icon: 品牌化应用图标 (crystal-mark + XRD 配色, 多分辨率 ICO)

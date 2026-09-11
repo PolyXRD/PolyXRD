@@ -17,7 +17,7 @@ from enum import Enum
 from typing import Optional
 
 from PySide6.QtCore import Qt, Signal, QSize
-from PySide6.QtGui import QPainter, QColor, QBrush, QPen, QFont
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QWidget,
     QGridLayout,

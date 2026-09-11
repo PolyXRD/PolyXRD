@@ -110,6 +110,7 @@ translations = {
             "仅内置的 118 种参考物相可用。"
         ),
         "pkg_hint": "下载包：{pkg}　→　解压出 {file}",
+        "pkg_hint_local": "本库不随发布包分发：请自行准备 {file} 后在此导入",
         "recheck": "重新检测",
         "import": "导入…",
         "clear": "取消挂载",
@@ -152,10 +153,10 @@ translations = {
         "first_run_title": "尚未导入数据库",
         "first_run_body": (
             "从 0.10.0 起，安装包不再内置数据库。\n\n"
-            "三个数据库各自独立打包下载，需要哪个下哪个：\n"
+            "数据库各自独立打包，需要哪个下哪个：\n"
             "　· COD 无机物库　…-Databases-COD-inorg.zip\n"
             "　· COD 全库索引　…-Databases-COD-full.zip\n"
-            "　· PDF2-2004 库　…-Databases-PDF2.zip\n\n"
+            "　· PDF2-2004 库　不提供下载（ICDD 版权库，需自行准备）\n\n"
             "解压后从菜单「数据库 ▸ 外挂数据库管理…」逐个导入。\n"
             "未导入数据库时，程序仍可使用内置的 118 种参考物相。"
         ),

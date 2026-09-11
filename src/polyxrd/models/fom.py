@@ -6,7 +6,7 @@ FoM (Figure of Merit) 匹配结果模型
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass

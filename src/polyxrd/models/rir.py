@@ -5,7 +5,6 @@ RIR 半定量模型 (M13)
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 @dataclass
