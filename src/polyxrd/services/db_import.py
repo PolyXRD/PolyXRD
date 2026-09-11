@@ -41,6 +41,10 @@ class DBKind:
     # 发布用独立下载包的文件名后缀 —— 三个库各自打包, 用户按槽位挑一个下即可。
     # 存"后缀"而不是完整文件名, 是为了不把版本号硬编码进源码。
     pkg_suffix: str = ""
+    #: 可选: 该库需要额外展示的"授权/合规提示" i18n 键。
+    #: PDF2-2004 是 ICDD 的商业数据库, 我们只做格式转换与离线索引, 不附带任何
+    #: 授权 —— 因此必须把"请自行确认正版授权"写在导入界面上, 而不是藏在许可协议里。
+    notice_key: str = ""
 
 
 # 顺序即优先级: 先匹配到的为准
@@ -65,6 +69,7 @@ DB_KINDS: tuple[DBKind, ...] = (
         signature=("pearson", "name"),
         excludes=(),
         pkg_suffix="Databases-PDF2.zip",
+        notice_key="db_manager.notice.pdf2",
     ),
     DBKind(
         key="cod_index",

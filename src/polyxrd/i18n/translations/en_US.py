@@ -149,6 +149,15 @@ translations = {
             "pdf2": "PDF2-2004 Database",
             "cod_index": "COD Full Index",
         },
+        "notice": {
+            "pdf2": (
+                "[Please confirm you hold a valid licence] PDF2-2004 is a "
+                "commercial database from ICDD. This software only provides "
+                "format conversion and an offline index, and conveys no "
+                "licence of any kind - please make sure you are properly "
+                "licensed before use."
+            ),
+        },
         "first_run_title": "No Database Imported Yet",
         "first_run_body": (
             "Starting with 0.10.0 the installer no longer bundles any database.\n\n"

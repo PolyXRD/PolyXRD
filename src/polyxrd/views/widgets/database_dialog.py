@@ -108,6 +108,20 @@ class DatabaseManagerDialog(QDialog):
         pkg_lbl.setWordWrap(True)
         pkg_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         info.addWidget(pkg_lbl)
+
+        # 授权/合规提示 (目前只有 PDF2-2004 需要): 该库是 ICDD 的商业数据库,
+        # 我们只做格式转换与离线索引、不附带任何授权, 所以把"请确认正版授权"
+        # 直接摆在导入按钮旁边 —— 用户是在这里点的「导入…」, 提示放这里才有用。
+        notice_key = getattr(kind, "notice_key", "")
+        if notice_key:
+            notice = QLabel(tr(notice_key))
+            notice.setWordWrap(True)
+            notice.setStyleSheet("color: #b9770e;")
+            notice.setTextInteractionFlags(
+                Qt.TextInteractionFlag.TextSelectableByMouse
+            )
+            info.addWidget(notice)
+
         info_w = QWidget()
         info_w.setLayout(info)
 
