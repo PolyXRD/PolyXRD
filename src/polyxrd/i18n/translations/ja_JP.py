@@ -305,6 +305,9 @@ translations = {
             "candidate_format": "{name} - FOM: {score}",
             "col_fom": "FOM",
             "col_confidence": "信頼度",
+            "hint_select_phase": "上の候補相をチェックすると、ここに参照ピークが表示されます",
+            "peaks_summary": "ピーク帰属: 説明済み {explained} / 未説明 {unexplained} (全 {total} ピーク)",
+            "mix_info": "多相混合分析 | 相関係数 {corr}% | R={r}",
             "periodic_table": {
                 "title": "元素周期表",
                 "must_have": "必須含む",

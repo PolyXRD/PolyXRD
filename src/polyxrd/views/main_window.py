@@ -48,7 +48,6 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QSplitter,
     QMenu,
-    QSizePolicy,
     QCheckBox,
 )
 
@@ -453,6 +452,18 @@ class MainWindow(QMainWindow):
     - QSettings 持久化
     """
 
+    #: ``saveState``/``restoreState`` 的状态版本。
+    #:
+    #: ⚠️ 改动它 = **作废旧版本保存的窗口状态** (Qt 版本不匹配时直接忽略)。
+    #: 曾踩过的坑: 旧版本保存的 windowState 里带着一条把工具栏宽度钉死的记录
+    #: (保存那一刻窗口较窄, 工具栏只有 ~788px), 恢复后窗口拉多宽工具栏都只有
+    #: 788px, 末尾十几个动作全被塞进右侧 "»" 溢出菜单, 整条工具栏还被顶到窗口
+    #: 右侧 —— 用户看到的就是"快捷按钮不在左边、还丢了一大半"。Qt 的
+    #: removeToolBar/addToolBar、改 objectName、重新 resize 都清不掉这条记录,
+    #: 唯一可靠的解法就是升版本号, 让这份脏状态作废。v2 起工具栏与停靠窗口都
+    #: 设了 objectName, 记录才真正按名字对上号。
+    _WINDOW_STATE_VERSION = 2
+
     def __init__(self, config: AppConfig) -> None:
         super().__init__()
         self._config = config
@@ -529,12 +540,15 @@ class MainWindow(QMainWindow):
 
     def _setup_toolbar(self) -> None:
         toolbar = QToolBar(tr("toolbar.main"))
+        toolbar.setObjectName("mainToolBar")
         toolbar.setIconSize(QSize(24, 24))
         toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         toolbar.setFloatable(False)
         toolbar.setMovable(False)
         toolbar.setContentsMargins(0, 0, 0, 0)
         self.addToolBar(Qt.ToolBarArea.TopToolBarArea, toolbar)
+        # 留引用: _load_settings 恢复持久化状态后要把工具栏重新挂回顶部区
+        self._toolbar = toolbar
 
         self._actions["open"] = QAction(tr("toolbar.open"), self)
         self._actions["open"].setShortcut(QKeySequence.Open)
@@ -619,17 +633,11 @@ class MainWindow(QMainWindow):
         self._set_action_icon(self._actions["export"], "export")
         toolbar.addAction(self._actions["export"])
 
-        spacer = QWidget()
-        spacer.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
-        )
-        spacer.setMinimumWidth(0)
-        toolbar.addWidget(spacer)
-
-        # 强制左对齐
-        toolbar_layout = toolbar.layout()
-        if toolbar_layout:
-            toolbar_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        # 工具栏左对齐: QToolBar 默认就把动作排在左侧, 不需要任何占位控件。
+        # ⚠️ 切勿在这里 addWidget 一个 Expanding 的空 QWidget —— 无 layout 的
+        # QWidget 默认 sizeHint 是 640×480, 会让工具栏 sizeHint 凭空多出 640px,
+        # 超过实际可用宽度后 Qt 会弹出右侧的 "»" 溢出菜单, 把末尾的
+        # 「导出报告」等动作藏进去 (桌面宽度充裕时也会藏, 看起来像随机丢按钮)。
 
     @staticmethod
     def _set_action_icon(action: QAction, icon_name: str) -> None:
@@ -640,6 +648,9 @@ class MainWindow(QMainWindow):
 
     def _setup_docks(self) -> None:
         self._params_dock = QDockWidget(tr("params.panel_title"), self)
+        # objectName 是 saveState/restoreState 用来识别停靠窗口的唯一依据;
+        # 不设的话 Qt 会告警, 且恢复时只能靠顺序猜, 容易把尺寸张冠李戴。
+        self._params_dock.setObjectName("paramsDock")
         self._params_dock.setAllowedAreas(
             Qt.DockWidgetArea.LeftDockWidgetArea
             | Qt.DockWidgetArea.RightDockWidgetArea
@@ -722,6 +733,7 @@ class MainWindow(QMainWindow):
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self._params_dock)
 
         self._phases_dock = QDockWidget(tr("params.phases_title"), self)
+        self._phases_dock.setObjectName("phasesDock")
         self._phases_dock.setAllowedAreas(
             Qt.DockWidgetArea.LeftDockWidgetArea
             | Qt.DockWidgetArea.RightDockWidgetArea
@@ -1619,7 +1631,15 @@ class MainWindow(QMainWindow):
 
         state = self._settings.value("windowState")
         if state:
-            self.restoreState(state)
+            # 版本不匹配 (旧版本存下的脏状态) 时 Qt 直接忽略, 工具栏拿到的是
+            # 全新布局 —— 按当前窗口宽度铺满并左对齐。
+            restored = False
+            try:
+                restored = bool(self.restoreState(state, self._WINDOW_STATE_VERSION))
+            except Exception:  # noqa: BLE001 - 老格式字节流可能直接抛错
+                restored = False
+            if restored:
+                self._reset_toolbar_layout()
 
         language = self._settings.value("language", Language.ZH_CN)
         if language and language != self._i18n.current_language:
@@ -1628,9 +1648,25 @@ class MainWindow(QMainWindow):
         wavelength = self._settings.value("wavelength", self._config.default_wavelength)
         self._wl_spin.setValue(float(wavelength))
 
+    def _reset_toolbar_layout(self) -> None:
+        """把工具栏重新挂回顶部区, 作为恢复状态后的兜底清理。
+
+        真正解决"工具栏被钉死"的是 ``_WINDOW_STATE_VERSION`` 升版本 ——
+        实测 ``removeToolBar`` + ``addToolBar`` **并不能**清掉状态里固化的工具栏
+        宽度 (改 objectName、重新 resize、``layout().invalidate()`` 同样无效)。
+        这里保留这一步只是因为代价极小: 万一将来某个版本的状态里混进了别的
+        工具栏几何, 重挂一次可以让它回到顶部区、重新铺满并按当前窗口宽度排布。
+        """
+        tb = getattr(self, "_toolbar", None)
+        if tb is None:
+            return
+        self.removeToolBar(tb)
+        self.addToolBar(Qt.ToolBarArea.TopToolBarArea, tb)
+        tb.setVisible(True)
+
     def _save_settings(self) -> None:
         self._settings.setValue("geometry", self.saveGeometry())
-        self._settings.setValue("windowState", self.saveState())
+        self._settings.setValue("windowState", self.saveState(self._WINDOW_STATE_VERSION))
         self._settings.setValue("language", self._i18n.current_language)
         self._settings.setValue("wavelength", self._wl_spin.value())
 
