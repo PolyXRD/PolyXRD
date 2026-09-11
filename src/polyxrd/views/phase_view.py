@@ -35,8 +35,10 @@ from PySide6.QtWidgets import (
     QFrame,
 )
 
+from polyxrd.i18n import tr
 from polyxrd.viewmodels.main_vm import MainViewModel
 from polyxrd.services import db_import
+from polyxrd.views.widgets.busy_indicator import busy
 from polyxrd.views.widgets.pattern_display import PatternDisplayWidget
 from polyxrd.views.widgets.peak_match_table import PeakMatchTable
 from polyxrd.views.widgets.element_filter_dialog import ElementFilterDialog
@@ -334,12 +336,15 @@ class PhaseView(QWidget):
 
     def _on_profile_fitting(self) -> None:
         """Profile Fitting 物相识别"""
-        self._current_method = "profile_fitting"
-        self._vm.identify_phases_profile_fitting(
-            element_filter=self._filter_dict if self._filter_dict else None,
-            top_n=10,
-            fwhm=self._fwhm_spin.value(),
-        )
+        with busy(self, tr("busy.identify_profile")) as acquired:
+            if not acquired:
+                return
+            self._current_method = "profile_fitting"
+            self._vm.identify_phases_profile_fitting(
+                element_filter=self._filter_dict if self._filter_dict else None,
+                top_n=10,
+                fwhm=self._fwhm_spin.value(),
+            )
 
     # ------------------------------------------------------------------
     # 传统 Search/Match (需要先寻峰)
@@ -457,20 +462,27 @@ class PhaseView(QWidget):
 
     def _on_traditional_identify(self) -> None:
         """传统物相识别"""
-        self._current_method = "fom"
-        self._vm.identify_phases(
-            element_filter=self._filter_dict if self._filter_dict else None,
-            top_n=10,
-            db_source=self._current_db_source(),
-        )
+        # COD 全库检索在 11 万条目上要跑近 10 秒, 必须给反馈 + 挡重入
+        with busy(self, tr("busy.identify")) as acquired:
+            if not acquired:
+                return
+            self._current_method = "fom"
+            self._vm.identify_phases(
+                element_filter=self._filter_dict if self._filter_dict else None,
+                top_n=10,
+                db_source=self._current_db_source(),
+            )
 
     def _on_quick_identify(self) -> None:
         """快速识别（无元素过滤）"""
-        self._current_method = "fom"
-        self._vm.identify_phases(
-            element_filter=None, top_n=10,
-            db_source=self._current_db_source(),
-        )
+        with busy(self, tr("busy.identify")) as acquired:
+            if not acquired:
+                return
+            self._current_method = "fom"
+            self._vm.identify_phases(
+                element_filter=None, top_n=10,
+                db_source=self._current_db_source(),
+            )
 
     # ------------------------------------------------------------------
     # 结果展示

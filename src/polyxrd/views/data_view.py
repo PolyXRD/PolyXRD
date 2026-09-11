@@ -23,7 +23,9 @@ from PySide6.QtWidgets import (
     QCheckBox,
 )
 
+from polyxrd.i18n import tr
 from polyxrd.viewmodels.main_vm import MainViewModel
+from polyxrd.views.widgets.busy_indicator import busy
 from polyxrd.views.widgets.plot_widget import PlotWidget
 from polyxrd.views.widgets.peak_table import PeakTable
 
@@ -172,14 +174,24 @@ class DataView(QWidget):
 
     def _on_find_peaks(self) -> None:
         """峰检测 (默认高精度; 取消勾选回退传统高度阈值法)"""
-        if self._peak_hi.isChecked():
-            self._vm.find_peaks_advanced()
-        else:
-            self._vm.find_peaks(
-                height=self._peak_height.value() / 100.0,
-                distance=self._peak_distance.value(),
-            )
+        high_precision = self._peak_hi.isChecked()
+        text = (tr("busy.peak_search_hi") if high_precision
+                else tr("busy.peak_search"))
+        # 峰检测在数据点多时要跑几秒, 期间界面不刷新; 不给反馈用户就会再点一次
+        with busy(self, text) as acquired:
+            if not acquired:
+                return
+            if high_precision:
+                self._vm.find_peaks_advanced()
+            else:
+                self._vm.find_peaks(
+                    height=self._peak_height.value() / 100.0,
+                    distance=self._peak_distance.value(),
+                )
 
     def _on_fit_peaks(self) -> None:
         """峰拟合"""
-        self._vm.fit_peaks(model="voigt")
+        with busy(self, tr("busy.peak_fit")) as acquired:
+            if not acquired:
+                return
+            self._vm.fit_peaks(model="voigt")

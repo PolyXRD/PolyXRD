@@ -24,7 +24,9 @@ from PySide6.QtWidgets import (
     QTabWidget,
 )
 
+from polyxrd.i18n import tr
 from polyxrd.viewmodels.main_vm import MainViewModel
+from polyxrd.views.widgets.busy_indicator import BusyIndicator, busy
 from polyxrd.views.widgets.plot_widget import PlotWidget
 
 
@@ -168,20 +170,30 @@ class RefinementView(QWidget):
 
     def _on_refine(self) -> None:
         """开始精修"""
-        self._btn_refine.setEnabled(False)
-        self._btn_cancel.setEnabled(True)
-        self._progress.setVisible(True)
-        self._progress.setValue(0)
+        # 注意: 这里原本就禁用了按钮, 但挡不住"迟到的点击" —— 精修结束时会
+        # refinement_completed 同步重启用按钮, 而阻塞期间积压的点击正好在那一刻
+        # 被投递, 于是又起一轮精修 (用户看到的就是"多点几下就未响应/崩溃")。
+        # 必须由忙碌闸门一直持有到积压输入被排空为止。
+        with busy(self, tr("busy.refine")) as acquired:
+            if not acquired:
+                return
+            self._btn_refine.setEnabled(False)
+            self._btn_cancel.setEnabled(True)
+            self._progress.setVisible(True)
+            self._progress.setValue(0)
 
-        self._vm.refine_structure(
-            strategy=self._strategy_combo.currentText(),
-            engine=self._engine_combo.currentText(),
-            max_cycles=self._max_cycles.value(),
-            peak_shape=self._peak_shape_combo.currentText(),
-            fwhm=self._fwhm_spin.value(),
-            bg_method=self._bg_combo.currentText(),
-            zero_shift=self._zero_shift_spin.value(),
-        )
+            # 把进度回调交给精修引擎: 多起点 + 稀疏抛光都是纯 Python 嵌套循环,
+            # 借它周期性泵事件, 窗口才不会在几十秒里被系统标成"未响应"。
+            self._vm.refine_structure(
+                strategy=self._strategy_combo.currentText(),
+                engine=self._engine_combo.currentText(),
+                max_cycles=self._max_cycles.value(),
+                peak_shape=self._peak_shape_combo.currentText(),
+                fwhm=self._fwhm_spin.value(),
+                bg_method=self._bg_combo.currentText(),
+                zero_shift=self._zero_shift_spin.value(),
+                progress_cb=BusyIndicator.progress_tick,
+            )
 
     def _on_refinement_completed(self, result) -> None:
         """精修完成"""

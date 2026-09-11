@@ -156,6 +156,19 @@ translations = {
     "action": {
         "strip_kalpha2": "Kα2剥离",
     },
+    "busy": {
+        "title": "请稍候",
+        "working": "正在执行，请稍后…",
+        "hint": "执行期间界面会暂时无响应，请勿重复点击。",
+        "progress": "正在执行…（{done}/{total}）",
+        "peak_search": "正在进行峰检测，请稍后…",
+        "peak_search_hi": "正在进行高精度峰检测（背景扣除 + 亚步长精修），请稍后…",
+        "peak_fit": "正在进行峰拟合，请稍后…",
+        "identify": "正在进行物相检索，请稍后…",
+        "identify_profile": "正在进行 Profile Fitting 物相检索，请稍后…",
+        "refine": "正在进行 Rietveld 精修，请稍后…",
+        "repeat_ignored": "已有任务正在执行，请等待其完成",
+    },
     "dialog": {
         "open_file_title": "打开XRD数据文件",
         "confirm_clear_data": "确定要清除当前数据吗？\n将同时清除已检测的峰、物相与精修结果。",

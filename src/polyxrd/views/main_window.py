@@ -60,6 +60,7 @@ from polyxrd.views.data_view import DataView
 from polyxrd.views.phase_view import PhaseView
 from polyxrd.views.refinement_view import RefinementView
 from polyxrd.views.report_view import ReportView
+from polyxrd.views.widgets.busy_indicator import BusyIndicator, busy
 from polyxrd.views.widgets.database_dialog import DatabaseManagerDialog
 from polyxrd.services import CIFDatabase, CODSearcher
 
@@ -1234,21 +1235,38 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _on_find_peaks(self) -> None:
-        if getattr(self, "_peak_hi_check", None) and self._peak_hi_check.isChecked():
-            self._vm.find_peaks_advanced()
-        else:
-            self._vm.find_peaks(
-                height=self._peak_height_spin.value() / 100.0,
-                distance=self._peak_distance_spin.value(),
-            )
+        hi = bool(
+            getattr(self, "_peak_hi_check", None)
+            and self._peak_hi_check.isChecked()
+        )
+        # 峰搜索在密集谱上是秒级纯 Python 循环; 没有提示时用户会再点一次 →
+        # 点击积压到本轮结束后一次性投递 → 又起一轮 → "未响应"/崩溃。
+        with busy(
+            self, tr("busy.peak_search_hi" if hi else "busy.peak_search")
+        ) as acquired:
+            if not acquired:
+                return
+            if hi:
+                self._vm.find_peaks_advanced()
+            else:
+                self._vm.find_peaks(
+                    height=self._peak_height_spin.value() / 100.0,
+                    distance=self._peak_distance_spin.value(),
+                )
 
     def _on_identify(self) -> None:
         self._tab_widget.setCurrentWidget(self._phase_view)
-        self._vm.identify_phases()
+        with busy(self, tr("busy.identify")) as acquired:
+            if not acquired:
+                return
+            self._vm.identify_phases()
 
     def _on_profile_fitting(self) -> None:
         self._tab_widget.setCurrentWidget(self._phase_view)
-        self._vm.identify_phases_profile_fitting()
+        with busy(self, tr("busy.identify_profile")) as acquired:
+            if not acquired:
+                return
+            self._vm.identify_phases_profile_fitting()
 
     def _on_cif_browser(self) -> None:
         dialog = CIFBrowserDialog(self)
@@ -1312,17 +1330,26 @@ class MainWindow(QMainWindow):
 
     def _on_refine(self) -> None:
         self._tab_widget.setCurrentWidget(self._refinement_view)
-        self._vm.refine_structure()
+        with busy(self, tr("busy.refine")) as acquired:
+            if not acquired:
+                return
+            self._vm.refine_structure(
+                progress_cb=BusyIndicator.progress_tick,
+            )
 
     def _on_refine_wizard(self) -> None:
         dialog = RefinementWizardDialog(self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             params = dialog.get_params()
             self._tab_widget.setCurrentWidget(self._refinement_view)
-            self._vm.refine_structure(
-                strategy=params["strategy"],
-                max_cycles=params["max_cycles"],
-            )
+            with busy(self, tr("busy.refine")) as acquired:
+                if not acquired:
+                    return
+                self._vm.refine_structure(
+                    strategy=params["strategy"],
+                    max_cycles=params["max_cycles"],
+                    progress_cb=BusyIndicator.progress_tick,
+                )
 
     def _on_quick_refine(self) -> None:
         data = self._vm.current_data
@@ -1343,10 +1370,14 @@ class MainWindow(QMainWindow):
             return
 
         self._tab_widget.setCurrentWidget(self._refinement_view)
-        self._vm.refine_structure(
-            strategy="sequential",
-            max_cycles=10,
-        )
+        with busy(self, tr("busy.refine")) as acquired:
+            if not acquired:
+                return
+            self._vm.refine_structure(
+                strategy="sequential",
+                max_cycles=10,
+                progress_cb=BusyIndicator.progress_tick,
+            )
 
     def _on_template_management(self) -> None:
         QMessageBox.information(
