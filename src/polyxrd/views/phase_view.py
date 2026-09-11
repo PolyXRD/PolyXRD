@@ -637,7 +637,7 @@ class PhaseView(QWidget):
             self._plot.set_calculated(None, None)
             self._plot.set_peak_assignments([])
             self._match_table.clear_table()
-            self._plot.set_info_text("<b>勾选候选物相叠加查看</b>")
+            self._plot.set_info_text(tr("view.phase.hint_select_phase"))
             return
 
         tolerance = self._tolerance_spin.value()
@@ -645,13 +645,16 @@ class PhaseView(QWidget):
         # 1) 归属计算 (双向: 参考峰命中表 + 实验峰归属)
         assignments, ref_hit = pvm.current_assignment(tolerance=tolerance)
 
-        # 2) 参考棒区: [(name, refs, color), ...]
+        # 2) 参考棒区: [(name, refs, color, coverage), ...]
+        #    逐相覆盖率随行标画在棒区 (不能塞进标题 —— matplotlib 标题不解析 HTML)
         sticks = []
         for i, phase in enumerate(phases):
             color = phase_color(i)
             refs = phase.get_reference_peaks() if hasattr(
                 phase, "get_reference_peaks") else getattr(phase, "reference_peaks", [])
-            sticks.append((phase.name, refs or [], color))
+            hits = ref_hit[i]
+            cov = (100.0 * sum(1 for h in hits if h) / len(hits)) if hits else 0.0
+            sticks.append((phase.name, refs or [], color, cov))
         self._plot.set_selected_phases(sticks)
 
         # 3) 归属标记 (峰顶相色圆点 / 未解释红▼)
@@ -674,25 +677,14 @@ class PhaseView(QWidget):
         # 5) 峰归属表
         self._match_table.set_assignments(assignments)
 
-        # 6) 统计信息条: 逐相覆盖率 + 未解释峰
-        info = self._coverage_summary(phases, ref_hit, assignments)
-        self._plot.set_info_text(info)
-
-    def _coverage_summary(self, phases, ref_hit, assignments):
-        """拼一段 HTML: 逐相覆盖率 | 已解释/未解释峰数。"""
-        parts = []
-        for i, ph in enumerate(phases):
-            hits = ref_hit[i]
-            if hits:
-                cov = 100.0 * sum(1 for h in hits if h) / len(hits)
-            else:
-                cov = 0.0
-            parts.append(
-                f"<span style='color:{phase_color(i)}'>■ {ph.name}: {cov:.0f}%</span>")
+        # 6) 统计信息条: 只放"峰解释情况" (纯文本)
         explained = sum(1 for a in assignments if a.phase_index is not None)
         unexplained = len(assignments) - explained
-        parts.append(f"峰 已解释 {explained} / 未解释 {unexplained}")
-        return " | ".join(parts)
+        self._plot.set_info_text(tr(
+            "view.phase.peaks_summary",
+            explained=explained, unexplained=unexplained,
+            total=len(assignments),
+        ))
 
     def _flash_peak(self, two_theta: float) -> None:
         """峰表点击 → 谱图上闪示该峰位 (x 轴居中临时放大可不做, 仅高亮提示)。"""
@@ -865,18 +857,13 @@ class PhaseView(QWidget):
                     else getattr(ph, "reference_peaks", []))
             w_i = next((w for p, w in zip(phases, weight_pcts)
                         if p.name == ph.name), 0.0)
-            sticks.append((f"{ph.name} ({w_i:.0f}%)", refs or [],
-                           phase_color(i)))
+            # 第 4 项 = 质量分数 → 棒区行标 (同色, 等高), 不进标题栏
+            sticks.append((ph.name, refs or [], phase_color(i), w_i))
         self._plot.set_selected_phases(sticks)
 
-        # 统计信息
-        phase_info = " + ".join(
-            f"{p.name}: {w:.1f}%" for p, w in zip(phases, weight_pcts)
-        )
-        info_text = (
-            f"<b>多相混合分析</b> | "
-            f"相关系数: {correlation * 100:.1f}% | "
-            f"R={r_factor:.3f} | "
-            f"{phase_info}"
-        )
-        self._plot.set_info_text(info_text)
+        # 统计信息 —— 纯文本 (matplotlib 标题不解析 HTML)
+        self._plot.set_info_text(tr(
+            "view.phase.mix_info",
+            corr=f"{correlation * 100:.1f}",
+            r=f"{r_factor:.3f}",
+        ))

@@ -32,6 +32,11 @@ class PolyXRDApplication:
         self._qt_app.setOrganizationName("PolyXRD")
         self._qt_app.setApplicationVersion(get_config().app_version)
 
+        # matplotlib 图上文字含中文 → 尽早把系统中文字体插进字体栈 (幂等)
+        from polyxrd.utils.mpl_font import ensure_cjk_font
+
+        ensure_cjk_font()
+
         # 启用高DPI支持
         self._qt_app.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps, True)
         self._qt_app.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling, True)

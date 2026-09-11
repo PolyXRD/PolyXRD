@@ -16,6 +16,10 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QC
 
 from polyxrd.models.peak import Peak
 from polyxrd.models.xrd_data import XRDData
+from polyxrd.utils.mpl_font import ensure_cjk_font
+
+# 图上标题/图例含中文 → 建图前先插系统中文字体, 否则画成豆腐块。
+ensure_cjk_font()
 
 
 class PlotWidget(QWidget):

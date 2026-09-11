@@ -332,6 +332,9 @@ translations = {
             "candidate_format": "{name} - FOM: {score}",
             "col_fom": "FOM",
             "col_confidence": "置信度",
+            "hint_select_phase": "在上方候选物相中勾选, 此处显示参考峰对照",
+            "peaks_summary": "峰归属: 已解释 {explained} / 未解释 {unexplained} (共 {total} 个实验峰)",
+            "mix_info": "多相混合分析 | 相关系数 {corr}% | R={r}",
             "periodic_table": {
                 "title": "元素周期表",
                 "must_have": "必有",

@@ -13,6 +13,7 @@ Signals:
 """
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 import numpy as np
@@ -27,6 +28,10 @@ from polyxrd.services.phase_display import (
     COLOR_CALC, COLOR_EXP, COLOR_RESIDUAL, COLOR_UNMATCHED,
     PeakAssignment, phase_color,
 )
+from polyxrd.utils.mpl_font import ensure_cjk_font
+
+# 图上标题/行标含中文 → 必须在建图前把系统中文字体插进字体栈, 否则画成豆腐块。
+ensure_cjk_font()
 
 
 class PatternDisplayWidget(QWidget):
@@ -34,17 +39,41 @@ class PatternDisplayWidget(QWidget):
 
     peak_clicked = Signal(object)
 
+    #: 棒区每行的数据空间高度。行距恒等于它 ⇒ 各行高度一致 (不随相数变化)。
+    ROW_H = 1.0
+
+    #: 棒最大高度占行高的比例 (行内 0..ROW_H 的空间里, 棒只占下面 85%)。
+    _STICK_MAX = 0.85
+
+    #: 主区与棒区的 GridSpec 基准比 (主区固定占 4 份)。
+    _MAIN_RATIO = 4.0
+
+    #: 每行目标像素高度 —— 占整块绘图区的比例 (0.0707 ≈ 单相时原始观感)。
+    #: 定死它 → 相数增加时反解棒区占比, 使各行实际像素高度保持恒定。
+    _ROW_FRAC = 0.0707
+
+    #: 棒区占比上限 (r 值)。超过它才封顶, 之后行高才缓慢压缩,
+    #: 避免 8 个相时棒区把主谱挤成一条缝。
+    _STICK_RATIO_MAX = 3.4
+
+    #: 相名过长时的截断长度。
+    _LABEL_MAX = 16
+
+    #: 只剥真正的 HTML 标签 (保留 "2θ < 20" 这类含尖括号的普通文本)。
+    _HTML_TAG_RE = re.compile(r"</?[a-zA-Z][^>]*>")
+
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self._figure = Figure(figsize=(8, 5.2), dpi=100, tight_layout=True)
         self._canvas = FigureCanvasQTAgg(self._figure)
         self._canvas.setMinimumHeight(320)
-        gs = GridSpec(2, 1, height_ratios=[4, 1], hspace=0.08)
+        gs = GridSpec(2, 1, height_ratios=[self._MAIN_RATIO, 1], hspace=0.08)
+        self._gridspec = gs
         self._ax_main = self._figure.add_subplot(gs[0])
         self._ax_stick = self._figure.add_subplot(gs[1], sharex=self._ax_main)
         # 关闭棒区独立的 y 标签/刻度 (它是虚拟的相行)
         self._ax_stick.set_yticks([])
-        self._ax_stick.set_ylim(-6.5, 0.6)   # 最多 6 行棒区基线 + 顶部留白
+        self._apply_stick_ylim(1)
         self._ax_main.set_ylabel("Intensity")
         self._ax_stick.set_xlabel("2θ (°)")
 
@@ -133,37 +162,168 @@ class PatternDisplayWidget(QWidget):
         self._redraw()
 
     def set_selected_phases(self, phase_sticks) -> None:
-        """设置参考棒区: [(name, [(hkl,2θ,I)...], color), ...]。
+        """设置参考棒区。
 
-        每相一行; 棒高 = min(1, I/100) × 行高; 基线逐行下移; 相名标在左侧。
+        Args:
+            phase_sticks: ``[(name, [(hkl, 2θ, I), ...], color[, coverage]), ...]``
+                第 4 项可选 (覆盖率 / 质量分数, 数字或 None)。旧的三元组仍兼容。
+
+        每相一行: 行内画该相参考棒, **本行左端**在 row 内写 ``相名 (+百分比)``。
+        三条约定 ——
+
+        1. **颜色一致**: 行标颜色与竖线颜色同为 ``color`` (即 ``phase_color(i)``),
+           与峰顶归属圆点、峰匹配表的颜色也同源, 同一个相到哪都是这个色;
+        2. **高度一致**: 行距恒为 ``ROW_H``, 行标一律垂直居中于本行 → 所有行
+           等高、等间距, 不随相数或棒高变化;
+        3. **在框内**: 行标画在棒区坐标轴**内部**的左端 (x 取轴分数 0.006),
+           与相棒同处一个框里; 行标带一块与轴底色同色的无边框衬底, 万一有
+           低角度相棒落在同一位置也不会互相糊住。
+
+        行标之所以在这里而不是主区标题: matplotlib 不解析 HTML, 以前把
+        ``<span style='color:...'>`` 塞进 ``set_info_text`` 会原样显示成
+        ``<span style='color:#E53935'>■ Brucite: 0%</span> | ...`` 一串乱码。
         """
         self._clear_stick()
-        row_h = 1.0
-        for i, (name, refs, color) in enumerate(phase_sticks):
-            base = -i * row_h
+        for i, row in enumerate(phase_sticks):
+            name = row[0]
+            refs = row[1]
+            color = row[2]
+            coverage = row[3] if len(row) > 3 else None
+
+            base = -i * self.ROW_H
             for rp in refs:
                 if len(rp) < 3:
                     continue
                 tt = float(rp[1]); I = float(rp[2])
-                h = 0.85 * row_h * min(1.0, I / 100.0)
+                h = self._STICK_MAX * self.ROW_H * min(1.0, I / 100.0)
                 if h <= 0:
                     continue
                 ln = self._ax_stick.plot([tt, tt], [base, base + h],
                                          color=color, linewidth=1.8,
                                          solid_capstyle="butt")[0]
                 ln.set_gid("stick"); self._artists.append(ln)
-            # 相名标在左侧 (只标前 6 行, 防拥挤)
-            if i < 6:
-                txt = self._ax_stick.text(
-                    0.01, base + 0.5 * row_h, name,
-                    fontsize=7, color=color, va="center", ha="left",
-                    transform=self._ax_stick.transAxes)
-                txt.set_gid("stick"); self._artists.append(txt)
+
+            label = str(name)
+            if coverage is not None:
+                label = f"{label}  {float(coverage):.0f}%"
+            if len(label) > self._LABEL_MAX:
+                label = label[: self._LABEL_MAX - 1] + "…"
+
+            # x 用轴分数、y 用数据坐标: 行标贴在框内左端, 且随行一起移动
+            txt = self._ax_stick.annotate(
+                label,
+                xy=(0.006, base + 0.5 * self.ROW_H),
+                xycoords=self._ax_stick.get_yaxis_transform(),
+                xytext=(0, 0), textcoords="offset points",
+                fontsize=7.5, color=color, alpha=0.95,
+                ha="left", va="center",
+                clip_on=False, annotation_clip=False,
+            )
+            # 衬底与轴底色同色 (不透明) → 干净地盖住可能穿过的相棒与网格,
+            # 浅色背景下等于"隐形底板", 不会有突兀的色块; 深色主题下同理。
+            txt.set_bbox({
+                "facecolor": self._ax_stick.get_facecolor(),
+                "edgecolor": "none", "alpha": 1.0, "pad": 1.0,
+            })
+            txt.set_gid("stick"); self._artists.append(txt)
+
         nrow = max(1, len(phase_sticks))
-        self._ax_stick.set_ylim(-nrow * row_h - 0.5, 0.5)
-        self._ax_stick.set_yticks([])
+        self._apply_stick_ylim(nrow)
+        self._update_stick_ratio(nrow)
         self._ax_main.relim(); self._ax_main.autoscale_view()
         self._redraw()
+
+    def _stick_span(self, n_rows: int) -> float:
+        """棒区所需的数据空间跨度 (行基线 + 棒顶 + 上下留白)。"""
+        n = max(1, n_rows)
+        return ((n - 1) * self.ROW_H            # 末行基线到首行基线的距离
+                + self._STICK_MAX * self.ROW_H  # 首行棒顶
+                + 1.10)                         # 上下各 0.55 行留白
+
+    def _apply_stick_ylim(self, n_rows: int) -> None:
+        """按行数设定棒区 y 范围。
+
+        ⚠️ 上限必须盖住**首行的棒顶** (``_STICK_MAX * ROW_H``), 不能只到行基线
+        之上一点点 —— 否则第一相最高的那根棒会被轴线裁掉一截, 看上去"变矮",
+        在各相之间造成假的相对强度差。
+        """
+        n = max(1, n_rows)
+        bottom = -(n - 1) * self.ROW_H - 0.55
+        top = self._STICK_MAX * self.ROW_H + 0.55
+        self._ax_stick.set_ylim(bottom, top)
+        self._ax_stick.set_yticks([])
+
+    def _update_stick_ratio(self, n_rows: int) -> None:
+        """反解棒区占比, 目标是**每行像素高度恒定**。
+
+        固定 4:1 时, 6 个相挤在 1/5 的图高里, 行被压扁成几条线, 行标互相重叠
+        —— 视觉上就是"高度不一致"。这里按下面的关系反解 GridSpec 的 ``r``:
+
+            行高 / 绘图区高 = panel_frac × (ROW_H / span) ≡ _ROW_FRAC
+
+        其中 ``panel_frac = r / (M + r)`` (M = ``_MAIN_RATIO``)。于是
+
+            panel_frac = _ROW_FRAC × span / ROW_H
+            r          = M × panel_frac / (1 − panel_frac)
+
+        ⚠️ matplotlib 的坑 (3.10.9 实测): ``GridSpec.set_height_ratios`` 在 Axes
+        建好之后**不会自动生效**。原因有两层 ——
+
+        1. 各 Axes 的 position 是上一次布局时锁定的, 改 ratio 再 draw 毫无变化;
+        2. 想靠 ``fig.get_layout_engine().execute(fig)`` 重跑一遍也不行: Qt 画布
+           下 ``get_tight_layout_figure`` 认为不需要再调边距, 返回空 dict, 于是
+           ``subplots_adjust()`` 不带任何参数 ⇒ 位置依旧不动。
+
+        所以这里**不依赖 layout engine**, 直接按比例把两个 Axes 摆回去 (见
+        ``_relayout``)。同时仍然更新 ratio, 这样以后窗口缩放触发真正的重排时,
+        引擎算出来的比例也是对的。
+        """
+        n = max(1, n_rows)
+        span = self._stick_span(n)
+        panel_frac = self._ROW_FRAC * span / self.ROW_H
+        panel_frac = min(panel_frac, 1.0 - 1e-6)
+        r = self._MAIN_RATIO * panel_frac / (1.0 - panel_frac)
+        r = min(r, self._STICK_RATIO_MAX)
+        try:
+            self._gridspec.set_height_ratios([self._MAIN_RATIO, r])
+        except Exception:  # noqa: BLE001 - 老版本 matplotlib 无此 API
+            pass
+        self._relayout(self._MAIN_RATIO, r)
+
+    def _relayout(self, main_ratio: float, stick_ratio: float) -> None:
+        """按 ``main_ratio : stick_ratio`` 重新分配两个 Axes 的高度。
+
+        边距不自己发明, 而是**从当前 Axes 位置读回来** —— 这样 tight_layout
+        已经算好的左边距/下边距 (留给 y 轴标签、2θ 轴标题) 原样保留, 只在
+        上下方向上按比例重分, 并保持两区之间的间隙不变。
+
+        由于 ``top``、``bottom``、``gap`` 三个量在一次重排前后守恒, 本函数是
+        幂等的: 反复调用 (每次勾选物相都会调) 不会让布局逐次漂移。
+        """
+        if main_ratio + stick_ratio <= 0:
+            return
+        try:
+            mp = self._ax_main.get_position()
+            sp = self._ax_stick.get_position()
+        except Exception:  # noqa: BLE001
+            return
+
+        left = min(mp.x0, sp.x0)
+        right = max(mp.x1, sp.x1)
+        top = max(mp.y1, sp.y1)
+        bottom = min(mp.y0, sp.y0)
+        gap = abs(mp.y0 - sp.y1) if mp.y0 >= sp.y1 else 0.0
+
+        avail = (top - bottom) - gap
+        if avail <= 0:
+            return
+        width = right - left
+        total = main_ratio + stick_ratio
+        main_h = avail * main_ratio / total
+        stick_h = avail * stick_ratio / total
+
+        self._ax_stick.set_position([left, bottom, width, stick_h])
+        self._ax_main.set_position([left, bottom + stick_h + gap, width, main_h])
 
     def set_peak_assignments(self, assignments) -> None:
         """在主区峰顶画归属标记: 圆点(相色) / 红▼(未解释)。"""
@@ -194,7 +354,16 @@ class PatternDisplayWidget(QWidget):
         return list(self._main_y[lo:hi])
 
     def set_info_text(self, text: str) -> None:
-        self._ax_main.set_title(text, fontsize=10, loc="left", pad=5)
+        """主区标题 —— **纯文本**。
+
+        ⚠️ matplotlib 的文本只认 mathtext (``$...$``), **不解析 HTML**。传进
+        ``<span style='color:#E53935'>`` 这类标记会被原样画出来, 变成标题栏里
+        一串 ``<span style='color:...'>■ 相名: 0%</span> | ...`` 的乱码。
+        逐相的彩色信息请走 ``set_selected_phases`` 的第 4 个字段 (棒区行标);
+        这里再做一次兜底剥离, 防止以后又有人把 HTML 拼进标题。
+        """
+        plain = self._HTML_TAG_RE.sub("", text or "").strip()
+        self._ax_main.set_title(plain, fontsize=10, loc="left", pad=5)
         self._redraw()
 
     # ------------------------------------------------------------------
@@ -228,8 +397,8 @@ class PatternDisplayWidget(QWidget):
         self._ax_stick.grid(True, alpha=0.3)
         self._ax_main.set_ylabel("Intensity")
         self._ax_stick.set_xlabel("2θ (°)")
-        self._ax_stick.set_yticks([])
-        self._ax_stick.set_ylim(-6.5, 0.6)
+        self._apply_stick_ylim(1)
+        self._update_stick_ratio(0)
         self._artists = []
         self._main_x = np.array([])
         self._main_y = np.array([])

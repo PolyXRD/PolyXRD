@@ -342,6 +342,9 @@ translations = {
             "candidate_format": "{name} - FOM: {score}",
             "col_fom": "FOM",
             "col_confidence": "Confidence",
+            "hint_select_phase": "Check a candidate phase above to show its reference peaks here",
+            "peaks_summary": "Peak assignment: explained {explained} / unexplained {unexplained} ({total} experimental peaks)",
+            "mix_info": "Multiphase mixture | Correlation {corr}% | R={r}",
             "periodic_table": {
                 "title": "Periodic Table",
                 "must_have": "Must have",
