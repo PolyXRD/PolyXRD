@@ -12,7 +12,6 @@ import csv
 from pathlib import Path
 from typing import Iterable, Optional, Union
 
-import numpy as np
 
 from polyxrd.models.peak import PeakList
 from polyxrd.models.xrd_data import XRDData

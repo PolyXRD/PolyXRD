@@ -154,9 +154,10 @@ PolyXRD/
 │
 ├── scripts/                    # 交付性构建脚本
 │   ├── PolyXRD-Setup.iss           # Inno Setup 安装脚本
-│   ├── verify_release.ps1          # 发布产物校验 + 三个数据库包生成 + SHA-256
-│   ├── upload_release_assets.ps1   # Release 附件上传
-│   ├── create_github_release_v0.9.10.ps1  # GitHub Release 创建 (模板, 改版本号复用)
+│   ├── verify_release.ps1          # 发布产物校验 + 各库独立包生成 + SHA-256
+│   ├── create_github_release_v0.10.0.ps1  # ★ 创建 Release + 上传附件 (内置 PDF2 禁传守卫)
+│   ├── create_github_release_v0.9.10.ps1  # 上一版模板 (保留备查)
+│   ├── upload_release_assets.ps1   # 已废弃 (旧盘符路径, 仅留占位)
 │   ├── gsas2_bridge.py             # GSAS-II 调用桥
 │   ├── _pe_imports.py              # PyInstaller 隐式导入收集
 │   └── _pyinst_collect.py          # COLLECT 步骤兜底
@@ -213,10 +214,9 @@ PolyXRD/
    ↓
 ② 安装 (默认 C:\Program Files\PolyXRD\) 或解压便携包后直接运行 PolyXRD.exe
    ↓
-③ 按需下载数据库包 —— 三个库各自独立，需要哪个下哪个
+③ 按需下载数据库包 —— 各库独立，需要哪个下哪个
    ③-a PolyXRD-v0.10.0-Databases-COD-inorg.zip   134 MB  →  COD_inorganics.sqlite  (日常推荐)
-   ③-b PolyXRD-v0.10.0-Databases-PDF2.zip         59 MB  →  PDF2_2004.sqlite        (商品库对照)
-   ③-c PolyXRD-v0.10.0-Databases-COD-full.zip    206 MB  →  cod_index.sqlite        (COD 全库/合并检索)
+   ③-b PolyXRD-v0.10.0-Databases-COD-full.zip    206 MB  →  cod_index.sqlite        (COD 全库/合并检索)
    解压到任意目录（必须真正解压到磁盘，不要直接在压缩包里打开）
    ↓
 ④ 启动 PolyXRD → 菜单「数据库 ▸ 外挂数据库管理…」
@@ -225,6 +225,10 @@ PolyXRD/
    ↓
 ⑤ 开始使用! 参考 docs/5分钟上手_4-1样例.md
 ```
+
+> **关于 PDF2-2004 库**：该库为 ICDD 商品数据库，**受版权保护，本仓库不分发、Release 不提供下载**。
+> 持有正版授权的用户可自行准备 `PDF2_2004.sqlite` 并在「外挂数据库管理…」中作为 PDF2 槽位导入；
+> 未授权时该槽位留空即可，其余功能不受影响（详见 [docs/外挂数据库使用说明.md](docs/外挂数据库使用说明.md)）。
 
 > 一个库都不装也能用：程序内置 118 种常见参考物相。
 > 详细说明与排错见 [docs/外挂数据库使用说明.md](docs/外挂数据库使用说明.md)。
@@ -339,8 +343,10 @@ PolyXRD 基于以下高质量开源项目构建，感谢各位维护者及贡献
 | **PolyXRD-v0.10.0-Portable.zip** | 380.7 MB | 免安装便携包（解压即用，不含任何数据库） |
 | **PolyXRD-v0.10.0-Databases-COD-inorg.zip** | 133.9 MB | COD 无机物库外挂包（71,199 物相，主检索库，推荐） |
 | **PolyXRD-v0.10.0-Databases-COD-full.zip** | 205.9 MB | COD 全库索引外挂包（113,223 条目） |
-| **PolyXRD-v0.10.0-Databases-PDF2.zip** | 58.9 MB | PDF2-2004 外挂包（163,834 物相） |
 | **Source code (.zip / .tar.gz)** | — | 完整源码快照 |
+
+> `…-Databases-PDF2.zip` **不在 Release 中提供**：PDF2-2004 为 ICDD 版权数据库，
+> 仓库仅提供挂载能力，分发包由用户依授权自行准备。
 
 SHA-256 校验值（完整清单见发布附件中的 `SHA256-v0.10.0.txt`，体积单位为资源管理器口径 = 1,048,576 字节）：
 
@@ -349,7 +355,6 @@ SHA-256 校验值（完整清单见发布附件中的 `SHA256-v0.10.0.txt`，体
 c1c316fb67733d05acbd8aba420fa374cf20b8cd1319f26dbe8569c2e67617bd  PolyXRD-v0.10.0-Portable.zip             380.7 MB
 84ffdad091e5dc5c6d9f72ba3fb68eae5e1a4f5a9a25e7326711a5c95cd4e9b4  PolyXRD-v0.10.0-Databases-COD-inorg.zip  133.9 MB
 ba703a6c2d587a4c39599aa84c5a07d0272aea39a8a66da7efa3687b63ed9def  PolyXRD-v0.10.0-Databases-COD-full.zip   205.9 MB
-26760ead7150ec321f073dc007965d85d7fca4b059bd0a0f0dc10fdf8c95ad2d  PolyXRD-v0.10.0-Databases-PDF2.zip        58.9 MB
 ```
 
 > 下载数据库包后建议核对 SHA-256，尤其是大文件传输中断导致 SQLite 尾部截断的情况
@@ -361,7 +366,7 @@ ba703a6c2d587a4c39599aa84c5a07d0272aea39a8a66da7efa3687b63ed9def  PolyXRD-v0.10.
 
 | PolyXRD | COD 无机物库 | COD 全库索引 | PDF2-2004 |
 |---|---|---|---|
-| **0.10.0** | `…-Databases-COD-inorg.zip` | `…-Databases-COD-full.zip` | `…-Databases-PDF2.zip` |
+| **0.10.0** | `…-Databases-COD-inorg.zip` | `…-Databases-COD-full.zip` | 用户自行准备（ICDD 授权，仓库不分发） |
 | 0.9.10 及以前 | 内嵌或 `PolyXRD_COD_Inorganics_v0.9.x.zip` | 内嵌或 `PolyXRD_COD_Full_v0.9.x.zip` | 不支持 |
 
 代码部分遵循 **MIT License**（除非子模块另行声明）。使用时请同时遵守上游 PySide6 (LGPL/GPL)、pymatgen、COD 的许可证条款。

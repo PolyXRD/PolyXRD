@@ -113,6 +113,14 @@ cod_data/cif_db/
 cod_data/PolyXRD_COD_Inorganics_v*.zip
 cod_data/*.sqlite*
 
+# ── PDF2-2004 (ICDD 商品库): 仅本地保留 ──────────────
+# 版权原因**永不入库、永不上传 GitHub / Release**。
+# 下面两条是兜底: 任何目录下的 PDF2_2004.sqlite 都不允许被 add。
+PDF2_2004.sqlite
+**/PDF2_2004.sqlite
+**/PDF2*.sqlite
+**/PolyXRD*PDF2*.zip
+
 
 # ── 本地工作记忆(不入库) ───────────────────────
 .workbuddy/

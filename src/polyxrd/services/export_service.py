@@ -7,9 +7,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Optional
 
-import numpy as np
 
 from polyxrd.models.phase import Phase
 from polyxrd.models.refinement import RefinementResult

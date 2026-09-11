@@ -105,6 +105,7 @@ translations = {
             "利用できます。"
         ),
         "pkg_hint": "ダウンロード: {pkg}　→　{file} を展開",
+        "pkg_hint_local": "本ライブラリはリリースに含まれません: {file} をご自身で用意し、ここからインポートしてください",
         "recheck": "再検出",
         "import": "インポート…",
         "clear": "マウント解除",
@@ -158,7 +159,7 @@ translations = {
             "ダウンロードしてください:\n"
             "　· COD 無機物　　　…-Databases-COD-inorg.zip\n"
             "　· COD 全庫インデックス　…-Databases-COD-full.zip\n"
-            "　· PDF2-2004　　　…-Databases-PDF2.zip\n\n"
+            "　· PDF2-2004　　　配布なし（ICDD ライセンス、ご自身で用意）\n\n"
             "解凍後、「データベース ▸ 外部データベース管理…」から順に"
             "インポートしてください。\n"
             "未導入の場合、内蔵の 118 種の参照相のみ利用できます。"

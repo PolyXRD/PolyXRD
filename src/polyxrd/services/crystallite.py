@@ -5,7 +5,7 @@ Scherrer 公式 + 仪器展宽扣除 (高斯/洛伦兹两种近似)。
 """
 from __future__ import annotations
 
-from typing import Iterable, Optional
+from typing import Iterable
 
 import numpy as np
 

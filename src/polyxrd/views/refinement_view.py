@@ -5,7 +5,6 @@ Rietveld结构精修的界面。
 """
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,

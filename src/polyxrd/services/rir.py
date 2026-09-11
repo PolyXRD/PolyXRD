@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from typing import Optional
 
-import numpy as np
 
 from polyxrd.models.peak import PeakList
 from polyxrd.models.phase import Phase

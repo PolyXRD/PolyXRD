@@ -68,7 +68,9 @@ DB_KINDS: tuple[DBKind, ...] = (
         required=("cod_id", "formula", "n_peaks", "peaks_d", "peaks_i"),
         signature=("pearson", "name"),
         excludes=(),
-        pkg_suffix="Databases-PDF2.zip",
+        # 空 = 不提供发布包。PDF2-2004 是 ICDD 商品库, 版权上不允许随 Release 转发,
+        # 本项目只提供"挂载能力", 库文件由持授权用户自行准备。
+        pkg_suffix="",
         notice_key="db_manager.notice.pdf2",
     ),
     DBKind(
@@ -95,8 +97,14 @@ PKG_FILENAME: dict[str, str] = {
 
 
 def release_package_name(kind_key: str, version: str) -> str:
-    """某槽位对应的独立下载包文件名, 如 ``PolyXRD-v0.10.0-Databases-COD-inorg.zip``。"""
+    """某槽位对应的独立下载包文件名, 如 ``PolyXRD-v0.10.0-Databases-COD-inorg.zip``。
+
+    `pkg_suffix` 为空的槽位**没有发布包** (PDF2-2004 属 ICDD 版权库, 永不上传),
+    返回空串, 由界面改显示"本库不随发布包分发"。
+    """
     spec = KIND_BY_KEY[kind_key]
+    if not spec.pkg_suffix:
+        return ""
     return f"PolyXRD-v{version}-{spec.pkg_suffix}"
 
 
@@ -208,9 +216,7 @@ def apply_import(ins: DBInspect) -> None:
     """把探测通过的结果写进配置 (持久化, 下次启动自动加载)。"""
     if not ins.ok or not ins.kind_spec:
         raise ValueError("只能导入校验通过的数据库")
-    cfg = get_config()
-    setter = _SETTERS[ins.kind_spec.config_key]
-    setter(str(ins.path))
+    _setter(ins.kind_spec.config_key)(str(ins.path))
 
 
 def clear_import(kind_key: str) -> None:
@@ -218,25 +224,26 @@ def clear_import(kind_key: str) -> None:
     spec = KIND_BY_KEY.get(kind_key)
     if spec is None:
         raise KeyError(kind_key)
-    _SETTERS[spec.config_key](None)
+    _setter(spec.config_key)(None)
 
 
-def _setters() -> dict:
+#: config_key → AppConfig 上的"写入用户导入路径"方法名。
+_PATH_SETTERS = {
+    "cod_db_path": "set_cod_db_path",
+    "pdf2_db_path": "set_pdf2_db_path",
+    "cod_index_db_path": "set_cod_index_db_path",
+}
+
+
+def _setter(config_key: str):
+    """按 config_key 取写入路径的 bound method。
+
+    必须是**每次现取**而不是 import 期缓存: `get_config()` 虽是单例, 但测试会
+    直接 monkeypatch 返回的配置实例, 缓存住的旧 bound method 会写到被替换掉的
+    对象上去, 表现成"导入成功但配置没变"。
+    """
     cfg = get_config()
-    return {
-        "cod_db_path": cfg.set_cod_db_path,
-        "pdf2_db_path": cfg.set_pdf2_db_path,
-        "cod_index_db_path": cfg.set_cod_index_db_path,
-    }
-
-
-# 延迟到调用时取 (get_config 是单例, 但避免 import 期就构造)
-class _SetterProxy:
-    def __getitem__(self, key: str):
-        return _setters()[key]
-
-
-_SETTERS = _SetterProxy()
+    return getattr(cfg, _PATH_SETTERS[config_key])
 
 
 def _default_paths() -> dict[str, Path]:

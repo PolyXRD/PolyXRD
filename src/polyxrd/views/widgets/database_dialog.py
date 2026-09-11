@@ -155,10 +155,16 @@ class DatabaseManagerDialog(QDialog):
             row["path"].setText(st["path"] or "—")
             # 三个库各自独立打包下载 —— 把"这个槽位该下哪个包"写死在行里,
             # 否则用户面对三个槽位只能靠文件名猜。
-            row["pkg"].setText(
-                tr("db_manager.pkg_hint",
-                   pkg=st["pkg_name"], file=st["pkg_filename"])
-            )
+            # PDF2-2004 没有发布包 (ICDD 版权): pkg_name 为空, 改说明"自行准备"。
+            if st["pkg_name"]:
+                row["pkg"].setText(
+                    tr("db_manager.pkg_hint",
+                       pkg=st["pkg_name"], file=st["pkg_filename"])
+                )
+            else:
+                row["pkg"].setText(
+                    tr("db_manager.pkg_hint_local", file=st["pkg_filename"])
+                )
             if not st["exists"]:
                 row["status"].setText(f"<span style='color:#c0392b'>"
                                       f"{tr('db_manager.status_missing')}</span>")

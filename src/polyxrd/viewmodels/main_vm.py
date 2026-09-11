@@ -10,7 +10,7 @@ from typing import Optional
 
 from PySide6.QtCore import QObject, Signal
 
-from polyxrd.models.peak import Peak, PeakList
+from polyxrd.models.peak import PeakList
 from polyxrd.models.phase import Phase, PhaseMatchResult
 from polyxrd.models.refinement import RefinementResult
 from polyxrd.viewmodels.data_vm import DataViewModel

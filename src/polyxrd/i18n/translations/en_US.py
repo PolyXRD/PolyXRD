@@ -112,6 +112,7 @@ translations = {
             "reference phases are available."
         ),
         "pkg_hint": "Download: {pkg}  →  extracts {file}",
+        "pkg_hint_local": "Not shipped in any release package: supply your own {file} and import it here",
         "recheck": "Re-check",
         "import": "Import…",
         "clear": "Unmount",
@@ -164,7 +165,7 @@ translations = {
             "Each database ships as its own archive — download only what you need:\n"
             "  · COD Inorganics    …-Databases-COD-inorg.zip\n"
             "  · COD Full Index    …-Databases-COD-full.zip\n"
-            "  · PDF2-2004         …-Databases-PDF2.zip\n\n"
+            "  · PDF2-2004         not downloadable (ICDD licensed; supply your own)\n\n"
             "After extracting, import each one via "
             "\"Database ▸ Manage External Databases…\".\n"
             "Without imported databases only the 118 built-in reference phases "

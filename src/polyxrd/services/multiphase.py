@@ -14,7 +14,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Callable, Iterable, Optional
 
-from polyxrd.models.peak import Peak, PeakList
+from polyxrd.models.peak import PeakList
 from polyxrd.models.phase import Phase, PhaseMatchResult
 from polyxrd.models.search_options import SearchOptions
 from polyxrd.services.foam import search_match

@@ -15,7 +15,6 @@ from typing import Iterable, Optional
 import numpy as np
 
 from polyxrd.models.peak import Peak, PeakList
-from polyxrd.models.xrd_data import XRDData
 
 
 class PeakManager:

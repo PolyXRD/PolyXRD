@@ -40,10 +40,10 @@ import sys
 import tarfile
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any, Iterable, Iterator, Optional, Sequence
+from typing import Any, Optional, Sequence
 
 from polyxrd.config import get_config
 from polyxrd.models.phase import LatticeParams, Phase

@@ -77,10 +77,8 @@ PDF-2 2004 定宽格式 (每行 80 字符 ASCII):
 from __future__ import annotations
 
 import logging
-import os
 import re
 import sqlite3
-import struct
 from pathlib import Path
 from typing import Optional
 

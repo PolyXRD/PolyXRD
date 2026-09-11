@@ -13,7 +13,6 @@ from typing import Optional
 import numpy as np
 
 from polyxrd.config import get_config
-from polyxrd.models.peak import Peak
 from polyxrd.models.phase import Phase, LatticeParams
 from polyxrd.models.refinement import RefinementResult
 from polyxrd.models.xrd_data import XRDData

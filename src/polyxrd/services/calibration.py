@@ -13,7 +13,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Iterable, Optional, Union
+from typing import Iterable, Union
 
 import numpy as np
 

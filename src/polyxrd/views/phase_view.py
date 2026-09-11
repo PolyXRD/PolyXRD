@@ -42,7 +42,6 @@ from polyxrd.views.widgets.busy_indicator import busy
 from polyxrd.views.widgets.pattern_display import PatternDisplayWidget
 from polyxrd.views.widgets.peak_match_table import PeakMatchTable
 from polyxrd.views.widgets.element_filter_dialog import ElementFilterDialog
-from polyxrd.services.peak_finder import PeakFinder
 from polyxrd.services.phase_display import (combined_pattern,
                                             assign_peaks, phase_color,
                                             PeakAssignment)
