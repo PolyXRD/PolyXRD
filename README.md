@@ -340,9 +340,9 @@ PolyXRD 基于以下高质量开源项目构建，感谢各位维护者及贡献
 | 附件 | 大小 | 说明 |
 |---|---|---|
 | **PolyXRD-Setup-v0.10.0.exe** | 243.1 MB | Windows 独立安装包（内置 Python/Qt6/全部依赖，不含任何数据库） |
-| **PolyXRD-v0.10.0-Portable.zip** | 380.7 MB | 免安装便携包（解压即用，不含任何数据库） |
-| **PolyXRD-v0.10.0-Databases-COD-inorg.zip** | 133.9 MB | COD 无机物库外挂包（71,199 物相，主检索库，推荐） |
-| **PolyXRD-v0.10.0-Databases-COD-full.zip** | 205.9 MB | COD 全库索引外挂包（113,223 条目） |
+| **PolyXRD-v0.10.0-Portable.zip** | 372.6 MB | 免安装便携包（解压即用，不含任何数据库） |
+| **PolyXRD-v0.10.0-Databases-COD-inorg.zip** | 131.1 MB | COD 无机物库外挂包（71,199 物相，主检索库，推荐） |
+| **PolyXRD-v0.10.0-Databases-COD-full.zip** | 193.1 MB | COD 全库索引外挂包（113,223 条目） |
 | **Source code (.zip / .tar.gz)** | — | 完整源码快照 |
 
 > `…-Databases-PDF2.zip` **不在 Release 中提供**：PDF2-2004 为 ICDD 版权数据库，
@@ -351,10 +351,10 @@ PolyXRD 基于以下高质量开源项目构建，感谢各位维护者及贡献
 SHA-256 校验值（完整清单见发布附件中的 `SHA256-v0.10.0.txt`，体积单位为资源管理器口径 = 1,048,576 字节）：
 
 ```
-1bac0c220c83796ce3a5a0741ec82ff28a667ca6e0604674a85e6a0bb024ccaa  PolyXRD-Setup-v0.10.0.exe                243.1 MB
-c1c316fb67733d05acbd8aba420fa374cf20b8cd1319f26dbe8569c2e67617bd  PolyXRD-v0.10.0-Portable.zip             380.7 MB
-84ffdad091e5dc5c6d9f72ba3fb68eae5e1a4f5a9a25e7326711a5c95cd4e9b4  PolyXRD-v0.10.0-Databases-COD-inorg.zip  133.9 MB
-ba703a6c2d587a4c39599aa84c5a07d0272aea39a8a66da7efa3687b63ed9def  PolyXRD-v0.10.0-Databases-COD-full.zip   205.9 MB
+b19f346e0662e90fd1dfea3e7e45b3c990a1f1ae1756a84b8822f6ac9205ac33  PolyXRD-Setup-v0.10.0.exe                243.1 MB
+d4ef3a6773d7a74bc1c7670bab0a6310aec34064629a709315f04dbfb49a4c65  PolyXRD-v0.10.0-Portable.zip             372.6 MB
+4366f873ad69487fbdac14a6e0cd3e6bf682f73492f20275d043cc7feec35ccd  PolyXRD-v0.10.0-Databases-COD-inorg.zip  131.1 MB
+72dff7525fe74934ac070eb9212ca6c106e25099e8050ece02a008e81c6c6af2  PolyXRD-v0.10.0-Databases-COD-full.zip   193.1 MB
 ```
 
 > 下载数据库包后建议核对 SHA-256，尤其是大文件传输中断导致 SQLite 尾部截断的情况
