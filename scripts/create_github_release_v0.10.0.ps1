@@ -1,4 +1,4 @@
-# PolyXRD v0.10.0 GitHub Release 创建 + 附件上传 (幂等可重跑)
+﻿# PolyXRD v0.10.0 GitHub Release 创建 + 附件上传 (幂等可重跑)
 # 用法: pwsh -NoProfile -File scripts/create_github_release_v0.10.0.ps1
 #
 # ★ 硬性政策: PDF2-2004 是 ICDD 版权商品库, **永不随 Release 分发**。
@@ -132,15 +132,9 @@ try {
   Write-Host "release body refreshed"
 } catch { Write-Host "WARN: body patch failed: $($_.Exception.Message)" }
 
-# ---- HttpClient ----
-Add-Type -AssemblyName System.Net.Http
-$hch = New-Object System.Net.Http.SocketsHttpHandler
-$hch.PooledConnectionLifetime = [TimeSpan]::FromMinutes(10)
-$hch.MaxConnectionsPerServer = 4
-$client = New-Object System.Net.Http.HttpClient($hch)
-$client.Timeout = [TimeSpan]::FromMinutes(60)
-$client.DefaultRequestHeaders.Authorization = New-Object System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", $token)
-$client.DefaultRequestHeaders.Add('User-Agent','PolyXRD-upload/1.0')
+# ---- 上传: 用 curl.exe 而不是 .NET HttpClient ----
+# curl 优势: Windows 10+ 自带; 不依赖 Add-Type (沙盒里 .NET 反射常被拦);
+# 处理大文件流式稳定; --data-binary "@path" 跨平台一致。
 
 $existingAssets = @()
 try { $existingAssets = Invoke-RestMethod -Uri "$baseURL/releases/$releaseId/assets" -Headers $headers } catch {}
@@ -151,6 +145,13 @@ function Assert-NotBanned([string]$s) {
   if ($s -match $BANNED) {
     throw "拒绝上传: '$s' 命中禁用关键字 '$BANNED' —— PDF2-2004 受 ICDD 版权保护, 永不发布。"
   }
+}
+
+$curlExe = (Get-Command curl.exe -ErrorAction SilentlyContinue).Source
+if (-not $curlExe) {
+  # 兜底: C:\Windows\System32\curl.exe
+  $fallback = 'C:\Windows\System32\curl.exe'
+  if (Test-Path $fallback) { $curlExe = $fallback } else { throw 'curl.exe 不存在; 无法上传附件' }
 }
 
 function Upload-Asset([string]$filePath, [string]$assetName, [string]$contentType, [int]$retries = 6) {
@@ -170,31 +171,39 @@ function Upload-Asset([string]$filePath, [string]$assetName, [string]$contentTyp
   Write-Host "Uploading $assetName ($([math]::Round($size/1MB,1)) MB)..."
   $name = [Uri]::EscapeDataString($assetName)
   $uri = "$uploadURL`?name=$name"
+  $tmpOut = Join-Path $env:TEMP "poly_curl_$assetName.out"
+  $tmpErr = Join-Path $env:TEMP "poly_curl_$assetName.err"
   for ($i=1; $i -le $retries; $i++) {
-    try {
-      $sw = [System.Diagnostics.Stopwatch]::StartNew()
-      $fs = [System.IO.File]::OpenRead($filePath)
+    if (Test-Path $tmpOut) { Remove-Item $tmpOut -Force -ErrorAction SilentlyContinue }
+    if (Test-Path $tmpErr) { Remove-Item $tmpErr -Force -ErrorAction SilentlyContinue }
+    $args = @(
+      '-sS','-X','POST',
+      '-H', "Authorization: Bearer $token",
+      '-H', "Accept: application/vnd.github+json",
+      '-H', "User-Agent: PolyXRD-upload/2.0",
+      '-H', "Content-Type: $contentType",
+      '--data-binary', "@`"$filePath`"",
+      $uri
+    )
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    $proc = Start-Process -FilePath $curlExe -ArgumentList $args -NoNewWindow -Wait -PassThru -RedirectStandardOutput $tmpOut -RedirectStandardError $tmpErr
+    $sw.Stop()
+    if ($proc.ExitCode -eq 0 -and (Test-Path $tmpOut)) {
       try {
-        $content = New-Object System.Net.Http.StreamContent($fs)
-        $content.Headers.ContentType = New-Object System.Net.Http.Headers.MediaTypeHeaderValue($contentType)
-        $content.Headers.ContentLength = $size
-        $resp = $client.PostAsync($uri, $content).Result
-        $respBody = $resp.Content.ReadAsStringAsync().Result
-        if (-not $resp.IsSuccessStatusCode) {
-          Write-Host ("  retry $i/$retries HTTP $($resp.StatusCode): " + $respBody.Substring(0, [Math]::Min(300,$respBody.Length)))
-          $resp.Dispose(); Start-Sleep -Seconds (5*[Math]::Min($i,6)); continue
+        $up = Get-Content $tmpOut -Raw | ConvertFrom-Json
+        if ($up.browser_download_url) {
+          $mbps = [math]::Round(($size/1MB)/$sw.Elapsed.TotalSeconds, 2)
+          Write-Host ("  OK in $([math]::Round($sw.Elapsed.TotalSeconds,1))s ($mbps MB/s) -> $($up.browser_download_url)")
+          return $up
         }
-        $resp.Dispose()
-        $up = $respBody | ConvertFrom-Json
-        $sw.Stop()
-        $mbps = [math]::Round(($size/1MB)/$sw.Elapsed.TotalSeconds, 2)
-        Write-Host ("  OK in $([math]::Round($sw.Elapsed.TotalSeconds,1))s ($mbps MB/s) -> $($up.browser_download_url)")
-        return $up
-      } finally { $fs.Dispose() }
-    } catch {
-      Write-Host ("  retry $i/$retries ERR: " + $_.Exception.Message)
-      Start-Sleep -Seconds (6*[math]::Min($i,6))
+      } catch {
+        Write-Host "    retry ${i}: bad JSON response"
+      }
+    } else {
+      $errMsg = if (Test-Path $tmpErr) { (Get-Content $tmpErr -Raw -ErrorAction SilentlyContinue) } else { '' }
+      Write-Host ("    retry ${i}/$retries curl exit=$($proc.ExitCode): " + ($errMsg -replace "`n",' '))
     }
+    Start-Sleep -Seconds (5*[Math]::Min($i,6))
   }
   throw "FAILED upload $assetName after $retries tries"
 }
