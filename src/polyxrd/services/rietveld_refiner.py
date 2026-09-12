@@ -988,6 +988,29 @@ class RietveldRefiner:
         residuals = intensity - simulated_full
         wR = best_wR
 
+        # ── v0.11.0 R-A4: Chebyshev 多项式背景抛光 (opt-in) ─────────
+        # 在 least_squares + 局部抛光之后, 用已拟合谱对 BG 做一次低频校正.
+        # 默认 bg_chebyshev_deg=0 = 关闭 → 行为完全等价旧版, 不影响既有测试.
+        # 启用后: 只有在 _chebyshev_background_polish 真的改进了 wR (gate)
+        # 时才采纳, 否则保持现状 — 双层保护 (内部缩放 + 外部 wR gate).
+        bg_cheb_deg = int(kwargs.get("bg_chebyshev_deg", 0))
+        bg_cheb_applied = False
+        if bg_cheb_deg > 0:
+            try:
+                bg_new, _before, after = self._chebyshev_background_polish(
+                    intensity, best_simulated, bg, two_theta,
+                    degree=bg_cheb_deg,
+                )
+                if np.all(np.isfinite(bg_new)) and after + 1e-9 < wR:
+                    simulated_full = best_simulated + bg_new
+                    residuals = intensity - simulated_full
+                    wR = float(after)
+                    bg = bg_new
+                    bg_cheb_applied = True
+            except Exception:
+                # 任何异常 → 静默回退 (守门员: 默认值已关; 走正门也不应崩)
+                bg_cheb_applied = False
+
         # GOF
         n_points = len(intensity)
         n_free = max(1, n_points - n_params)
@@ -1053,6 +1076,9 @@ class RietveldRefiner:
                 "opt_fwhm": float(opt_fwhm),
                 "opt_eta": float(opt_eta),
                 "opt_zero_shift": float(opt_zero_shift),
+                # v0.11.0 R-A4: Chebyshev BG 抛光, 默认关闭
+                "bg_chebyshev_deg": int(bg_cheb_deg),
+                "bg_chebyshev_applied": bool(bg_cheb_applied),
             },
         )
 
@@ -1064,6 +1090,76 @@ class RietveldRefiner:
             }
             return best_quick
         return result
+
+    # ------------------------------------------------------------------
+    # v0.11.0 R-A4: Chebyshev 多项式背景抛光 (opt-in)
+    # ------------------------------------------------------------------
+
+    def _chebyshev_background_polish(
+        self,
+        intensity: np.ndarray,
+        simulated: np.ndarray,
+        bg_initial: np.ndarray,
+        two_theta: np.ndarray,
+        degree: int = 4,
+        max_corr_fraction: float = 0.30,
+    ) -> tuple[np.ndarray, float, float]:
+        """Chebyshev 多项式背景抛光 (R-A4, opt-in)
+
+        把 ``intensity - simulated - bg_initial`` 视作 BG 估计误差的低频成分,
+        用 ``numpy.polynomial.chebyshev`` 拟合, 给出 bg 增量.
+        返回 ``(bg_new, before_wR, after_wR)``.
+
+        设计原则 (保守, 防恶化):
+        1. ``degree <= 0`` 或样本数不足 → 直接返回原 BG, 不动声不响
+        2. 拟合权重 = 1/sigma, sigma = sqrt(max(y,1)) (泊松/Poirier 启发):
+           让高强度峰区对 BG 拟合贡献低, 避免峰身拉偏 BG
+        3. **gate**: corr 范围不超过 ``max_corr_fraction · 动态范围`` (默认 30%);
+           若超过则按比例缩放, 防极端标本 (高散射基底) 让 Chebyshev 失控
+        4. **调用方**只采纳 ``after_wR < before_wR`` 的结果, 进一步保险
+
+        几何动机: median/SNIP 给的 bg 常低估宽峰肩 (陶瓷 amorphous hump),
+        或高角硬 X 射线散射抬升; Chebyshev 多项式提供低频解析分量,
+        在已拟合谱的基础上给 BG 一个软校正项。
+        """
+        n = len(intensity)
+        if degree <= 0 or n < 2 * degree + 1:
+            before_wR = float(self._calc_wR(intensity, simulated + bg_initial))
+            return bg_initial, before_wR, before_wR
+
+        residual = intensity - simulated - bg_initial
+        before_wR = float(self._calc_wR(intensity, simulated + bg_initial))
+
+        # x 归一到 [-1, 1] (Chebyshev 标准域)
+        t_min, t_max = float(two_theta[0]), float(two_theta[-1])
+        span = max(t_max - t_min, 1e-9)
+        x = 2.0 * (two_theta - t_min) / span - 1.0
+
+        # 泊松/Poirier 启发权: 1/sqrt(y) → 高强度峰区对 BG 拟合权重低
+        sigma = np.sqrt(np.maximum(intensity, 1.0))
+        w = 1.0 / sigma
+        if not np.all(np.isfinite(w)):
+            w = np.ones_like(intensity)
+
+        from numpy.polynomial.chebyshev import chebfit, chebval
+        coeffs = chebfit(x, residual, deg=degree, w=w)
+        corr = chebval(x, coeffs)
+
+        # corr 范围缩放 gate
+        y_dyn = max(float(np.max(intensity) - np.median(intensity)), 1.0)
+        corr_range = float(np.max(corr) - np.min(corr))
+        if corr_range > max_corr_fraction * y_dyn:
+            scale = (max_corr_fraction * y_dyn) / corr_range
+            corr = corr * scale
+
+        bg_new = bg_initial + corr
+        after_wR = float(self._calc_wR(intensity, simulated + bg_new))
+
+        # 数值稳定性: any NaN/Inf → 回退
+        if not (np.all(np.isfinite(bg_new)) and np.isfinite(after_wR)):
+            return bg_initial, before_wR, before_wR
+
+        return bg_new, before_wR, after_wR
 
     def _estimate_background(
         self, intensity: np.ndarray, method: str = "snip", wide_window: bool = False
