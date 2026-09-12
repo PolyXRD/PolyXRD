@@ -340,12 +340,71 @@ def _final_refine(req, xy_path, iparm_path, iparm_lines, scale):
             lat_out = None
         out_phases.append({"name": name, "lattice": lat_out})
 
+    # Le Bail 最终 wR 必须在定量阶段**之前**捕获 (定量切到 Rietveld 模式
+    # 后 wR 必然升高, 不能作为主指标回传)
     wR = None
     try:
         wR = gpx.histogram(0).get_wR()
     except Exception:
         wR = None
-    return {"phases": out_phases, "wR": wR, "rounds": rounds, "gpx": gpx_path}
+
+    # ── v0.11.0 定量阶段: 全相有 CIF 结构时关 LeBail, 用 |F|² 精修相分数 ──
+    # Le Bail 模式下相分数无语义 (强度是自由变量); 只有回到真 Rietveld
+    # (结构因子 × 相 Scale) 才能得到可解释的 wt%.
+    # 整段 try/except 包裹: 任何失败只损失 wt%, 不影响晶胞/LeBail wR 结果.
+    phase_fractions = None
+    wR_rietveld = None
+    ycalc = None
+    try:
+        req_phases = req.get("phases", [])
+        if req_phases and all(p.get("cif_path") for p in req_phases):
+            gpx.reload()
+            ctrl = gpx.data["Controls"]["data"]
+            ctrl["max cyc"] = 5
+            # 关 LeBail (强度改由结构因子 |F|² 计算) + 打开相分数精修。
+            # 注意: 相名 (如 ' ?') 在 reload 后 gpx.phase(name) 可能查不到,
+            # 这里直接迭代工程里的全部相 (与 req 顺序一致) 绕开名字查找.
+            proj_phases = list(gpx.phases())
+            for ph in proj_phases:
+                ph.set_refinements({"LeBail": False})
+                ph.set_HAP_refinements({"Scale": True}, histograms="all")
+            gpx.save()
+            gpx.do_refinements([{"set": dict(_CELL_BKG)} for _ in range(2)])
+            rounds += 3
+            gpx.reload()
+            hist = gpx.histogram(0)
+            proj_phases = list(gpx.phases())  # reload 后重新取对象
+            masses = []
+            for idx, p in enumerate(req_phases):
+                if idx < len(proj_phases):
+                    ph = proj_phases[idx]
+                else:
+                    ph = gpx.phase(p.get("name") or "phase")
+                if ph is None:
+                    raise RuntimeError(f"phase not found: {p.get('name')!r}")
+                frac = ph.getHAPvalues(hist.name)["Scale"][0]
+                mass = ph.data["General"]["Mass"]
+                masses.append(float(frac) * float(mass))
+            total = sum(masses)
+            if total > 0:
+                phase_fractions = [100.0 * m / total for m in masses]
+            try:
+                wR_rietveld = float(gpx.histogram(0).get_wR())
+            except Exception:
+                wR_rietveld = None
+    except Exception as e:
+        print(f"[bridge] quantify stage failed: {e}", file=sys.stderr)
+        phase_fractions = None
+
+    # v0.11.0: 回传计算谱 (修 PolyXRD 侧残差图"假装完美"的假回传)
+    try:
+        hist0 = gpx.histogram(0)
+        ycalc = [float(v) for v in hist0.getdata("Ycalc")]
+    except Exception:
+        ycalc = None
+    return {"phases": out_phases, "wR": wR, "rounds": rounds, "gpx": gpx_path,
+            "phase_fractions": phase_fractions, "wR_rietveld": wR_rietveld,
+            "ycalc": ycalc}
 
 
 # ----------------------------------------------------------------------
@@ -479,6 +538,9 @@ def main() -> int:
         "GOF": None,
         "n_cycles": int(result["rounds"]),
         "phases": result["phases"],
+        "phase_fractions": result.get("phase_fractions"),
+        "wR_rietveld": result.get("wR_rietveld"),
+        "ycalc": result.get("ycalc"),
         "gpx": result["gpx"],
         "engine_meta": {
             "gw_est": round(gw, 3),
