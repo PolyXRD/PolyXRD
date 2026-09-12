@@ -182,10 +182,14 @@ class RietveldRefiner:
         if not out.get("ok"):
             return self._refine_builtin(data, phases, strategy, max_cycles, **kwargs)
 
-        # 收集精修后晶胞
+        # 收集精修后晶胞 + 定量相分数 (v0.11.0: 桥在全相有 CIF 时输出)
         refined_phases = []
         lat_by_name = {p["name"]: p.get("lattice") for p in out.get("phases", [])}
-        for phase in phases:
+        fractions = out.get("phase_fractions")
+        use_fractions = (
+            isinstance(fractions, list) and len(fractions) == len(phases)
+        )
+        for i, phase in enumerate(phases):
             lat = phase.lattice if phase.lattice is not None else LatticeParams()
             new_lat = lat_by_name.get(phase.name) or {}
             if new_lat and new_lat.get("a") is not None:
@@ -196,12 +200,19 @@ class RietveldRefiner:
                     beta=float(new_lat.get("beta", 90.0)),
                     gamma=float(new_lat.get("gamma", 90.0)),
                 )
+            if use_fractions:
+                try:
+                    wf = float(fractions[i])
+                except (TypeError, ValueError):
+                    wf = phase.weight_fraction
+            else:
+                wf = phase.weight_fraction
             refined_phases.append(Phase(
                 name=phase.name,
                 formula=phase.formula,
                 space_group=phase.space_group,
                 lattice=lat,
-                weight_fraction=phase.weight_fraction,
+                weight_fraction=wf,
                 reference_peaks=phase.reference_peaks,
                 elements=phase.elements,
             ))
@@ -211,11 +222,21 @@ class RietveldRefiner:
         quality = ("优秀" if wR < 5 else "良好" if wR < 10
                    else "可接受" if wR < 20 else "需改进")
 
+        # v0.11.0: 使用桥回传的计算谱 (无则保持旧行为 — 观测谱占位)
+        ycalc = out.get("ycalc")
+        if isinstance(ycalc, list) and len(ycalc) == len(two_theta):
+            sim = np.asarray(ycalc, dtype=float)
+            sim_data = (data.two_theta, sim)
+            resid = (data.two_theta, np.asarray(data.intensity) - sim)
+        else:
+            sim_data = (data.two_theta, data.intensity)  # 旧行为
+            resid = (data.two_theta, np.zeros_like(data.two_theta))
+
         return RefinementResult(
             phases=refined_phases,
             observed_data=(data.two_theta, data.intensity),
-            simulated_data=(data.two_theta, data.intensity),  # 无残差谱回传
-            residual_data=(data.two_theta, np.zeros_like(data.two_theta)),
+            simulated_data=sim_data,
+            residual_data=resid,
             wR=wR,
             GOF=GOF,
             quality=quality,
@@ -227,6 +248,11 @@ class RietveldRefiner:
                 "gsas2_python": str(py),
                 "gpx": out.get("gpx", ""),
                 "wR": wR,
+                # v0.11.0: 定量阶段结果 (全相有 CIF 时才有)
+                "wR_rietveld": out.get("wR_rietveld"),
+                "quantified": bool(
+                    isinstance(out.get("phase_fractions"), list)
+                ),
             },
         )
 

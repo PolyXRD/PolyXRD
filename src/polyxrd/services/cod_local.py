@@ -45,7 +45,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
-from polyxrd.config import get_config
+from polyxrd.config import AppConfig, get_config
 from polyxrd.models.phase import LatticeParams, Phase
 
 log = logging.getLogger("polyxrd.cod_local")
@@ -611,19 +611,29 @@ def get_cod_root(default: Optional[Path] = None) -> Path:
 
     Priority:
       1. passed default
-      2. Paths with existing cod_index.sqlite alongside (most reliable)
-      3. AppConfig.cif_db_path / "cod"  (存在的话)
-      4. d:\\TEMP\\PolyXRD\\cod  (项目内解压路径)
-      5. ~/.polyxrd/cif_db/cod (创建并返回)
+      2. 用户导入的 cod_index.sqlite 旁路 (config.get_cod_index_sqlite_path)
+      3. Paths with existing cod_index.sqlite alongside (most reliable)
+         — **项目根优先** (v0.11.0 修复: 系统重装后盘符 D:→E:, 旧
+         d:\\TEMP 硬编码抢在项目根之前命中老树, 导致下载写 E: 运行读 D:)
+      4. AppConfig.cif_db_path / "cod"  (存在的话)
+      5. d:\\TEMP\\PolyXRD\\cod  (旧系统盘遗留, 仅兜底)
+      6. ~/.polyxrd/cif_db/cod (创建并返回)
     """
     # Phase 1: check candidates that have cod_index.sqlite alongside
     index_candidates: list[Path] = []
     if default:
         index_candidates.append(Path(default))
     cfg = get_config()
+    user_idx = cfg.get_cod_index_sqlite_path()
+    if user_idx and Path(user_idx).exists():
+        index_candidates.append(Path(user_idx).parent / "cod")
+        index_candidates.append(Path(user_idx).parent / "cod" / "cif")
+    # 项目根优先: 源码树 (dev) 或 _internal (打包后) 下的 cod/
+    index_candidates.append(AppConfig._PROJECT_ROOT / "cod")
+    index_candidates.append(AppConfig._PROJECT_ROOT / "cod" / "cif")
+    index_candidates.append(cfg.get_cif_db_path() / "cod")
     index_candidates.append(Path(r"d:\TEMP\PolyXRD\cod"))
     index_candidates.append(Path(r"d:\TEMP\PolyXRD\cod\cif"))
-    index_candidates.append(cfg.get_cif_db_path() / "cod")
     index_candidates.append(Path(r"d:\TEMP\cod\cif"))
     for c in index_candidates:
         idx = c.parent / "cod_index.sqlite" if c.name == "cif" else c.parent / "cod_index.sqlite"
@@ -635,8 +645,9 @@ def get_cod_root(default: Optional[Path] = None) -> Path:
             return c
     # Phase 3: fallback - try to create
     fallbacks = [
-        Path(r"d:\TEMP\PolyXRD\cod"),
+        AppConfig._PROJECT_ROOT / "cod",
         cfg.get_cif_db_path() / "cod",
+        Path(r"d:\TEMP\PolyXRD\cod"),
         Path(r"d:\TEMP\cod\cif"),
     ]
     for fallback in fallbacks:
@@ -1202,22 +1213,42 @@ class CODLocalDatabase:
     def get_cif(self, cod_id: int) -> Optional[str]:
         """Return CIF text contents.
 
-        Supports 4-level fallback:
+        Supports 5-level fallback:
+          0) Direct path construction cif/{d}/{dd}/{dd}/{id}.cif
+             (v0.11.0 修复: 无机库 cod_id 可能不在 cod_entries 索引里,
+             旧版在 entry 缺失时直接 return None, 连 REST 都不试)
           1) Directory-based CIF files under cod_root  (unpacked layout)
           2) SQLite BLOB: cif_gz gzip compressed CIF  (full self-contained DB)
           3) Original .tar archive (meta.tar_source points to it)
           4) COD REST API https://www.crystallography.net/cod/<id>.cif (last resort)
         """
-        # Level 1: directory-based CIF
         entry = self.get_entry(cod_id)
-        if not entry or not entry.file:
+        rel_path = entry.file if (entry and entry.file) else None
+        if rel_path is None:
+            # 无索引条目 → 按 COD 官方目录布局直接构造路径
+            s = str(int(cod_id))
+            rel_path = f"cif/{s[0]}/{s[1:3]}/{s[3:5]}/{s}.cif"
+
+        def _read_direct(rp: str) -> Optional[str]:
+            full = self.cod_root / rp
+            if full.exists():
+                try:
+                    return full.read_text(encoding="utf-8", errors="replace")
+                except Exception:
+                    pass
             return None
-        full = self.cod_root / entry.file
-        if full.exists():
-            try:
-                return full.read_text(encoding="utf-8", errors="replace")
-            except Exception:
-                pass
+
+        # Level 0/1: direct path (构造路径与索引路径一致时等价, 只读一次)
+        text = _read_direct(rel_path)
+        if text is not None:
+            return text
+        if entry is None:
+            # 索引都没有 → 不可能有 cif_gz/tar_source 两条路, 只剩 REST
+            rest = self._fetch_cif_from_cod_rest(cod_id)
+            if rest and "data_" in rest:
+                log.info("get_cif fallback to COD REST API for id=%d", cod_id)
+                return rest
+            return None
         # Level 2: cif_gz BLOB (精简模式下可能为 NULL, 跳过)
         try:
             conn = connect(self.db_path)
