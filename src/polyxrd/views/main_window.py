@@ -70,7 +70,8 @@ class RefinementWizardDialog(QDialog):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle(tr("dialog.refine_wizard_title"))
-        self.setMinimumSize(500, 400)
+        self.setMinimumSize(500, 480)
+        self._engine_status: dict = {}
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -83,9 +84,17 @@ class RefinementWizardDialog(QDialog):
         param_group = QGroupBox(tr("params.refine_params"))
         form = QFormLayout(param_group)
 
+        # 引擎下拉 + 状态标签 (R-C5)
+        engine_row = QHBoxLayout()
         self._engine_combo = QComboBox()
-        self._engine_combo.addItems(["gsas2", "powerxrd", "builtin"])
-        form.addRow(tr("params.engine_label"), self._engine_combo)
+        # 候选列表: 按"始终可用→可能可用"排序; 用户切换时触发状态刷新
+        self._engine_combo.addItems(["gsas2", "powerxrd", "maud", "builtin"])
+        self._engine_combo.currentTextChanged.connect(self._on_engine_changed)
+        engine_row.addWidget(self._engine_combo, 1)
+        self._engine_status_label = QLabel("")
+        self._engine_status_label.setMinimumWidth(140)
+        engine_row.addWidget(self._engine_status_label, 0)
+        form.addRow(tr("params.engine_label"), engine_row)
 
         self._strategy_combo = QComboBox()
         self._strategy_combo.addItems(["sequential", "auto", "manual"])
@@ -125,6 +134,49 @@ class RefinementWizardDialog(QDialog):
         button_box.accepted.connect(self.accept)
         button_box.rejected.connect(self.reject)
         layout.addWidget(button_box)
+
+        # 初始化引擎状态
+        self._refresh_engine_status()
+
+    def _refresh_engine_status(self) -> None:
+        """从 RietveldRefiner.get_engine_status() 拉各引擎状态, 写入 _engine_status."""
+        try:
+            from polyxrd.services.rietveld_refiner import RietveldRefiner
+            self._engine_status = RietveldRefiner().get_engine_status()
+        except Exception:
+            self._engine_status = {}
+        self._on_engine_changed(self._engine_combo.currentText())
+
+    def _on_engine_changed(self, engine_name: str) -> None:
+        """引擎下拉变化时, 更新状态标签 + 必要 fallback 警告."""
+        info = self._engine_status.get(engine_name) or {"available": False, "note": ""}
+        if info.get("available"):
+            self._engine_status_label.setText(
+                f"✓ {tr('params.engine_available')}"
+            )
+            self._engine_status_label.setStyleSheet("color: #2a8c2a;")
+        else:
+            self._engine_status_label.setText(
+                f"✗ {tr('params.engine_unavailable')}"
+            )
+            self._engine_status_label.setStyleSheet("color: #c25a2a;")
+
+    def accept(self) -> None:  # type: ignore[override]
+        """OK 时, 若用户选了不可用引擎, 弹提示并询问 fallback (R-C5)."""
+        engine_name = self._engine_combo.currentText()
+        info = self._engine_status.get(engine_name) or {}
+        if engine_name == "maud" and not info.get("available"):
+            # MAUD 缺: 提示并 fallback
+            note = info.get("note", "")
+            QMessageBox.warning(
+                self,
+                tr("dialog.refine_wizard_title"),
+                f"{tr('params.engine_unavailable')}: {note}\n"
+                f"{tr('params.engine_maud_missing_cif')}",
+            )
+            self._engine_combo.setCurrentText("builtin")
+            return  # 让用户再点一次确认 (避免静默改值)
+        super().accept()
 
     def get_params(self) -> dict:
         return {
