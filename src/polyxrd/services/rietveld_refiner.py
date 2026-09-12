@@ -88,6 +88,7 @@ class RietveldRefiner:
             "gsas2": self._refine_gsas2,
             "powerxrd": self._refine_powerxrd,
             "builtin": self._refine_builtin,
+            "maud": self._refine_maud,
         }
 
         refine_func = engines.get(engine)
@@ -308,6 +309,107 @@ class RietveldRefiner:
             )
         return env
 
+    # ------------------------------------------------------------------
+    # MAUD 精修引擎 (路线 C)
+    # ------------------------------------------------------------------
+
+    def _refine_maud(
+        self,
+        data: XRDData,
+        phases: list[Phase],
+        strategy: str,
+        max_cycles: int,
+        **kwargs,
+    ) -> RefinementResult:
+        """使用 MAUD (MaudText 批处理) 进行 Rietveld 精修
+
+        调用 :py:class:`polyxrd.services.refinement_engines.MaudEngine`。
+        失败 (缺 MAUD / 缺 CIF / 子进程崩溃 / 超时) 全部回退内置引擎,
+        与 GSAS-II / powerxrd 行为一致。
+
+        关键字:
+            maud_root: 自定义 MAUD 安装根 (默认自动探测 C:\\MAUD3)
+            maud_timeout: 子进程超时秒数 (默认 600)
+            maud_wizard_index: wizard 步 (-1/1/3/5/8/13/999); None=MAUD 自動選
+            maud_keep_workdir: True 时保留 work_dir (调试用, 默认 False)
+            maud_on_progress: 进度回调 (MaudProgress → None)
+            maud_cod_root: 当 phase.cod_id 给出时, COD 库根用于 CIF 映射
+        """
+        from polyxrd.services.refinement_engines import (
+            MaudEngine,
+            MaudEngineError,
+        )
+
+        # ── first-run 探测 (R-C4) ──
+        # 若上一次 MAUD 跑挂 (output.par 缺 R 字段) 或压根没跑过 → 走 wizard 1
+        # 强制收敛起步。否则用 MAUD 自动 wizard (None)。
+        wizard = kwargs.get("maud_wizard_index")
+        if wizard is None and self._maud_needs_first_run():
+            wizard = 1  # 强制走 wizard 1 (scale+背景), 避免初次跑卡死
+
+        try:
+            maud_root = kwargs.get("maud_root")
+            engine = MaudEngine(
+                maud_root=Path(maud_root) if maud_root else None,
+            )
+            result = engine.refine(
+                data, list(phases),  # 引擎会就地改 phases 的 weight/lattice, 先复制防破坏
+                iterations=max_cycles,
+                wizard_index=wizard,
+                timeout_s=float(kwargs.get("maud_timeout", 600.0)),
+                keep_workdir=bool(kwargs.get("maud_keep_workdir", False)),
+                on_progress=kwargs.get("maud_on_progress"),
+                cod_root=Path(kwargs["maud_cod_root"]) if kwargs.get("maud_cod_root") else None,
+            )
+        except MaudEngineError as e:
+            return self._refine_builtin(data, phases, strategy, max_cycles, **kwargs)
+        except Exception:
+            return self._refine_builtin(data, phases, strategy, max_cycles, **kwargs)
+
+        # 标记 first-run 完成 (下次可走自动 wizard)
+        self._maud_mark_first_run_done()
+        return result
+
+    @staticmethod
+    def _maud_needs_first_run(
+        search_paths: tuple[Path, ...] = (Path("C:/MAUD3"), Path("C:/MAUD2")),
+    ) -> bool:
+        """探测是否需要 first-run wizard=1 (R-C4 策略).
+
+        触发条件:
+        1. 标记文件 ``~/.polyxrd/.maud_first_run_done`` 不存在
+        2. 默认搜索路径下所有 ``examples/*.par`` 都不含 ``_refine_ls_wR_factor_all``
+
+        :param search_paths: 自定义搜索根 (测试用); 默认 C:\\MAUD3 + C:\\MAUD2
+        """
+        flag = Path.home() / ".polyxrd" / ".maud_first_run_done"
+        if flag.exists():
+            return False
+        for maud in search_paths:
+            exdir = maud / "examples"
+            if exdir.is_dir():
+                for par in exdir.glob("*.par"):
+                    try:
+                        txt = par.read_text(encoding="utf-8", errors="replace")
+                        if "_refine_ls_wR_factor_all" in txt:
+                            return False
+                    except OSError:
+                        continue
+        return True
+
+    @staticmethod
+    def _maud_mark_first_run_done() -> None:
+        """写下 first-run 完成标记 (R-C4)"""
+        try:
+            flag = Path.home() / ".polyxrd" / ".maud_first_run_done"
+            flag.parent.mkdir(parents=True, exist_ok=True)
+            flag.write_text(
+                f"maud first-run done at {time.time():.0f}\n",
+                encoding="utf-8",
+            )
+        except OSError:
+            pass  # 标记失败不影响主流程
+
     def get_engine_status(self) -> dict:
         """返回各精修引擎的可用状态 (供 GUI 提示)"""
         status: dict = {"builtin": {"available": True, "note": "内置引擎 (始终可用)"}}
@@ -336,6 +438,29 @@ class RietveldRefiner:
                 "python": None,
                 "note": "未检测到 GSAS-II (gsas2main 安装器), 或用 "
                         "POLYXRD_GSAS2_PYTHON 指定 python.exe",
+            }
+        # maud
+        try:
+            from polyxrd.services.maud_par_builder import detect_maud_root
+            try:
+                maud_root = detect_maud_root()
+                status["maud"] = {
+                    "available": True,
+                    "maud_root": str(maud_root),
+                    "note": "MaudText 子进程; 需要每个 phase 提供 cif_path "
+                            "或 cod_id (路线 B 自动映射)",
+                }
+            except FileNotFoundError:
+                status["maud"] = {
+                    "available": False,
+                    "maud_root": None,
+                    "note": "未检测到 MAUD (C:\\MAUD2 / C:\\MAUD3)",
+                }
+        except ImportError:
+            status["maud"] = {
+                "available": False,
+                "maud_root": None,
+                "note": "maud_par_builder 模块未加载",
             }
         return status
 

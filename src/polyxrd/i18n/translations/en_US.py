@@ -461,6 +461,11 @@ translations = {
         "cif_url": "CIF URL",
         "refine_params": "Refinement Parameters",
         "engine_label": "Engine",
+        "engine_available": "Available",
+        "engine_unavailable": "Not installed",
+        "engine_status_label": "Engine status",
+        "engine_maud_missing_cif": "MAUD engine requires cif_path or cod_id for each phase; "
+                                  "currently not satisfied. Fall back to builtin engine?",
         "strategy_label": "Strategy",
         "max_cycles_label": "Max Cycles",
         "bgm_snip": "SNIP",
