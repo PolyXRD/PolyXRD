@@ -677,6 +677,31 @@ class RietveldRefiner:
         y_exp_pos = np.where(y_exp > 0, y_exp, 0.0).astype(float)
         y_floor = max(float(np.median(y_exp_pos)) * 0.05, 1.0)
 
+        # ── 1b. v0.11.0 R-A1: 统计权重 (opt-in) ──────────────────
+        # 旧版 residual 与 _calc_wR 都是单位权, 且 residual 用扣背景的
+        # y_exp 而 wR 用含背景的 intensity — 目标函数与评价指标不同量.
+        # stat_weights 启用后: residual 乘 sqrt(w), 全部 _calc_wR 调用带
+        # 同一组 w (wR 与目标函数自洽, 即 docs/精修算法改进方案.md A1).
+        #   "poisson": σ² = max(y, 1)
+        #   "poirier": σ² = max(y, 1) + bg   (推荐, 低强度区更稳)
+        # w 归一到均值 1, 保持 residual 数值量级与旧版可比 (边界/初值不变).
+        stat_weights_mode = str(kwargs.get("stat_weights", "none")).lower()
+        if stat_weights_mode not in ("none", "poisson", "poirier"):
+            stat_weights_mode = "none"
+        if stat_weights_mode == "poisson":
+            _var = np.maximum(intensity, 1.0)
+        elif stat_weights_mode == "poirier":
+            _var = np.maximum(intensity, 1.0) + np.maximum(bg, 0.0)
+        else:
+            _var = None
+        if _var is not None:
+            w_fit = 1.0 / _var
+            w_fit = w_fit / float(np.mean(w_fit))  # 均值 1 归一
+            sqrt_w_fit = np.sqrt(w_fit)
+        else:
+            w_fit = None
+            sqrt_w_fit = None
+
         # ── 2. 参考峰收集 (v2 不做全局归一化, 避免破坏 wR 分子分母比例一致性)
         #    仅对每个物相做参考峰完整性检查; 原内置库中的参考峰强度已可比较
         phase_peaks = []
@@ -852,7 +877,16 @@ class RietveldRefiner:
                 eff_two_theta, phase_peaks, weights, fwhm, eta, scale, peak_shape,
                 caglioti=cag
             )
-            return y_exp - simulated
+            r = y_exp - simulated
+            if sqrt_w_fit is not None:
+                r = r * sqrt_w_fit  # R-A1: 目标函数带统计权
+            return r
+
+        def _wr_of(sim_core: np.ndarray) -> float:
+            """R-A1 自洽 wR: 与 residual 用同一组统计权 (stat_weights=none 时单位权)"""
+            if w_fit is None:
+                return self._calc_wR(intensity, sim_core + bg)
+            return self._calc_wR(intensity, sim_core + bg, weight=w_fit)
 
         # ── 6. 多起点最小二乘，取最终 wR 最优者 ──────────────
         best_result = None
@@ -879,7 +913,7 @@ class RietveldRefiner:
                 eff, phase_peaks, opt_w, opt_fw, opt_et, opt_sc, peak_shape,
                 caglioti=opt_cag
             )
-            wr_i = self._calc_wR(intensity, sim_i + bg)
+            wr_i = _wr_of(sim_i)
 
             if wr_i < best_wR:
                 best_wR = wr_i
@@ -962,7 +996,7 @@ class RietveldRefiner:
                                         eff_t, phase_peaks, _uw, _ufw, _uet, _usc, peak_shape,
                                         caglioti=_ucag
                                     )
-                                    wr_t = self._calc_wR(intensity, sim_t + bg)
+                                    wr_t = _wr_of(sim_t)
                                     # 每 8 次评估汇报一次: 抛光约百余次评估, 采样过密
                                     # 会让 processEvents 本身成为开销
                                     _polish_n += 1
@@ -999,7 +1033,7 @@ class RietveldRefiner:
             try:
                 bg_new, _before, after = self._chebyshev_background_polish(
                     intensity, best_simulated, bg, two_theta,
-                    degree=bg_cheb_deg,
+                    degree=bg_cheb_deg, weight=w_fit,
                 )
                 if np.all(np.isfinite(bg_new)) and after + 1e-9 < wR:
                     simulated_full = best_simulated + bg_new
@@ -1079,6 +1113,8 @@ class RietveldRefiner:
                 # v0.11.0 R-A4: Chebyshev BG 抛光, 默认关闭
                 "bg_chebyshev_deg": int(bg_cheb_deg),
                 "bg_chebyshev_applied": bool(bg_cheb_applied),
+                # v0.11.0 R-A1: 统计权 (目标函数与 wR 自洽), 默认 "none"
+                "stat_weights": stat_weights_mode,
             },
         )
 
@@ -1103,12 +1139,16 @@ class RietveldRefiner:
         two_theta: np.ndarray,
         degree: int = 4,
         max_corr_fraction: float = 0.30,
+        weight: Optional[np.ndarray] = None,
     ) -> tuple[np.ndarray, float, float]:
         """Chebyshev 多项式背景抛光 (R-A4, opt-in)
 
         把 ``intensity - simulated - bg_initial`` 视作 BG 估计误差的低频成分,
         用 ``numpy.polynomial.chebyshev`` 拟合, 给出 bg 增量.
         返回 ``(bg_new, before_wR, after_wR)``.
+
+        ``weight``: R-A1 统计权 (stat_weights 启用时由调用方传入), 保证
+        before/after wR 与主拟合口径一致; None = 单位权 (旧行为).
 
         设计原则 (保守, 防恶化):
         1. ``degree <= 0`` 或样本数不足 → 直接返回原 BG, 不动声不响
@@ -1124,11 +1164,13 @@ class RietveldRefiner:
         """
         n = len(intensity)
         if degree <= 0 or n < 2 * degree + 1:
-            before_wR = float(self._calc_wR(intensity, simulated + bg_initial))
+            before_wR = float(self._calc_wR(intensity, simulated + bg_initial,
+                                            weight=weight))
             return bg_initial, before_wR, before_wR
 
         residual = intensity - simulated - bg_initial
-        before_wR = float(self._calc_wR(intensity, simulated + bg_initial))
+        before_wR = float(self._calc_wR(intensity, simulated + bg_initial,
+                                        weight=weight))
 
         # x 归一到 [-1, 1] (Chebyshev 标准域)
         t_min, t_max = float(two_theta[0]), float(two_theta[-1])
@@ -1153,7 +1195,8 @@ class RietveldRefiner:
             corr = corr * scale
 
         bg_new = bg_initial + corr
-        after_wR = float(self._calc_wR(intensity, simulated + bg_new))
+        after_wR = float(self._calc_wR(intensity, simulated + bg_new,
+                                       weight=weight))
 
         # 数值稳定性: any NaN/Inf → 回退
         if not (np.all(np.isfinite(bg_new)) and np.isfinite(after_wR)):
