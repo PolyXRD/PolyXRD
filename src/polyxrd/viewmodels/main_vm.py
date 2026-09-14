@@ -84,6 +84,15 @@ class MainViewModel(QObject):
     def selected_phases(self):
         return self._phase_vm.selected_phases
 
+    @property
+    def matched_phases(self):
+        """识别出的物相 (按匹配分排序)。
+
+        用于用户**没有显式勾选**物相时的兜底: 精修向导/批量精修都靠它取
+        "匹配分最高的前几个", 否则用户会莫名其妙被拦住说"请先选择物相"。
+        """
+        return self._phase_vm.matched_phases
+
     # ------------------------------------------------------------------
     # 公共方法 - 数据
     # ------------------------------------------------------------------
@@ -364,10 +373,18 @@ class MainViewModel(QObject):
     # ------------------------------------------------------------------
     # 公共方法 - 导出
     # ------------------------------------------------------------------
-
     def export_result(self, export_dir: str, format: str = "all") -> None:
         """导出结果"""
         self._refinement_vm.export_result(export_dir, format=format)
+
+    def adopt_refinement_result(self, result) -> None:
+        """登记一个在别处(如分步精修向导)算好的精修结果, 并广播完成信号。
+
+        分步向导自带 refiner, 结果不会经过 `refine_structure`; 若不接回来,
+        用户在向导里跑完会发现精修页/报告页仍是空的 —— 与快速向导行为不一致。
+        下游(精修页/报告)无需关心结果来自哪条路径。
+        """
+        self._refinement_vm.adopt_result(result)
 
     # ------------------------------------------------------------------
     # 信号处理
