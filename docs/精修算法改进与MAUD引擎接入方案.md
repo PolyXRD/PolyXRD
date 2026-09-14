@@ -376,6 +376,8 @@ _riet_append_simple_result_to   # 结果追写（TSV）
 ### 7.2 基准工具（新增）
 
 - **`tests/bench_refine_wr.py`**（按项目惯例，`bench_*` 不入库的临时基准也要能一键重跑）
+  - ⚠️ 该脚本随 `fa9c9ab` 的 `tests/bench_*.py` 批量清理一并删除，且从未入库、不可取回。
+    需要时按下述规格重建（骨架与 `docs/基准报告-v0.9.11.md` 文末「重写指引」同构）。
   - 遍历 `E:/TEMP/test_xrd/txt/` 13 样 × 引擎集合（builtin / gsas2 / maud）
   - 输出 Markdown 表：`试样 | 引擎 | wR | GOF | 耗时 | 各相 wt% | 与真值偏差`
   - 真值从 `物相结果+wt%.txt` 解析

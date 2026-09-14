@@ -293,7 +293,9 @@ _riet_append_result_to                         ← 结果 TSV（**MAUD3 必须�
 
 ### 9.2 R-C6 端到端实测: 部分成功
 
-**真实 MAUD3 跑通路径**（脚本 `scripts/maud_replay_ins_F.py`）:
+**真实 MAUD3 跑通路径**（脚本 `scripts/maud_replay_ins_F.py`，
+⚠️ 该探针已在 `fa9c9ab` 清理；因 `scripts/` 入库，可取回：
+`git show fa9c9ab^:scripts/maud_replay_ins_F.py > scripts\maud_replay_ins_F.py`）:
 
 - 数据：`C:/MAUD2/alzrc.dat` (2660 点, 22~155°, Cu Kα)
 - 模板：`C:/Users/.../maud_ins_smoke/alzrc.par` (**预加载** 含 corundum + T-PSZ 两相)
@@ -301,7 +303,9 @@ _riet_append_result_to                         ← 结果 TSV（**MAUD3 必须�
 - 结果: **wR = 0.087%, R = 0.064%, GOF = 0.064, n_cycles = 20**
 - TSV 回读两相 Wt%/Cell/Size 全部正确
 
-**动态 CIF 注入路径** (`scripts/maud_smoke_e2e.py` + `scripts/maud_v3_default_template.py`):
+**动态 CIF 注入路径** (`scripts/maud_smoke_e2e.py` + `scripts/maud_v3_default_template.py`，
+⚠️ 两个探针已在 `fa9c9ab` 清理；因 `scripts/` 入库，可取回：
+`git show fa9c9ab^:scripts/maud_smoke_e2e.py > scripts\maud_smoke_e2e.py`):
 
 - 用 bundled `maud_default.par` (无相) + `_maud_import_phase` × 2 注入外部 CIF
 - **结果: MAUD 加载完成, 但 R 因子恒为 0, TSV 为空, 无 refined.par 输出**

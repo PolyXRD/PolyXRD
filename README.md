@@ -159,7 +159,7 @@ PolyXRD/
 │   ├── create_github_release_v0.9.10.ps1  # 上一版模板 (保留备查)
 │   ├── upload_release_assets.ps1   # 已废弃 (旧盘符路径, 仅留占位)
 │   ├── gsas2_bridge.py             # GSAS-II 调用桥
-│   ├── _pe_imports.py              # PyInstaller 隐式导入收集
+│   ├── (已清理) _pe_imports.py      # 原 DLL 导入表诊断探针, fa9c9ab 移除 (git 可取回)
 │   └── _pyinst_collect.py          # COLLECT 步骤兜底
 │
 ├── docs/                       # 文档
@@ -254,6 +254,18 @@ python -m polyxrd.main
 # 5. 跑测试
 python -m pytest -q
 ```
+
+#### 一键源码启动（人工验收用）
+
+仓库根目录的 `run_dev.bat` 已封装好 PYTHONPATH，双击即可：
+
+```bat
+run_dev.bat
+```
+
+它直接跑仓库里的 `src/`，**永远是最新代码**，不必等 PyInstaller 构建完成，
+适合功能验收 / 手测。打包版与源码版的差异只在分发方式，业务代码同源。
+验收项与逐步操作见 [docs/验收清单-v0.11.0.md](docs/验收清单-v0.11.0.md)。
 
 ### 构建发布产物
 

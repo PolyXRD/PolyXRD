@@ -159,6 +159,8 @@ build.bat
   `_icu_dlls\` 并在 spec 里加该路径，或安装 Qt 6.11 运行时从其 `bin\` 取
   `icuuc74.dll + icudt74.dll`。
 - 排查工具：`scripts\_pe_imports.py <dll路径>` 可列出任意 DLL 的导入表。
+  **注意**：该脚本已在 fa9c9ab 作为一次性诊断工具清理，需要时先取回：
+  `git show fa9c9ab^:scripts/_pe_imports.py > scripts\_pe_imports.py`。
 
 ### 坑 2：WorkBuddy 沙盒 safe-delete 拦截 PyInstaller
 
@@ -219,6 +221,7 @@ venv\Scripts\python.exe -m PyInstaller PolyXRD.spec --noconfirm
 venv\Scripts\python.exe scripts\_pyinst_collect.py
 
 :: 查任意 DLL 依赖 (排查 ICU 类问题)
+:: 注意: _pe_imports.py 已在 fa9c9ab 移除, 先按坑 1 的 git show 命令取回
 venv\Scripts\python.exe scripts\_pe_imports.py dist\PolyXRD\_internal\PySide6\Qt6Core.dll
 ```
 

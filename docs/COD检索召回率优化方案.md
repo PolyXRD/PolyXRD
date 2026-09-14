@@ -52,7 +52,8 @@ top-40 强峰索引（2.8M 行）又高度集中在低 d 区 —— 于是"≥3 
 3. 每次改检索前先跑 `_bench_bucket.py` 式的"耗时 + 候选集指纹"双指标基线。
 
 **教训**: 优化前应先做**单变量消融**定位瓶颈，而不是按"看起来最像"的机制（d 容差）下手。
-本轮基准脚本见 `tests/bench_*.py`（该目录已 gitignore），完整成绩见 `docs/基准报告-v0.9.11.md`。
+本轮基准脚本（`tests/bench_*.py`）已在 `fa9c9ab` 清理删除，且因 `tests/` 整体 gitignore 而未曾入库，
+无法取回；完整成绩与口径说明见 `docs/基准报告-v0.9.11.md` 文末「复现方式 / 重写指引」。
 
 ---
 
@@ -129,7 +130,7 @@ cands = cdb.search_cod_by_d_peaks(
 prefilter_tolerance_rel: float = 0.005,  # 原 0.0
 ```
 
-**验证**: `bench_cod_recall.py` 已验证 `rel.5% m3 r40` 配置召回优于基线。
+**验证**（脚本已删）: `bench_cod_recall.py` 已验证 `rel.5% m3 r40` 配置召回优于基线。
 
 **预期收益**: 低角度峰（d > 3 Å）漏配修复，直接提升石英、白云石等常见矿物召回。
 
@@ -231,7 +232,7 @@ prefilter_min_match: int = 2      # 原 3 → 2: 低含量相峰少时也能进�
 prefilter_max_ref_peaks: int = 80 # 原 40 → 80: 多峰相覆盖更全
 ```
 
-**验证**: `bench_cod_recall.py` 已验证 `rel.3% m2 r80` 在多个试样上召回有提升。
+**验证**（脚本已删）: `bench_cod_recall.py` 已验证 `rel.3% m2 r80` 在多个试样上召回有提升。
 
 **代价**: 候选池变大，需配合方案 C 控制下游耗时。`min_match=2` 可能引入更多杂相，但下游 FOM 是强判别器可以过滤。
 
@@ -308,6 +309,9 @@ if use_intensity and total_i > 0:
 
 ### 建议实施顺序
 
+> 注：下方提到的 `bench_*.py` 基准脚本已在 `fa9c9ab` 删除（从未入库）。
+> 执行下列步骤时需按 `docs/基准报告-v0.9.11.md` 文末「重写指引」重建度量脚本。
+
 ```
 Step 1: 方案 A (1 行改动) → 跑 bench_cod_recall.py 验证
 Step 2: 方案 D (2 行改动) → 跑 bench_cod_recall.py 验证
@@ -323,6 +327,8 @@ Step 5: 方案 E/F (可选, 叠加优化)
 ### 4.1 召回率诊断
 
 ```bash
+# ⚠️ 以下基准脚本已在 fa9c9ab 删除（tests/ 整体 gitignore → 从未入库，不可取回）。
+#    需要重新度量时请按 docs/基准报告-v0.9.11.md 文末「重写指引」重建。
 # 已有基准脚本 (tests/ 已 gitignore, 不进库)
 python tests/bench_cod_recall.py
 # 对比不同 tolerance/min_match/max_ref_peaks 配置的召回率
@@ -372,7 +378,8 @@ python tests/bench_cod_ranking.py
 
 ---
 
-> **附**: 基准脚本位于 `tests/` (该目录已 gitignore, 不随仓库提交):
+> **附**（脚本已删，见上文 4.1 说明）: 原基准脚本位于 `tests/`（该目录已 gitignore, 不随仓库提交），
+> 已于 `fa9c9ab` 清理，记录如下仅作方法学存档:
 > - `tests/bench_cod_recall.py` — 召回率诊断 (多配置扫描)
 > - `tests/bench_match_factor.py` — 新旧 FoM 同候选集重排对比
 > - `tests/bench_cod_ranking.py` — 多排序策略扫描
