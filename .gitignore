@@ -22,6 +22,11 @@ dbg*.ps1
 _dbg*.py
 _dbg*.ps1
 _*.py
+# 注意: `_*.py` 会连 `__init__.py` 一起吞掉(下划线开头, 后缀 .py)。
+# 曾经因此导致 src/polyxrd/services/refinement_engines/__init__.py 从未入库,
+# 且 git status 不报错(被忽略)。必须显式放行包初始化文件。
+!__init__.py
+!**/__init__.py
 
 # PyInstaller 运行日志
 pyinstaller-build.log
