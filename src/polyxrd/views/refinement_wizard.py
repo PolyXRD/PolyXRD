@@ -326,7 +326,7 @@ class RefinementWizard(QWidget):
         params_layout = QFormLayout()
 
         self._engine_combo = QComboBox()
-        self._engine_combo.addItems(["gsas2", "powerxrd", "builtin"])
+        self._engine_combo.addItems(["auto", "gsas2", "powerxrd", "builtin"])
         self._engine_combo.currentTextChanged.connect(self._on_param_changed)
         params_layout.addRow(tr("wizard.params_page.engine"), self._engine_combo)
 

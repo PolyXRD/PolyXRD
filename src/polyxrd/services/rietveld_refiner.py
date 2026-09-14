@@ -6,6 +6,7 @@ Rietveld精修服务
 from __future__ import annotations
 
 import os
+import logging
 import time
 from pathlib import Path
 from typing import Optional
@@ -16,6 +17,8 @@ from polyxrd.config import get_config
 from polyxrd.models.phase import Phase, LatticeParams
 from polyxrd.models.refinement import RefinementResult
 from polyxrd.models.xrd_data import XRDData
+
+logger = logging.getLogger("polyxrd.rietveld_refiner")
 
 
 class RietveldRefiner:
@@ -85,6 +88,7 @@ class RietveldRefiner:
         kwargs.pop("options", None)
 
         engines = {
+            "auto": self._refine_auto,
             "gsas2": self._refine_gsas2,
             "powerxrd": self._refine_powerxrd,
             "builtin": self._refine_builtin,
@@ -98,11 +102,57 @@ class RietveldRefiner:
 
         try:
             result = refine_func(data, phases_use, strategy, max_cycles, **kwargs)
-        except Exception:
-            # 任何引擎失败时使用内置精修
+        except Exception as e:
+            # 任何引擎失败时使用内置精修 (不再静默: 记录原因供 UI/调试)
+            logger.warning("engine=%s 精修失败, 回退 builtin: %s", engine, e)
             result = self._refine_builtin(data, phases_use, strategy, max_cycles, **kwargs)
+            result.fit_params["engine_requested"] = engine
+            result.fit_params["engine_fallback_reason"] = f"{type(e).__name__}: {e}"
 
         result.time_seconds = time.time() - start_time
+        return result
+
+    # ------------------------------------------------------------------
+    # 自动引擎选择 (v0.11.0 打磨)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _phases_have_structure(phases: list[Phase]) -> bool:
+        """全部物相都带可用结构 CIF 时才走 GSAS-II (真 Rietveld + 定量才有意义)."""
+        return bool(phases) and all(
+            p.cif_path and Path(p.cif_path).exists() for p in phases
+        )
+
+    def _refine_auto(
+        self,
+        data: XRDData,
+        phases: list[Phase],
+        strategy: str,
+        max_cycles: int,
+        **kwargs,
+    ) -> RefinementResult:
+        """自动引擎选择:
+        全相有结构 CIF 且 GSAS-II 可用 → gsas2 (真 Rietveld + wt% 定量);
+        否则回退 builtin (无结构剖面拟合), 并把原因写入 fit_params.
+        """
+        reasons: list[str] = []
+        if self._phases_have_structure(phases):
+            py = self._find_gsas2_python()
+            if py is not None:
+                try:
+                    return self._refine_gsas2(
+                        data, phases, strategy, max_cycles, **kwargs
+                    )
+                except Exception as e:
+                    reasons.append(f"gsas2 执行失败: {type(e).__name__}: {e}")
+            else:
+                reasons.append("未找到 GSAS-II 安装 (E:\\GSASII)")
+        else:
+            reasons.append("存在无结构 CIF 的物相 (builtin 剖面拟合即可)")
+
+        result = self._refine_builtin(data, phases, strategy, max_cycles, **kwargs)
+        result.fit_params["engine_requested"] = "auto"
+        result.fit_params["engine_fallback_reason"] = "; ".join(reasons)
         return result
 
     # ------------------------------------------------------------------
@@ -127,7 +177,12 @@ class RietveldRefiner:
         py = self._find_gsas2_python()
         bridge = Path(__file__).resolve().parents[3] / "scripts" / "gsas2_bridge.py"
         if not py or not bridge.exists():
-            return self._refine_builtin(data, phases, strategy, max_cycles, **kwargs)
+            logger.warning("GSAS-II 不可用 (py=%s, bridge 存在=%s), 回退 builtin",
+                           py, bridge.exists())
+            result = self._refine_builtin(data, phases, strategy, max_cycles, **kwargs)
+            result.fit_params["engine_requested"] = "gsas2"
+            result.fit_params["engine_fallback_reason"] = "GSAS-II 未安装或 bridge 缺失"
+            return result
 
         import json as _json
         import subprocess
@@ -171,16 +226,29 @@ class RietveldRefiner:
                     env=self._gsas2_env(py),
                 )
                 if not Path(out_path).exists():
-                    return self._refine_builtin(
+                    logger.warning("GSAS-II 桥未产出 output.json, 回退 builtin")
+                    result = self._refine_builtin(
                         data, phases, strategy, max_cycles, **kwargs
                     )
+                    result.fit_params["engine_requested"] = "gsas2"
+                    result.fit_params["engine_fallback_reason"] = "桥未产出结果文件"
+                    return result
                 with open(out_path, "r", encoding="utf-8") as f:
                     out = _json.load(f)
-        except Exception:
-            return self._refine_builtin(data, phases, strategy, max_cycles, **kwargs)
+        except Exception as e:
+            logger.warning("GSAS-II 子进程异常, 回退 builtin: %s", e)
+            result = self._refine_builtin(data, phases, strategy, max_cycles, **kwargs)
+            result.fit_params["engine_requested"] = "gsas2"
+            result.fit_params["engine_fallback_reason"] = f"子进程异常: {e}"
+            return result
 
         if not out.get("ok"):
-            return self._refine_builtin(data, phases, strategy, max_cycles, **kwargs)
+            err = str(out.get("error", ""))[:300]
+            logger.warning("GSAS-II 桥返回 ok=False (%s), 回退 builtin", err)
+            result = self._refine_builtin(data, phases, strategy, max_cycles, **kwargs)
+            result.fit_params["engine_requested"] = "gsas2"
+            result.fit_params["engine_fallback_reason"] = f"桥内错误: {err}"
+            return result
 
         # 收集精修后晶胞 + 定量相分数 (v0.11.0: 桥在全相有 CIF 时输出)
         refined_phases = []

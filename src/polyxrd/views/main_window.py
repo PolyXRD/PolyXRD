@@ -939,6 +939,11 @@ class MainWindow(QMainWindow):
         self._set_action_icon(self._actions["quick_refine"], "refine")
         refine_menu.addAction(self._actions["quick_refine"])
 
+        self._actions["batch_refine"] = QAction(tr("menu.structure_refinement.batch_refine"), self)
+        self._actions["batch_refine"].triggered.connect(self._on_batch_refine)
+        self._set_action_icon(self._actions["batch_refine"], "refine")
+        refine_menu.addAction(self._actions["batch_refine"])
+
         self._actions["template_mgmt"] = QAction(tr("menu.structure_refinement.templates"), self)
         self._actions["template_mgmt"].triggered.connect(self._on_template_management)
         self._set_action_icon(self._actions["template_mgmt"], "target")
@@ -1414,6 +1419,24 @@ class MainWindow(QMainWindow):
                     max_cycles=params["max_cycles"],
                     progress_cb=BusyIndicator.progress_tick,
                 )
+
+    def _on_batch_refine(self) -> None:
+        """批量精修: 对文件夹内全部数据文件用当前已选物相顺序精修"""
+        import copy as _copy
+
+        from polyxrd.views.batch_refinement_dialog import BatchRefinementDialog
+
+        phases = self._vm.selected_phases
+        if not phases:
+            self._tab_widget.setCurrentWidget(self._phase_view)
+            QMessageBox.information(
+                self,
+                tr("dialog.info"),
+                tr("dialog.quick_refine_no_phases"),
+            )
+            return
+        dialog = BatchRefinementDialog(_copy.deepcopy(phases), parent=self)
+        dialog.exec()
 
     def _on_quick_refine(self) -> None:
         data = self._vm.current_data
