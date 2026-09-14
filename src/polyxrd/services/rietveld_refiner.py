@@ -505,7 +505,12 @@ class RietveldRefiner:
             pass  # 标记失败不影响主流程
 
     def get_engine_status(self) -> dict:
-        """返回各精修引擎的可用状态 (供 GUI 提示)"""
+        """返回各精修引擎的可用状态 (供 GUI 提示)
+
+        含 `auto`: 它不是独立引擎, 而是"按样品条件自动择引擎"的策略项,
+        恒为可用; note 里说明当前条件下会自动选中谁, 便于用户在向导里
+        选 auto 前就知道会跑什么。
+        """
         status: dict = {"builtin": {"available": True, "note": "内置引擎 (始终可用)"}}
         # powerxrd
         try:
@@ -556,6 +561,17 @@ class RietveldRefiner:
                 "maud_root": None,
                 "note": "maud_par_builder 模块未加载",
             }
+
+        # auto: 非独立引擎, 恒可用; 说明"若全相有结构 CIF 且 GSAS-II 在, 会走 gsas2"
+        gsas_ok = bool(status.get("gsas2", {}).get("available"))
+        status["auto"] = {
+            "available": True,
+            "note": (
+                "自动择引擎: 全相有结构 CIF 且 GSAS-II 可用 → gsas2; 否则 builtin"
+                + ("" if gsas_ok else " (当前未检测到 GSAS-II, 实际会走 builtin)")
+            ),
+            "resolves_to": "gsas2" if gsas_ok else "builtin",
+        }
         return status
 
     # ------------------------------------------------------------------

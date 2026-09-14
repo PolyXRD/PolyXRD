@@ -87,12 +87,15 @@ class RefinementWizardDialog(QDialog):
         # 引擎下拉 + 状态标签 (R-C5)
         engine_row = QHBoxLayout()
         self._engine_combo = QComboBox()
-        # 候选列表: 按"始终可用→可能可用"排序; 用户切换时触发状态刷新
-        self._engine_combo.addItems(["gsas2", "powerxrd", "maud", "builtin"])
+        # 候选列表: auto 在首位 (推荐默认), 其后按"始终可用→可能可用"排序;
+        # 用户切换时触发状态刷新。列表必须与 RietveldRefiner.get_engine_status()
+        # 的键集合一致, 否则界面会出现"选了却没有对应状态"的假不可用。
+        self._engine_combo.addItems(["auto", "gsas2", "powerxrd", "maud", "builtin"])
         self._engine_combo.currentTextChanged.connect(self._on_engine_changed)
         engine_row.addWidget(self._engine_combo, 1)
         self._engine_status_label = QLabel("")
         self._engine_status_label.setMinimumWidth(140)
+        self._engine_status_label.setToolTip("")
         engine_row.addWidget(self._engine_status_label, 0)
         form.addRow(tr("params.engine_label"), engine_row)
 
@@ -150,6 +153,8 @@ class RefinementWizardDialog(QDialog):
     def _on_engine_changed(self, engine_name: str) -> None:
         """引擎下拉变化时, 更新状态标签 + 必要 fallback 警告."""
         info = self._engine_status.get(engine_name) or {"available": False, "note": ""}
+        # 状态说明挂 tooltip: auto 的"会自动走谁"、maud 的"需要 CIF"都靠它传达
+        self._engine_status_label.setToolTip(str(info.get("note", "")))
         if info.get("available"):
             self._engine_status_label.setText(
                 f"✓ {tr('params.engine_available')}"
@@ -162,17 +167,25 @@ class RefinementWizardDialog(QDialog):
             self._engine_status_label.setStyleSheet("color: #c25a2a;")
 
     def accept(self) -> None:  # type: ignore[override]
-        """OK 时, 若用户选了不可用引擎, 弹提示并询问 fallback (R-C5)."""
+        """OK 时, 若用户选了不可用引擎, 弹提示并询问 fallback (R-C5).
+
+        覆盖 gsas2 / powerxrd / maud 三个外部引擎 —— 否则用户选了却没装,
+        会静默回退内置引擎, 结果"选了跟没选一样"(最难查的一类误判)。
+        `auto` 恒可用, 不必提示 (它的回退是设计行为, 且原因会在结果里记录)。
+        """
         engine_name = self._engine_combo.currentText()
         info = self._engine_status.get(engine_name) or {}
-        if engine_name == "maud" and not info.get("available"):
-            # MAUD 缺: 提示并 fallback
+        if engine_name != "builtin" and not info.get("available"):
             note = info.get("note", "")
+            extra = (
+                f"\n{tr('params.engine_maud_missing_cif')}"
+                if engine_name == "maud"
+                else ""
+            )
             QMessageBox.warning(
                 self,
                 tr("dialog.refine_wizard_title"),
-                f"{tr('params.engine_unavailable')}: {note}\n"
-                f"{tr('params.engine_maud_missing_cif')}",
+                f"{tr('params.engine_unavailable')}: {engine_name}\n{note}{extra}",
             )
             self._engine_combo.setCurrentText("builtin")
             return  # 让用户再点一次确认 (避免静默改值)
@@ -1414,9 +1427,16 @@ class MainWindow(QMainWindow):
             with busy(self, tr("busy.refine")) as acquired:
                 if not acquired:
                     return
+                # 注意: engine 必须下传。曾经漏传导致"向导里选什么引擎都跑
+                # builtin"(静默失效), 是精修向导最容易误判的一处。
+                # wavelength / 2θ 区间同理 —— 引擎只认数据对象上的值, 必须经
+                # viewmodel 落到数据副本上, 否则这两个控件是纯装饰。
                 self._vm.refine_structure(
                     strategy=params["strategy"],
+                    engine=params["engine"],
                     max_cycles=params["max_cycles"],
+                    wavelength=params["wavelength"],
+                    two_theta_range=(params["two_theta_min"], params["two_theta_max"]),
                     progress_cb=BusyIndicator.progress_tick,
                 )
 

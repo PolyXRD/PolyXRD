@@ -258,12 +258,29 @@ class MainViewModel(QObject):
         strategy: str = "sequential",
         engine: str = "builtin",
         max_cycles: int = 20,
+        wavelength: Optional[float] = None,
+        two_theta_range: Optional[tuple[float, float]] = None,
         **kwargs,
     ) -> None:
-        """Rietveld结构精修"""
+        """Rietveld结构精修
+
+        Args:
+            strategy: 精修策略 (sequential/auto/manual)
+            engine: 精修引擎 (auto/builtin/gsas2/powerxrd/maud)
+            max_cycles: 最大循环数
+            wavelength: 覆盖 X 射线波长 (Å); None = 沿用数据自带值。
+                引擎内部一律读 `data.wavelength`, 所以必须在这里落到数据对象上,
+                传成 kwargs 是**无效**的 (会被 **kwargs 静默吞掉)。
+            two_theta_range: 只精修该 2θ 窗口 (min, max); None = 全区间。
+                同样需要先在数据上裁好区间, 引擎按数据自身范围建模。
+        """
         data = self.current_data
         if data is None:
             self.error_occurred.emit("请先加载数据")
+            return
+
+        data = self._apply_data_overrides(data, wavelength, two_theta_range)
+        if data is None:
             return
 
         phases = self._phase_vm.selected_phases
@@ -281,6 +298,67 @@ class MainViewModel(QObject):
         self.status_changed.emit(f"执行Rietveld精修 ({engine})")
         self._refinement_vm.refine(
             data, phases, strategy=strategy, engine=engine, max_cycles=max_cycles, **kwargs
+        )
+
+    def _apply_data_overrides(
+        self,
+        data,
+        wavelength: Optional[float],
+        two_theta_range: Optional[tuple[float, float]],
+    ):
+        """按向导参数生成一份数据副本 (波长覆盖 / 2θ 窗口裁剪)。
+
+        只在参数确实与原始数据不同时才复制, 避免无谓开销。
+        裁剪后点数 < 3 (XRDData 下限) 时发错误信号并返回 None —— 让用户看到
+        明确原因, 而不是让引擎抛一个难懂的异常。
+        """
+        if wavelength is None and two_theta_range is None:
+            return data
+
+        need_wl = wavelength is not None and abs(float(wavelength) - float(data.wavelength)) > 1e-9
+        win = None
+        req = None
+        if two_theta_range is not None:
+            req_lo, req_hi = float(two_theta_range[0]), float(two_theta_range[1])
+            if req_lo > req_hi:
+                req_lo, req_hi = req_hi, req_lo
+            lo = max(req_lo, float(data.two_theta[0]))
+            hi = min(req_hi, float(data.two_theta[-1]))
+            req = (req_lo, req_hi)
+            if lo > hi:
+                # 请求窗口与数据范围完全不相交: 报"请求值"而不是空集边界, 更好懂
+                self.error_occurred.emit(
+                    f"2θ 窗口 [{req_lo:.2f}, {req_hi:.2f}] 与数据范围 "
+                    f"[{float(data.two_theta[0]):.2f}, {float(data.two_theta[-1]):.2f}] "
+                    f"没有交集, 无法精修"
+                )
+                return None
+            if lo > float(data.two_theta[0]) or hi < float(data.two_theta[-1]):
+                win = (lo, hi)
+
+        if not need_wl and win is None:
+            return data
+
+        import numpy as np
+
+        from polyxrd.models.xrd_data import XRDData
+
+        tt, ii = np.asarray(data.two_theta), np.asarray(data.intensity)
+        if win is not None:
+            mask = (tt >= win[0]) & (tt <= win[1])
+            if int(mask.sum()) < 3:
+                self.error_occurred.emit(
+                    f"2θ 窗口 [{req[0]:.2f}, {req[1]:.2f}] 内仅 {int(mask.sum())} 个数据点, "
+                    f"不足以精修 (需 ≥ 3), 请放宽区间"
+                )
+                return None
+            tt, ii = tt[mask], ii[mask]
+
+        return XRDData(
+            two_theta=tt,
+            intensity=ii,
+            wavelength=float(wavelength) if need_wl else float(data.wavelength),
+            metadata=dict(data.metadata),
         )
 
     # ------------------------------------------------------------------
