@@ -26,6 +26,10 @@ def main() -> int:
     if app_icon_path:
         app.setWindowIcon(QIcon(app_icon_path))
 
+    # 注意: splash 必须在 if 之前初始化。若 splash_path 有值但图片读不出来
+    # (文件缺失/损坏), 下面 `if not pixmap.isNull()` 不成立, splash 就从未绑定,
+    # 后面引用它必然 NameError 崩在 app.exec() 之前 —— 表现为"启动即闪退无窗口"。
+    splash: QSplashScreen | None = None
     splash_path = get_splash_screen_path()
     if splash_path:
         pixmap = QPixmap(splash_path)
@@ -48,7 +52,7 @@ def main() -> int:
     window = MainWindow(config)
     window.show()
 
-    if splash_path:
+    if splash is not None:
         QTimer.singleShot(100, lambda: (splash.close(), window.activateWindow()))
 
     return app.exec()
