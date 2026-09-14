@@ -56,6 +56,28 @@ BATCH_INSERT_SIZE = 5000
 PARSE_WORKERS = 8  # 并行解析 CIF 数 (I/O 为主，设 CPU 数 2x 以内)
 
 
+# ── CIF 字段清洗辅助 (v0.11.0) ────────────────────────────────
+def _clean_elem_symbol(sym) -> str:
+    """清洗元素符号: 'W+' -> 'W', 'Sn4+' -> 'Sn', 'O-' -> 'O'."""
+    m = re.match(r"[A-Z][a-z]?", str(sym or "").strip())
+    return m.group(0) if m else str(sym or "").strip()
+
+
+def _cif_num(v) -> Optional[float]:
+    """CIF 数值解析: 剥离不确定度 '0.144(10)' -> 0.144; '.'/'?' -> None."""
+    if v is None:
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    s = re.sub(r"\([^)]*\)", "", str(v).strip())
+    if s in ("", ".", "?"):
+        return None
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
 # ── 数据类 ──────────────────────────────────────────────────
 
 @dataclass
@@ -1320,35 +1342,75 @@ class CODLocalDatabase:
                                  (需要 atomic_sites 完整且 CIF 可被 pymatgen 加载)
         """
         entry = self.get_entry(cod_id)
+        _cif_pre: Optional[str] = None
         if entry is None:
-            return None
+            # v0.11.0 修复: 无机库 cod_id 可能不在 cod_entries 索引里
+            # (约 1 万个 1xx/4xx/7xx/8xx 编号), 与 get_cif 同样的 Level-0 回退:
+            # 直接读 CIF 全文, 从 CIF 自身解析出 cell/formula/space group 重建条目
+            _cif_pre = self.get_cif(cod_id)
+            if _cif_pre is None:
+                return None
+            entry = parse_cif_text(_cif_pre, file_rel="", cod_id=int(cod_id), mtime=0)
+            log.info(
+                "get_phase: cod_id=%d not in cod_index, entry rebuilt from CIF "
+                "(formula=%s, sg=%s)", cod_id, entry.formula, entry.space_group,
+            )
 
         # 优先从 DB 读取原子位点 (精简模式, 不需要 CIF 全文)
         sites_fixed = self.get_atomic_sites(cod_id)
 
         # 如果 DB 中没有原子位点, 回退到 CIF 全文解析
-        cif_text = None
-        if not sites_fixed:
+        cif_text = _cif_pre
+        if not sites_fixed and cif_text is None:
             cif_text = self.get_cif(cod_id)
             if cif_text is None:
                 return None
+        if not sites_fixed and cif_text:
             from polyxrd.services.cif_database import CIFDatabase
             parsed = CIFDatabase._parse_cif_content(cif_text)
-            atomic_sites = parsed.get("atomic_sites") or []
-            for s in atomic_sites:
-                elem = s.get("element") or s.get("type_symbol") or ""
-                x = s.get("x") if "x" in s else s.get("fract_x")
-                y = s.get("y") if "y" in s else s.get("fract_y")
-                z = s.get("z") if "z" in s else s.get("fract_z")
-                occ = s.get("occupancy", 1.0)
+            for s in (parsed.get("atomic_sites") or []):
+                elem = _clean_elem_symbol(s.get("element") or s.get("type_symbol") or "")
+                x = _cif_num(s.get("x") if "x" in s else s.get("fract_x"))
+                y = _cif_num(s.get("y") if "y" in s else s.get("fract_y"))
+                z = _cif_num(s.get("z") if "z" in s else s.get("fract_z"))
+                occ = _cif_num(s.get("occupancy"))
                 label = s.get("label") or f"{elem or 'X'}{len(sites_fixed)+1}"
                 if elem and x is not None and y is not None and z is not None:
                     sites_fixed.append({
                         "label": label,
-                        "element": str(elem),
-                        "x": float(x), "y": float(y), "z": float(z),
-                        "occupancy": float(occ) if occ is not None else 1.0,
+                        "element": elem,
+                        "x": x, "y": y, "z": z,
+                        "occupancy": occ if occ is not None else 1.0,
                     })
+        # 最终兜底: 用 pymatgen 直接解析 CIF (自动展开对称操作, 兼容带电符号/乱序 loop)
+        if not sites_fixed and cif_text:
+            try:
+                _struct = None
+                try:
+                    from pymatgen.core import Structure as _St
+                    _struct = _St.from_str(cif_text, fmt="cif")
+                except Exception:
+                    # 占有率略超 1 (如 1.002/1.02) 会导致默认解析失败 → 放宽容差重试
+                    from pymatgen.io.cif import CifParser
+                    _parser = CifParser.from_str(cif_text, occupancy_tolerance=1.2)
+                    _struct = _parser.parse_structures(primitive=False)[0]
+                for site in _struct:
+                    comp = site.species
+                    try:
+                        elem = comp.specie.symbol  # 单一组分位点
+                    except Exception:
+                        elem = max(comp, key=lambda sp: comp[sp]).symbol  # 无序位点取主元素
+                    fx, fy, fz = site.frac_coords
+                    sites_fixed.append({
+                        "label": f"{elem}{len(sites_fixed)+1}",
+                        "element": elem,
+                        "x": float(fx), "y": float(fy), "z": float(fz),
+                        "occupancy": 1.0,
+                    })
+                log.info("get_phase: cod_id=%d atomic sites from pymatgen CIF parse (%d sites)",
+                         cod_id, len(sites_fixed))
+            except Exception as e:
+                log.debug("get_phase: pymatgen CIF fallback failed for %d: %s", cod_id, e)
 
         lat = lattice or LatticeParams(
             a=entry.a, b=entry.b, c=entry.c,
