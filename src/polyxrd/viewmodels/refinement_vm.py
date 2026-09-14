@@ -94,6 +94,24 @@ class RefinementViewModel(QObject):
             return self._result.summary()
         return "没有精修结果。"
 
+    def adopt_result(self, result: Optional[RefinementResult]) -> None:
+        """接收一个**在别处算好**的精修结果, 当成本 VM 的当前结果。
+
+        用途: 分步精修向导 (`views/refinement_wizard.py`) 自带一个
+        `RietveldRefiner` 并在自己的执行页跑完整精修 —— 它是自包含的, 不走本 VM。
+        若不把结果接回来, 用户在向导里跑完会看到"精修页/报告页什么都没有",
+        两个向导的行为就不一致了。
+
+        这里只做状态登记与信号广播, **不触发任何计算**, 因此代价可忽略。
+        广播的信号与 `refine()` 末尾完全一致, 保证下游(精修页/报告)无需区分
+        结果是"本 VM 算的"还是"向导算的"。
+        """
+        if result is None:
+            return
+        self._result = result
+        self.refinement_progress.emit(100)
+        self.refinement_completed.emit(result)
+
     def export_result(self, path: str, format: str = "all") -> None:
         """导出精修结果"""
         if self._result is None:

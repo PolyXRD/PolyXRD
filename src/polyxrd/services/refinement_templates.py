@@ -74,6 +74,21 @@ class RefinementTemplate:
 
 _BUILTIN_TEMPLATES: list[RefinementTemplate] = [
     RefinementTemplate(
+        name="自动选择（推荐）",
+        description=(
+            "按样品条件自动选引擎: 全部物相都有结构 CIF 且 GSAS-II 可用时走 "
+            "GSAS-II（真 Rietveld + wt% 定量），否则回退内置引擎（无结构剖面拟合）。"
+            "不确定选哪个时用这个。"
+        ),
+        engine="auto",
+        strategy="sequential",
+        background_method="snip",
+        peak_shape="pseudo-voigt",
+        max_cycles=20,
+        params={},
+        is_builtin=True,
+    ),
+    RefinementTemplate(
         name="标准晶态样品",
         description="适用于结晶度良好的常规样品，使用GSAS-II引擎和Voigt峰形",
         engine="gsas2",

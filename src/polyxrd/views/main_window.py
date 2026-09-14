@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QTabWidget,
     QDockWidget,
     QToolBar,
+    QToolButton,
     QStatusBar,
     QFileDialog,
     QMessageBox,
@@ -840,9 +841,31 @@ class MainWindow(QMainWindow):
         self._setup_phase_menu()
         self._setup_database_menu()
         self._setup_refine_menu()
+        # 必须在 _setup_refine_menu 之后: 它要引用那里面创建的两个向导动作
+        self._setup_wizard_path_menu()
         self._setup_view_menu()
         self._setup_report_menu()
         self._setup_help_menu()
+
+    def _setup_wizard_path_menu(self) -> None:
+        """给工具栏的「精修向导」按钮挂下拉, 让用户在两套向导里挑。
+
+        两套向导并存 (见 `_setup_refine_menu` 的说明): 快速版收几个参数就走,
+        分步版多了模板/CIF/COD 且自带 refiner。
+
+        这里用 `MenuButtonPopup` 而不是 `InstantPopup`: 点按钮**主体**仍直接
+        打开快速向导 (最常用, 不打断既有习惯), 只有点右侧小箭头才展开选择。
+        若用 InstantPopup, 每次都会多出"必须选一次"的一步, 是体验倒退。
+        """
+        btn = self._toolbar.widgetForAction(self._actions["refine_wizard"])
+        if btn is None:  # 理论上不会发生; 拿不到就别硬塞
+            return
+        menu = QMenu(btn)
+        menu.addAction(self._actions["refine_wizard_menu"])   # 快速
+        menu.addAction(self._actions["refine_wizard_full"])   # 分步
+        btn.setMenu(menu)
+        btn.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+        self._actions["refine_wizard"].setToolTip(tr("toolbar.refine_wizard_tip"))
 
     def _setup_file_menu(self) -> None:
         file_menu = self.menuBar().addMenu(tr("menu.file.title"))
@@ -942,10 +965,26 @@ class MainWindow(QMainWindow):
         self._menus["refine"] = refine_menu
         refine_menu.addAction(self._actions["refine"])
 
-        self._actions["refine_wizard_menu"] = QAction(tr("menu.structure_refinement.wizard"), self)
+        # ── 两条精修向导路径, 并存让用户自己挑 ───────────────────────────
+        # 快速: 单页参数 (引擎/策略/循环/波长/2θ 窗口), 点确定就交给主 VM 精修。
+        self._actions["refine_wizard_menu"] = QAction(
+            tr("menu.structure_refinement.wizard_quick"), self
+        )
         self._actions["refine_wizard_menu"].triggered.connect(self._on_refine_wizard)
         self._set_action_icon(self._actions["refine_wizard_menu"], "refine_wizard")
         refine_menu.addAction(self._actions["refine_wizard_menu"])
+
+        # 分步: 数据 → 物相 → 参数 → 预览 → 执行。比快速版多了模板管理 /
+        # CIF 导入 / COD 检索, 且自带 refiner 独立执行 (结果经
+        # adopt_refinement_result 回灌, 两条路径最终都落到同一个精修页)。
+        self._actions["refine_wizard_full"] = QAction(
+            tr("menu.structure_refinement.wizard_full"), self
+        )
+        self._actions["refine_wizard_full"].triggered.connect(self._on_refine_wizard_full)
+        self._set_action_icon(self._actions["refine_wizard_full"], "refine_wizard")
+        refine_menu.addAction(self._actions["refine_wizard_full"])
+
+        refine_menu.addSeparator()
 
         self._actions["quick_refine"] = QAction(tr("menu.structure_refinement.quick_refine"), self)
         self._actions["quick_refine"].triggered.connect(self._on_quick_refine)
@@ -1439,6 +1478,66 @@ class MainWindow(QMainWindow):
                     two_theta_range=(params["two_theta_min"], params["two_theta_max"]),
                     progress_cb=BusyIndicator.progress_tick,
                 )
+
+    def _on_refine_wizard_full(self) -> None:
+        """分步精修向导 (路径 B)。
+
+        与 `_on_refine_wizard` (快速单页) 并列存在, 用户按需要挑。分步版自带
+        refiner, 结果不会经过 `refine_structure`, 所以这里把
+        `result_ready` 接到 `adopt_refinement_result` 上 —— 否则用户在向导里
+        跑完会发现精修页/报告页还是空的。
+        """
+        data = self._vm.current_data
+        if data is None:
+            QMessageBox.information(
+                self, tr("dialog.info"), tr("dialog.refine_wizard_need_data")
+            )
+            return
+
+        phases = self._vm.selected_phases
+        if not phases:
+            # 与批量精修同样的兜底: 没有勾选就用匹配分最高的几个
+            matched = getattr(self._vm, "matched_phases", None) or []
+            if matched:
+                phases = [m.phase for m in matched[:3]]
+        if not phases:
+            QMessageBox.information(
+                self, tr("dialog.info"), tr("dialog.refine_wizard_need_phase")
+            )
+            return
+
+        # deepcopy: 向导会往物相里写精修结果 (晶胞/wt%), 不能污染主窗口的选择态
+        import copy as _copy
+        try:
+            from polyxrd.views.refinement_wizard import RefinementWizardHostDialog
+        except Exception as e:  # 资源/依赖缺失时给明确提示, 别静默无反应
+            QMessageBox.warning(
+                self,
+                tr("dialog.error"),
+                tr("dialog.refine_wizard_unavailable", error=str(e)),
+            )
+            return
+
+        dialog = RefinementWizardHostDialog(
+            data, _copy.deepcopy(list(phases)), parent=self
+        )
+        dialog.result_ready.connect(self._on_wizard_result_ready)
+        dialog.exec()
+
+    def _on_wizard_result_ready(self, result) -> None:
+        """分步向导跑完 → 登记结果并切到精修页, 与快速向导行为对齐。"""
+        self._vm.adopt_refinement_result(result)
+        self._tab_widget.setCurrentWidget(self._refinement_view)
+        wr = getattr(result, "wR", None)
+        engine = "?"
+        try:
+            engine = (result.fit_params or {}).get("engine", "?")
+        except Exception:
+            pass
+        if wr is not None:
+            self.statusBar().showMessage(
+                tr("dialog.refine_wizard_done", engine=engine, wr=f"{wr:.3f}"), 8000
+            )
 
     def _on_batch_refine(self) -> None:
         """批量精修: 对文件夹内全部数据文件用当前已选物相顺序精修"""

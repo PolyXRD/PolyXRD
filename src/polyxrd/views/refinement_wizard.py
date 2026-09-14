@@ -9,6 +9,14 @@
 3. 参数设置 - 背景方法、峰形模型、精修引擎、最大循环数
 4. 预览确认 - 显示所有设置的预览
 5. 执行精修 - 显示精修进度和结果摘要
+
+本模块对外提供两个东西 (主窗口的"两条精修路径"中的分步那条):
+- `RefinementWizard`: 向导本体 (QWidget), 可分步走完并**自己跑精修**;
+- `RefinementWizardHostDialog`: 把向导装进对话框的最小宿主, 供主窗口一键弹出。
+
+对比另一条路径 (`main_window.RefinementWizardDialog`, 简洁单页): 那个只收
+几个参数就交给主 VM 去精修; 本向导多了模板管理 / CIF 导入 / COD 检索 / 预览,
+且自带 refiner 独立执行 —— 所以结果要靠 `result_ready` 信号回灌主窗口。
 """
 from __future__ import annotations
 
@@ -17,6 +25,7 @@ from typing import Optional
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QWidget,
+    QDialog,
     QVBoxLayout,
     QHBoxLayout,
     QLabel,
@@ -986,3 +995,55 @@ class RefinementWizard(QWidget):
         if step in self._page_indexes:
             self._stack.setCurrentIndex(self._page_indexes[step])
             self._update_step_display()
+
+
+# ======================================================================
+# 宿主对话框 —— 供主窗口一键弹出分步向导
+# ======================================================================
+
+class RefinementWizardHostDialog(QDialog):
+    """把 `RefinementWizard` 装进对话框的最小宿主。
+
+    为什么需要它: 向导是 QWidget, 而 `_on_cancel` 会去 `parentWidget().close()`
+    —— 它本就预期被装在一个容器里。没有这个宿主, 它就无法从菜单弹出。
+
+    职责边界: 只做"装载 + 播种数据/物相 + 把完成结果转发出去", 不含任何精修
+    逻辑 (精修全部由内部向导自己完成)。
+    """
+
+    result_ready = Signal(object)   # 精修完成, 携带 RefinementResult
+
+    def __init__(
+        self,
+        data: Optional[XRDData] = None,
+        phases: Optional[list[Phase]] = None,
+        parent: Optional[QWidget] = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(tr("menu.structure_refinement.wizard_full"))
+        # 向导有 5 个步骤页 + 结果表, 给足空间; 用户仍可自由缩放
+        self.resize(1000, 740)
+        self.setSizeGripEnabled(True)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        self._wizard = RefinementWizard(data, phases, self)
+        layout.addWidget(self._wizard)
+
+        self._wizard.wizard_completed.connect(self._on_wizard_completed)
+        self._wizard.wizard_cancelled.connect(self.reject)
+
+    @property
+    def wizard(self) -> RefinementWizard:
+        """内部向导本体 (测试/二次开发用)。"""
+        return self._wizard
+
+    def _on_wizard_completed(self, result) -> None:
+        """精修成功 → 先广播结果, 再关闭对话框。
+
+        顺序很重要: 必须先 emit (主窗口据此登记结果并切到精修页), 再 accept,
+        否则主窗口可能在对话框关闭过程中拿到已失效的上下文。
+        """
+        self.result_ready.emit(result)
+        self.accept()
