@@ -107,11 +107,10 @@ def _format_xrd_data_as_xye(data: XRDData, dest: Path) -> Path:
 
     sigma = np.sqrt(np.maximum(intensity, 0.0))
     # MAUD .xye 默认分隔是空白/tab; 用 tab 更稳 (避免科学计数小数点被拆)
+    # 注意: 不能写 '#' 注释头 — MAUD 的 ETH 三列读取器不跳过注释行,
+    # 会把 '#' 当数值解析抛 NumberFormatException → 整个数据文件加载失败
     arr = np.column_stack([two_theta, intensity, sigma])
-    np.savetxt(
-        dest, arr, fmt="%.6f", delimiter="\t",
-        header=f"# PolyXRD export {len(arr)} pts", comments="",
-    )
+    np.savetxt(dest, arr, fmt="%.6f", delimiter="\t", comments="")
     return dest
 
 
@@ -145,6 +144,11 @@ def _parse_par_rfactors(par_path: Path) -> dict:
                 out[key] = float(m.group(1)) if key != "iterations" else int(m.group(1))
             except ValueError:
                 pass
+    # MAUD .par 的 R 因子是小数 (0.5218 = 52.18%); 本模块统一用 % 单位
+    # (MAUD2/3 的 results.tsv "Rwp(%)" 列同样为百分数, 两者已对表核实一致)
+    for k in ("rwp", "wrp"):
+        if out[k] is not None:
+            out[k] = float(out[k]) * 100.0
     return out
 
 
@@ -284,6 +288,198 @@ def _apply_tsv_to_phases(
                 else:
                     # 正交: cell_b_or_c 是 b
                     phase.lattice.b = new_b_or_c
+
+
+# =============================================================================
+# refined.par 相定量解析 (MAUD3 批处理 TSV 不含相定量, 必须从 par 拿)
+# =============================================================================
+
+def _par_num(s: str) -> Optional[float]:
+    """par 数值: '3.2465792(1.98E-4)' → 3.2465792 (剥不确定度括号)."""
+    if s is None:
+        return None
+    s = re.sub(r"\([^)]*\)", "", s.strip())
+    if s in ("", ".", "?"):
+        return None
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def _parse_par_phases(par_path: Path) -> list[dict]:
+    """从 refined.par 解析每相的 name / 体积分数 / 晶胞 / 胞内容质量.
+
+    MAUD2/3 批处理 TSV (_riet_append_result_to) 只含 Title/Rwp 两列, 没有
+    相定量行 (旧版 "每相 9 列" 的假设对两版都不成立, 已实测对表)。真实数据:
+    - 相体积分数: 样品段 ``loop_ _pd_phase_atom_%`` (Layer.java 字典注释
+      "phase scale factor / volume fraction", 精修值 0~1 归一);
+    - 相名/晶胞/位点: ``#subordinateObject_<名>`` 相块中的
+      ``_pd_phase_name`` / ``_cell_length_*`` / ``_atom_site_*`` +
+      ``_atom_type_number_in_cell`` (胞内多重数)。
+
+    返回每相 dict: name, vol_frac, cell_a/b/c, cell_weight (胞内容质量, Da),
+    volume (A^3) — 足够换算 wt%: wt_i ∝ vol_frac_i·cell_weight_i/volume_i。
+    """
+    if not par_path.exists():
+        return []
+    try:
+        text = par_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+
+    # 1) 相体积分数 (loop_ _pd_phase_atom_% 后的连续非空行)
+    vol_fracs: list[float] = []
+    m = re.search(r"loop_\s*\n_pd_phase_atom_%\s*\n((?:[^\n]*\n)+?)\s*\n", text)
+    if m:
+        for line in m.group(1).strip().splitlines():
+            tok = line.split("#")[0].split()[0] if line.split("#")[0].split() else None
+            v = _par_num(tok) if tok else None
+            if v is not None:
+                vol_fracs.append(v)
+
+    # 2) 顺序扫描 subordinateObject 块: 相块 (_pd_phase_name + _cell_length_a)
+    #    开启新相; 位点块 (_atom_site_label, 独立的 #subordinateObject_<label>)
+    #    归属当前相。
+    out: list[dict] = []
+    for chunk in text.split("#subordinateObject_")[1:]:
+        if "_pd_phase_name" in chunk and "_cell_length_a" in chunk:
+            nm_m = re.search(r"_pd_phase_name\s+'([^']*)'", chunk)
+            name = nm_m.group(1).strip() if nm_m else ""
+            cell_a = _par_num(_tag_value(chunk, "_cell_length_a"))
+            cell_b = _par_num(_tag_value(chunk, "_cell_length_b"))
+            cell_c = _par_num(_tag_value(chunk, "_cell_length_c"))
+            alpha = _par_num(_tag_value(chunk, "_cell_angle_alpha")) or 90.0
+            beta = _par_num(_tag_value(chunk, "_cell_angle_beta")) or 90.0
+            gamma = _par_num(_tag_value(chunk, "_cell_angle_gamma")) or 90.0
+            volume = _cell_volume(cell_a, cell_b, cell_c, alpha, beta, gamma)
+            out.append({
+                "name": name,
+                "vol_frac": None,      # 稍后按序对齐 atom_% 值
+                "cell_a": cell_a,
+                "cell_b": cell_b,
+                "cell_c": cell_c,
+                "cell_weight": 0.0,
+                "volume": volume,
+            })
+            continue
+        if "_atom_site_label" in chunk and out:
+            # 位点块: 块头即 '#subordinateObject_Zn1'' 后的 "Zn1'"
+            lab_m = re.match(r"\s*'?([A-Za-z]{1,3})\d*", chunk)
+            if not lab_m:
+                continue
+            sym_m = re.match(r"[A-Z][a-z]?", lab_m.group(1))
+            if not sym_m:
+                continue
+            n_in_cell = _par_num(_tag_value(chunk, "_atom_type_number_in_cell")) or 0.0
+            occ = _par_num(_tag_value(chunk, "_atom_site_occupancy"))
+            occ = 1.0 if occ is None else occ
+            out[-1]["cell_weight"] += (
+                _atomic_weight(sym_m.group(0)) * n_in_cell * occ
+            )
+
+    for entry in out:
+        if entry["cell_weight"] <= 0:
+            entry["cell_weight"] = None
+
+    # 3) 按序对齐体积分数 (par 相块顺序 = 样品相表顺序)
+    if vol_fracs and len(vol_fracs) == len(out):
+        for entry, f in zip(out, vol_fracs):
+            entry["vol_frac"] = f
+    return out
+
+
+def _tag_value(text: str, tag: str) -> Optional[str]:
+    """取 'tag value' 行的 value 原文 (不含行内 # 注释)."""
+    m = re.search(rf"^{re.escape(tag)}\s+([^#\n]+)", text, re.MULTILINE)
+    return m.group(1).strip() if m else None
+
+
+def _cell_volume(a, b, c, alpha, beta, gamma) -> Optional[float]:
+    """晶胞体积 (A^3); 参数缺失返回 None."""
+    if None in (a, b, c):
+        return None
+    import math
+    ca, cb, cg = (math.cos(math.radians(x)) for x in (alpha, beta, gamma))
+    v2 = 1 - ca * ca - cb * cb - cg * cg + 2 * ca * cb * cg
+    if v2 <= 0:
+        return None
+    return a * b * c * math.sqrt(v2)
+
+
+_ATOMIC_WEIGHTS_FALLBACK = {
+    "H": 1.008, "C": 12.011, "N": 14.007, "O": 15.999, "Na": 22.990,
+    "Mg": 24.305, "Al": 26.982, "Si": 28.085, "P": 30.974, "S": 32.06,
+    "K": 39.098, "Ca": 40.078, "Ti": 47.867, "V": 50.942, "Cr": 51.996,
+    "Mn": 54.938, "Fe": 55.845, "Co": 58.933, "Ni": 58.693, "Cu": 63.546,
+    "Zn": 65.38, "Zr": 91.224, "Ba": 137.327, "W": 183.84, "Pb": 207.2,
+}
+
+
+def _atomic_weight(symbol: str) -> float:
+    try:
+        from pymatgen.core.periodic_table import Element
+        return float(Element(symbol).atomic_mass)
+    except Exception:
+        return _ATOMIC_WEIGHTS_FALLBACK.get(symbol, 0.0)
+
+
+def _apply_par_to_phases(
+    phases: list[Phase],
+    par_entries: list[dict],
+) -> bool:
+    """把 par 相结果回写 phases: weight_fraction (wt%) + lattice a/b/c.
+
+    wt% 换算: MAUD 精修的是体积分数 vol_frac (归一), 密度 ρ_i = cell_weight_i
+    ×1.6605/volume_i, 故 wt_i ∝ vol_frac_i·cell_weight_i/volume_i (标准
+    体积分数→质量分数换算, 与 MAUD GUI Phase analysis 面板一致)。
+
+    返回 True 表示至少回写了一相。
+    """
+    if not par_entries:
+        return False
+    by_name: dict[str, dict] = {}
+    for e in par_entries:
+        nm = (e.get("name") or "").strip().lower()
+        if nm:
+            by_name[nm] = e
+
+    matched = 0
+    total_w = 0.0
+    weights: list[Optional[float]] = []
+    for phase in phases:
+        key = phase.name.strip().lower()
+        entry = by_name.get(key)
+        if entry is None and phase.cif_path:
+            entry = by_name.get(Path(phase.cif_path).stem.lower())
+        if entry is None:
+            weights.append(None)
+            continue
+        matched += 1
+        # 晶胞
+        if phase.lattice is not None:
+            if entry.get("cell_a") is not None:
+                phase.lattice.a = float(entry["cell_a"])
+            if entry.get("cell_b") is not None:
+                phase.lattice.b = float(entry["cell_b"])
+            if entry.get("cell_c") is not None:
+                phase.lattice.c = float(entry["cell_c"])
+        # wt% 权重: vol_frac × cell_weight / volume
+        w = None
+        vf = entry.get("vol_frac")
+        cw = entry.get("cell_weight")
+        vol = entry.get("volume")
+        if vf is not None and cw and vol:
+            w = float(vf) * float(cw) / float(vol)
+            total_w += w
+        weights.append(w)
+
+    if matched == 0 or total_w <= 0:
+        return False
+    for phase, w in zip(phases, weights):
+        if w is not None:
+            phase.weight_fraction = w / total_w * 100.0
+    return True
 
 
 # =============================================================================
@@ -505,6 +701,9 @@ class MaudEngine:
         rfactors = _parse_par_rfactors(artifacts.output_par_path)
         tsv_entries = _parse_tsv_results(artifacts.output_tsv_path)
         _apply_tsv_to_phases(phases, tsv_entries)
+        # MAUD2/3 的 TSV 不含相定量 — 相体积分数/晶胞从 refined.par 解析回写
+        par_entries = _parse_par_phases(artifacts.output_par_path)
+        _apply_par_to_phases(phases, par_entries)
 
         # 复制最终 par 到 work_dir 顶层 (供 GUI 查看); 不动 shutil.rmtree 因为可能 keep_workdir
         rwp = float(rfactors.get("rwp") or 0.0)
@@ -552,6 +751,7 @@ class MaudEngine:
                 "output_par": str(artifacts.output_par_path),
                 "output_tsv": str(artifacts.output_tsv_path),
                 "tsv_entries": tsv_entries,
+                "par_phase_entries": par_entries,
                 "kept_workdir": keep_workdir,
             },
         )

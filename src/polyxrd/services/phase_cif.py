@@ -37,11 +37,16 @@ def _format_value(v) -> str:
 
 
 def _space_group_to_hall_or_hm(phase: Phase) -> Optional[str]:
-    """从 phase.space_group 提取出 Hermann-Mauguin 符号 (CIF 兼容)."""
+    """从 phase.space_group 提取出 Hermann-Mauguin 符号 (CIF 兼容).
+
+    剥离 setting 后缀 (:H/:R/:P/:S/:1/:2 等) — MAUD 3 的空间群查找不认
+    'P 63 m c :H' 这类带冒号记号, 会报 "No Space Group found for the name"。
+    """
     sg = (phase.space_group or "").strip()
     if not sg:
         return None
-    return sg
+    sg = re.sub(r"\s*:\s*[A-Za-z0-9]{1,2}\s*$", "", sg).strip()
+    return sg or None
 
 
 def _element_from_label(label: str) -> str:
