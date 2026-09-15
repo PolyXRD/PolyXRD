@@ -7,7 +7,7 @@
     峰检测 &nbsp;·&nbsp; 多物相定性检索 &nbsp;·&nbsp; Rietveld 结构精修 &nbsp;·&nbsp; Le Bail 晶胞精修 &nbsp;·&nbsp; 全谱拟合 &nbsp;·&nbsp; 三库外挂检索 (COD 无机物 / COD 全库 / PDF2-2004)
   </p>
   <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v0.10.0-blue?style=flat-square" /></a>
+    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v0.11.0-blue?style=flat-square" /></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
     &nbsp;
@@ -210,13 +210,13 @@ PolyXRD/
 ### 方式 A · 普通用户 (推荐, 无需 Python)
 
 ```
-① 下载 PolyXRD-Setup-v0.10.0.exe (243 MB, Windows x64) 或 PolyXRD-v0.10.0-Portable.zip (381 MB, 免安装)
+① 下载 PolyXRD-Setup-v0.11.0.exe (247.5 MB, Windows x64)
    ↓
-② 安装 (默认 C:\Program Files\PolyXRD\) 或解压便携包后直接运行 PolyXRD.exe
+② 安装 (默认 C:\Program Files\PolyXRD\) 后直接运行 PolyXRD.exe
    ↓
 ③ 按需下载数据库包 —— 各库独立，需要哪个下哪个
-   ③-a PolyXRD-v0.10.0-Databases-COD-inorg.zip   134 MB  →  COD_inorganics.sqlite  (日常推荐)
-   ③-b PolyXRD-v0.10.0-Databases-COD-full.zip    206 MB  →  cod_index.sqlite        (COD 全库/合并检索)
+   ③-a PolyXRD-v0.11.0-Databases-COD-inorg.zip   976 MB  →  COD_inorganics.sqlite  (日常推荐, 内嵌 CIF)
+   ③-b PolyXRD-v0.11.0-Databases-COD-full.zip    193 MB  →  cod_index.sqlite        (COD 全库/合并检索)
    解压到任意目录（必须真正解压到磁盘，不要直接在压缩包里打开）
    ↓
 ④ 启动 PolyXRD → 菜单「数据库 ▸ 外挂数据库管理…」
@@ -329,7 +329,21 @@ PolyXRD 基于以下高质量开源项目构建，感谢各位维护者及贡献
 
 ## 📦 Release
 
-当前最新版本：**v0.10.0**（2026-09-10）→ [👉 前往 Release 下载](https://github.com/PolyXRD/PolyXRD/releases)
+当前最新版本：**v0.11.0**（2026-09-15）→ [👉 前往 Release 下载](https://github.com/PolyXRD/PolyXRD/releases)
+
+### v0.11.0 主要变化
+
+- **COD 结构精修链路打通** — CIF 覆盖 + 5 级回退（本地目录 → 全库索引 → 无机库内嵌 → tar → COD 在线 REST）
+- **COD 无机物库升级为 v2 结构（本次发布）** — phases 表内嵌 gzip CIF 全文（71,156/71,199 = 99.94%）
+  + `cod_atomic_sites` 子集表（31.1 万行原子位点）：**只挂无机物库一个库即可做 Rietveld 结构精修**
+  - 背景：无机库与 COD 全库索引的编号体系并不重合（全库仅覆盖约 1/3 的无机相编号），
+    旧版"只挂无机库"时几乎拿不到结构数据
+- **引擎端到端** — GSAS-II（engine=auto 自动选引擎 + wt% 定量）与 MAUD3 全链路接入；
+  引擎下拉统一为 auto / gsas2 / maud / builtin / powerxrd
+- **精修算法** — R-A1 统计权重（目标函数与 wR 自洽）、R-A4 Chebyshev 背景抛光（均为 opt-in）
+- **两套精修向导并存** — 快速版（单页）+ 分步版（数据→物相→参数→预览→执行，含模板/CIF 导入/COD 检索），
+  分步向导结果自动回灌主窗口精修页；工具栏按钮点主体=快速版、右侧小箭头=选路径
+- **版本号** 0.10.0 → 0.11.0
 
 ### v0.10.0 主要变化
 
@@ -347,26 +361,25 @@ PolyXRD 基于以下高质量开源项目构建，感谢各位维护者及贡献
 - **COD 候选排序重做** — `0.3 × Hanawalt 复合 + 0.7 × (1 − FoM)`，基准 Top-1 12%→14% / Top-5 22%→25% / Top-10 24%→27%
 - **元素过滤四语义定稿** — 必有 / 含有 / 可能 / 没有，未勾选默认并入"没有"；LIGHT_ELEMENTS 一键设为含有
 
-### 发布附件 (v0.10.0)
+### 发布附件 (v0.11.0)
 
 | 附件 | 大小 | 说明 |
 |---|---|---|
-| **PolyXRD-Setup-v0.10.0.exe** | 243.1 MB | Windows 独立安装包（内置 Python/Qt6/全部依赖，不含任何数据库） |
-| **PolyXRD-v0.10.0-Portable.zip** | 372.6 MB | 免安装便携包（解压即用，不含任何数据库） |
-| **PolyXRD-v0.10.0-Databases-COD-inorg.zip** | 131.1 MB | COD 无机物库外挂包（71,199 物相，主检索库，推荐） |
-| **PolyXRD-v0.10.0-Databases-COD-full.zip** | 193.1 MB | COD 全库索引外挂包（113,223 条目） |
+| **PolyXRD-Setup-v0.11.0.exe** | 247.5 MB | Windows 独立安装包（内置 Python/Qt6/全部依赖，不含任何数据库） |
+| **PolyXRD-v0.11.0-Databases-COD-inorg.zip** | 976.1 MB | COD 无机物库外挂包 **v2**（71,199 物相，内嵌 CIF 全文 + 原子位点，主检索库，推荐） |
+| **PolyXRD-v0.11.0-Databases-COD-full.zip** | 193.1 MB | COD 全库索引外挂包（113,223 条目 + 513 万原子位点） |
 | **Source code (.zip / .tar.gz)** | — | 完整源码快照 |
 
+> **v0.11.0 起免安装 Portable 包不再随 Release 发布**（按需联系作者获取）。
 > `…-Databases-PDF2.zip` **不在 Release 中提供**：PDF2-2004 为 ICDD 版权数据库，
 > 仓库仅提供挂载能力，分发包由用户依授权自行准备。
 
-SHA-256 校验值（完整清单见发布附件中的 `SHA256-v0.10.0.txt`，体积单位为资源管理器口径 = 1,048,576 字节）：
+SHA-256 校验值（完整清单见发布附件中的 `SHA256-v0.11.0.txt`，体积单位为资源管理器口径 = 1,048,576 字节）：
 
 ```
-b19f346e0662e90fd1dfea3e7e45b3c990a1f1ae1756a84b8822f6ac9205ac33  PolyXRD-Setup-v0.10.0.exe                243.1 MB
-d4ef3a6773d7a74bc1c7670bab0a6310aec34064629a709315f04dbfb49a4c65  PolyXRD-v0.10.0-Portable.zip             372.6 MB
-4366f873ad69487fbdac14a6e0cd3e6bf682f73492f20275d043cc7feec35ccd  PolyXRD-v0.10.0-Databases-COD-inorg.zip  131.1 MB
-72dff7525fe74934ac070eb9212ca6c106e25099e8050ece02a008e81c6c6af2  PolyXRD-v0.10.0-Databases-COD-full.zip   193.1 MB
+ff21085f96eb7db3b1d39ba60d112df72e5771360186460a1bb4d9128665a637  PolyXRD-Setup-v0.11.0.exe                247.5 MB
+591c5314b9d5d690d7434d1ef8051a35f2f6529a08d7ae54f5bcdc1557a3fbec  PolyXRD-v0.11.0-Databases-COD-inorg.zip  976.1 MB
+814cd066ebf422ab3c1ceb8e09ec1a5ce4c6a77f12d590685c7272b445b55288  PolyXRD-v0.11.0-Databases-COD-full.zip   193.1 MB
 ```
 
 > 下载数据库包后建议核对 SHA-256，尤其是大文件传输中断导致 SQLite 尾部截断的情况
@@ -378,7 +391,8 @@ d4ef3a6773d7a74bc1c7670bab0a6310aec34064629a709315f04dbfb49a4c65  PolyXRD-v0.10.
 
 | PolyXRD | COD 无机物库 | COD 全库索引 | PDF2-2004 |
 |---|---|---|---|
-| **0.10.0** | `…-Databases-COD-inorg.zip` | `…-Databases-COD-full.zip` | 用户自行准备（ICDD 授权，仓库不分发） |
+| **0.11.0** | `…-Databases-COD-inorg.zip`（v2, 内嵌 CIF） | `…-Databases-COD-full.zip` | 用户自行准备（ICDD 授权，仓库不分发） |
+| 0.10.0 | `…-Databases-COD-inorg.zip`（v1, 仅 d-I 峰） | `…-Databases-COD-full.zip` | 用户自行准备（ICDD 授权，仓库不分发） |
 | 0.9.10 及以前 | 内嵌或 `PolyXRD_COD_Inorganics_v0.9.x.zip` | 内嵌或 `PolyXRD_COD_Full_v0.9.x.zip` | 不支持 |
 
 代码部分遵循 **MIT License**（除非子模块另行声明）。使用时请同时遵守上游 PySide6 (LGPL/GPL)、pymatgen、COD 的许可证条款。
@@ -386,5 +400,5 @@ d4ef3a6773d7a74bc1c7670bab0a6310aec34064629a709315f04dbfb49a4c65  PolyXRD-v0.10.
 ---
 
 <div align="right">
-  <i>PolyXRD Team · 2025 — 2026 · 文档版本 0.10.0 (2026-09-10) · 联系：sshztx@outlook.com</i>
+  <i>PolyXRD Team · 2025 — 2026 · 文档版本 0.11.0 (2026-09-15) · 联系：sshztx@outlook.com</i>
 </div>
