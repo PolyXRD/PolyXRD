@@ -1064,6 +1064,10 @@ class CODLocalDatabase:
 
     def __init__(self, cod_root: Optional[Path] = None, db_path: Optional[Path] = None):
         self._init_error: Optional[str] = None
+        # v0.11.0: 无机物库内嵌结构数据的惰性连接缓存。
+        # None = 还没探测; False = 探测过、不可用; Connection = 可用。
+        self._inorg_conn: Optional[sqlite3.Connection] = None
+        self._inorg_probed = False
         try:
             self.cod_root = Path(cod_root) if cod_root else get_cod_root()
             self.db_path = Path(db_path) if db_path else _index_db_path(self.cod_root)
@@ -1072,6 +1076,62 @@ class CODLocalDatabase:
             self.cod_root = Path(cod_root) if cod_root else Path("cod")
             self.db_path = Path(db_path) if db_path else (self.cod_root.parent / "cod_index.sqlite")
             self._init_error = str(e)
+
+    # ── 无机物库内嵌结构数据 (v0.11.0) ──────────────────────
+
+    def _inorg_db(self) -> Optional[sqlite3.Connection]:
+        """打开"COD 无机物库"(config 的 cod_db_path), 仅当它带内嵌结构数据。
+
+        v0.11.0 起无机物库的 phases 表新增 ``cif_gz`` 列 (gzip 的 CIF 全文),
+        并带 ``cod_atomic_sites`` 子集表 —— 这样**只挂无机库也能做 Rietveld
+        结构精修**, 不必再挂 COD 全库索引 (两库的 COD 编号体系并不重合,
+        全库只覆盖约 1/3 的无机相, 见 v0.11.0 侦察)。
+
+        一次性探测并缓存; 库不存在 / 没有 cif_gz 列 / 与全库是同一文件时
+        返回 None, 调用方按"没有这条回退"处理。**只读**打开, 不写。
+        """
+        if self._inorg_probed:
+            return self._inorg_conn
+        self._inorg_probed = True
+        try:
+            path = Path(get_config().get_cod_db_path())
+        except Exception:
+            path = None
+        if path is None or not path.exists():
+            return None
+        try:
+            if path.resolve() == self.db_path.resolve():
+                return None  # 同一个文件 (全库被当无机库挂了), 别重复打开
+        except Exception:
+            pass
+        try:
+            conn = sqlite3.connect(
+                f"file:{path}?mode=ro", uri=True, check_same_thread=False,
+            )
+            conn.row_factory = sqlite3.Row
+            cols = [r["name"] for r in conn.execute("PRAGMA table_info(phases)")]
+            if "cif_gz" not in cols:
+                conn.close()
+                return None  # 旧版无机库 (未内嵌 CIF), 走原有回退链
+            self._inorg_conn = conn
+        except Exception:
+            self._inorg_conn = None
+        return self._inorg_conn
+
+    def _inorg_cif_gz(self, cod_id: int) -> Optional[str]:
+        """从无机物库取内嵌 CIF 全文 (cif_gz BLOB → 解压文本)。"""
+        conn = self._inorg_db()
+        if conn is None:
+            return None
+        try:
+            row = conn.execute(
+                "SELECT cif_gz FROM phases WHERE cod_id = ?", (cod_id,)
+            ).fetchone()
+            if row and row["cif_gz"]:
+                return gzip.decompress(row["cif_gz"]).decode("utf-8", errors="replace")
+        except Exception as e:
+            log.debug("inorg cif_gz lookup failed for %d: %s", cod_id, e)
+        return None
 
     # ── 基础设施 ────────────────────────────────────────────
     def is_ready(self) -> bool:
@@ -1265,6 +1325,11 @@ class CODLocalDatabase:
         if text is not None:
             return text
         if entry is None:
+            # v0.11.0: 编号不在全库索引 ≠ 拿不到结构 —— 无机物库自带 cif_gz
+            # (两库编号体系不重合, 全库只覆盖约 1/3 的无机相), 先查无机库
+            inorg_text = self._inorg_cif_gz(cod_id)
+            if inorg_text:
+                return inorg_text
             # 索引都没有 → 不可能有 cif_gz/tar_source 两条路, 只剩 REST
             rest = self._fetch_cif_from_cod_rest(cod_id)
             if rest and "data_" in rest:
@@ -1282,6 +1347,11 @@ class CODLocalDatabase:
                 return raw.decode("utf-8", errors="replace")
         except Exception:
             pass
+        # Level 2b: 无机物库内嵌 CIF (v0.11.0) —— 两库 COD 编号体系不重合,
+        # 全库索引覆盖不到的相, 从无机库自己的 cif_gz 列取 (只挂无机库即可精修)
+        inorg_text = self._inorg_cif_gz(cod_id)
+        if inorg_text:
+            return inorg_text
         # Level 3: fallback read from original .tar
         tar_path = self._get_tar_source()
         if tar_path and tar_path.exists():
@@ -1317,14 +1387,26 @@ class CODLocalDatabase:
             )
             rows = cur.fetchall()
             conn.close()
-            return [
-                {"label": r["label"] or "", "element": r["element"],
-                 "x": r["x"], "y": r["y"], "z": r["z"],
-                 "occupancy": r["occupancy"]}
-                for r in rows
-            ]
         except Exception:
-            return []
+            rows = []
+        if not rows:
+            # v0.11.0: 无机物库自带的位点子集 (全库索引没有该编号时的回退)
+            conn = self._inorg_db()
+            if conn is not None:
+                try:
+                    rows = conn.execute(
+                        "SELECT label, element, x, y, z, occupancy FROM cod_atomic_sites "
+                        "WHERE cod_id = ? ORDER BY site_idx",
+                        (cod_id,),
+                    ).fetchall()
+                except Exception:
+                    rows = []
+        return [
+            {"label": r["label"] or "", "element": r["element"],
+             "x": r["x"], "y": r["y"], "z": r["z"],
+             "occupancy": r["occupancy"]}
+            for r in rows
+        ]
 
     # ── 转 Phase 模型 (供物相识别/精修使用) ──────────────────
     def get_phase(self, cod_id: int, lattice: Optional[LatticeParams] = None,
