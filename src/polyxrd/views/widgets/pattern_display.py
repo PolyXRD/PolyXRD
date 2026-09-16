@@ -8,6 +8,12 @@ Match! 式双区衍射谱绘图控件 (M21)
 布局用 matplotlib GridSpec(2,1, height_ratios=[4,1], sharex=True) —
 上下 x 轴联动缩放; 棒区叠加在主区下方 (Match! 风格)。
 
+纵坐标 (v0.12.0): 主区支持 线性 / 对数 / 方根 三种显示。
+- 左键点击 **Y 轴区域** 循环切换 (数据区左键仍是峰点击, 两者不冲突);
+- 右键点击图内任意位置弹出选择菜单。
+对数/方根下只按**正的数据点**定 y 范围 —— 底部偏移为负的残差曲线不参与,
+否则对数轴的自动缩放会被它拖到 1e-308, 整张图压成一条线。
+
 Signals:
     peak_clicked : 点中某实验峰 → 发出该峰 two_theta
 """
@@ -21,7 +27,7 @@ from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QWidget, QVBoxLayout
+from PySide6.QtWidgets import QLabel, QHBoxLayout, QWidget, QVBoxLayout
 
 from polyxrd.models.xrd_data import XRDData
 from polyxrd.services.phase_display import (
@@ -29,6 +35,7 @@ from polyxrd.services.phase_display import (
     PeakAssignment, phase_color,
 )
 from polyxrd.utils.mpl_font import ensure_cjk_font
+from polyxrd.views.widgets.y_scale import YScaleController, hint_text
 
 # 图上标题/行标含中文 → 必须在建图前把系统中文字体插进字体栈, 否则画成豆腐块。
 ensure_cjk_font()
@@ -64,6 +71,7 @@ class PatternDisplayWidget(QWidget):
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
+        self._ylabel_base = "Intensity"
         self._figure = Figure(figsize=(8, 5.2), dpi=100, tight_layout=True)
         self._canvas = FigureCanvasQTAgg(self._figure)
         self._canvas.setMinimumHeight(320)
@@ -74,7 +82,7 @@ class PatternDisplayWidget(QWidget):
         # 关闭棒区独立的 y 标签/刻度 (它是虚拟的相行)
         self._ax_stick.set_yticks([])
         self._apply_stick_ylim(1)
-        self._ax_main.set_ylabel("Intensity")
+        self._ax_main.set_ylabel(self._ylabel_base)
         self._ax_stick.set_xlabel("2θ (°)")
 
         self._canvas.mpl_connect("button_press_event", self._on_click)
@@ -84,10 +92,58 @@ class PatternDisplayWidget(QWidget):
         self._main_x: np.ndarray = np.array([])
         self._main_ymax: float = 1.0
 
+        # 纵坐标刻度控制器: 只认主区 (棒区是虚拟行坐标, 不参与切换)
+        self._y_scale = YScaleController(
+            self._canvas,
+            axes_getter=lambda: [self._ax_main],
+            label_getter=lambda _ax: self._ylabel_base,
+            repaint=self._canvas.draw_idle,
+            on_change=self._on_y_scale_changed,
+            parent=self,
+        )
+
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.addWidget(self._canvas)
+
+        hint_row = QHBoxLayout()
+        hint_row.setContentsMargins(2, 0, 2, 0)
+        self._y_scale_hint = QLabel()
+        self._y_scale_hint.setStyleSheet("QLabel { color: #555; font-size: 11px; }")
+        self._y_scale_hint.setToolTip(
+            "左键点击 Y 轴区域循环切换; 右键点击图内任意位置弹出选择菜单。\n"
+            "对数 / 方根刻度下刻度标签仍是真实强度值。"
+        )
+        hint_row.addWidget(self._y_scale_hint)
+        hint_row.addStretch()
+        lay.addLayout(hint_row)
+
+        self._on_y_scale_changed(self._y_scale.mode())
         self.clear_all()
+
+    # ------------------------------------------------------------------
+    # 纵坐标刻度
+    # ------------------------------------------------------------------
+    def _on_y_scale_changed(self, _mode: str) -> None:
+        self._y_scale_hint.setText(hint_text(self._y_scale.mode()))
+
+    def set_y_scale_mode(self, mode: str) -> None:
+        """外部设定纵坐标模式 (linear/log/sqrt)。"""
+        self._y_scale.set_mode(mode)
+
+    def get_y_scale_mode(self) -> str:
+        """当前纵坐标模式。"""
+        return self._y_scale.mode()
+
+    def _autoscale_main(self) -> None:
+        """主区自动缩放 —— 对数/方根模式下把 y 范围交还给刻度逻辑。
+
+        ``set_autoscaley_on(False)`` 之后 ``autoscale_view()`` 不会再动 y,
+        所以再按当前模式重算一次正数据范围即可; x 轴照常自适应。
+        """
+        self._ax_main.relim()
+        self._ax_main.autoscale_view()
+        self._y_scale.set_mode(self._y_scale.mode(), refit=True)
 
     # ------------------------------------------------------------------
     # 内部
@@ -108,6 +164,9 @@ class PatternDisplayWidget(QWidget):
         self._redraw()
 
     def _on_click(self, event):
+        # 只认左键: 右键留给纵坐标菜单, Y 轴竖条留给纵坐标循环切换
+        if getattr(event, "button", 1) != 1:
+            return
         if event.inaxes is not self._ax_main or event.xdata is None:
             return
         # 命中最近的实验峰 (仅在已设实验数据时)
@@ -132,7 +191,7 @@ class PatternDisplayWidget(QWidget):
             ln = self._ax_main.plot(x, y, color=COLOR_EXP, linewidth=1.1,
                                     label="实验数据")[0]
             ln.set_gid("exp"); self._artists.append(ln)
-        self._ax_main.relim(); self._ax_main.autoscale_view()
+        self._autoscale_main()
         self._redraw()
 
     def set_calculated(self, two_theta, y_calc) -> None:
@@ -159,6 +218,7 @@ class PatternDisplayWidget(QWidget):
         zero = self._ax_main.axhline(off, color=COLOR_RESIDUAL, linewidth=0.5,
                                      alpha=0.3)
         zero.set_gid("resid"); self._artists.append(zero)
+        self._autoscale_main()
         self._redraw()
 
     def set_selected_phases(self, phase_sticks) -> None:
@@ -230,7 +290,7 @@ class PatternDisplayWidget(QWidget):
         nrow = max(1, len(phase_sticks))
         self._apply_stick_ylim(nrow)
         self._update_stick_ratio(nrow)
-        self._ax_main.relim(); self._ax_main.autoscale_view()
+        self._autoscale_main()
         self._redraw()
 
     def _stick_span(self, n_rows: int) -> float:
@@ -395,7 +455,6 @@ class PatternDisplayWidget(QWidget):
         self._ax_stick.clear()
         self._ax_main.grid(True, alpha=0.3)
         self._ax_stick.grid(True, alpha=0.3)
-        self._ax_main.set_ylabel("Intensity")
         self._ax_stick.set_xlabel("2θ (°)")
         self._apply_stick_ylim(1)
         self._update_stick_ratio(0)
@@ -403,6 +462,8 @@ class PatternDisplayWidget(QWidget):
         self._main_x = np.array([])
         self._main_y = np.array([])
         self._main_ymax = 1.0
+        # clear() 会连刻度与轴标题一起重置 → 按当前模式重新贴回去
+        self._y_scale.set_mode(self._y_scale.mode(), refit=True)
         self._redraw()
 
     def export_image(self, path: str, dpi: int = 300) -> None:

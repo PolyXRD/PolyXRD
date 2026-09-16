@@ -21,6 +21,7 @@ class RefinementViewModel(QObject):
     Signals:
         refinement_started: 精修开始
         refinement_progress: 精修进度
+        refinement_log: 精修过程日志 (v0.12.0, 逐行流式)
         refinement_completed: 精修完成
         refinement_failed: 精修失败
         error: 错误发生
@@ -28,6 +29,7 @@ class RefinementViewModel(QObject):
 
     refinement_started = Signal()
     refinement_progress = Signal(int)
+    refinement_log = Signal(str)
     refinement_completed = Signal(object)
     refinement_failed = Signal(str)
     error = Signal(str)
@@ -71,6 +73,10 @@ class RefinementViewModel(QObject):
 
         self.refinement_started.emit()
         self.refinement_progress.emit(0)
+
+        # 过程日志: 引擎边跑边回吐过程数据, 界面实时显示 (v0.12.0)。
+        # 调用方若自己传了 log_cb 则以它为准 (例如批量精修各自收集日志)。
+        kwargs.setdefault("log_cb", self.refinement_log.emit)
 
         try:
             result = self._refiner.refine(

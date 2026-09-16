@@ -347,6 +347,14 @@ translations = {
         "smooth_failed": "Smoothing failed: {error}",
     },
     "view": {
+        "y_scale": {
+            "group": "Y Axis Scale",
+            "linear": "Linear",
+            "log": "Log",
+            "sqrt": "Square Root",
+            "menu_title": "Y Axis Scale",
+            "hint": "Y axis: {mode}  (left-click the Y axis to cycle / right-click to choose)",
+        },
         "data": {
             "title": "Data",
             "group_preprocess": "Data Preprocessing",
@@ -367,7 +375,7 @@ translations = {
             "title": "Phase Analysis",
             "group_ref_peaks": "Reference Peak Matching",
             "group_filter": "Element Filter",
-            "group_filter_title": "Element Filter (Three-State)",
+            "group_filter_title": "Element Filter (Four-State)",
             "group_candidates": "Candidate Phases",
             "group_mix": "Multi-Phase Mixing",
             "label_elements": "Known Elements:",
@@ -401,7 +409,7 @@ translations = {
                 "status_maybe": "Maybe: {elements}",
                 "status_exclude": "Absent: {elements}",
                 "status_closed_world": "Unchecked elements are treated as Absent",
-                "hint": "Click element to cycle: None → MustHave(dark green) → Has(green) → Maybe(yellow) → Absent(red)",
+                "hint": "Click element to cycle: None → Has(green) → Maybe(yellow) → Absent(red) → MustHave(dark green)",
             },
         },
         "refinement": {
@@ -419,6 +427,26 @@ translations = {
             "label_quality": "Quality:",
             "label_cycles": "Cycles:",
             "btn_start_refine": "Start Refinement",
+            "wizard_style": "Use refinement-wizard settings (recommended)",
+            "wizard_style_tip": (
+                "Applies the refinement wizard's recommended settings: engine=builtin, "
+                "strategy=sequential, peak shape=pseudo-voigt, background=snip, "
+                "max cycles=20; the process log below streams the refinement steps in "
+                "real time. Uncheck to adjust the parameters manually."
+            ),
+            "group_log": "Refinement Process Log",
+            "log_placeholder": "Run a refinement and the process data will stream here in real time...",
+            "btn_clear_log": "Clear Log",
+            "btn_save_log": "Save Log...",
+            "log_start": "===== Rietveld refinement started =====",
+            "log_wizard_style": "Mode: refinement-wizard preset \"{name}\" (engine {engine} / strategy {strategy})",
+            "log_manual_style": "Mode: manual parameters",
+            "log_params": "Parameters: engine={engine} strategy={strategy} max_cycles={cycles} peak_shape={shape} background={bg}",
+            "log_result": "Result: wR={wr}%  GOF={gof}  quality={quality}  nfev={cycles}  time={time}s",
+            "log_phase": "  Phase {name}: weight fraction {weight}%",
+            "log_done": "===== Refinement finished =====",
+            "log_failed": "Refinement failed: {error}",
+            "log_save_failed": "Failed to save log: {error}",
             "col_phase": "Phase",
             "col_weight": "Weight Fraction(%)",
             "col_a": "a(Å)",

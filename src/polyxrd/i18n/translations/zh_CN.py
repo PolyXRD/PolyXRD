@@ -335,6 +335,14 @@ translations = {
         "smooth_failed": "平滑处理失败：{error}",
     },
     "view": {
+        "y_scale": {
+            "group": "纵坐标",
+            "linear": "线性",
+            "log": "对数",
+            "sqrt": "方根",
+            "menu_title": "纵坐标刻度",
+            "hint": "纵坐标: {mode}  (左键点击 Y 轴切换 / 右键选择)",
+        },
         "data": {
             "title": "数据",
             "group_preprocess": "数据预处理",
@@ -355,7 +363,7 @@ translations = {
             "title": "物相分析",
             "group_ref_peaks": "参考峰对照",
             "group_filter": "元素过滤",
-            "group_filter_title": "元素过滤 (三态选择)",
+            "group_filter_title": "元素过滤 (四态选择)",
             "group_candidates": "候选物相",
             "group_mix": "多相混合",
             "label_elements": "已知元素:",
@@ -389,7 +397,7 @@ translations = {
                 "status_maybe": "可能: {elements}",
                 "status_exclude": "没有: {elements}",
                 "status_closed_world": "未勾选元素默认按「没有」排除",
-                "hint": "点击元素切换状态: 无 → 必有(深绿) → 含有(绿) → 可能(黄) → 没有(红)",
+                "hint": "点击元素切换状态: 无 → 含有(绿) → 可能(黄) → 没有(红) → 必有(深绿)",
             },
         },
         "refinement": {
@@ -407,6 +415,25 @@ translations = {
             "label_quality": "质量:",
             "label_cycles": "循环次数:",
             "btn_start_refine": "开始精修",
+            "wizard_style": "按精修向导的方式（推荐）",
+            "wizard_style_tip": (
+                "采用精修向导的推荐配置：引擎 builtin、策略 sequential、"
+                "峰形 pseudo-voigt、背景 snip、最大循环 20，并在下方实时输出"
+                "精修过程日志。取消勾选后可自行调整参数。"
+            ),
+            "group_log": "精修过程日志",
+            "log_placeholder": "执行精修后，这里会像跑码一样实时输出过程数据…",
+            "btn_clear_log": "清空日志",
+            "btn_save_log": "保存日志…",
+            "log_start": "===== 开始 Rietveld 精修 =====",
+            "log_wizard_style": "方式: 精修向导推荐配置「{name}」(引擎 {engine} / 策略 {strategy})",
+            "log_manual_style": "方式: 手动参数配置",
+            "log_params": "参数: 引擎={engine} 策略={strategy} 最大循环={cycles} 峰形={shape} 背景={bg}",
+            "log_result": "结果: wR={wr}%  GOF={gof}  质量={quality}  循环={cycles}  耗时={time}s",
+            "log_phase": "  物相 {name}: 质量分数 {weight}%",
+            "log_done": "===== 精修结束 =====",
+            "log_failed": "精修失败: {error}",
+            "log_save_failed": "日志保存失败: {error}",
             "col_phase": "物相",
             "col_weight": "质量分数(%)",
             "col_a": "a(Å)",

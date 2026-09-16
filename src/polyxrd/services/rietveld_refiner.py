@@ -2,6 +2,15 @@
 Rietveld精修服务
 ================
 封装GSAS-II和powerxrd的Rietveld精修功能。
+
+过程日志 (v0.12.0)
+------------------
+调用方可以传 ``log_cb=callable(str)`` 进来, 精修过程会**边跑边**把过程数据
+(引擎选择、背景估计、每个起点的 wR/nfev、抛光评估数、最终指标) 回吐给 UI,
+界面就能像终端跑码一样实时显示。不传回调 = 完全静默, 行为与旧版一致。
+
+日志文本刻意用**技术符号 + 数值** (如 ``[start 2/4] wR=52.310% nfev=57``),
+不含面向用户的自然语言 —— 服务层不依赖 i18n, 界面要本地化的措辞请自己包。
 """
 from __future__ import annotations
 
@@ -9,7 +18,7 @@ import os
 import logging
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 import numpy as np
 
@@ -37,6 +46,29 @@ class RietveldRefiner:
     def __init__(self) -> None:
         self._config = get_config()
 
+    # ------------------------------------------------------------------
+    # 过程日志工具 (v0.12.0)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def make_logger(kwargs: dict) -> Callable[[str], None]:
+        """从 kwargs 里取出 ``log_cb`` 并包成"永不抛异常"的日志函数。
+
+        回调抛异常不该影响精修本身 (日志是旁路), 所以这里吞掉所有异常并
+        退化成空操作。
+        """
+        cb = kwargs.get("log_cb")
+        if not callable(cb):
+            return lambda _msg: None
+
+        def _log(msg: str) -> None:
+            try:
+                cb(msg)
+            except Exception:  # noqa: BLE001 - 日志失败不影响计算
+                pass
+
+        return _log
+
     def refine(
         self,
         data: XRDData,
@@ -60,6 +92,7 @@ class RietveldRefiner:
             RefinementResult
         """
         start_time = time.time()
+        log = self.make_logger(kwargs)
 
         # ── M14 options 前处理: 择优取向 (参考峰强度) / 零点初值 ──
         phases_use = phases
@@ -100,16 +133,45 @@ class RietveldRefiner:
             # 使用内置引擎作为fallback
             refine_func = self._refine_builtin
 
+        # ── 过程日志: 起点信息 ─────────────────────────────────────
+        try:
+            tth = np.asarray(data.two_theta, dtype=float)
+            lam = float(getattr(data, "wavelength", 0.0) or 0.0)
+            log(f"[start] engine={engine} strategy={strategy} max_cycles={max_cycles}")
+            log(
+                f"[data] n={tth.size} 2θ={tth.min():.2f}–{tth.max():.2f}° "
+                f"λ={lam:.5f} Å"
+            )
+            log(
+                "[phase] {} phase(s): {}".format(
+                    len(phases_use),
+                    ", ".join(getattr(p, "name", "?") for p in phases_use),
+                )
+            )
+        except Exception:  # noqa: BLE001 - 日志不该阻断精修
+            pass
+
         try:
             result = refine_func(data, phases_use, strategy, max_cycles, **kwargs)
         except Exception as e:
             # 任何引擎失败时使用内置精修 (不再静默: 记录原因供 UI/调试)
             logger.warning("engine=%s 精修失败, 回退 builtin: %s", engine, e)
+            log(f"[warn] engine={engine} 失败: {type(e).__name__}: {e}")
+            log("[warn] 回退内置引擎 builtin")
             result = self._refine_builtin(data, phases_use, strategy, max_cycles, **kwargs)
             result.fit_params["engine_requested"] = engine
             result.fit_params["engine_fallback_reason"] = f"{type(e).__name__}: {e}"
 
         result.time_seconds = time.time() - start_time
+        log(
+            "[done] engine={} wR={:.3f}% GOF={:.3f} nfev={} t={:.1f}s".format(
+                result.fit_params.get("engine", engine),
+                float(result.wR),
+                float(result.GOF),
+                int(result.num_cycles),
+                result.time_seconds,
+            )
+        )
         return result
 
     # ------------------------------------------------------------------
@@ -136,9 +198,11 @@ class RietveldRefiner:
         否则回退 builtin (无结构剖面拟合), 并把原因写入 fit_params.
         """
         reasons: list[str] = []
+        log = self.make_logger(kwargs)
         if self._phases_have_structure(phases):
             py = self._find_gsas2_python()
             if py is not None:
+                log(f"[auto] 全部物相带结构 CIF 且找到 GSAS-II ({py}) → engine=gsas2")
                 try:
                     return self._refine_gsas2(
                         data, phases, strategy, max_cycles, **kwargs
@@ -150,6 +214,7 @@ class RietveldRefiner:
         else:
             reasons.append("存在无结构 CIF 的物相 (builtin 剖面拟合即可)")
 
+        log("[auto] → engine=builtin (原因: " + "; ".join(reasons) + ")")
         result = self._refine_builtin(data, phases, strategy, max_cycles, **kwargs)
         result.fit_params["engine_requested"] = "auto"
         result.fit_params["engine_fallback_reason"] = "; ".join(reasons)
@@ -174,11 +239,13 @@ class RietveldRefiner:
         方式调用 scripts/gsas2_bridge.py, 而非 in-process import。
         未安装 GSAS-II 或调用失败时回退内置引擎。
         """
+        log = self.make_logger(kwargs)
         py = self._find_gsas2_python()
         bridge = Path(__file__).resolve().parents[3] / "scripts" / "gsas2_bridge.py"
         if not py or not bridge.exists():
             logger.warning("GSAS-II 不可用 (py=%s, bridge 存在=%s), 回退 builtin",
                            py, bridge.exists())
+            log("[gsas2] 不可用 (未找到 python 或 bridge) → 回退 builtin")
             result = self._refine_builtin(data, phases, strategy, max_cycles, **kwargs)
             result.fit_params["engine_requested"] = "gsas2"
             result.fit_params["engine_fallback_reason"] = "GSAS-II 未安装或 bridge 缺失"
@@ -214,6 +281,8 @@ class RietveldRefiner:
             req["phases"].append(entry)
 
         timeout = float(kwargs.get("gsas2_timeout", 300.0))
+        log(f"[gsas2] 子进程桥启动: python={py} timeout={timeout:.0f}s "
+            f"phases={len(phases)}")
         try:
             with tempfile.TemporaryDirectory(prefix="polyxrd_g2_") as td:
                 req_path = str(Path(td) / "request.json")
@@ -227,6 +296,7 @@ class RietveldRefiner:
                 )
                 if not Path(out_path).exists():
                     logger.warning("GSAS-II 桥未产出 output.json, 回退 builtin")
+                    log("[gsas2] 桥未产出 output.json → 回退 builtin")
                     result = self._refine_builtin(
                         data, phases, strategy, max_cycles, **kwargs
                     )
@@ -237,6 +307,7 @@ class RietveldRefiner:
                     out = _json.load(f)
         except Exception as e:
             logger.warning("GSAS-II 子进程异常, 回退 builtin: %s", e)
+            log(f"[gsas2] 子进程异常: {type(e).__name__}: {e} → 回退 builtin")
             result = self._refine_builtin(data, phases, strategy, max_cycles, **kwargs)
             result.fit_params["engine_requested"] = "gsas2"
             result.fit_params["engine_fallback_reason"] = f"子进程异常: {e}"
@@ -245,6 +316,7 @@ class RietveldRefiner:
         if not out.get("ok"):
             err = str(out.get("error", ""))[:300]
             logger.warning("GSAS-II 桥返回 ok=False (%s), 回退 builtin", err)
+            log(f"[gsas2] 桥返回 ok=False: {err} → 回退 builtin")
             result = self._refine_builtin(data, phases, strategy, max_cycles, **kwargs)
             result.fit_params["engine_requested"] = "gsas2"
             result.fit_params["engine_fallback_reason"] = f"桥内错误: {err}"
@@ -429,6 +501,7 @@ class RietveldRefiner:
             maud_on_progress: 进度回调 (MaudProgress → None)
             maud_cod_root: 当 phase.cod_id 给出时, COD 库根用于 CIF 映射
         """
+        log = self.make_logger(kwargs)
         from polyxrd.services.refinement_engines import (
             MaudEngine,
             MaudEngineError,
@@ -441,6 +514,8 @@ class RietveldRefiner:
         if wizard is None and self._maud_needs_first_run():
             wizard = 1  # 强制走 wizard 1 (scale+背景), 避免初次跑卡死
 
+        log(f"[maud] MaudText 批处理启动: wizard_index={wizard} "
+            f"iterations={max_cycles} phases={len(phases)}")
         try:
             maud_root = kwargs.get("maud_root")
             engine = MaudEngine(
@@ -456,12 +531,15 @@ class RietveldRefiner:
                 cod_root=Path(kwargs["maud_cod_root"]) if kwargs.get("maud_cod_root") else None,
             )
         except MaudEngineError as e:
+            log(f"[maud] 引擎错误: {e} → 回退 builtin")
             return self._refine_builtin(data, phases, strategy, max_cycles, **kwargs)
-        except Exception:
+        except Exception as e:  # noqa: BLE001
+            log(f"[maud] 异常: {type(e).__name__}: {e} → 回退 builtin")
             return self._refine_builtin(data, phases, strategy, max_cycles, **kwargs)
 
         # 标记 first-run 完成 (下次可走自动 wizard)
         self._maud_mark_first_run_done()
+        log(f"[maud] 完成 wR={result.wR:.3f}% nfev={result.num_cycles}")
         return result
 
     @staticmethod
@@ -597,6 +675,7 @@ class RietveldRefiner:
         精修参数: 晶胞 a + 强度 scale + 背景截距 (无结构时 |F|²=100,
         峰位主导拟合, 适用于晶胞参数测定; 强度/含量定量请用内置引擎)。
         """
+        log = self.make_logger(kwargs)
         try:
             from powerxrd.model import PhaseModel
             from powerxrd.lattice import CubicLattice
@@ -605,14 +684,17 @@ class RietveldRefiner:
                 __import__("powerxrd"), "__version__", "4.x"
             )
         except ImportError:
+            log("[powerxrd] 未安装 powerxrd → 回退 builtin")
             return self._refine_builtin(data, phases, strategy, max_cycles, **kwargs)
 
         # powerxrd v4 仅支持单相 + 立方
         if len(phases) != 1:
+            log(f"[powerxrd] 仅支持单相 (当前 {len(phases)} 相) → 回退 builtin")
             return self._refine_builtin(data, phases, strategy, max_cycles, **kwargs)
         phase = phases[0]
         lat = phase.lattice if phase.lattice is not None else None
         if lat is None:
+            log("[powerxrd] 物相无晶格信息 → 回退 builtin")
             return self._refine_builtin(data, phases, strategy, max_cycles, **kwargs)
         cubic_ok = (
             abs(lat.a - lat.b) < 1e-9
@@ -622,8 +704,10 @@ class RietveldRefiner:
             and abs(lat.gamma - 90.0) < 1e-6
         )
         if not cubic_ok:
+            log("[powerxrd] 仅支持立方晶系 → 回退 builtin")
             return self._refine_builtin(data, phases, strategy, max_cycles, **kwargs)
 
+        log(f"[powerxrd] v{_PXR_VERSION} 单相立方拟合启动: {phase.name} a={lat.a:.4f}")
         two_theta = np.asarray(data.two_theta, dtype=float)
         intensity = np.asarray(data.intensity, dtype=float)
         bg = self._estimate_background(intensity, "median", wide_window=True)
@@ -741,6 +825,13 @@ class RietveldRefiner:
             except Exception:  # noqa: BLE001 - 进度回调失败不该影响精修本身
                 pass
 
+        # 过程日志 (v0.12.0): 快检子调用会带 "[quick]" 前缀, 免得两轮日志混在一起
+        log = self.make_logger(kwargs)
+        _stage = str(kwargs.get("log_stage", "") or "")
+
+        def _plog(msg: str) -> None:
+            log(_stage + msg)
+
         # ── 0. 快速路径: 无 Caglioti 快检, wR 达标即返回 ────────────
         wR_threshold = kwargs.get("wR_threshold", 55.0)
         best_quick: Optional[RefinementResult] = None
@@ -750,6 +841,8 @@ class RietveldRefiner:
             quick_kw["n_starts"] = min(3, kwargs.get("n_starts", 3))
             quick_kw["wR_threshold"] = None  # 防止递归再次触发快检
             quick_kw["max_nfev_per_start"] = kwargs.get("max_nfev_per_start", 400)
+            quick_kw["log_stage"] = "[quick] "
+            _plog(f"[quick] 快检启动 (wR_threshold={wR_threshold}%, use_caglioti=False)")
             try:
                 best_quick = self._refine_builtin(
                     data, phases, strategy, max_cycles, **quick_kw
@@ -762,7 +855,18 @@ class RietveldRefiner:
                     "quick_path": True,
                     "wR_threshold": float(wR_threshold),
                 }
+                _plog(
+                    f"[quick] wR={best_quick.wR:.3f}% ≤ {float(wR_threshold):.1f}% "
+                    "→ 达标, 跳过 Caglioti 精细模式"
+                )
                 return best_quick
+            if best_quick is not None:
+                _plog(
+                    f"[quick] wR={best_quick.wR:.3f}% > {float(wR_threshold):.1f}% "
+                    "→ 启用 Caglioti 精细模式"
+                )
+            else:
+                _plog("[quick] 快检失败 → 直接进入 Caglioti 精细模式")
 
         two_theta = data.two_theta
         intensity = data.intensity
@@ -786,6 +890,10 @@ class RietveldRefiner:
         y_exp = intensity - bg
         y_exp_pos = np.where(y_exp > 0, y_exp, 0.0).astype(float)
         y_floor = max(float(np.median(y_exp_pos)) * 0.05, 1.0)
+        _plog(
+            f"[bg] method={bg_method} median={float(np.median(bg)):.2f} "
+            f"I_max={float(np.max(intensity)):.1f} y_floor={y_floor:.3f}"
+        )
 
         # ── 1b. v0.11.0 R-A1: 统计权重 (opt-in) ──────────────────
         # 旧版 residual 与 _calc_wR 都是单位权, 且 residual 用扣背景的
@@ -1002,10 +1110,16 @@ class RietveldRefiner:
         best_result = None
         best_wR = float("inf")
         best_simulated = None
+        _plog(
+            f"[init] n_phases={n_phases} n_params={n_params} n_starts={n_starts} "
+            f"max_nfev/start={max_nfev_per_start} peak_shape={peak_shape} "
+            f"caglioti={use_caglioti} stat_weights={stat_weights_mode}"
+        )
 
         for _start_i, x0_i in enumerate(candidates):
             x0_clipped = np.clip(x0_i, lower + 1e-8, upper - 1e-8)
             _tick(_start_i, n_starts + 1)
+            _t0 = time.time()
             try:
                 res_opt = least_squares(
                     residual, x0_clipped, bounds=(lower, upper),
@@ -1013,7 +1127,11 @@ class RietveldRefiner:
                     method="trf",
                     loss="linear",
                 )
-            except Exception:
+            except Exception as e:  # noqa: BLE001
+                _plog(
+                    f"[start {_start_i + 1}/{n_starts}] 求解失败: "
+                    f"{type(e).__name__}: {e}"
+                )
                 continue
 
             # 计算该起点的 wR
@@ -1025,12 +1143,20 @@ class RietveldRefiner:
             )
             wr_i = _wr_of(sim_i)
 
-            if wr_i < best_wR:
+            improved = wr_i < best_wR
+            if improved:
                 best_wR = wr_i
                 best_result = res_opt
                 best_simulated = sim_i
+            _plog(
+                f"[start {_start_i + 1}/{n_starts}] wR={wr_i:7.3f}% "
+                f"nfev={int(getattr(res_opt, 'nfev', 0)):4d} "
+                f"cost={float(getattr(res_opt, 'cost', 0.0)):10.4g} "
+                f"t={time.time() - _t0:5.2f}s" + ("  ← best" if improved else "")
+            )
 
         if best_result is None:
+            _plog("[warn] 所有起点求解失败 → 退化为单起点直接拟合")
             # 退化: 直接返回起点拟合
             best_result = least_squares(
                 residual, candidates[0], bounds=(lower, upper),
@@ -1041,14 +1167,15 @@ class RietveldRefiner:
                 two_theta, phase_peaks, _w, _fw, _et, _sc, peak_shape,
                 caglioti=_cag
             )
+        _plog(f"[multistart] best wR={best_wR:.3f}% → 进入局部抛光")
 
         # ── 7. v7 局部抛光 (性能+效果平衡) ───────────────────────
         #    取 24 个手工方向 + 9 个 Caglioti 调整方向，而不是 3^8 网格
         _tick(n_starts, n_starts + 1)   # 多起点跑完, 进入抛光阶段
+        _polish_n = 0   # 抛光评估计数 (日志/进度共用; 提前初始化避免异常路径未定义)
         try:
             cur_x = np.array(best_result.x, dtype=float)
             best_polish_x = cur_x.copy()
-            _polish_n = 0   # 抛光评估计数 (用于按固定间隔汇报进度)
             # 各参数步长（相对值）
             w_mult  = [0.9, 1.0, 1.1]
             fw_mult = [0.92, 1.0, 1.08]
@@ -1117,8 +1244,10 @@ class RietveldRefiner:
                                         best_polish_x = x_t
                                         best_simulated = sim_t
             best_result_x = best_polish_x
-        except Exception:
+        except Exception as e:  # noqa: BLE001
+            _plog(f"[warn] 局部抛光异常, 保留多起点结果: {type(e).__name__}: {e}")
             best_result_x = best_result.x
+        _plog(f"[polish] 评估 {_polish_n} 次 → wR={best_wR:.3f}%")
 
         # ── 8. 提取最终结果 ──────────────────────────────────────
         opt_weights, opt_fwhm, opt_eta, opt_scale, opt_zero_shift, opt_cag = _unpack(best_result_x)
@@ -1151,6 +1280,14 @@ class RietveldRefiner:
                     wR = float(after)
                     bg = bg_new
                     bg_cheb_applied = True
+                    _plog(
+                        f"[bg-polish] Chebyshev deg={bg_cheb_deg} → wR={wR:.3f}% (采纳)"
+                    )
+                else:
+                    _plog(
+                        f"[bg-polish] Chebyshev deg={bg_cheb_deg} 未改进 (after={after:.3f}% "
+                        f"≥ {wR:.3f}%) → 忽略"
+                    )
             except Exception:
                 # 任何异常 → 静默回退 (守门员: 默认值已关; 走正门也不应崩)
                 bg_cheb_applied = False
@@ -1228,13 +1365,35 @@ class RietveldRefiner:
             },
         )
 
+        _plog(
+            "[result] wR={:.3f}% GOF={:.3f} nfev={} Rwp_quality={}".format(
+                float(wR), float(GOF), int(num_cycles), quality
+            )
+        )
+        _plog(
+            "[weights] "
+            + ", ".join(
+                f"{getattr(phases[i], 'name', '?')}={float(weight_pcts[i]):.2f}%"
+                for i in range(min(n_phases, len(weight_pcts)))
+            )
+        )
+
         # ── v8: 快速路径结果择优 (快检 wR 更低则返回快检结果) ──────
         if best_quick is not None and best_quick.wR < result.wR:
             best_quick.fit_params = {
                 **best_quick.fit_params,
                 "caglioti_fallback": True,
             }
+            _plog(
+                f"[pick] 快检 wR={best_quick.wR:.3f}% < 精细 {result.wR:.3f}% "
+                "→ 返回快检结果"
+            )
             return best_quick
+        if best_quick is not None:
+            _plog(
+                f"[pick] 精细 wR={result.wR:.3f}% ≤ 快检 {best_quick.wR:.3f}% "
+                "→ 返回精细结果"
+            )
         return result
 
     # ------------------------------------------------------------------

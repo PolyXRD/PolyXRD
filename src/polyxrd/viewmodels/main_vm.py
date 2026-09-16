@@ -30,6 +30,7 @@ class MainViewModel(QObject):
         peaks_changed: 峰变更
         phase_identified: 物相识别完成
         refinement_completed: 精修完成
+        refinement_log: 精修过程日志 (v0.12.0, 逐行流式)
     """
 
     status_changed = Signal(str)
@@ -38,6 +39,7 @@ class MainViewModel(QObject):
     peaks_changed = Signal(object)
     phase_identified = Signal(list)
     refinement_completed = Signal(object)
+    refinement_log = Signal(str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -54,6 +56,7 @@ class MainViewModel(QObject):
         self._phase_vm.error.connect(self._on_error)
         self._phase_vm.phase_identified.connect(self._on_phase_identified)
         self._refinement_vm.refinement_completed.connect(self._on_refinement_completed)
+        self._refinement_vm.refinement_log.connect(self.refinement_log.emit)
         self._refinement_vm.error.connect(self._on_error)
 
     # ------------------------------------------------------------------
