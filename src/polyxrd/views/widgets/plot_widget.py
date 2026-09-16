@@ -2,6 +2,10 @@
 XRD绘图控件
 ===========
 基于matplotlib的可交互XRD绘图控件。
+
+纵坐标支持 **线性 / 对数 / 方根** 三种显示 (v0.12.0):
+左键点击 Y 轴区域循环切换, 右键点击弹出菜单精确选择。数值换算由 matplotlib
+的 log / function 刻度完成, 刻度标签上仍是真实强度。
 """
 from __future__ import annotations
 
@@ -12,11 +16,12 @@ from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolb
 from matplotlib.figure import Figure
 from matplotlib.widgets import SpanSelector
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
 
 from polyxrd.models.peak import Peak
 from polyxrd.models.xrd_data import XRDData
 from polyxrd.utils.mpl_font import ensure_cjk_font
+from polyxrd.views.widgets.y_scale import YScaleController, hint_text
 
 # 图上标题/图例含中文 → 建图前先插系统中文字体, 否则画成豆腐块。
 ensure_cjk_font()
@@ -33,6 +38,7 @@ class PlotWidget(QWidget):
     - 框选区域
     - 重置视图
     - 导出图片
+    - 纵坐标线性/对数/方根切换 (左键点 Y 轴循环, 右键菜单选择)
 
     Signals:
         peak_clicked: 点击峰
@@ -44,12 +50,22 @@ class PlotWidget(QWidget):
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
+        self._ylabel_base = "Intensity"
         self._setup_ui()
         self._data_list: list[XRDData] = []
         self._peaks: list[Peak] = []
         self._peak_artists: list = []
         self._match_artists: list = []
         self._span_selector: Optional[SpanSelector] = None
+        # 纵坐标刻度控制器 (必须在 _axes 建好之后挂)
+        self._y_scale = YScaleController(
+            self._canvas,
+            axes_getter=lambda: [self._axes],
+            label_getter=lambda _ax: self._ylabel_base,
+            repaint=self._canvas.draw_idle,
+            on_change=self._on_y_scale_changed,
+            parent=self,
+        )
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -80,6 +96,15 @@ class PlotWidget(QWidget):
         self._btn_export.clicked.connect(self._on_export)
         btn_layout.addWidget(self._btn_export)
 
+        # 纵坐标模式提示 (随切换实时更新)
+        self._y_scale_hint = QLabel()
+        self._y_scale_hint.setStyleSheet("QLabel { color: #555; font-size: 11px; }")
+        self._y_scale_hint.setToolTip(
+            "左键点击 Y 轴区域循环切换; 右键点击图内任意位置弹出选择菜单。\n"
+            "对数 / 方根刻度下刻度标签仍是真实强度值。"
+        )
+        btn_layout.addWidget(self._y_scale_hint)
+
         btn_layout.addStretch()
 
         layout.addWidget(self._toolbar)
@@ -92,9 +117,24 @@ class PlotWidget(QWidget):
         # 初始空白图
         self._axes = self._figure.add_subplot(111)
         self._axes.set_xlabel("2θ (°)")
-        self._axes.set_ylabel("Intensity")
+        self._axes.set_ylabel(self._ylabel_base)
         self._axes.set_title("XRD Pattern")
         self._axes.grid(True, alpha=0.3)
+
+    # ------------------------------------------------------------------
+    # 纵坐标刻度
+    # ------------------------------------------------------------------
+
+    def _on_y_scale_changed(self, _mode: str) -> None:
+        self._y_scale_hint.setText(hint_text(self._y_scale.mode()))
+
+    def set_y_scale_mode(self, mode: str) -> None:
+        """外部设定纵坐标模式 (linear/log/sqrt)。"""
+        self._y_scale.set_mode(mode)
+
+    def get_y_scale_mode(self) -> str:
+        """当前纵坐标模式。"""
+        return self._y_scale.mode()
 
     # ------------------------------------------------------------------
     # 公共方法
@@ -126,13 +166,14 @@ class PlotWidget(QWidget):
         self._axes.legend(loc="best")
         self._axes.relim()
         self._axes.autoscale_view()
+        # 对数/方根模式下重新按新数据取正数据范围 (autoscale 已对 y 失效)
+        self._y_scale.set_mode(self._y_scale.mode(), refit=True)
         self._canvas.draw_idle()
 
     def clear_plot(self) -> None:
         """清除所有数据"""
         self._axes.clear()
         self._axes.set_xlabel("2θ (°)")
-        self._axes.set_ylabel("Intensity")
         self._axes.grid(True, alpha=0.3)
         self._data_list.clear()
         self._peaks.clear()
@@ -140,6 +181,8 @@ class PlotWidget(QWidget):
         for artist in getattr(self, '_match_artists', []):
             artist.remove()
         self._match_artists = []
+        # clear() 会把刻度与轴标题一起重置 → 按当前模式重新贴回去
+        self._y_scale.set_mode(self._y_scale.mode(), refit=True)
         self._canvas.draw_idle()
 
     def set_info_text(self, text: str) -> None:
@@ -231,6 +274,7 @@ class PlotWidget(QWidget):
             self._axes.axhline(y=residual_offset, color="k", linewidth=0.5, alpha=0.3)
 
         self._axes.legend(loc="best")
+        self._y_scale.set_mode(self._y_scale.mode(), refit=True)
         self._canvas.draw_idle()
 
     def set_x_range(self, x_min: float, x_max: float) -> None:
@@ -244,9 +288,10 @@ class PlotWidget(QWidget):
         self._canvas.draw_idle()
 
     def reset_view(self) -> None:
-        """重置视图"""
+        """重置视图 (保持当前纵坐标刻度模式)"""
         self._axes.relim()
         self._axes.autoscale_view()
+        self._y_scale.set_mode(self._y_scale.mode(), refit=True)
         self._canvas.draw_idle()
 
     def export_image(self, path: str, dpi: int = 300) -> None:
@@ -266,7 +311,9 @@ class PlotWidget(QWidget):
     # ------------------------------------------------------------------
 
     def _on_mouse_press(self, event) -> None:
-        """鼠标按下事件"""
+        """鼠标按下事件 (只认左键: 右键/Y 轴竖条留给纵坐标刻度控制器)"""
+        if getattr(event, "button", 1) != 1:
+            return
         if event.inaxes != self._axes:
             return
 

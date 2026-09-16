@@ -914,6 +914,8 @@ class RefinementWizard(QWidget):
                 refine_kwargs = dict(config.get("params", {}))
                 # 让多起点/抛光循环把轮次回吐给忙碌窗, 用户能看到"在动"
                 refine_kwargs["progress_cb"] = BusyIndicator.progress_tick
+                # v0.12.0: 引擎把过程数据逐行回吐到本页日志 (跑码式输出)
+                refine_kwargs.setdefault("log_cb", self._log)
                 result = self._refiner.refine(
                     data_to_refine,
                     self._selected_phases,

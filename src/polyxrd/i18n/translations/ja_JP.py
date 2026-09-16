@@ -310,6 +310,14 @@ translations = {
         "smooth_failed": "スムージングに失敗しました: {error}",
     },
     "view": {
+        "y_scale": {
+            "group": "縦軸スケール",
+            "linear": "線形",
+            "log": "対数",
+            "sqrt": "平方根",
+            "menu_title": "縦軸スケール",
+            "hint": "縦軸: {mode}  (Y 軸を左クリックで切替 / 右クリックで選択)",
+        },
         "data": {
             "title": "データ",
             "group_preprocess": "データ前処理",
@@ -330,7 +338,7 @@ translations = {
             "title": "相分析",
             "group_ref_peaks": "参照ピークマッチング",
             "group_filter": "元素フィルター",
-            "group_filter_title": "元素フィルター (三状態選択)",
+            "group_filter_title": "元素フィルター (四状態選択)",
             "group_candidates": "候補相",
             "group_mix": "多相混合",
             "label_elements": "既知元素:",
@@ -364,7 +372,7 @@ translations = {
                 "status_maybe": "可能: {elements}",
                 "status_exclude": "なし: {elements}",
                 "status_closed_world": "未選択の元素は「なし」として除外されます",
-                "hint": "元素をクリックして切替: なし → 必須含む(濃緑) → 含有(緑) → 可能(黄) → なし(赤)",
+                "hint": "元素をクリックして切替: なし → 含有(緑) → 可能(黄) → なし(赤) → 必須含む(濃緑)",
             },
         },
         "refinement": {
@@ -382,6 +390,26 @@ translations = {
             "label_quality": "品質:",
             "label_cycles": "サイクル数:",
             "btn_start_refine": "精密化開始",
+            "wizard_style": "精密化ウィザード方式（推奨）",
+            "wizard_style_tip": (
+                "精密化ウィザードの推奨設定（エンジン builtin、戦略 sequential、"
+                "ピーク形状 pseudo-voigt、バックグラウンド snip、最大サイクル 20）を"
+                "適用し、下のログに過程データをリアルタイム出力します。"
+                "チェックを外すとパラメータを手動調整できます。"
+            ),
+            "group_log": "精密化プロセスログ",
+            "log_placeholder": "精密化を実行すると、ここに過程データがリアルタイムで流れます…",
+            "btn_clear_log": "ログをクリア",
+            "btn_save_log": "ログを保存…",
+            "log_start": "===== Rietveld 精密化 開始 =====",
+            "log_wizard_style": "方式: ウィザード推奨設定「{name}」（エンジン {engine} / 戦略 {strategy}）",
+            "log_manual_style": "方式: 手動パラメータ",
+            "log_params": "パラメータ: エンジン={engine} 戦略={strategy} 最大サイクル={cycles} ピーク形状={shape} バックグラウンド={bg}",
+            "log_result": "結果: wR={wr}%  GOF={gof}  品質={quality}  サイクル={cycles}  時間={time}s",
+            "log_phase": "  相 {name}: 重量分率 {weight}%",
+            "log_done": "===== 精密化 終了 =====",
+            "log_failed": "精密化に失敗しました: {error}",
+            "log_save_failed": "ログの保存に失敗しました: {error}",
             "col_phase": "相",
             "col_weight": "質量分率(%)",
             "col_a": "a(Å)",

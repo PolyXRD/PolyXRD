@@ -2,14 +2,15 @@
 元素周期表控件
 ==============
 交互式元素周期表，支持四态选择 (0.9.11)：
-- 必有 (深绿): 物相必须**全部**含有这些元素 (AND)
 - 含有 (绿色): 物相由这些元素构成，至少含其中一个
 - 可能 (黄色): 允许出现但不要求，只放宽候选元素池
 - 没有 (红色): 物相含任一这些元素即被淘汰
+- 必有 (深绿): 物相必须**全部**含有这些元素 (AND) —— v0.12.0 把它挪到末位
 
 **未勾选的元素默认等于「没有」** (闭环)，仅在 必有/含有/可能 至少勾中
 一项时生效；三者全空 = 全库搜索，只勾「没有」= 开放世界。
-单击元素循环: 无 → 必有 → 含有 → 可能 → 没有 → 无。
+单击元素循环 (v0.12.0 起「必有」置于末位):
+    无 → 含有 → 可能 → 没有 → 必有 → 无。
 """
 from __future__ import annotations
 
@@ -78,13 +79,21 @@ STATE_TIPS = {
     ElementState.EXCLUDE: "没有: 含任一这些元素的物相被淘汰",
 }
 
-# 单击循环顺序
+# 单击循环顺序 (v0.12.0: 「必有」放到最后)
 STATE_CYCLE = (
     ElementState.NONE,
-    ElementState.MUST_HAVE,
     ElementState.MUST,
     ElementState.MAYBE,
     ElementState.EXCLUDE,
+    ElementState.MUST_HAVE,
+)
+
+# 图例显示顺序 (v0.12.0: 「必有」放到最后)
+LEGEND_ORDER = (
+    ElementState.MUST,
+    ElementState.MAYBE,
+    ElementState.EXCLUDE,
+    ElementState.MUST_HAVE,
 )
 
 
@@ -163,7 +172,7 @@ for table in [PERIODIC_TABLE, LANTHANIDE_POSITIONS, ACTINIDE_POSITIONS]:
 
 
 class ElementButton(QPushButton):
-    """单个元素按钮，支持四态切换 (无 → 必有 → 含有 → 可能 → 没有)"""
+    """单个元素按钮，支持四态切换 (无 → 含有 → 可能 → 没有 → 必有)"""
 
     def __init__(self, element: str, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -245,13 +254,11 @@ class ElementPeriodicTable(QWidget):
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(4)
 
-        # 图例
+        # 图例 (v0.12.0: 「必有」置于最后)
         legend_layout = QHBoxLayout()
         legend_layout.setSpacing(8)
-        legend_layout.addWidget(self._make_legend_item(ElementState.MUST_HAVE))
-        legend_layout.addWidget(self._make_legend_item(ElementState.MUST))
-        legend_layout.addWidget(self._make_legend_item(ElementState.MAYBE))
-        legend_layout.addWidget(self._make_legend_item(ElementState.EXCLUDE))
+        for state in LEGEND_ORDER:
+            legend_layout.addWidget(self._make_legend_item(state))
         legend_layout.addStretch()
 
         btn_layout = QHBoxLayout()
