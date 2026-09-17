@@ -207,6 +207,7 @@ translations = {
         "identify": "相の検索を実行中です。しばらくお待ちください…",
         "identify_profile": "プロファイルフィッティングによる相検索を実行中です。しばらくお待ちください…",
         "refine": "Rietveld 精密化を実行中です。しばらくお待ちください…",
+        "cif_match": "CIF構造を照合中です。しばらくお待ちください…",
         "repeat_ignored": "タスクが実行中です。完了までお待ちください",
     },
     "dialog": {
@@ -531,6 +532,22 @@ translations = {
         "phase_page": {
             "tab_cif": "CIFデータベース",
             "tab_cod": "CODオンライン検索",
+            "cif_search_placeholder": "CIF検索: 化学式 / 鉱物名 / COD番号（例: Mg(OH)2、Calcite、1010484）",
+            "cif_list_searching": "マウント済みデータベースを検索中…",
+            "cif_list_browsing": "選択した相の候補 CIF を検索中…",
+            "cif_for_phase": "{phase} → {cif}",
+            "cif_list_hint": ("上のリストは選択可能な CIF 構造です。化学式 / 鉱物名 / COD 番号を"
+                              "入力するとマウント済み DB を検索できます（同一相に複数の CIF が"
+                              "ある場合があります）。下は初期構造として選択済みの相です。"),
+            "cif_list_count": "{count} 件の CIF を表示中",
+            "cif_list_count_builtin": "内蔵鉱物相 {count} 件（検索で同一相の全 CIF を表示）",
+            "cif_list_no_db": "（DB 未マウント — 内蔵相のみ。「選択した相を追加」で CIF は自動照合されます）",
+            "cif_db_unavailable": "CIF内蔵データベースが未マウントのため、内蔵物相を表示中",
+            "col_cif_source": "CIFソース",
+            "cif_source_auto": "リファイン時に自動マッチング",
+            "cif_source_builtin": "内蔵構造",
+            "cif_fetching": "ローカルDBにCIFがないため、CODサイトから取得中…",
+            "cif_fetch_failed": "CIFの取得に失敗: {error}",
             "btn_add_cif": "選択した相を追加",
             "btn_cod_search": "検索",
             "btn_add_cod": "選択項目を追加",

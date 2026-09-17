@@ -13,7 +13,13 @@ TOC = os.path.join(ROOT, 'build', 'PolyXRD', 'COLLECT-00.toc')
 
 text = open(TOC, encoding='utf-8', errors='ignore').read()
 # 三元组: ('rel', 'src', 'TYPE')
-triples = re.findall(r"\('([^']+)',\s*'([^']+)',\s*'(?:BINARY|DATA|EXTENSION|EXECUTABLE)'\)", text)
+#
+# 注意: 这里【故意】不匹配 'EXECUTABLE'。
+# COLLECT-00.toc 里 EXECUTABLE 那条的 rel 是 'PolyXRD.exe' (相对 dist\PolyXRD\ 根),
+# 而本脚本的 DST 是 dist\PolyXRD\_internal\ —— 若一并收集会往 _internal 里多塞一份
+# 39 MB 的 PolyXRD.exe 副本 (2026-09-16 实测), 启动器只认 dist\PolyXRD\PolyXRD.exe,
+# 因此这份副本纯属冗余。EXE 由 build.bat / 手工 cp 负责放到 dist 根目录。
+triples = re.findall(r"\('([^']+)',\s*'([^']+)',\s*'(?:BINARY|DATA|EXTENSION)'\)", text)
 
 copied = skipped = missing = 0
 miss_list = []
