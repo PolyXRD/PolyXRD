@@ -13,6 +13,7 @@ from PySide6.QtCore import QObject, Signal
 from polyxrd.models.peak import PeakList
 from polyxrd.models.phase import Phase, PhaseMatchResult
 from polyxrd.models.refinement import RefinementResult
+from polyxrd.services.phase_structure_resolver import PhaseStructureResolver
 from polyxrd.viewmodels.data_vm import DataViewModel
 from polyxrd.viewmodels.phase_vm import PhaseViewModel
 from polyxrd.viewmodels.refinement_vm import RefinementViewModel
@@ -47,6 +48,9 @@ class MainViewModel(QObject):
         self._data_vm = DataViewModel()
         self._phase_vm = PhaseViewModel()
         self._refinement_vm = RefinementViewModel()
+        # 精修前置 CIF 自动匹配 (v0.12): 已选物相缺结构时按 COD 编号/
+        # 规范化化学式/矿物名查库补齐。实例级缓存 —— 同一物相二次精修不重查。
+        self._cif_resolver = PhaseStructureResolver()
 
         # 连接子ViewModel的信号
         self._data_vm.data_loaded.connect(self._on_data_loaded)
@@ -306,6 +310,19 @@ class MainViewModel(QObject):
         if not phases:
             self.error_occurred.emit("请先识别并选择物相")
             return
+
+        # ── 精修前置: 给已选物相自动匹配 CIF 基础结构 (v0.12) ──
+        # 检索得到的候选相多数只有参考峰+晶胞, 没有 cif_path/atomic_sites;
+        # 不补结构, _refine_auto 永远走 builtin 剖面拟合, GSAS-II/MAUD
+        # 真 Rietveld 无从谈起。未命中的相原样保留 (回退剖面拟合), 不阻断。
+        phases = self._cif_resolver.resolve(
+            phases,
+            wavelength=float(data.wavelength),
+            two_theta_range=(
+                float(data.two_theta[0]), float(data.two_theta[-1]),
+            ),
+            log_cb=self.refinement_log.emit,
+        )
 
         self.status_changed.emit(f"执行Rietveld精修 ({engine})")
         self._refinement_vm.refine(

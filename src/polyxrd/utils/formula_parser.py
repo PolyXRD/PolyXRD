@@ -272,3 +272,35 @@ def elements_match_filter(
         if pool and not (s & pool):
             return False
     return True
+
+def normalize_cod_formula(formula: str) -> str:
+    """任意写法化学式 → COD 库存储格式 (空格分隔, 元素字母序, 系数 1 省略)。
+
+    COD / PDF2 库的 ``formula`` 列是空格分隔的 "元素+系数" 组
+    (如 "H2 Mg O2"、"Mg3.4 Mn0.6 O9 Ta2"), 系数 1 省略
+    (如 "Mg O4 Sc2")。本函数把常见写法 ("Mg(OH)2"、"CaCO3") 与
+    库格式双向归一到这一种, 供结构候选查询做精确匹配。
+    解析失败 (空串/无有效元素) 返回 ""。
+
+    单点实现: `phase_structure_resolver` 与 `cod_local` 都从这里取,
+    勿在调用方复制。
+    """
+    if not formula or not formula.strip():
+        return ""
+    try:
+        counts = parse_formula_detailed(formula)
+    except Exception:
+        return ""
+    if not counts:
+        return ""
+    parts: list[str] = []
+    for el in sorted(counts):
+        v = float(counts[el])
+        if v <= 0:
+            continue
+        if abs(v - round(v)) < 0.01:
+            n = int(round(v))
+            parts.append(el if n == 1 else f"{el}{n}")
+        else:
+            parts.append(f"{el}{v:g}")
+    return " ".join(parts)

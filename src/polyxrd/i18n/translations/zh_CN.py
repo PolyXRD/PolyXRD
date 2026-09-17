@@ -203,6 +203,7 @@ translations = {
         "identify": "正在进行物相检索，请稍后…",
         "identify_profile": "正在进行 Profile Fitting 物相检索，请稍后…",
         "refine": "正在进行 Rietveld 精修，请稍后…",
+        "cif_match": "正在匹配 CIF 结构，请稍后…",
         "repeat_ignored": "已有任务正在执行，请等待其完成",
     },
     "dialog": {
@@ -571,6 +572,22 @@ translations = {
         "phase_page": {
             "tab_cif": "CIF 数据库",
             "tab_cod": "COD 在线搜索",
+            "cif_search_placeholder": "搜索 CIF：化学式 / 矿物名 / COD 编号（如 Mg(OH)2、Calcite、1010484）",
+            "cif_list_searching": "正在检索挂载数据库…",
+            "cif_list_browsing": "正在检索已选物相的候选 CIF…",
+            "cif_for_phase": "{phase} → {cif}",
+            "cif_list_hint": ("上方列表为可选的 CIF 结构；输入化学式 / 矿物名 / COD 编号"
+                              "可检索挂载库（同一物相可能有多条 CIF）。下方为已选作"
+                              "初始结构的物相。"),
+            "cif_list_count": "已列出 {count} 条 CIF",
+            "cif_list_count_builtin": "内置矿物相 {count} 条（搜索可展开库内同物相多条 CIF）",
+            "cif_list_no_db": "（未挂载数据库，仅内置矿物相，可点「添加选中物相」由程序自动匹配 CIF）",
+            "cif_db_unavailable": "未挂载带 CIF 的数据库，显示内置物相列表",
+            "col_cif_source": "CIF 来源",
+            "cif_source_auto": "精修时自动匹配",
+            "cif_source_builtin": "内置结构",
+            "cif_fetching": "本地库无此 CIF，正在从 COD 官网下载…",
+            "cif_fetch_failed": "CIF 获取失败: {error}",
             "btn_add_cif": "添加选中物相",
             "btn_cod_search": "搜索",
             "btn_add_cod": "添加选中",

@@ -214,6 +214,7 @@ translations = {
         "identify": "Identifying phases, please wait…",
         "identify_profile": "Identifying phases by profile fitting, please wait…",
         "refine": "Running Rietveld refinement, please wait…",
+        "cif_match": "Matching CIF structures, please wait…",
         "repeat_ignored": "A task is already running; please wait for it to finish",
     },
     "dialog": {
@@ -573,6 +574,23 @@ translations = {
         "phase_page": {
             "tab_cif": "CIF Database",
             "tab_cod": "COD Online Search",
+            "cif_search_placeholder": "Search CIF: formula / mineral name / COD ID (e.g. Mg(OH)2, Calcite, 1010484)",
+            "cif_list_searching": "Searching mounted database…",
+            "cif_list_browsing": "Searching candidate CIFs for the selected phases…",
+            "cif_for_phase": "{phase} → {cif}",
+            "cif_list_hint": ("The list above shows selectable CIF structures; type a formula / "
+                              "mineral name / COD ID to search the mounted database (a phase may "
+                              "have several CIFs). Below are the phases used as initial structures."),
+            "cif_list_count": "{count} CIF(s) listed",
+            "cif_list_count_builtin": "{count} built-in phases (search to expand all CIFs of a phase)",
+            "cif_list_no_db": ("(No mounted database — built-in phases only; use \"Add Selected "
+                               "Phases\" and the CIF will be auto-matched)"),
+            "cif_db_unavailable": "No mounted database with embedded CIFs; showing built-in phases",
+            "col_cif_source": "CIF Source",
+            "cif_source_auto": "auto-match at refinement",
+            "cif_source_builtin": "built-in structure",
+            "cif_fetching": "CIF not in local database, downloading from COD website…",
+            "cif_fetch_failed": "CIF download failed: {error}",
             "btn_add_cif": "Add Selected Phases",
             "btn_cod_search": "Search",
             "btn_add_cod": "Add Selected",

@@ -47,6 +47,7 @@ from typing import Any, Optional, Sequence
 
 from polyxrd.config import AppConfig, get_config
 from polyxrd.models.phase import LatticeParams, Phase
+from polyxrd.utils.formula_parser import normalize_cod_formula
 
 log = logging.getLogger("polyxrd.cod_local")
 
@@ -1231,6 +1232,274 @@ class CODLocalDatabase:
     def get_entry(self, cod_id: int) -> Optional[CODLocalEntry]:
         results = self.search(cod_id=cod_id, limit=1, parse_ok_only=False)
         return results[0] if results else None
+
+    # ── 结构候选查询 (v0.12 精修前置 CIF 自动匹配) ──────────
+
+    def find_structure_candidates(self, formula_norm: str,
+                                  mineral_name: str = "",
+                                  limit: int = 24) -> list[dict]:
+        """按规范化化学式 (可选矿物名) 找**带结构数据**的候选条目。
+
+        供 `phase_structure_resolver` 在精修前把无结构物相匹配到 CIF。
+        两个通道, 结果按 cod_id 去重合并:
+          1) 无机物库 phases 表 —— formula 是空格分隔 COD 格式, 且 71k+ 条
+             内嵌 cif_gz, 是首选通道;
+          2) 全库索引 cod_entries —— formula_red 精确匹配 + mineral_name
+             模糊匹配 (内置 118 物相只有矿物名, 走这条通道兜底)。
+
+        Args:
+            formula_norm: 规范化化学式 ("Mg(OH)2" → "H2 Mg O2"), 可为空
+            mineral_name: 矿物名 (仅全库索引支持), 可为空
+            limit: 返回上限
+
+        Returns:
+            [{"cod_id", "formula", "space_group", "a", "b", "c",
+              "alpha", "beta", "gamma", "has_cif", "mineral_name"}]
+            库不可用返回 []。**只读**查询, 不抛异常。
+        """
+        out: dict[int, dict] = {}
+        formula_norm = (formula_norm or "").strip()
+        mineral_name = (mineral_name or "").strip()
+        if not formula_norm and not mineral_name:
+            return []
+
+        # 通道 1: 无机物库 (formula 精确; 该库无矿物名列)
+        if formula_norm:
+            conn = self._inorg_db()
+            if conn is not None:
+                try:
+                    rows = conn.execute(
+                        "SELECT cod_id, formula, space_group, cell_a, cell_b, "
+                        "cell_c, cell_alpha, cell_beta, cell_gamma, "
+                        "(cif_gz IS NOT NULL) AS has_cif "
+                        "FROM phases WHERE formula = ? "
+                        "ORDER BY (cif_gz IS NOT NULL) DESC, cod_id LIMIT ?",
+                        (formula_norm, int(limit)),
+                    ).fetchall()
+                    for r in rows:
+                        out[int(r["cod_id"])] = {
+                            "cod_id": int(r["cod_id"]),
+                            "formula": r["formula"] or "",
+                            "space_group": r["space_group"] or "",
+                            "a": r["cell_a"], "b": r["cell_b"], "c": r["cell_c"],
+                            "alpha": r["cell_alpha"], "beta": r["cell_beta"],
+                            "gamma": r["cell_gamma"],
+                            "has_cif": bool(r["has_cif"]),
+                            "mineral_name": "",
+                        }
+                except Exception as e:
+                    log.debug("find_structure_candidates inorg query failed: %s", e)
+
+        # 通道 2: 全库索引 (formula_red 精确 + mineral_name 模糊)
+        if len(out) < int(limit):
+            try:
+                if not self.db_path.exists():
+                    return list(out.values())
+                conn = connect(self.db_path)
+                clauses: list[str] = ["parse_ok = 1"]
+                args: list[Any] = []
+                if formula_norm:
+                    fr, _ = _parse_elements(formula_norm)
+                    if fr:
+                        clauses.append("formula_red = ?")
+                        args.append(fr)
+                if mineral_name:
+                    clauses.append("mineral_name LIKE ?")
+                    args.append(f"%{mineral_name}%")
+                where = "WHERE " + " AND ".join(clauses)
+                sql = (
+                    "SELECT cod_id, formula, space_group, a, b, c, alpha, "
+                    "beta, gamma, file, mineral_name FROM cod_entries "
+                    f"{where} ORDER BY cod_id LIMIT ?"
+                )
+                args.append(int(limit))
+                for r in conn.execute(sql, args).fetchall():
+                    cid = int(r["cod_id"])
+                    if cid in out:
+                        # 无机库通道优先, 但矿物名可从全库补全
+                        if r["mineral_name"] and not out[cid]["mineral_name"]:
+                            out[cid]["mineral_name"] = r["mineral_name"]
+                        continue
+                    out[cid] = {
+                        "cod_id": cid,
+                        "formula": r["formula"] or "",
+                        "space_group": r["space_group"] or "",
+                        "a": r["a"], "b": r["b"], "c": r["c"],
+                        "alpha": r["alpha"], "beta": r["beta"],
+                        "gamma": r["gamma"],
+                        "has_cif": bool(r["file"]),
+                        "mineral_name": r["mineral_name"] or "",
+                    }
+                conn.close()
+            except Exception as e:
+                log.debug("find_structure_candidates full-index query failed: %s", e)
+
+        return list(out.values())[: int(limit)]
+
+    def search_structures(self, query: str, limit: int = 200) -> list[dict]:
+        """通用结构检索 (向导「CIF 数据库」页的列表数据源)。
+
+        与 :meth:`find_structure_candidates` (精修前置自动匹配, 精确匹配)
+        不同, 这里面向**人工浏览**: 同一物相的多条 CIF 都要列出来。
+
+        查询语义:
+          - 纯数字 / "97-xxxxxxx" → 按 COD 编号
+          - 化学式 ("Mg(OH)2" / "H2 Mg O2") → 规范化后精确匹配,
+            无命中再按前缀 LIKE (兼容固溶体小数系数)
+          - 其它 (矿物名 / 空间群) → 全库索引 mineral_name / space_group LIKE
+
+        Returns:
+            与 :meth:`find_structure_candidates` 相同的字典列表
+            (cod_id/formula/space_group/晶胞/has_cif/mineral_name)。
+        """
+        q = (query or "").strip()
+        if not q:
+            return []
+        limit = int(limit)
+        out: dict[int, dict] = {}
+
+        def _absorb(cands: list[dict]) -> None:
+            for c in cands:
+                out.setdefault(int(c["cod_id"]), c)
+
+        # 1) 编号直查
+        q_dash = q.replace(" ", "")
+        if q_dash.isdigit() or q_dash.lower().startswith(("97-", "96-")):
+            digits = "".join(ch for ch in q_dash if ch.isdigit())
+            if digits.isdigit():
+                by_id = self._structure_by_id(int(digits))
+                if by_id:
+                    _absorb([by_id])
+            return list(out.values())[:limit]
+
+        # 2) 化学式: 精确 → 前缀 LIKE
+        norm = normalize_cod_formula(q)
+        if norm:
+            _absorb(self.find_structure_candidates(norm, limit=limit))
+            if len(out) < limit:
+                _absorb(self._structure_like(norm, like_field="formula",
+                                             limit=limit - len(out)))
+        # 3) 矿物名 / 空间群 (仅全库索引有 mineral_name)
+        if len(out) < limit:
+            _absorb(self._structure_like(q, like_field="mineral_name",
+                                         limit=limit - len(out)))
+        if len(out) < limit:
+            _absorb(self._structure_like(q, like_field="space_group",
+                                         limit=limit - len(out)))
+        return list(out.values())[:limit]
+
+    def _structure_by_id(self, cod_id: int) -> Optional[dict]:
+        """按编号取单条结构候选 (两通道, 无机库优先)。"""
+        got = self.find_structure_candidates("", limit=1)
+        got = []  # find_structure_candidates 需要至少一个条件, 这里单独查
+        try:
+            conn = self._inorg_db()
+            if conn is not None:
+                r = conn.execute(
+                    "SELECT cod_id, formula, space_group, cell_a, cell_b, "
+                    "cell_c, cell_alpha, cell_beta, cell_gamma, "
+                    "(cif_gz IS NOT NULL) AS has_cif FROM phases "
+                    "WHERE cod_id = ?",
+                    (int(cod_id),),
+                ).fetchone()
+                if r:
+                    return {
+                        "cod_id": int(r["cod_id"]),
+                        "formula": r["formula"] or "",
+                        "space_group": r["space_group"] or "",
+                        "a": r["cell_a"], "b": r["cell_b"], "c": r["cell_c"],
+                        "alpha": r["cell_alpha"], "beta": r["cell_beta"],
+                        "gamma": r["cell_gamma"],
+                        "has_cif": bool(r["has_cif"]),
+                        "mineral_name": "",
+                    }
+        except Exception as e:
+            log.debug("_structure_by_id inorg failed: %s", e)
+        try:
+            if not self.db_path.exists():
+                return None
+            conn = connect(self.db_path)
+            r = conn.execute(
+                "SELECT cod_id, formula, space_group, a, b, c, alpha, beta, "
+                "gamma, file, mineral_name FROM cod_entries WHERE cod_id = ?",
+                (int(cod_id),),
+            ).fetchone()
+            conn.close()
+            if r:
+                return {
+                    "cod_id": int(r["cod_id"]),
+                    "formula": r["formula"] or "",
+                    "space_group": r["space_group"] or "",
+                    "a": r["a"], "b": r["b"], "c": r["c"],
+                    "alpha": r["alpha"], "beta": r["beta"], "gamma": r["gamma"],
+                    "has_cif": bool(r["file"]),
+                    "mineral_name": r["mineral_name"] or "",
+                }
+        except Exception as e:
+            log.debug("_structure_by_id full-index failed: %s", e)
+        return None
+
+    def _structure_like(self, pattern: str, *, like_field: str,
+                        limit: int) -> list[dict]:
+        """LIKE 模糊检索结构候选 (formula / mineral_name / space_group)。"""
+        if limit <= 0 or like_field not in ("formula", "mineral_name",
+                                            "space_group"):
+            return []
+        like = f"{pattern}%"
+        out: list[dict] = []
+        try:
+            conn = self._inorg_db()
+            if conn is not None and like_field == "formula":
+                rows = conn.execute(
+                    "SELECT cod_id, formula, space_group, cell_a, cell_b, "
+                    "cell_c, cell_alpha, cell_beta, cell_gamma, "
+                    "(cif_gz IS NOT NULL) AS has_cif FROM phases "
+                    "WHERE formula LIKE ? AND cif_gz IS NOT NULL "
+                    "ORDER BY cod_id LIMIT ?",
+                    (like, int(limit)),
+                ).fetchall()
+                for r in rows:
+                    out.append({
+                        "cod_id": int(r["cod_id"]),
+                        "formula": r["formula"] or "",
+                        "space_group": r["space_group"] or "",
+                        "a": r["cell_a"], "b": r["cell_b"], "c": r["cell_c"],
+                        "alpha": r["cell_alpha"], "beta": r["cell_beta"],
+                        "gamma": r["cell_gamma"],
+                        "has_cif": bool(r["has_cif"]),
+                        "mineral_name": "",
+                    })
+                return out
+        except Exception as e:
+            log.debug("_structure_like inorg failed: %s", e)
+        try:
+            if not self.db_path.exists():
+                return out
+            conn = connect(self.db_path)
+            col = {"mineral_name": "mineral_name",
+                   "space_group": "space_group",
+                   "formula": "formula"}[like_field]
+            rows = conn.execute(
+                f"SELECT cod_id, formula, space_group, a, b, c, alpha, beta, "
+                f"gamma, file, mineral_name FROM cod_entries "
+                f"WHERE parse_ok = 1 AND {col} LIKE ? "
+                f"ORDER BY cod_id LIMIT ?",
+                (like, int(limit)),
+            ).fetchall()
+            conn.close()
+            for r in rows:
+                out.append({
+                    "cod_id": int(r["cod_id"]),
+                    "formula": r["formula"] or "",
+                    "space_group": r["space_group"] or "",
+                    "a": r["a"], "b": r["b"], "c": r["c"],
+                    "alpha": r["alpha"], "beta": r["beta"], "gamma": r["gamma"],
+                    "has_cif": bool(r["file"]),
+                    "mineral_name": r["mineral_name"] or "",
+                })
+        except Exception as e:
+            log.debug("_structure_like full-index failed: %s", e)
+        return out
 
     # ── CIF 内容获取 ────────────────────────────────────────
     def get_cif_path(self, cod_id: int) -> Optional[Path]:
