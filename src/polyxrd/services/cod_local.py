@@ -169,6 +169,86 @@ def _extract_field(content: str, tags: Sequence[str]) -> Optional[str]:
 _ELEMENT_RE = re.compile(r"([A-Z][a-z]?)\s*(\d*\.?\d*)")
 
 
+def formula_sum_from_cif(cif_text: str) -> str:
+    """从 CIF 全文抽 ``_chemical_formula_sum`` 并归一到库内 formula 写法。
+
+    这是「用 CIF 补/修化学式」的**单点实现** —— `cif_database.get_cod_phase`
+    的公式回退与 `scripts/migrate_inorg_formula.py` 都从这里取, 勿在调用方
+    各自写正则。
+
+    用途背景: COD 无机物库有 605 条 ``phases.formula`` 被写成了空间群符号
+    (如 ``P 63 m c``), 而内嵌 CIF 里的 ``_chemical_formula_sum`` 是好的。
+
+    Returns:
+        归一化后的化学式 (如 ``"O Zn"``); CIF 缺该标签或解析失败返回 ``""``。
+    """
+    raw = _extract_field(cif_text or "", ("_chemical_formula_sum",))
+    if not raw:
+        return ""
+    try:
+        return normalize_cod_formula(raw)
+    except Exception:  # noqa: BLE001 - 归一化不该把调用方拖崩
+        return ""
+
+
+def formula_sum_from_inorg_cif(conn: sqlite3.Connection, cod_id: int) -> str:
+    """从「COD 无机物库」某条的内嵌 ``cif_gz`` 恢复化学式。
+
+    给 ``cif_database.get_cod_phase`` 的公式回退用 (它只持有无机库连接,
+    不便自己处理 gzip / 列缺失)。**老版或外部导入的无机库可能没有
+    cif_gz 列**, 或该条没有内嵌 CIF → 一律返回 ``""``, 由调用方保留原值。
+
+    单点实现: 化学式的抽取与归一化都走 :func:`formula_sum_from_cif`。
+    """
+    try:
+        row = conn.execute(
+            "SELECT cif_gz FROM phases WHERE cod_id = ?", (cod_id,)
+        ).fetchone()
+        blob = row["cif_gz"] if row is not None else None
+        if not blob:
+            return ""
+        text = gzip.decompress(blob).decode("utf-8", errors="replace")
+        return formula_sum_from_cif(text)
+    except Exception as e:  # noqa: BLE001 - 缺列/坏 BLOB 都不该影响主流程
+        log.debug("inorg cif formula recovery failed for %s: %s", cod_id, e)
+        return ""
+
+
+def is_db_formula_trusted(formula: str, space_group: str = "") -> bool:
+    """库内 ``formula`` 是否可作为化学判据 (单点实现)。
+
+    不可信 = 三者任一: 空串 / 与空间群符号完全相同 / 解析不出任何元素。
+    实测 COD 无机物库 71,199 条里有 609 条不可信 (605 条 ``formula`` 被
+    写成了 ``P 63 m c`` 这类空间群记号), 是建库脚本的字段提取 bug。
+
+    用途: (a) 迁移脚本判断是否改写; (b) 运行时判断是否需要走 CIF 回退;
+    (c) 扫描层判断是否该放行 (不可信时不参与 ``issubset`` 淘汰, 见
+    ``cif_database.search_cod_by_d_peaks``)。
+    """
+    f = (formula or "").strip()
+    if not f:
+        return False
+    if space_group and f == space_group.strip():
+        return False
+    from polyxrd.utils.formula_parser import elements_from_db_formula
+
+    return bool(elements_from_db_formula(f))
+
+
+def recover_inorg_formula(
+    conn: sqlite3.Connection, cod_id: int, formula: str, space_group: str = ""
+) -> str:
+    """库内 ``formula`` 不可信时, 回退到内嵌 CIF 的化学式; 否则原样返回。
+
+    回退失败 (无可信值/库无 cif_gz 列/该条无内嵌 CIF) 一律**返回原值**,
+    绝不返回空串 —— 调用方直接把它当 ``formula`` 用。
+    """
+    f = (formula or "").strip()
+    if is_db_formula_trusted(f, space_group):
+        return f
+    return formula_sum_from_inorg_cif(conn, cod_id) or f
+
+
 def _parse_elements(formula_sum: str) -> tuple[str, str]:
     """Parse _chemical_formula_sum-style string like 'Si1 O2' or 'Si O2'
     Returns (normalized "O2Si1", element_csv "O,Si") with element alphabetical order.
@@ -604,6 +684,23 @@ def deploy_bundled_cod_db_if_missing(target: Optional[Path] = None) -> Optional[
         return None
 
 
+def _is_usable_index_file(path: Optional[Path]) -> bool:
+    """索引文件是否存在且体积合理 (排除 0 条目的空库)。
+
+    ⚠️ 这条判断很关键: 打包版启动时若某条路径被 ``sqlite3.connect()`` 碰过,
+    会在用户目录凭空留下一个 0 条目、约 60 KB 的 ``cod_index.sqlite``
+    (2026-09-18 实测)。它体积远小于 :data:`_MIN_VALID_DB_BYTES`, 却会被
+    "只要 exists 就返回"的旧逻辑选中, 从此**永久顶掉**真正的 431 MB 全库索引
+    —— 表现就是状态显示 ``live_counts()['cod_index'] == 0``。
+    """
+    try:
+        return bool(path) and Path(path).is_file() and (
+            Path(path).stat().st_size >= _MIN_VALID_DB_BYTES
+        )
+    except OSError:
+        return False
+
+
 def resolved_index_db_path(deploy: bool = True) -> Path:
     """解析 COD 全库索引的**预期**路径。
 
@@ -613,40 +710,48 @@ def resolved_index_db_path(deploy: bool = True) -> Path:
     ``_bundled_cod_db_source()`` 会指向项目根的 cod_index.sqlite, 一旦
     ``deploy=True`` 就会在这里触发一次 ~400 MB 的复制。打开"外挂数据库
     管理"对话框只是要**看一眼状态**, 不该产生这种副作用。
+
+    候选文件必须通过 :func:`_is_usable_index_file` (体积门槛) 才算命中 ——
+    否则一个 0 条目的空库会把真正的索引永久遮蔽, 且部署永远不再触发。
     """
     cfg = get_config()
     user_path = cfg.get_cod_index_sqlite_path()
     if user_path is not None:
         return user_path
     target = cfg.get_cif_db_path() / "cod_index.sqlite"
-    if target.exists():
+    if _is_usable_index_file(target):
         return target
     alt = cfg.user_db_dir() / "cod_index.sqlite"
-    if alt.exists():
+    if _is_usable_index_file(alt):
         return alt
     if deploy:
+        # target 若已存在但体积不合理, deploy 内部会识别并重部署
         deploy_bundled_cod_db_if_missing(target)
     return target
 
 
 def existing_index_db_path() -> Optional[Path]:
-    """只读查找**当前实际存在**的 COD 全库索引文件 (不部署、不复制)。
+    """只读查找**当前实际存在且可用**的 COD 全库索引文件 (不部署、不复制)。
 
     顺序: 用户导入 → 目标位置 → 用户目录 (``~/.polyxrd/cif_db``) →
     打包资源/开发模式自带位置 (``_bundled_cod_db_source()``)。找不到返回 None。
 
     用途是"这个槽位现在能用吗"这类状态显示; 真正的检索路径仍由
     :func:`_index_db_path` 决定 (它会在需要时触发首次部署)。
+
+    ``target`` / ``alt`` 两个自动发现的候选要过 :func:`_is_usable_index_file`
+    体积门槛, 免得 0 条目空库把真索引遮蔽; 用户**显式导入**的路径不做门槛
+    (导入是用户意图, 状态里如实报 0 条更有用)。
     """
     cfg = get_config()
     user_path = cfg.get_cod_index_sqlite_path()
     if user_path is not None:
         return user_path
     target = cfg.get_cif_db_path() / "cod_index.sqlite"
-    if target.exists():
+    if _is_usable_index_file(target):
         return target
     alt = cfg.user_db_dir() / "cod_index.sqlite"
-    if alt.exists():
+    if _is_usable_index_file(alt):
         return alt
     return _bundled_cod_db_source()
 
@@ -1396,7 +1501,7 @@ class CODLocalDatabase:
         不同, 这里面向**人工浏览**: 同一物相的多条 CIF 都要列出来。
 
         查询语义:
-          - 纯数字 / "97-xxxxxxx" → 按 COD 编号
+          - 纯数字 / "97-xxxxxxx" / "97 xxxxxxx" → 按 COD 编号
           - 化学式 ("Mg(OH)2" / "H2 Mg O2") → 规范化后精确匹配,
             无命中再按前缀 LIKE (兼容固溶体小数系数)
           - 其它 (矿物名 / 空间群) → 全库索引 mineral_name / space_group LIKE
@@ -1415,14 +1520,20 @@ class CODLocalDatabase:
             for c in cands:
                 out.setdefault(int(c["cod_id"]), c)
 
-        # 1) 编号直查
-        q_dash = q.replace(" ", "")
-        if q_dash.isdigit() or q_dash.lower().startswith(("97-", "96-")):
-            digits = "".join(ch for ch in q_dash if ch.isdigit())
-            if digits.isdigit():
-                by_id = self._structure_by_id(int(digits))
-                if by_id:
-                    _absorb([by_id])
+        # 1) 编号直查: "9004178" / "97-9004178" / "97 9004178" / "979004178"
+        #    ⚠️ 前缀必须**剥掉**再取数字。旧实现是把整串里的数字都收集起来,
+        #    "97-9004178" 会变成 979004178 → 查不到 → 静默返回空列表
+        #    (用户从列表里复制 display_id 去搜就必然落空)。
+        #    分隔符统一先去掉; 剩下的 9 位纯数字且以 96/97 打头, 即
+        #    "语料库前缀 + 7 位 COD 号" → 取后 7 位。
+        #    (COD 号恒为 7 位, 不存在 9 位的真实编号, 故无歧义)
+        core = q.replace(" ", "").replace("-", "").replace("_", "")
+        if len(core) == 9 and core.isdigit() and core[:2] in ("96", "97"):
+            core = core[2:]
+        if core.isdigit():
+            by_id = self._structure_by_id(int(core))
+            if by_id:
+                _absorb([by_id])
             return list(out.values())[:limit]
 
         # 2) 化学式: 精确 → 前缀 LIKE
