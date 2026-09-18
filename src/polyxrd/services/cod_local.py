@@ -622,9 +622,13 @@ def _bundled_cod_db_source() -> Optional[Path]:
     if getattr(sys, "frozen", False):
         return None
     dev_root = Path(__file__).resolve().parents[3]
-    dev = dev_root / "cod_index.sqlite"
-    if dev.exists():
-        return dev
+    # v0.13.2: 三库统一放 cod_data/ 后, 项目根已不再有 cod_index.sqlite
+    # (2026-09-18 实测: 移动后此函数返回 None, dev 模式部署来源随之丢失)。
+    dev_candidates = (dev_root / "cod_index.sqlite",
+                      dev_root / "cod_data" / "cod_index.sqlite")
+    for dev in dev_candidates:
+        if dev.exists():
+            return dev
     return None
 
 
@@ -701,6 +705,31 @@ def _is_usable_index_file(path: Optional[Path]) -> bool:
         return False
 
 
+def _cod_data_index_candidates() -> list[Path]:
+    """``cod_index.sqlite`` 的"项目内"候选目录 (v0.13.2)。
+
+    2026-09-18 起三库统一放 ``cod_data/`` (无机库 / PDF2 本就在那里, 全库索引
+    也被移了过去), 但解析逻辑只会看 ``cod_root.parent`` (项目根) 与
+    ``~/.polyxrd/cif_db``, 于是真索引成了"隐形" —— 状态显示 0 条, 且下一次
+    ``connect()`` 会在项目根凭空再造一个 0 条目的幽灵库。这里把 ``cod_data``
+    提为一等候选:
+
+    1. ``<项目根>/cod_data/cod_index.sqlite`` —— 当前实际布局;
+    2. 当前无机库所在目录 —— 用户外挂导入时, 全库索引常与无机库放在一起
+       (导入布局的合理推断, 不引入新配置项)。
+
+    全部要过 :func:`_is_usable_index_file` 体积门槛, 不给 60KB 幽灵库留口子。
+    """
+    out: list[Path] = [AppConfig._PROJECT_ROOT / "cod_data" / "cod_index.sqlite"]
+    try:
+        p = get_config().get_cod_db_path()
+        if p is not None:
+            out.append(Path(p).parent / "cod_index.sqlite")
+    except Exception:  # noqa: BLE001 - 路径推导不该影响解析主流程
+        pass
+    return out
+
+
 def resolved_index_db_path(deploy: bool = True) -> Path:
     """解析 COD 全库索引的**预期**路径。
 
@@ -724,6 +753,10 @@ def resolved_index_db_path(deploy: bool = True) -> Path:
     alt = cfg.user_db_dir() / "cod_index.sqlite"
     if _is_usable_index_file(alt):
         return alt
+    # v0.13.2: cod_data/ 候选 (三库统一目录, 见 _cod_data_index_candidates)
+    for cand in _cod_data_index_candidates():
+        if _is_usable_index_file(cand):
+            return cand
     if deploy:
         # target 若已存在但体积不合理, deploy 内部会识别并重部署
         deploy_bundled_cod_db_if_missing(target)
@@ -753,6 +786,10 @@ def existing_index_db_path() -> Optional[Path]:
     alt = cfg.user_db_dir() / "cod_index.sqlite"
     if _is_usable_index_file(alt):
         return alt
+    # v0.13.2: cod_data/ 候选 (2026-09-18 起全库索引与另两库同放 cod_data/)
+    for cand in _cod_data_index_candidates():
+        if _is_usable_index_file(cand):
+            return cand
     return _bundled_cod_db_source()
 
 
@@ -772,6 +809,21 @@ def _index_db_path(cod_root: Optional[Path] = None) -> Path:
     """
     if cod_root is not None:
         cand = Path(cod_root).parent / "cod_index.sqlite"
+        if _is_usable_index_file(cand):
+            return cand
+        # v0.13.2: 项目根的索引被移进 cod_data/ 后, cand 会指向一个不存在的
+        # 路径 —— 旧逻辑 "not is_inside_app_dir(cand) 也照返" 会让调用方在
+        # 那里 connect() 凭空造出 0 条目幽灵库 (60KB)。先找 cod_data/ 候选。
+        #
+        # ⚠️ 只对**项目自己的 cod 树**生效 (cod_root.parent == 项目根)。
+        #    无条件兜底会把 CODLocalIndexer 指到真实库上 —— 2026-09-18 实测:
+        #    test_cod_local 的合成临时树被重定向到 431MB 真库, build_index()
+        #    往里插了 12 条假条目 (113,223 → 113,235)。测试/临时树必须
+        #    原地取 cand, 让索引器在旁边新建。
+        if Path(cod_root).parent == Path(AppConfig._PROJECT_ROOT):
+            for alt in _cod_data_index_candidates():
+                if _is_usable_index_file(alt):
+                    return alt
         if cand.exists() or not is_inside_app_dir(cand):
             return cand
         return resolved_index_db_path(deploy=True)
