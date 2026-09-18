@@ -50,7 +50,7 @@ def parse_formula(formula: str) -> set[str]:
 _DB_FORMULA_TOKEN = re.compile(r"^([A-Z][a-z]?)(\d*\.?\d*)$")
 
 
-def elements_from_db_formula(formula: str) -> set[str]:
+def elements_from_db_formula(formula: str, *, space_group: str = "") -> set[str]:
     """解析数据库公式字符串，返回元素集合。
 
     COD / PDF2 索引里的 formula 字段是空格分隔的 "元素+系数" 组
@@ -59,9 +59,21 @@ def elements_from_db_formula(formula: str) -> set[str]:
     再退回 parse_formula (兼容偶发的整串化学式)。
 
     这是 COD 路径与 PDF2 路径的**单点实现**，勿在调用方各自复制闭包。
+
+    Args:
+        formula: 库里的 formula 字段原文。
+        space_group: 同一行的 space_group 字段 (可选)。传入时若 formula
+            与之完全相同, 直接返回**空集** —— 实测 COD 无机物库有 609 条
+            (2026-09-18 统计, 占 0.86%) formula 被写成了 "P 63 m c" 这类空间群
+            记号 (建库字段提取 bug), 这类记录**不携带任何化学信息**。空集即
+            "不可信"信号: 扫描层应放行交给下游复核, 判定层应回退到 CIF 的
+            ``_chemical_formula_sum``。
     """
+    f = (formula or "").strip()
+    if space_group and f and f == space_group.strip():
+        return set()
     els: set[str] = set()
-    for tok in (formula or "").split():
+    for tok in f.split():
         m = _DB_FORMULA_TOKEN.match(tok)
         if m:
             els.add(m.group(1))

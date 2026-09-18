@@ -16,6 +16,7 @@ import numpy as np
 
 from polyxrd.config import get_config
 from polyxrd.models.phase import LatticeParams, Phase
+from polyxrd.utils.formula_parser import elements_from_db_formula
 
 
 # ──────────────────────────────────────────────────────────────
@@ -1657,21 +1658,23 @@ class CIFDatabase:
         q = query.strip()
         if not q:
             return []
-        # 如果 query 是纯数字,按 COD ID 搜索;也支持 97-XXXXXXX / 96-XXX-YYYY 格式
+        # 编号直查: 支持 "1011097" / "97-1011097" / "97 1011097" / "96-101-1097"
+        # ⚠️ 旧实现用 len(q_dash) == 15 判定 display_id, 但 display_id 实际是
+        #    "97-1011097" (10 字符), 该分支**永假**; 而 "96-" 分支还把带横杠的
+        #    原串直接拿去比 ref_id ("96-101-1097" 是 11 字符), 也必然落空。
+        #    结果: 从结果列表复制编号回搜 → 静默空列表 (MCP 侧同受影响)。
+        #    改为统一剥离 96/97 前缀取后 7 位, 三种写法等价。
         q_dash = q.replace(" ", "")
-        if q_dash.lower().startswith("97-") and len(q_dash) == 15:  # "97-1011097"
+        core = q_dash.replace("-", "").replace("_", "")
+        if len(core) == 9 and core.isdigit() and core[:2] in ("96", "97"):
+            num = int(core[2:])
             cur = conn.execute(
                 "SELECT cod_id, ref_id, display_id, formula, space_group, "
                 "cell_a, cell_b, cell_c, cell_alpha, cell_beta, cell_gamma, n_peaks "
-                "FROM phases WHERE display_id = ? LIMIT ?",
-                (q_dash, limit),
-            )
-        elif q_dash.lower().startswith("96-"):  # "96-101-1097" (COD 风格)
-            cur = conn.execute(
-                "SELECT cod_id, ref_id, display_id, formula, space_group, "
-                "cell_a, cell_b, cell_c, cell_alpha, cell_beta, cell_gamma, n_peaks "
-                "FROM phases WHERE ref_id = ? LIMIT ?",
-                (q_dash, limit),
+                "FROM phases WHERE cod_id = ? OR display_id = ? OR ref_id = ? "
+                "LIMIT ?",
+                (num, f"97-{num:07d}", f"96-{num // 10000:03d}-{num % 10000:04d}",
+                 limit),
             )
         elif q.isdigit():
             # 可能是 7 位 COD ID, 也可能是 display_id 省略前缀(或部分编码)
@@ -1723,6 +1726,21 @@ class CIFDatabase:
         if row is None:
             return None
         data = dict(row)
+        # formula 回退: 库里的 formula 不可信时改用内嵌 CIF 的
+        # _chemical_formula_sum —— COD 无机物库实测有 609 条 formula 被写成
+        # 空间群符号 (建库字段 bug; v0.13.2 已迁移修复 541 条, 残留 72 条
+        # 因 CIF 式子被截断而刻意不动), 这类记录的元素集会解析成磷等无关元素,
+        # 导致 ① 结果名称显示成 "P 63 m c" ② 元素过滤把真物相误杀。
+        # 恢复失败时原样保留 (recover_inorg_formula 保证不返回空串)。
+        try:
+            from polyxrd.services.cod_local import recover_inorg_formula
+            data["formula"] = recover_inorg_formula(
+                conn, cod_id,
+                data.get("formula") or "",
+                data.get("space_group") or "",
+            )
+        except Exception:  # noqa: BLE001 - 回退不该影响详情返回
+            pass
         # 把逗号分隔的字符串解析成 float 列表,方便上层使用
         if data.get("peaks_d"):
             data["peaks_d_list"] = [float(x) for x in data["peaks_d"].split(",") if x.strip()]
@@ -1861,18 +1879,20 @@ class CIFDatabase:
                 "n_peaks, peaks_d, peaks_i FROM phases"
             )
         # 元素约束下推 (化学过滤在扫描层完成, 避免候选名额被无效化学
-        # 成分占用)。COD 公式为空格分隔 "元素+系数" 组 (如 "O4 Zr3")。
-        import re as _re
-        _tok_re = _re.compile(r"^([A-Z][a-z]?)(\d*\.?\d*)$")
+        # 成分占用)。走 `formula_parser.elements_from_db_formula` 的**单点
+        # 实现** —— 0.9.11 曾在这里复制了一份 token 正则, 口径容易漂移。
+        #
+        # 空集 = 该行 formula **不可信** (COD 无机物库实测有 605 条被写成了
+        # 空间群符号, 如 "P 63 m c"; 另有极少数为空) → **放行**交给判定层
+        # 用 CIF 的 _chemical_formula_sum 复核。若在此按 issubset 淘汰,
+        # 真物相会在扫描层就被误杀 (实测: 勾 Zn/O 过滤时 ZnO 就是这样丢的,
+        # 候选 40 → 2)。见 elements_from_db_formula 的 space_group 参数。
         for row in cur:
             if elements_allowed is not None:
-                f_str = row["formula"] or ""
-                els = {
-                    m.group(1)
-                    for tok in f_str.split()
-                    if (m := _tok_re.match(tok))
-                }
-                if not els or not els.issubset(elements_allowed):
+                els = elements_from_db_formula(
+                    row["formula"], space_group=row["space_group"] or ""
+                )
+                if els and not els.issubset(elements_allowed):
                     continue
             if use_top:
                 d_np = _parse_float_csv(row["peaks_top_d"])
