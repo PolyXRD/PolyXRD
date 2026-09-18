@@ -497,6 +497,33 @@ _BUNDLED_COD_DB_SUBPATH = "cod/cod_index.sqlite"
 _MIN_VALID_DB_BYTES = 50 * 1024 * 1024  # 50 MB (实际 431 MB, 留大量余量)
 
 
+def app_dir() -> Optional[Path]:
+    """打包运行时的**安装目录** (含 PolyXRD.exe 的那层); 非打包返回 None。
+
+    onedir 打包下 ``__file__`` 落在 ``<install>/_internal/polyxrd/...`` ——
+    ``Path(__file__).resolve().parents[2]`` 就是安装目录, 而它**通常只读**
+    (装到 Program Files 时更是), 绝不能往里写库文件。
+    """
+    if not getattr(sys, "frozen", False):
+        return None
+    try:
+        return Path(sys.executable).resolve().parent
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def is_inside_app_dir(path: Path) -> bool:
+    """路径是否落在安装目录内 (用于拦截"往安装目录写库"的行为)。"""
+    root = app_dir()
+    if root is None:
+        return False
+    try:
+        Path(path).resolve().relative_to(root)
+        return True
+    except (ValueError, OSError):
+        return False
+
+
 def _bundled_cod_db_source() -> Optional[Path]:
     """如果是 PyInstaller 打包运行, 返回 datas 里的 cod_index.sqlite 路径; 否则 None."""
     # PyInstaller onefile / onedir 都设置 sys._MEIPASS 为临时解压/资源根目录
@@ -505,8 +532,16 @@ def _bundled_cod_db_source() -> Optional[Path]:
         p = Path(meipass) / _BUNDLED_COD_DB_SUBPATH
         if p.exists():
             return p
-    # 开发模式: PolyXRD 根目录
-    dev_root = Path(__file__).resolve().parents[3]  # src/polyxrd/services -> project root
+    # 开发模式: PolyXRD 根目录 (src/polyxrd/services -> project root)
+    #
+    # ⚠️ 这条兜底**只在源码模式**下成立。打包后 __file__ 在
+    # <install>/_internal/polyxrd/services/, parents[3] 就是安装目录 ——
+    # 若那里恰好躺着个残缺的 cod_index.sqlite (实测 2026-09-17: 被
+    # CODLocalDatabase 初始化时凭空创建的 60 KB 空库), 它就会被当成
+    # "随包索引"复制到用户目录, 把真正的全库索引永久顶掉 (搜索全空)。
+    if getattr(sys, "frozen", False):
+        return None
+    dev_root = Path(__file__).resolve().parents[3]
     dev = dev_root / "cod_index.sqlite"
     if dev.exists():
         return dev
@@ -623,9 +658,18 @@ def _index_db_path(cod_root: Optional[Path] = None) -> Path:
     - Otherwise use the user's cif_db_path from AppConfig.
     - Before returning the user path, deploy the bundled DB if missing.
     - 0.10.0: 用户在 GUI 里导入的 COD 全库**优先** (数据库改外挂)。
+
+    v0.13.0 修正: `cod_root` 落在**安装目录**内时不再原地建库。打包运行时
+    `get_cod_root()` 可能解析到 `<install>/cod`, 于是 sqlite3.connect() 会在
+    <install> 里凭空生成一个 0 条目的空索引 (实测), 之后它既污染安装目录,
+    又会被 `_bundled_cod_db_source()` 的旧兜底当成"随包索引"回灌用户目录。
+    这种情况一律退回 `resolved_index_db_path()` (用户目录/外挂库)。
     """
     if cod_root is not None:
-        return Path(cod_root).parent / "cod_index.sqlite"
+        cand = Path(cod_root).parent / "cod_index.sqlite"
+        if cand.exists() or not is_inside_app_dir(cand):
+            return cand
+        return resolved_index_db_path(deploy=True)
     return resolved_index_db_path(deploy=True)
 
 
@@ -667,19 +711,28 @@ def get_cod_root(default: Optional[Path] = None) -> Path:
         if c.exists() and any(c.iterdir()):
             return c
     # Phase 3: fallback - try to create
+    #
+    # ⚠️ 顺序与"跳过安装目录"都很关键 (v0.13.0): 打包后 AppConfig._PROJECT_ROOT
+    # 就是安装目录, 旧代码会在这里 `mkdir <install>/cod` 并返回 —— 紧接着
+    # CODLocalDatabase 就在安装目录里 connect 出一个 0 条目的空 cod_index.sqlite
+    # (2026-09-17 实测的 60 KB 幽灵库)。装到 Program Files 时更是直接写不进去。
     fallbacks = [
-        AppConfig._PROJECT_ROOT / "cod",
+        cfg.user_db_dir() / "cod",       # 用户可写目录优先
         cfg.get_cif_db_path() / "cod",
+        AppConfig._PROJECT_ROOT / "cod",
         Path(r"d:\TEMP\PolyXRD\cod"),
         Path(r"d:\TEMP\cod\cif"),
     ]
     for fallback in fallbacks:
+        if is_inside_app_dir(fallback):
+            continue
         try:
             fallback.mkdir(parents=True, exist_ok=True)
             return fallback
         except (OSError, PermissionError):
             continue
-    return fallbacks[0]
+    # 兜底: 用户可写目录 (即使 mkdir 失败也返回它, 让调用方拿到一个合理位置)
+    return cfg.user_db_dir() / "cod"
 
 
 # ── 数据库连接辅助 ────────────────────────────────────────────
