@@ -1344,6 +1344,34 @@ class CODLocalDatabase:
             log.debug("inorg cif_gz lookup failed for %d: %s", cod_id, e)
         return None
 
+    def _inorg_is_slim(self) -> bool:
+        """无机库是否为瘦身索引式 (v0.14.0)。
+
+        瘦身库与 COD 全库索引同形态: ``phases.cif_gz`` 全为 NULL, CIF 原文由
+        ``cod/cif`` 目录按需读取 (缺失时 COD REST 在线下载兜底)。以 meta 表
+        ``variant`` 键 (``slim-index`` 打头) 判定; 探测失败一律按原库处理。
+        """
+        conn = self._inorg_db()
+        if conn is None:
+            return False
+        try:
+            row = conn.execute(
+                "SELECT value FROM meta WHERE key = 'variant'"
+            ).fetchone()
+            return bool(row and str(row["value"]).startswith("slim-index"))
+        except Exception as e:
+            log.debug("inorg slim variant probe failed: %s", e)
+            return False
+
+    def _inorg_has_cif_expr(self) -> str:
+        """has_cif 的 SQL 片段 (兼容原库 / 瘦身库)。
+
+        - 原库: 内嵌 ``cif_gz`` 非空才算有 CIF;
+        - 瘦身库: 全部按"可获取"处理 (本地 cod/cif 文件或 REST 回退),
+          否则 ``cif_gz IS NOT NULL`` 过滤会把搜索结果清空。
+        """
+        return "(1)" if self._inorg_is_slim() else "(cif_gz IS NOT NULL)"
+
     # ── 基础设施 ────────────────────────────────────────────
     def is_ready(self) -> bool:
         """索引数据库存在且有至少 1 条记录"""
@@ -1452,8 +1480,9 @@ class CODLocalDatabase:
 
         供 `phase_structure_resolver` 在精修前把无结构物相匹配到 CIF。
         两个通道, 结果按 cod_id 去重合并:
-          1) 无机物库 phases 表 —— formula 是空格分隔 COD 格式, 且 71k+ 条
-             内嵌 cif_gz, 是首选通道;
+          1) 无机物库 phases 表 —— formula 是空格分隔 COD 格式, 首选通道
+             (v0.14.0 起默认挂瘦身索引式: cif_gz 全空, has_cif 按"可获取"
+             处理, CIF 由 cod/cif 目录或 REST 回退提供);
           2) 全库索引 cod_entries —— formula_red 精确匹配 + mineral_name
              模糊匹配 (内置 118 物相只有矿物名, 走这条通道兜底)。
 
@@ -1478,12 +1507,13 @@ class CODLocalDatabase:
             conn = self._inorg_db()
             if conn is not None:
                 try:
+                    has_cif = self._inorg_has_cif_expr()
                     rows = conn.execute(
                         "SELECT cod_id, formula, space_group, cell_a, cell_b, "
                         "cell_c, cell_alpha, cell_beta, cell_gamma, "
-                        "(cif_gz IS NOT NULL) AS has_cif "
+                        f"{has_cif} AS has_cif "
                         "FROM phases WHERE formula = ? "
-                        "ORDER BY (cif_gz IS NOT NULL) DESC, cod_id LIMIT ?",
+                        f"ORDER BY {has_cif} DESC, cod_id LIMIT ?",
                         (formula_norm, int(limit)),
                     ).fetchall()
                     for r in rows:
@@ -1614,7 +1644,7 @@ class CODLocalDatabase:
                 r = conn.execute(
                     "SELECT cod_id, formula, space_group, cell_a, cell_b, "
                     "cell_c, cell_alpha, cell_beta, cell_gamma, "
-                    "(cif_gz IS NOT NULL) AS has_cif FROM phases "
+                    f"{self._inorg_has_cif_expr()} AS has_cif FROM phases "
                     "WHERE cod_id = ?",
                     (int(cod_id),),
                 ).fetchone()
@@ -1669,8 +1699,8 @@ class CODLocalDatabase:
                 rows = conn.execute(
                     "SELECT cod_id, formula, space_group, cell_a, cell_b, "
                     "cell_c, cell_alpha, cell_beta, cell_gamma, "
-                    "(cif_gz IS NOT NULL) AS has_cif FROM phases "
-                    "WHERE formula LIKE ? AND cif_gz IS NOT NULL "
+                    f"{self._inorg_has_cif_expr()} AS has_cif FROM phases "
+                    f"WHERE formula LIKE ? AND {self._inorg_has_cif_expr()} "
                     "ORDER BY cod_id LIMIT ?",
                     (like, int(limit)),
                 ).fetchall()

@@ -1,15 +1,15 @@
 @echo off
 chcp 65001 >nul
-title PolyXRD v0.13.0 打包构建器
+title PolyXRD v0.14.0 打包构建器
 echo ========================================
-echo   PolyXRD v0.13.0 打包为独立安装包
+echo   PolyXRD v0.14.0 打包为独立安装包
 echo   数据库外挂 (不随包分发)
 echo ========================================
 echo.
 
 cd /d "%~dp0"
 
-set APPVER=0.13.2
+set APPVER=0.14.0
 
 REM ── Python 定位 ──────────────────────────────────────
 if exist "venv\Scripts\python.exe" (
@@ -142,8 +142,8 @@ echo.
 echo [步骤 5/6] 校验产物 + 生成三个独立外挂数据库 ZIP + 计算 SHA-256...
 echo.
 echo [信息] 库各自成包 (用户按需只下一个):
-echo          PolyXRD-v%APPVER%-Databases-COD-inorg.zip  (COD 无机物库, 主检索库)
-echo          PolyXRD-v%APPVER%-Databases-COD-full.zip   (COD 全库索引)
+echo          PolyXRD-v%APPVER%-Databases-COD-inorg-index.zip  (COD 无机物库, 主检索库)
+echo          PolyXRD-v%APPVER%-Databases-COD-full-index.zip   (COD 全库索引)
 echo          PolyXRD-v%APPVER%-Databases-PDF2.zip       (PDF2-2004 库)  ^<-- 本地自用
 echo.
 echo [重要] PDF2-2004 是 ICDD 版权商品库: 上面这个 PDF2 包**仅作本地归档**,
@@ -168,8 +168,8 @@ Build Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
 Version    : %APPVER%
 ICU: 依赖系统 icuuc shim (PySide6 6.11 不自带 ICU)
 Databases: 外挂, 且各库独立打包 (随包不含数据库)。按需只下一个:
-           PolyXRD-v%APPVER%-Databases-COD-inorg.zip  COD 无机物库 (主检索库, 推荐)
-           PolyXRD-v%APPVER%-Databases-COD-full.zip   COD 全库索引
+           PolyXRD-v%APPVER%-Databases-COD-inorg-index.zip  COD 无机物库 (主检索库, 推荐)
+           PolyXRD-v%APPVER%-Databases-COD-full-index.zip   COD 全库索引
            PDF2-2004: ICDD 版权库, 不随 Release 分发, 由持授权用户自行准备。
            解压后在菜单「数据库 ▸ 外挂数据库管理…」逐个导入 (可只挂其中一个)。
            未导入时仅内置 118 种参考物相可用。
@@ -186,8 +186,8 @@ echo.
 echo 输出 (installer_output\):
 if exist "installer_output\PolyXRD-Setup-v%APPVER%.exe" for %%A in ("installer_output\PolyXRD-Setup-v%APPVER%.exe") do echo   Setup.exe:     %%~zA 字节
 if exist "installer_output\PolyXRD-v%APPVER%-Portable.zip" for %%A in ("installer_output\PolyXRD-v%APPVER%-Portable.zip") do echo   Portable.zip:  %%~zA 字节
-if exist "installer_output\PolyXRD-v%APPVER%-Databases-COD-inorg.zip" for %%A in ("installer_output\PolyXRD-v%APPVER%-Databases-COD-inorg.zip") do echo   库-COD无机物: %%~zA 字节
-if exist "installer_output\PolyXRD-v%APPVER%-Databases-COD-full.zip" for %%A in ("installer_output\PolyXRD-v%APPVER%-Databases-COD-full.zip") do echo   库-COD全库:   %%~zA 字节
+if exist "installer_output\PolyXRD-v%APPVER%-Databases-COD-inorg-index.zip" for %%A in ("installer_output\PolyXRD-v%APPVER%-Databases-COD-inorg-index.zip") do echo   库-COD无机物: %%~zA 字节
+if exist "installer_output\PolyXRD-v%APPVER%-Databases-COD-full-index.zip" for %%A in ("installer_output\PolyXRD-v%APPVER%-Databases-COD-full-index.zip") do echo   库-COD全库:   %%~zA 字节
 if exist "installer_output\PolyXRD-v%APPVER%-Databases-PDF2.zip" for %%A in ("installer_output\PolyXRD-v%APPVER%-Databases-PDF2.zip") do echo   库-PDF2:      %%~zA 字节
 if exist "dist\PolyXRD\PolyXRD.exe" for %%A in ("dist\PolyXRD\PolyXRD.exe") do echo   PolyXRD.exe:   %%~zA 字节
 

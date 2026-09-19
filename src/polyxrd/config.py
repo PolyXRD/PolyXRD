@@ -17,7 +17,7 @@ class AppConfig:
 
     # 应用信息
     app_name: str = "PolyXRD"
-    app_version: str = "0.13.2"
+    app_version: str = "0.14.0"
     app_org: str = "PolyXRD"
 
     # 窗口设置
@@ -101,9 +101,27 @@ class AppConfig:
         return default
 
     def get_cod_db_path(self) -> Path:
-        """获取当前 COD 无机物库路径 (支持用户导入的外部库覆盖)。"""
-        return self._resolve_db_path(
-            "cod_db_path", self.cod_db_path, ("COD_inorganics.sqlite",))
+        """获取当前 COD 无机物库路径 (支持用户导入的外部库覆盖)。
+
+        v0.14.0 起**瘦身索引式优先** (``COD_inorganics_index.sqlite``):
+        与 COD 全库索引同形态 —— 不内嵌 CIF, 由 ``cod/cif`` 目录按需读取
+        (本地缺失时回退 COD REST 在线下载), 体积约为内嵌版的 1/3。
+        完整内嵌版 (``COD_inorganics.sqlite``) 作为回退, 两者数据逐行一致。
+        """
+        imported = self.user_db_path("cod_db_path")
+        if imported is not None:
+            return imported
+        # 默认位置: 瘦身索引式优先, 回退完整内嵌版
+        for name in ("COD_inorganics_index.sqlite", "COD_inorganics.sqlite"):
+            cand = self.cod_db_path.with_name(name)
+            if cand.exists():
+                return cand
+        # 用户目录兜底: 同样瘦身版优先
+        for name in ("COD_inorganics_index.sqlite", "COD_inorganics.sqlite"):
+            cand = self.user_db_dir() / name
+            if cand.exists():
+                return cand
+        return self.cod_db_path
 
     def get_cif_db_path(self) -> Path:
         return self.cif_db_path
