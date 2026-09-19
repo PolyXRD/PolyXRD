@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "polyxrd"
-version = "0.13.2"
+version = "0.14.0"
 description = "X射线衍射仪数据分析软件 - 物相分析与Rietveld结构精修"
 readme = "README.md"
 license = {text = "MIT"}

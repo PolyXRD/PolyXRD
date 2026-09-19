@@ -58,7 +58,9 @@ DB_KINDS: tuple[DBKind, ...] = (
         signature=("cell_a",),
         # PDF2 的 phases 表多了 name/pearson, 用它把两者区分开
         excludes=("pearson",),
-        pkg_suffix="Databases-COD-inorg.zip",
+        # v0.14.0: 发布包改发瘦身索引式 (无内嵌 CIF, CIF 由 cod/cif 目录或
+        # COD REST 在线回退提供); 完整内嵌版仍可导入, 检测签名相同
+        pkg_suffix="Databases-COD-inorg-index.zip",
     ),
     DBKind(
         key="pdf2",
@@ -82,7 +84,7 @@ DB_KINDS: tuple[DBKind, ...] = (
         signature=("cif_gz",),
         excludes=(),
         min_rows=1000,
-        pkg_suffix="Databases-COD-full.zip",
+        pkg_suffix="Databases-COD-full-index.zip",
     ),
 )
 
@@ -90,7 +92,8 @@ KIND_BY_KEY: dict[str, DBKind] = {k.key: k for k in DB_KINDS}
 
 # 各类库在发布包里的文件名 (决定用户该下载哪个 zip, 也用于文档/脚本对账)
 PKG_FILENAME: dict[str, str] = {
-    "cod_inorganics": "COD_inorganics.sqlite",
+    # v0.14.0: 发布包改发瘦身索引式无机库 (原内嵌版 COD_inorganics.sqlite 仍可导入)
+    "cod_inorganics": "COD_inorganics_index.sqlite",
     "cod_index": "cod_index.sqlite",
     "pdf2": "PDF2_2004.sqlite",
 }
