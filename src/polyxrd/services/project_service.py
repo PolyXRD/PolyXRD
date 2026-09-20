@@ -51,6 +51,7 @@ class ProjectService:
         results: Optional[list[PhaseMatchResult]] = None,
         peaks: Optional[PeakList] = None,
         metadata: Optional[dict] = None,
+        selected_phases: Optional[list[Phase]] = None,
     ) -> None:
         """保存项目到.pxrd文件
 
@@ -61,6 +62,7 @@ class ProjectService:
             results: 匹配结果
             peaks: 峰列表
             metadata: 附加元数据
+            selected_phases: 勾选确认的物相集合 (v0.15 M23, 重开项目时恢复)
         """
         project_meta = {
             "version": self._version,
@@ -88,6 +90,11 @@ class ProjectService:
 
         if results:
             project_meta["results"] = [r.to_dict() for r in results]
+
+        if selected_phases:
+            project_meta["selected_phases"] = [
+                p.to_dict() for p in selected_phases
+            ]
 
         if peaks:
             project_meta["peaks"] = [p.to_dict() for p in peaks]
@@ -130,6 +137,7 @@ class ProjectService:
             "peaks": None,
             "metadata": {},
             "info": {},
+            "selected_phases": [],
         }
 
         with zipfile.ZipFile(path, "r") as zf:
@@ -160,6 +168,11 @@ class ProjectService:
 
             if "phases" in project_meta:
                 result["phases"] = [Phase.from_dict(p) for p in project_meta["phases"]]
+
+            if "selected_phases" in project_meta:
+                result["selected_phases"] = [
+                    Phase.from_dict(p) for p in project_meta["selected_phases"]
+                ]
 
             if "results" in project_meta:
                 result["results"] = []
