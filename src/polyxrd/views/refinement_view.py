@@ -32,6 +32,11 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QLabel,
     QPlainTextEdit,
+    QListWidget,
+    QListWidgetItem,
+    QMenu,
+    QFileDialog,
+    QMessageBox,
     QSplitter,
 )
 
@@ -83,15 +88,19 @@ class RefinementView(QWidget):
         left_layout = QVBoxLayout(left_widget)
         left_layout.setContentsMargins(0, 0, 0, 0)
 
-        # 对比图
+        # 对比图 (M24: 拉大)
         self._compare_plot = PlotWidget()
         left_layout.addWidget(QLabel(tr("view.refinement.label_compare")))
-        left_layout.addWidget(self._compare_plot)
+        left_layout.addWidget(self._compare_plot, stretch=5)
 
-        # 残差图
+        # 残差图 (M24: 改细条, X 轴与主图双向同步)
         self._residual_plot = PlotWidget()
         left_layout.addWidget(QLabel(tr("view.refinement.label_residual")))
-        left_layout.addWidget(self._residual_plot)
+        left_layout.addWidget(self._residual_plot, stretch=1)
+        self._install_x_sync()
+
+        # 精修过程日志 (M24: 从整页底栏移到左栏残差条下方)
+        left_layout.addWidget(self._build_log_panel(), stretch=2)
 
         # 右侧：控制区
         right_widget = QWidget()
@@ -204,16 +213,63 @@ class RefinementView(QWidget):
         phase_group.setLayout(phase_layout)
         right_layout.addWidget(phase_group, stretch=1)
 
+        # 已勾选物相 (M24: 继承物相分析页勾选集合, 右键导出 CIF)
+        sel_group = QGroupBox("已勾选物相")
+        sel_layout = QVBoxLayout()
+        self._selected_phase_list = QListWidget()
+        self._selected_phase_list.setContextMenuPolicy(
+            Qt.ContextMenuPolicy.CustomContextMenu
+        )
+        self._selected_phase_list.customContextMenuRequested.connect(
+            self._selected_phase_context_menu
+        )
+        sel_layout.addWidget(self._selected_phase_list)
+        sel_group.setLayout(sel_layout)
+        right_layout.addWidget(sel_group, stretch=1)
+
+        # 外部精修程序区 (M24 容器; M25 填充 GSAS-II / MAUD / FullProf 配置)
+        self._ext_group = QGroupBox("外部精修程序")
+        ext_layout = QVBoxLayout()
+        self._ext_placeholder = QLabel(
+            "外部引擎 (GSAS-II / MAUD / FullProf) 配置与调用区 — M25 启用"
+        )
+        self._ext_placeholder.setWordWrap(True)
+        self._ext_placeholder.setStyleSheet("color: #888; font-size: 11px;")
+        ext_layout.addWidget(self._ext_placeholder)
+        self._ext_group.setLayout(ext_layout)
+        right_layout.addWidget(self._ext_group)
+
         main_layout.addWidget(left_widget, stretch=2)
         main_layout.addWidget(right_widget, stretch=1)
 
-        # 下方: 过程日志 (可拖动分栏)
-        splitter = QSplitter(Qt.Orientation.Vertical)
-        splitter.addWidget(top_widget)
-        splitter.addWidget(self._build_log_panel())
-        splitter.setStretchFactor(0, 5)
-        splitter.setStretchFactor(1, 2)
-        outer.addWidget(splitter)
+        outer.addWidget(top_widget)
+
+    def _install_x_sync(self) -> None:
+        """残差条与主图 X 轴双向同步 (两个独立 canvas, 手动互抄 xlim)。"""
+        self._compare_plot.get_axes().callbacks.connect(
+            "xlim_changed", self._sync_residual_xlim
+        )
+        self._residual_plot.get_axes().callbacks.connect(
+            "xlim_changed", self._sync_compare_xlim
+        )
+
+    def _sync_residual_xlim(self, ax) -> None:
+        try:
+            rax = self._residual_plot.get_axes()
+            if rax.get_xlim() != ax.get_xlim():
+                rax.set_xlim(*ax.get_xlim())
+                self._residual_plot._canvas.draw_idle()
+        except (RuntimeError, AttributeError):  # 控件已销毁
+            pass
+
+    def _sync_compare_xlim(self, ax) -> None:
+        try:
+            cax = self._compare_plot.get_axes()
+            if cax.get_xlim() != ax.get_xlim():
+                cax.set_xlim(*ax.get_xlim())
+                self._compare_plot._canvas.draw_idle()
+        except (RuntimeError, AttributeError):
+            pass
 
     def _build_log_panel(self) -> QWidget:
         """精修过程日志面板 (跑码式输出)。"""
@@ -249,6 +305,58 @@ class RefinementView(QWidget):
         self._vm.refinement_completed.connect(self._on_refinement_completed)
         self._vm.refinement_log.connect(self._append_log)
         self._chk_wizard.toggled.connect(self._apply_wizard_style)
+        # M24: 勾选集合 → 右栏「已勾选物相」列表
+        self._vm._phase_vm.selection_changed.connect(
+            self._on_selected_phases_changed
+        )
+
+    # ------------------------------------------------------------------
+    # M24: 已勾选物相列表
+    # ------------------------------------------------------------------
+
+    def _on_selected_phases_changed(self, phases: list) -> None:
+        """物相分析页勾选变更 → 重建右栏列表。"""
+        self._selected_phase_list.clear()
+        for p in phases:
+            item = QListWidgetItem(
+                f"{getattr(p, 'name', '')}  {getattr(p, 'formula', '')}".strip()
+            )
+            item.setData(Qt.ItemDataRole.UserRole, p)
+            self._selected_phase_list.addItem(item)
+
+    def _selected_phase_context_menu(self, pos) -> None:
+        """已勾选物相右键 → 导出 CIF 文件 (与主窗/物相页共用服务)。"""
+        item = self._selected_phase_list.itemAt(pos)
+        if item is None:
+            return
+        phase = item.data(Qt.ItemDataRole.UserRole)
+        if phase is None:
+            return
+        menu = QMenu(self)
+        act_export = menu.addAction("导出 CIF 文件…")
+        chosen = menu.exec(self._selected_phase_list.viewport().mapToGlobal(pos))
+        if chosen is not act_export:
+            return
+        from polyxrd.services.phase_cif_export import (
+            CifUnavailableError,
+            default_cif_filename,
+            export_phase_cif,
+            resolve_cod_id,
+        )
+
+        path, _ = QFileDialog.getSaveFileName(
+            self, "导出 CIF 文件",
+            default_cif_filename(phase, resolve_cod_id(phase)),
+            "CIF 文件 (*.cif)",
+        )
+        if not path:
+            return
+        try:
+            export_phase_cif(phase, path)
+        except CifUnavailableError as exc:
+            QMessageBox.warning(self, "导出 CIF", str(exc))
+        except OSError as exc:
+            QMessageBox.warning(self, "导出 CIF", f"写盘失败: {exc}")
 
     # ------------------------------------------------------------------
     # 精修方式 (向导式 / 手动)
