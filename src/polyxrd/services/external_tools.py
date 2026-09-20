@@ -40,12 +40,14 @@ class ToolSpec:
     detect_fn: Optional[Callable[[], Optional[Path]]] = None    # 自动探测
 
     def validate(self, path: str | Path | None) -> bool:
-        """路径存在且 (无 exe 约束 或 文件名匹配) 即可用。"""
+        """路径存在且 (无 exe 约束 或 文件名匹配 或 是含 JDK 的 MAUD 根)。"""
         if not path:
             return False
         p = Path(path)
         if not p.exists():
             return False
+        if p.is_dir() and (p / "jdk" / "bin" / "java.exe").exists():
+            return True  # MAUD 安装根目录
         if not self.exe_names:
             return True
         return p.name.lower() in {n.lower() for n in self.exe_names}
@@ -61,10 +63,13 @@ def _detect_gsas2() -> Optional[Path]:
 
 
 def _detect_maud() -> Optional[Path]:
+    """MAUD: 返回自带 JDK 的 java.exe (根目录下通常没有 Maud.jar)。"""
     try:
         from polyxrd.services.maud_par_builder import detect_maud_root
 
-        return detect_maud_root()
+        root = detect_maud_root()
+        java = root / "jdk" / "bin" / "java.exe"
+        return java if java.exists() else (root if root.exists() else None)
     except Exception:  # noqa: BLE001
         return None
 
@@ -100,7 +105,8 @@ GSAS2_SPEC = ToolSpec(
 MAUD_SPEC = ToolSpec(
     key="external_maud_path",
     title="MAUD",
-    exe_names=("MaudText.jar", "Maud.jar", "maud.jar", "Maud.exe"),
+    # 用户可配 MAUD 安装根目录或其自带 jdk/bin/java.exe
+    exe_names=("java.exe",),
     detect_fn=_detect_maud,
 )
 FULLPROF_SPEC = ToolSpec(

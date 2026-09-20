@@ -79,12 +79,26 @@ def build_gui_command(maud_root: Path, max_memory_mb: int = 4096) -> list[str]:
     ]
 
 
+def resolve_maud_root(custom: Optional[str] = None) -> Path:
+    """解析 MAUD 根目录: 用户配置 (根目录或 java.exe) → 自动探测。"""
+    if custom:
+        p = Path(custom)
+        if p.name.lower() == "java.exe" and p.exists():
+            return p.parents[2]          # jdk/bin/java.exe → 根
+        if (p / "jdk" / "bin" / "java.exe").exists():
+            return p
+    from polyxrd.services.maud_par_builder import detect_maud_root
+
+    return detect_maud_root()
+
+
 def launch_gui(
     data,
     phases: list,
     workdir: str | Path,
     *,
     stem: str = "polyxrd",
+    custom: Optional[str] = None,
     on_log: Optional[Callable[[str], None]] = None,
 ) -> subprocess.Popen:
     """导出输入文件并拉起 MAUD GUI (非阻塞)。
@@ -94,9 +108,7 @@ def launch_gui(
     """
     log = on_log or (lambda _m: None)
     try:
-        from polyxrd.services.maud_par_builder import detect_maud_root
-
-        maud_root = detect_maud_root()
+        maud_root = resolve_maud_root(custom)
     except Exception as exc:  # noqa: BLE001
         raise RuntimeError(f"未找到 MAUD 安装: {exc}") from exc
 
