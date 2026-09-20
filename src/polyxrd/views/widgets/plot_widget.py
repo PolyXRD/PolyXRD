@@ -48,6 +48,11 @@ class PlotWidget(QWidget):
     peak_clicked = Signal(object)
     range_selected = Signal(float, float)
 
+    # M22: X 轴交互参数
+    _X_MARGIN_RATIO = 0.01   # 首屏边距 (数据宽度的 1%)
+    _X_ZOOM_STEP = 0.15      # 每格滚轮缩放幅度
+    _X_OVERSCAN = 0.20       # 允许越出数据范围的比例
+
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self._ylabel_base = "Intensity"
@@ -57,6 +62,10 @@ class PlotWidget(QWidget):
         self._peak_artists: list = []
         self._match_artists: list = []
         self._span_selector: Optional[SpanSelector] = None
+        # M22: X 轴交互状态
+        self._data_xlim: Optional[tuple[float, float]] = None  # 数据范围(含边距), Home/缩放 clamp 基准
+        self._pan_state: Optional[dict] = None                 # 左键拖动平移状态
+        self._pending_peak: Optional[Peak] = None              # 按下命中的峰, 位移 <3px 才算点击
         # 纵坐标刻度控制器 (必须在 _axes 建好之后挂)
         self._y_scale = YScaleController(
             self._canvas,
@@ -66,6 +75,7 @@ class PlotWidget(QWidget):
             on_change=self._on_y_scale_changed,
             parent=self,
         )
+        self._install_x_interaction()
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -166,6 +176,8 @@ class PlotWidget(QWidget):
         self._axes.legend(loc="best")
         self._axes.relim()
         self._axes.autoscale_view()
+        # M22: 横轴贴合数据实际 2θ 范围 (autoscale 默认 5% 边距对 XRD 过宽)
+        self.fit_x_to_data()
         # 对数/方根模式下重新按新数据取正数据范围 (autoscale 已对 y 失效)
         self._y_scale.set_mode(self._y_scale.mode(), refit=True)
         self._canvas.draw_idle()
@@ -178,6 +190,7 @@ class PlotWidget(QWidget):
         self._data_list.clear()
         self._peaks.clear()
         self._peak_artists.clear()
+        self._data_xlim = None  # M22: 数据没了, 缩放基准一并失效
         for artist in getattr(self, '_match_artists', []):
             artist.remove()
         self._match_artists = []
@@ -288,9 +301,13 @@ class PlotWidget(QWidget):
         self._canvas.draw_idle()
 
     def reset_view(self) -> None:
-        """重置视图 (保持当前纵坐标刻度模式)"""
+        """重置视图 (保持当前纵坐标刻度模式)
+
+        M22: X 回到数据实际范围而非 matplotlib 默认边距。
+        """
         self._axes.relim()
         self._axes.autoscale_view()
+        self.fit_x_to_data()
         self._y_scale.set_mode(self._y_scale.mode(), refit=True)
         self._canvas.draw_idle()
 
@@ -307,25 +324,143 @@ class PlotWidget(QWidget):
         return self._axes
 
     # ------------------------------------------------------------------
+    # M22: X 轴自适应与滚轮/拖动交互
+    # ------------------------------------------------------------------
+
+    def fit_x_to_data(self, margin_ratio: float = _X_MARGIN_RATIO) -> None:
+        """横轴贴合数据实际 2θ 范围 (默认 1% 边距)。
+
+        多数据集取并集; `_data_list` 为空 / 全 NaN / 范围无效时 no-op。
+        同时记录该范围作为滚轮缩放 clamp 与 Home / 重置的基准。
+        """
+        lo = hi = None
+        for d in self._data_list:
+            x = np.asarray(d.two_theta, dtype=float)
+            x = x[np.isfinite(x)]
+            if x.size == 0:
+                continue
+            dlo, dhi = float(x.min()), float(x.max())
+            lo = dlo if lo is None else min(lo, dlo)
+            hi = dhi if hi is None else max(hi, dhi)
+        if lo is None or hi is None or not (hi > lo):
+            return
+        pad = (hi - lo) * margin_ratio
+        self._data_xlim = (lo - pad, hi + pad)
+        self._axes.set_xlim(*self._data_xlim)
+
+    def _install_x_interaction(self) -> None:
+        """注册滚轮缩放 / 拖动平移, 并让 toolbar Home 回到数据范围。"""
+        self._canvas.mpl_connect("scroll_event", self._on_scroll)
+        self._canvas.mpl_connect("button_release_event", self._on_mouse_release)
+        # NavigationToolbar2QT.home 默认回到 nav_stack 底 (空白图的 0–1 视图),
+        # 改接到 reset_view; _actions 是 mpl Qt toolbar 的既有字典。
+        home_action = getattr(self._toolbar, "_actions", {}).get("home")
+        if home_action is not None:
+            try:
+                home_action.triggered.disconnect()
+            except (RuntimeError, TypeError):  # noqa: BLE001
+                pass
+            home_action.triggered.connect(self.reset_view)
+
+    def _x_bounds(self) -> Optional[tuple[float, float]]:
+        """允许的 xlim 硬边界: 数据范围外扩 20% (clamp)。"""
+        if self._data_xlim is None:
+            return None
+        lo, hi = self._data_xlim
+        pad = (hi - lo) * self._X_OVERSCAN
+        return lo - pad, hi + pad
+
+    def _clamp_xlim(self, lo: float, hi: float) -> tuple[float, float]:
+        """把目标 xlim 收进硬边界内, 且不允许缩到无穷小。"""
+        bounds = self._x_bounds()
+        if bounds is None:
+            return lo, hi
+        blo, bhi = bounds
+        width = hi - lo
+        min_w = max(0.1, (bhi - blo) * 0.002)
+        if width > (bhi - blo):
+            c = (lo + hi) / 2.0
+            lo, hi = c - (bhi - blo) / 2.0, c + (bhi - blo) / 2.0
+        elif width < min_w:
+            c = (lo + hi) / 2.0
+            lo, hi = c - min_w / 2.0, c + min_w / 2.0
+        if lo < blo:
+            hi += blo - lo
+            lo = blo
+        if hi > bhi:
+            lo -= hi - bhi
+            hi = bhi
+        return lo, hi
+
+    def _on_scroll(self, event) -> None:
+        """滚轮: 以鼠标 x 位置为中心 ±15%/格 缩放 X 轴。"""
+        if getattr(self._toolbar, "mode", ""):  # 工具栏 zoom/pan 模式下不插手
+            return
+        if event.inaxes != self._axes or event.xdata is None:
+            return
+        l, r = self._axes.get_xlim()
+        step = self._X_ZOOM_STEP if event.step > 0 else -self._X_ZOOM_STEP
+        factor = 1.0 - step
+        nl = event.xdata - (event.xdata - l) * factor
+        nr = event.xdata + (r - event.xdata) * factor
+        nl, nr = self._clamp_xlim(nl, nr)
+        if (nl, nr) == (l, r):
+            return
+        self._axes.set_xlim(nl, nr)
+        self._canvas.draw_idle()
+
+    # ------------------------------------------------------------------
     # 事件处理
     # ------------------------------------------------------------------
 
     def _on_mouse_press(self, event) -> None:
-        """鼠标按下事件 (只认左键: 右键/Y 轴竖条留给纵坐标刻度控制器)"""
+        """鼠标按下: 记录峰命中与拖动起点 (M22)。
+
+        右键 / Y 轴竖条仍留给纵坐标刻度控制器; 峰点击延迟到释放且
+        位移 <3px 时才发射, 以兼容左键拖动平移。
+        """
+        self._pending_peak = None
         if getattr(event, "button", 1) != 1:
             return
         if event.inaxes != self._axes:
             return
+        if getattr(self._toolbar, "mode", ""):  # 工具栏 zoom/pan 模式下不插手
+            return
 
-        # 检查是否点击了峰
-        if self._peaks:
+        # 检查是否点击了峰 (暂存, 释放时未拖动才发射)
+        if self._peaks and event.xdata is not None:
             for peak in self._peaks:
                 if abs(event.xdata - peak.two_theta) < 0.3:
-                    self.peak_clicked.emit(peak)
+                    self._pending_peak = peak
                     break
 
+        self._pan_state = {
+            "x0": event.xdata,
+            "xlim": self._axes.get_xlim(),
+            "x_px": event.x,
+            "moved": False,
+        }
+
     def _on_mouse_move(self, event) -> None:
-        """鼠标移动事件"""
+        """鼠标移动: 坐标读数 + 左键拖动 X 平移 (M22)。"""
+        pan = self._pan_state
+        if (
+            pan is not None
+            and getattr(event, "button", None) == 1
+            and event.inaxes == self._axes
+            and event.xdata is not None
+            and not getattr(self._toolbar, "mode", "")
+        ):
+            if abs(event.x - pan["x_px"]) > 3:
+                pan["moved"] = True
+            if pan["moved"]:
+                dx = pan["x0"] - event.xdata
+                l0, r0 = pan["xlim"]
+                nl, nr = self._clamp_xlim(l0 + dx, r0 + dx)
+                self._axes.set_xlim(nl, nr)
+                self._canvas.draw_idle()
+                return
+
         if event.inaxes == self._axes and event.xdata is not None:
             intensity_val = 0
             if self._data_list:
@@ -337,6 +472,19 @@ class PlotWidget(QWidget):
             self._toolbar.set_message(
                 f"2θ={event.xdata:.3f}°, I={intensity_val:.1f}"
             )
+
+    def _on_mouse_release(self, event) -> None:
+        """鼠标释放: 未拖动 (<3px) 且按下时命中峰 → 发射 peak_clicked (M22)。"""
+        pan = self._pan_state
+        self._pan_state = None
+        peak = self._pending_peak
+        self._pending_peak = None
+        if getattr(event, "button", 1) != 1:
+            return
+        if pan is None or pan["moved"]:
+            return
+        if peak is not None:
+            self.peak_clicked.emit(peak)
 
     def _on_add_peak_mode(self) -> None:
         """添加峰模式"""
