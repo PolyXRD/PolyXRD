@@ -191,6 +191,7 @@ class ExternalEnginesGroup(QGroupBox):
 
                 wd = new_run_dir("maud")
                 self.log_message.emit(f"[maud] 工作目录: {wd}")
-                launch_gui(data, phases, wd, on_log=self.log_message.emit)
+                launch_gui(data, phases, wd, custom=str(path) if path else None,
+                           on_log=self.log_message.emit)
         except Exception as exc:  # noqa: BLE001
             self.log_message.emit(f"[外部程序] {spec.title} 启动失败: {exc}")
