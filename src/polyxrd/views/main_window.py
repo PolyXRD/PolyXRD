@@ -528,7 +528,7 @@ class MainWindow(QMainWindow):
     #: removeToolBar/addToolBar、改 objectName、重新 resize 都清不掉这条记录,
     #: 唯一可靠的解法就是升版本号, 让这份脏状态作废。v2 起工具栏与停靠窗口都
     #: 设了 objectName, 记录才真正按名字对上号。
-    _WINDOW_STATE_VERSION = 2
+    _WINDOW_STATE_VERSION = 3  # v0.15 M24: 精修页布局重构, 作废旧窗口状态
 
     def __init__(self, config: AppConfig) -> None:
         super().__init__()
