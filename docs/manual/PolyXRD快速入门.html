@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>PolyXRD 快速入门 v0.15.0</title>
+<style>
+  body { font-family: "Microsoft YaHei", sans-serif; font-size: 10.5pt; color: #222; line-height: 1.6; margin: 0; }
+  h1 { font-size: 21pt; color: #1a4f8b; border-bottom: 3px solid #1a4f8b; padding-bottom: 6px; margin-top: 24px; }
+  h1 .sub { font-size: 12pt; color: #666; font-weight: normal; }
+  h2 { font-size: 14.5pt; color: #1a4f8b; margin-top: 18px; border-left: 4px solid #1a4f8b; padding-left: 8px; }
+  p { margin: 6px 0; }
+  table { border-collapse: collapse; width: 100%; margin: 8px 0; }
+  th, td { border: 1px solid #bbb; padding: 4px 8px; font-size: 9.5pt; }
+  th { background: #e8f0f8; }
+  img { max-width: 92%; border: 1px solid #ccc; display: block; margin: 8px auto; }
+  .figcap { text-align: center; color: #666; font-size: 8.5pt; margin-bottom: 10px; }
+  .warn { background: #fdf3e7; border-left: 4px solid #d9822b; padding: 6px 10px; margin: 8px 0; }
+  .tip { background: #eef7ee; border-left: 4px solid #3a8f3a; padding: 6px 10px; margin: 8px 0; }
+  .step { background: #f2f6fb; border: 1px solid #c5d5e8; border-radius: 4px; padding: 6px 10px; margin: 6px 0; }
+  .pagebreak { page-break-after: always; }
+</style>
+</head>
+<body>
+
+<h1>PolyXRD 快速入门 <span class="sub">· v0.15.0 · 5 分钟上手</span></h1>
+<p>本指南帮助你在最短时间内完成一次完整的 XRD 物相分析流程：<b>装载数据 → 扣背景 → 找峰 → 物相鉴定 → 结构精修 → 导出报告</b>。详细功能与原理请参阅《PolyXRD 使用手册》。</p>
+
+<div class="tip"><b>启动：</b>双击桌面 <b>PolyXRD</b> 图标，或运行安装目录下 <b>bin/PolyXRD.exe</b>。首次启动软件会自动完成初始化，界面为中文。</div>
+
+<h2>第 1 步 · 装载数据</h2>
+<div class="step"><b>数据页 → 「装载文件」</b>，选择 .xy / .txt / .dat / .rdf 等一维衍射数据（本项目自带测试数据：E:\TEMP\test_xrd\txt\）。</div>
+<p>装载后主窗口左侧显示衍射谱，右侧为文件信息（波长、步长、起止角）。确认 <b>波长 X 射线靶材</b>（默认 Cu Kα1, λ=1.5406 Å）与实际实验一致，可在「波长」下拉中切换或手动输入。</p>
+<img src="img/02_main_data_loaded.png">
+<div class="figcap">图 1　数据装载后主界面</div>
+
+<div class="pagebreak"></div>
+<h2>第 2 步 · 扣背景与找峰</h2>
+<div class="step"><b>物相页 → 「处理」</b>：先 SNIP 扣背景，再以二阶导数法自动找峰。</div>
+<p>找峰参数一般保持默认（信噪比阈值 3、最小峰间距 0.5°）。黑色圆点为扣除背景后的观测点，红色曲线为拟合峰形，绿色竖线标记峰位。</p>
+<img src="img/03_phase_peaks.png">
+<div class="figcap">图 2　自动找峰结果</div>
+
+<h2>第 3 步 · 物相鉴定</h2>
+<div class="step"><b>物相页 → 「鉴定」→ 数据源选「内置库」→ 开始鉴定</b>。软件用峰位对内置 COD 无机物相库检索，按 FoM（品质因子）排序。</div>
+<p>结果列表给出候选物相的化学式、空间群、晶胞参数与匹配度。点选某行即在谱图上叠加该物相的理论峰位（竖线），<b>点击「采纳」</b>将其加入物相列表。可逐条采纳多个物相直至谱线基本对齐。</p>
+<img src="img/04_phase_identified.png">
+<div class="figcap">图 3　物相鉴定与理论峰位叠加</div>
+
+<div class="pagebreak"></div>
+<h2>第 4 步 · 结构精修（Rietveld）</h2>
+<div class="step"><b>精修页 → 引擎选「内置 (builtin)」→ 「开始精修」</b>。也可选 GSAS-II / MAUD / FullProf 外部引擎做全谱精修。</div>
+<p>内置引擎为保守精修：自动依次放开标度因子 → 背景多项式 → 晶胞参数 → 峰形 (U, V, W)，每步检查收敛。精修完成后显示 <b>Rwp</b>（拟合优度指标，越低越好）、逐相含量表与拟合差值曲线。</p>
+<img src="img/06_refinement_done.png">
+<div class="figcap">图 4　精修完成：Rwp、物相含量与外置引擎状态（绿色=可用）</div>
+<div class="warn"><b>说明：</b>内置引擎不精修原子坐标（物相库不含完整结构），因此 wR 在 50%~90% 属正常水平；需要发布级结果请用 GSAS-II / MAUD / FullProf 外部引擎。外部程序需在「数据库 → 外部程序」中配置路径，或点击「检测」自动定位。</div>
+
+<h2>第 5 步 · 导出报告</h2>
+<div class="step"><b>报告页 → 「生成报告」</b>，一键导出 HTML 分析报告，包含谱图（含拟合线与差值线）、物相列表、含量表与精修指标。</div>
+<img src="img/07_report_page.png">
+<div class="figcap">图 5　报告页</div>
+
+<div class="pagebreak"></div>
+<h2>常见问题速查</h2>
+<table>
+  <tr><th>现象</th><th>处理</th></tr>
+  <tr><td>图谱加载后没有峰</td><td>检查波长与起始角设置；数据含表头时勾选「跳过文件头」</td></tr>
+  <tr><td>鉴定结果为空</td><td>检查是否扣了背景；峰太少（&lt;5 个）时放宽信噪比阈值</td></tr>
+  <tr><td>精修不收敛 / Rwp 不降</td><td>先只精修标度+背景；确认采纳的物相确实存在，多余的物相先删除</td></tr>
+  <tr><td>外部引擎红灯</td><td>「数据库 → 外部程序」中手动指定程序路径后「验证」</td></tr>
+  <tr><td>想改物相的晶胞/峰形</td><td>精修页双击物相行进入参数表，勾选要放开的参数</td></tr>
+</table>
+
+<div class="tip"><b>更多内容：</b>多步精修向导（分步放开参数）、数据库管理、批量处理、MAUD/GSAS-II/FullProf 外部精修的详细操作与 Rietveld 原理，请见《PolyXRD 使用手册 v0.15.0》。</div>
+
+</body>
+</html>

@@ -1,0 +1,29 @@
+<Slide style={{ width: 1280, height: 720, backgroundColor: '#FFFFFF', fontFamily: "'Source Han Sans SC','Microsoft YaHei',sans-serif", flexDirection: 'column' }}>
+  <Box style={{ flexDirection: 'row', height: 120, paddingTop: 20, paddingLeft: 60, paddingRight: 60, justifyContent: 'space-between', alignItems: 'center' }}>
+    <Text style={{ fontSize: 36, fontWeight: 'bold', color: '#0B3C6E' }}>四引擎精修体系</Text>
+    <Text style={{ fontSize: 16, color: '#8A94A6' }}>第二章 · 精修与产出</Text>
+  </Box>
+  <Box style={{ flexDirection: 'row', height: 540, paddingLeft: 60, paddingRight: 60 }}>
+    <Box style={{ width: 640, justifyContent: 'center' }}>
+      <Image src="assets/05_refinement_page.png" style={{ width: 640, height: 460, objectFit: 'contain', border: '1px solid #C5D5E8', borderRadius: 8 }} />
+      <Text style={{ fontSize: 14, color: '#8A94A6', textAlign: 'center', marginTop: 8 }}>精修页：引擎下拉 + 外部程序状态灯（绿=可用）</Text>
+    </Box>
+    <Box style={{ width: 460, paddingLeft: 40, paddingTop: 10, flexDirection: 'column', gap: 16 }}>
+      <Box style={{ backgroundColor: '#E8F0F8', borderRadius: 10, padding: 18 }}>
+        <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#0B3C6E' }}>builtin · 内置引擎</Text>
+        <Text style={{ fontSize: 17, color: '#333333', lineHeight: 1.55, marginTop: 6 }}>一键保守精修，自动放开标度→背景→晶胞→峰形，适合快速估算物相含量。</Text>
+      </Box>
+      <Box style={{ backgroundColor: '#E8F0F8', borderRadius: 10, padding: 18 }}>
+        <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#0B3C6E' }}>GSAS-II / MAUD / FullProf</Text>
+        <Text style={{ fontSize: 17, color: '#333333', lineHeight: 1.55, marginTop: 6 }}>外部专业引擎，可精修原子坐标与微观应变，适合发布级结果；需在「数据库→外部程序」中配置路径。</Text>
+      </Box>
+      <Box style={{ backgroundColor: '#EEF7EE', borderRadius: 10, padding: 18, border: '1px solid #2F8F4E' }}>
+        <Text style={{ fontSize: 18, color: '#1F6636', lineHeight: 1.55 }}><span style={{ fontWeight: 'bold' }}>选型原则：</span>日常巡检用内置，论文级数据交给外部引擎——同一数据可在四引擎间一键切换重跑。</Text>
+      </Box>
+    </Box>
+  </Box>
+  <Box style={{ height: 60, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 60, paddingRight: 60 }}>
+    <Text style={{ fontSize: 14, color: '#8A94A6' }}>PolyXRD v0.15.0 使用手册</Text>
+    <Text style={{ fontSize: 14, color: '#8A94A6' }}>08 / 14</Text>
+  </Box>
+</Slide>

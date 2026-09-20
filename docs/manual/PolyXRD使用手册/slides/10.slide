@@ -1,0 +1,24 @@
+<Slide style={{ width: 1280, height: 720, backgroundColor: '#FFFFFF', fontFamily: "'Source Han Sans SC','Microsoft YaHei',sans-serif", flexDirection: 'column' }}>
+  <Box style={{ flexDirection: 'row', height: 120, paddingTop: 20, paddingLeft: 60, paddingRight: 60, justifyContent: 'space-between', alignItems: 'center' }}>
+    <Text style={{ fontSize: 36, fontWeight: 'bold', color: '#0B3C6E' }}>精修结果与报告导出</Text>
+    <Text style={{ fontSize: 16, color: '#8A94A6' }}>第二章 · 精修与产出</Text>
+  </Box>
+  <Box style={{ flexDirection: 'row', height: 540, paddingLeft: 60, paddingRight: 60 }}>
+    <Box style={{ width: 480, flexDirection: 'column', paddingTop: 30, gap: 20 }}>
+      <Text style={{ fontSize: 96, fontWeight: 'bold', color: '#2F8F4E' }}>Rwp</Text>
+      <Text style={{ fontSize: 20, color: '#333333', lineHeight: 1.6 }}>加权残差因子——观测谱与计算谱差异的最直观度量，<span style={{ fontWeight: 'bold' }}>越低拟合越好</span>；同时给出 GoF 拟合优度与逐相含量表。</Text>
+      <Box style={{ backgroundColor: '#EEF7EE', borderRadius: 10, padding: 18, border: '1px solid #2F8F4E' }}>
+        <Text style={{ fontSize: 18, color: '#1F6636', lineHeight: 1.6 }}><span style={{ fontWeight: 'bold' }}>一键报告：</span>报告页生成 HTML 分析报告，含谱图（观测 / 计算 / 差值线）、物相列表、含量表与精修指标，可直接归档或进论文。</Text>
+      </Box>
+      <Text style={{ fontSize: 17, color: '#8A94A6', lineHeight: 1.5 }}>内置引擎不精修原子坐标，wR 在 50%~90% 属正常水平；发布级结果请切换外部引擎。</Text>
+    </Box>
+    <Box style={{ width: 680, justifyContent: 'center' }}>
+      <Image src="assets/07_report_page.png" style={{ width: 680, height: 460, objectFit: 'contain', border: '1px solid #C5D5E8', borderRadius: 8 }} />
+      <Text style={{ fontSize: 14, color: '#8A94A6', textAlign: 'center', marginTop: 8 }}>报告页：指标卡片 + 含量表 + 一键导出</Text>
+    </Box>
+  </Box>
+  <Box style={{ height: 60, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 60, paddingRight: 60 }}>
+    <Text style={{ fontSize: 14, color: '#8A94A6' }}>PolyXRD v0.15.0 使用手册</Text>
+    <Text style={{ fontSize: 14, color: '#8A94A6' }}>10 / 14</Text>
+  </Box>
+</Slide>

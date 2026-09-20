@@ -1,0 +1,25 @@
+<Slide style={{ width: 1280, height: 720, backgroundColor: '#FFFFFF', fontFamily: "'Source Han Sans SC','Microsoft YaHei',sans-serif", flexDirection: 'column' }}>
+  <Box style={{ flexDirection: 'row', height: 120, paddingTop: 20, paddingLeft: 60, paddingRight: 60, justifyContent: 'space-between', alignItems: 'center' }}>
+    <Text style={{ fontSize: 36, fontWeight: 'bold', color: '#0B3C6E' }}>扣背景与找峰</Text>
+    <Text style={{ fontSize: 16, color: '#8A94A6' }}>第一章 · 快速上手</Text>
+  </Box>
+  <Box style={{ flexDirection: 'row', height: 540 }}>
+    <Box style={{ width: 660, paddingLeft: 60, justifyContent: 'center' }}>
+      <Image src="assets/03_phase_peaks.png" style={{ width: 600, height: 460, objectFit: 'contain', border: '1px solid #C5D5E8', borderRadius: 8 }} />
+    </Box>
+    <Box style={{ width: 560, paddingRight: 60, paddingTop: 30, flexDirection: 'column', gap: 20 }}>
+      <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#0B3C6E' }}>两步预处理，峰位质量决定鉴定上限</Text>
+      <Box style={{ backgroundColor: '#E8F0F8', borderRadius: 10, padding: 20 }}>
+        <Text style={{ fontSize: 19, color: '#333333', lineHeight: 1.6 }}><span style={{ fontWeight: 'bold', color: '#0B3C6E' }}>SNIP 扣背景：</span>约束迭代算法剥离非晶散射与空气散射，得到干净的净强度曲线。</Text>
+      </Box>
+      <Box style={{ backgroundColor: '#E8F0F8', borderRadius: 10, padding: 20 }}>
+        <Text style={{ fontSize: 19, color: '#333333', lineHeight: 1.6 }}><span style={{ fontWeight: 'bold', color: '#0B3C6E' }}>二阶导数找峰：</span>自动识别衍射峰位，信噪比阈值默认 3、最小峰间距 0.5°；弱峰漏找时放宽阈值重找。</Text>
+      </Box>
+      <Text style={{ fontSize: 19, color: '#2F8F4E', lineHeight: 1.6 }}>黑色圆点为净强度，红色曲线为拟合峰形，绿色竖线为认定的峰位——三者对齐说明预处理可靠。</Text>
+    </Box>
+  </Box>
+  <Box style={{ height: 60, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 60, paddingRight: 60 }}>
+    <Text style={{ fontSize: 14, color: '#8A94A6' }}>PolyXRD v0.15.0 使用手册</Text>
+    <Text style={{ fontSize: 14, color: '#8A94A6' }}>05 / 14</Text>
+  </Box>
+</Slide>

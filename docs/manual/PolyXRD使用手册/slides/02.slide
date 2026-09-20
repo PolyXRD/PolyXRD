@@ -1,0 +1,38 @@
+<Slide style={{ width: 1280, height: 720, backgroundColor: '#FFFFFF', fontFamily: "'Source Han Sans SC','Microsoft YaHei',sans-serif", flexDirection: 'column' }}>
+  <Box style={{ flexDirection: 'row', height: 120, paddingTop: 20, paddingLeft: 60, paddingRight: 60 }}>
+    <Text style={{ fontSize: 36, fontWeight: 'bold', color: '#0B3C6E' }}>目录</Text>
+  </Box>
+  <Box style={{ flexDirection: 'row', height: 540 }}>
+    <Box style={{ width: 380, height: 480, backgroundColor: '#0B3C6E', borderRadius: 12, padding: 40, flexDirection: 'column', justifyContent: 'space-between' }}>
+      <Text style={{ fontSize: 30, fontWeight: 'bold', color: '#FFFFFF' }}>三章内容</Text>
+      <Text style={{ fontSize: 20, color: 'rgba(255,255,255,0.85)', lineHeight: 1.6 }}>从第一次装载数据，到读懂精修指标背后的原理——按章节顺序阅读即可完整掌握 PolyXRD。</Text>
+    </Box>
+    <Box style={{ flex: 1, paddingLeft: 50, paddingRight: 60, paddingTop: 10, flexDirection: 'column', gap: 28 }}>
+      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 24 }}>
+        <Text style={{ fontSize: 56, fontWeight: 'bold', color: '#2F8F4E' }}>01</Text>
+        <Box style={{ flexDirection: 'column', width: 600 }}>
+          <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#0B3C6E' }}>快速上手</Text>
+          <Text style={{ fontSize: 18, color: '#333333', lineHeight: 1.5, marginTop: 6 }}>主界面与数据装载、SNIP 扣背景与二阶导数找峰、内置库物相鉴定——三步完成一次完整的定性分析。</Text>
+        </Box>
+      </Box>
+      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 24 }}>
+        <Text style={{ fontSize: 56, fontWeight: 'bold', color: '#2F8F4E' }}>02</Text>
+        <Box style={{ flexDirection: 'column', width: 600 }}>
+          <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#0B3C6E' }}>结构精修与产出</Text>
+          <Text style={{ fontSize: 18, color: '#333333', lineHeight: 1.5, marginTop: 6 }}>内置引擎与 GSAS-II / MAUD / FullProf 四引擎体系、分步精修向导、Rwp 指标解读与一键报告导出。</Text>
+        </Box>
+      </Box>
+      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 24 }}>
+        <Text style={{ fontSize: 56, fontWeight: 'bold', color: '#2F8F4E' }}>03</Text>
+        <Box style={{ flexDirection: 'column', width: 600 }}>
+          <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#0B3C6E' }}>原理与支持</Text>
+          <Text style={{ fontSize: 18, color: '#333333', lineHeight: 1.5, marginTop: 6 }}>Rietveld 方法的最小二乘本质、五个衍射数据库的分工，以及外部引擎红灯等高频问题的处理办法。</Text>
+        </Box>
+      </Box>
+    </Box>
+  </Box>
+  <Box style={{ height: 60, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 60, paddingRight: 60 }}>
+    <Text style={{ fontSize: 14, color: '#8A94A6' }}>PolyXRD v0.15.0 使用手册</Text>
+    <Text style={{ fontSize: 14, color: '#8A94A6' }}>02 / 14</Text>
+  </Box>
+</Slide>

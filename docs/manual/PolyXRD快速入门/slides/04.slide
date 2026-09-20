@@ -1,0 +1,26 @@
+<Slide style={{ width: 1280, height: 720, backgroundColor: '#FFFFFF', fontFamily: "'Source Han Sans SC','Microsoft YaHei',sans-serif", flexDirection: 'column' }}>
+  <Box style={{ flexDirection: 'row', height: 120, paddingTop: 20, paddingLeft: 60, paddingRight: 60, alignItems: 'center', justifyContent: 'space-between' }}>
+    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+      <Box style={{ width: 52, height: 52, backgroundColor: '#2F8F4E', borderRadius: 10, alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ fontSize: 26, fontWeight: 'bold', color: '#FFFFFF' }}>2</Text>
+      </Box>
+      <Text style={{ fontSize: 36, fontWeight: 'bold', color: '#0B3C6E' }}>扣背景与找峰</Text>
+    </Box>
+    <Text style={{ fontSize: 16, color: '#8A94A6' }}>物相页 · 处理</Text>
+  </Box>
+  <Box style={{ flexDirection: 'column', height: 540, paddingLeft: 60, paddingRight: 60 }}>
+    <Image src="assets/03_phase_peaks.png" style={{ width: 1160, height: 320, objectFit: 'contain', border: '1px solid #C5D5E8', borderRadius: 8 }} />
+    <Box style={{ flexDirection: 'row', gap: 24, marginTop: 24 }}>
+      <Box style={{ width: 560, backgroundColor: '#E8F0F8', borderRadius: 10, padding: 20 }}>
+        <Text style={{ fontSize: 19, color: '#333333', lineHeight: 1.6 }}><span style={{ fontWeight: 'bold', color: '#0B3C6E' }}>操作：</span>物相页 → 「处理」：先 SNIP 扣背景，再自动找峰。参数保持默认即可（信噪比 3、峰间距 0.5°）。</Text>
+      </Box>
+      <Box style={{ width: 560, backgroundColor: '#E8F0F8', borderRadius: 10, padding: 20 }}>
+        <Text style={{ fontSize: 19, color: '#333333', lineHeight: 1.6 }}><span style={{ fontWeight: 'bold', color: '#0B3C6E' }}>确认：</span>绿色竖线（峰位）对齐谱峰；弱峰漏找时放宽信噪比阈值重新找峰。</Text>
+      </Box>
+    </Box>
+  </Box>
+  <Box style={{ height: 60, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 60, paddingRight: 60 }}>
+    <Text style={{ fontSize: 14, color: '#8A94A6' }}>PolyXRD v0.15.0 快速入门</Text>
+    <Text style={{ fontSize: 14, color: '#8A94A6' }}>04 / 8</Text>
+  </Box>
+</Slide>

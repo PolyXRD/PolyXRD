@@ -1,0 +1,9 @@
+<Slide style={{ width: 1280, height: 720, backgroundColor: '#0B3C6E', position: 'relative', fontFamily: "'Source Han Sans SC','Microsoft YaHei',sans-serif" }}>
+  <Image src="assets/01_main_data_empty.png" style={{ position: 'absolute', left: 0, top: 0, width: 1280, height: 720, objectFit: 'cover' }} />
+  <Box style={{ position: 'absolute', left: 0, top: 0, width: 1280, height: 720, backgroundColor: 'rgba(6,30,60,0.66)' }} />
+  <Box style={{ position: 'absolute', left: 80, top: 250, width: 820, flexDirection: 'column' }}>
+    <Text style={{ fontSize: 26, color: '#8FD4A8', letterSpacing: 8, fontWeight: 'bold' }}>POLYXRD · 5 分钟上手</Text>
+    <Text style={{ fontSize: 76, color: '#FFFFFF', fontWeight: 'bold', marginTop: 18 }}>快速入门</Text>
+    <Text style={{ fontSize: 24, color: 'rgba(255,255,255,0.88)', marginTop: 22 }}>五步完成你的第一份物相分析报告 · v0.15.0</Text>
+  </Box>
+</Slide>

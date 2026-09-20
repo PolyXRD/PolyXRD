@@ -1,0 +1,37 @@
+<Slide style={{ width: 1280, height: 720, backgroundColor: '#FFFFFF', fontFamily: "'Source Han Sans SC','Microsoft YaHei',sans-serif", flexDirection: 'column' }}>
+  <Box style={{ flexDirection: 'row', height: 120, paddingTop: 20, paddingLeft: 60, paddingRight: 60, justifyContent: 'space-between', alignItems: 'center' }}>
+    <Text style={{ fontSize: 36, fontWeight: 'bold', color: '#0B3C6E' }}>Rietveld 方法原理</Text>
+    <Text style={{ fontSize: 16, color: '#8A94A6' }}>第三章 · 原理与支持</Text>
+  </Box>
+  <Box style={{ flexDirection: 'row', height: 540, paddingLeft: 60, paddingRight: 60 }}>
+    <Box style={{ width: 720, flexDirection: 'column', gap: 18, paddingTop: 10 }}>
+      <Box style={{ backgroundColor: '#E8F0F8', borderRadius: 10, padding: 22 }}>
+        <Text style={{ fontSize: 19, color: '#0B3C6E', lineHeight: 1.7 }}><span style={{ fontWeight: 'bold' }}>核心思想：</span>用物相结构模型计算整条衍射谱，与观测谱逐点比较，最小二乘最小化残差：</Text>
+        <Text style={{ fontSize: 22, color: '#333333', textAlign: 'center', marginTop: 12, fontFamily: "'Cambria Math',Georgia,serif" }}>S = Σ wᵢ (yᵢᵒᵇˢ − yᵢᶜᵃˡᶜ)²</Text>
+      </Box>
+      <Box style={{ backgroundColor: '#E8F0F8', borderRadius: 10, padding: 22 }}>
+        <Text style={{ fontSize: 19, color: '#0B3C6E', lineHeight: 1.7 }}><span style={{ fontWeight: 'bold' }}>峰形与峰宽：</span>衍射峰用 pseudo-Voigt 函数描述（Gauss 与 Lorentz 的线性组合）；半高宽随角度变化服从 Caglioti 关系：</Text>
+        <Text style={{ fontSize: 22, color: '#333333', textAlign: 'center', marginTop: 12, fontFamily: "'Cambria Math',Georgia,serif" }}>FWHM² = U·tan²θ + V·tanθ + W</Text>
+      </Box>
+      <Box style={{ backgroundColor: '#E8F0F8', borderRadius: 10, padding: 22 }}>
+        <Text style={{ fontSize: 19, color: '#0B3C6E', lineHeight: 1.7 }}><span style={{ fontWeight: 'bold' }}>衍射条件：</span>晶面间距与波长满足 Bragg 方程 2d·sinθ = nλ——这就是波长设置错误会导致全部分析失真的原因。</Text>
+      </Box>
+    </Box>
+    <Box style={{ width: 380, paddingLeft: 36, paddingTop: 10, flexDirection: 'column', gap: 18 }}>
+      <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#0B3C6E' }}>看两个指标就够</Text>
+      <Box style={{ border: '1px solid #2F8F4E', borderRadius: 10, padding: 18, backgroundColor: '#EEF7EE' }}>
+        <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#2F8F4E' }}>Rwp</Text>
+        <Text style={{ fontSize: 17, color: '#333333', lineHeight: 1.55, marginTop: 6 }}>加权残差因子，越低越好；对比同一批样品的相对拟合质量。</Text>
+      </Box>
+      <Box style={{ border: '1px solid #2F8F4E', borderRadius: 10, padding: 18, backgroundColor: '#EEF7EE' }}>
+        <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#2F8F4E' }}>GoF</Text>
+        <Text style={{ fontSize: 17, color: '#333333', lineHeight: 1.55, marginTop: 6 }}>拟合优度（χ² 的平方根），接近 1 说明模型与数据匹配良好；远大于 1 提示有物相遗漏或模型不当。</Text>
+      </Box>
+      <Text style={{ fontSize: 17, color: '#8A94A6', lineHeight: 1.5 }}>内置引擎的物相不含原子坐标，算不出结构因子，故 wR 偏高是设计使然而非缺陷。</Text>
+    </Box>
+  </Box>
+  <Box style={{ height: 60, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 60, paddingRight: 60 }}>
+    <Text style={{ fontSize: 14, color: '#8A94A6' }}>PolyXRD v0.15.0 使用手册</Text>
+    <Text style={{ fontSize: 14, color: '#8A94A6' }}>12 / 14</Text>
+  </Box>
+</Slide>
