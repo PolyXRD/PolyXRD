@@ -33,6 +33,8 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QScrollArea,
     QFrame,
+    QMenu,
+    QFileDialog,
 )
 
 from polyxrd.i18n import tr
@@ -216,6 +218,11 @@ class PhaseView(QWidget):
         self._candidate_list.itemClicked.connect(self._on_candidate_clicked)
         # M21 v2: 支持勾选多选叠加 (Match! 式), itemChanged 驱动归属刷新
         self._candidate_list.itemChanged.connect(self._on_candidate_toggled)
+        # M23: 右键导出 CIF
+        self._candidate_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._candidate_list.customContextMenuRequested.connect(
+            self._candidate_context_menu
+        )
         right_panel.addWidget(self._candidate_list, stretch=1)
 
         btn_row = QHBoxLayout()
@@ -596,6 +603,40 @@ class PhaseView(QWidget):
             phase = (result.phase if hasattr(result, 'phase') else result) if result else None
             if phase and not self._vm._phase_vm.is_selected(phase):
                 item.setCheckState(Qt.CheckState.Checked)
+
+    def _candidate_context_menu(self, pos) -> None:
+        """候选列表右键 → 导出该物相的 CIF 文件 (M23, 与主窗右栏共用服务)。"""
+        item = self._candidate_list.itemAt(pos)
+        if item is None:
+            return
+        result = item.data(Qt.ItemDataRole.UserRole)
+        phase = getattr(result, "phase", None) if result is not None else None
+        if phase is None:
+            return
+        menu = QMenu(self)
+        act_export = menu.addAction("导出 CIF 文件…")
+        chosen = menu.exec(self._candidate_list.viewport().mapToGlobal(pos))
+        if chosen is not act_export:
+            return
+        from polyxrd.services.phase_cif_export import (
+            CifUnavailableError,
+            default_cif_filename,
+            export_phase_cif,
+            resolve_cod_id,
+        )
+
+        default_name = default_cif_filename(phase, resolve_cod_id(phase))
+        path, _ = QFileDialog.getSaveFileName(
+            self, "导出 CIF 文件", default_name, "CIF 文件 (*.cif)"
+        )
+        if not path:
+            return
+        try:
+            export_phase_cif(phase, path)
+        except CifUnavailableError as exc:
+            QMessageBox.warning(self, "导出 CIF", str(exc))
+        except OSError as exc:
+            QMessageBox.warning(self, "导出 CIF", f"写盘失败: {exc}")
 
     def _on_candidate_toggled(self, item: QListWidgetItem) -> None:
         """勾选框状态变更 → 更新选中集合 → 刷新叠加 (itemChanged 在 populate

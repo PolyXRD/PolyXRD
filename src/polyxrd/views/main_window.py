@@ -819,6 +819,11 @@ class MainWindow(QMainWindow):
         self._phase_tree.setSelectionMode(
             QTreeWidget.SelectionMode.ExtendedSelection
         )
+        # M23: 右键菜单 (导出 CIF / 查看详情); 列表默认空, 由勾选集合驱动
+        self._phase_tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._phase_tree.customContextMenuRequested.connect(
+            self._phase_tree_context_menu
+        )
         phases_layout.addWidget(self._phase_tree)
 
         btn_row = QHBoxLayout()
@@ -1101,6 +1106,10 @@ class MainWindow(QMainWindow):
         self._vm.peaks_changed.connect(self._on_peaks_changed)
         self._vm.phase_identified.connect(self._on_phases_updated)
         self._vm.refinement_completed.connect(self._on_refinement_completed)
+        # M23: 勾选集合 → 右侧物相列表 (默认空, 勾选驱动)
+        self._vm._phase_vm.selection_changed.connect(
+            self._on_phase_selection_changed
+        )
 
         self._i18n.languageChanged.connect(self._on_language_changed)
 
@@ -1721,20 +1730,122 @@ class MainWindow(QMainWindow):
         self._data_view._on_peaks_changed(peaks)
 
     def _on_phases_updated(self, phase_results: list) -> None:
-        """物相列表更新 - PhaseMatchResult 列表"""
-        self._phase_tree.clear()
-        for result in phase_results:
-            phase = result.phase if hasattr(result, 'phase') else result
-            score = result.score if hasattr(result, 'score') else getattr(result, 'match_score', 0.0)
+        """物相列表更新 (v0.15 M23)
 
+        右侧物相列表**默认空**: 检索候选只在物相分析页右下
+        「Profile Fitting 结果」勾选, 这里只显示勾选确认的物相
+        (由 `_on_phase_selection_changed` 驱动)。
+        """
+        self._phase_tree.clear()
+
+    def _on_phase_selection_changed(self, phases: list) -> None:
+        """勾选集合变更 → 重建右侧物相列表 (M23)。"""
+        self._phase_tree.clear()
+        for phase in phases:
+            score = getattr(phase, "match_score", 0.0) or 0.0
             item = QTreeWidgetItem([
-                phase.name,
-                phase.formula,
-                phase.space_group,
+                getattr(phase, "name", "") or "",
+                getattr(phase, "formula", "") or "",
+                getattr(phase, "space_group", "") or "",
                 f"{score:.1f}%",
             ])
             item.setData(0, Qt.ItemDataRole.UserRole, phase)
             self._phase_tree.addTopLevelItem(item)
+
+    def _phase_tree_context_menu(self, pos) -> None:
+        """右侧物相列表右键菜单: 导出 CIF / 查看详情 (M23)。"""
+        menu = QMenu(self)
+        phases = [
+            it.data(0, Qt.ItemDataRole.UserRole)
+            for it in self._phase_tree.selectedItems()
+        ]
+        phases = [p for p in phases if p is not None]
+        if not phases:
+            phases = [
+                self._phase_tree.topLevelItem(i).data(0, Qt.ItemDataRole.UserRole)
+                for i in range(self._phase_tree.topLevelItemCount())
+            ]
+
+        act_export = menu.addAction("导出 CIF 文件…")
+        act_export.setEnabled(bool(phases))
+        act_detail = menu.addAction("查看结构详情…")
+        act_detail.setEnabled(bool(phases))
+        chosen = menu.exec(self._phase_tree.viewport().mapToGlobal(pos))
+        if chosen is act_export:
+            self._export_selected_phase_cifs(phases)
+        elif chosen is act_detail:
+            self._show_phase_details(phases)
+
+    def _export_selected_phase_cifs(self, phases: list) -> None:
+        """导出一个或多个物相的 CIF 文件 (M23)。"""
+        if not phases:
+            return
+        from polyxrd.services.phase_cif_export import (
+            CifUnavailableError,
+            default_cif_filename,
+            export_phase_cif,
+        )
+
+        if len(phases) == 1:
+            phase = phases[0]
+            from polyxrd.services.phase_cif_export import resolve_cod_id
+
+            default_name = default_cif_filename(phase, resolve_cod_id(phase))
+            path, _ = QFileDialog.getSaveFileName(
+                self, "导出 CIF 文件", default_name, "CIF 文件 (*.cif)"
+            )
+            if not path:
+                return
+            targets = [(phase, path)]
+        else:
+            out_dir = QFileDialog.getExistingDirectory(
+                self, "选择 CIF 导出目录"
+            )
+            if not out_dir:
+                return
+            targets = [
+                (p, str(Path(out_dir) / default_cif_filename(p)))
+                for p in phases
+            ]
+
+        ok, failed = 0, []
+        for phase, path in targets:
+            try:
+                export_phase_cif(phase, path)
+                ok += 1
+            except CifUnavailableError as exc:
+                failed.append(f"{getattr(phase, 'name', '')}: {exc}")
+            except OSError as exc:
+                failed.append(f"{getattr(phase, 'name', '')}: 写盘失败 {exc}")
+        if failed:
+            QMessageBox.warning(
+                self, "导出 CIF",
+                f"成功 {ok} 个, 失败 {len(failed)} 个:\n" + "\n".join(failed),
+            )
+        elif len(targets) > 1:
+            self.statusBar().showMessage(f"已导出 {ok} 个 CIF 文件", 5000)
+
+    def _show_phase_details(self, phases: list) -> None:
+        """查看物相结构详情 (简单信息框; M23)。"""
+        if not phases:
+            return
+        lines = []
+        for p in phases[:8]:
+            lat = getattr(p, "lattice", None)
+            cell = (
+                f"a={lat.a:.4f} b={lat.b:.4f} c={lat.c:.4f} Å, "
+                f"α={lat.alpha:.2f} β={lat.beta:.2f} γ={lat.gamma:.2f}°"
+                if lat is not None else "晶胞: --"
+            )
+            n_sites = len(getattr(p, "atomic_sites", None) or [])
+            lines.append(
+                f"• {getattr(p, 'name', '')}  {getattr(p, 'formula', '')}\n"
+                f"  空间群: {getattr(p, 'space_group', '') or '--'}   "
+                f"位点: {n_sites}\n  {cell}"
+            )
+        QMessageBox.information(
+            self, "结构详情", "\n\n".join(lines)
+        )
 
     def _on_refinement_completed(self, result) -> None:
         self._tab_widget.setCurrentWidget(self._report_view)
