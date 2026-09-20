@@ -17,7 +17,7 @@ class AppConfig:
 
     # 应用信息
     app_name: str = "PolyXRD"
-    app_version: str = "0.14.0"
+    app_version: str = "0.15.0"
     app_org: str = "PolyXRD"
 
     # 窗口设置
@@ -222,6 +222,55 @@ class AppConfig:
     def set_cod_index_db_path(self, path: str | Path | None) -> None:
         """设置用户导入的 COD 全库索引路径并持久化 (空值 = 清除)。"""
         self._update_user_db_path("cod_index_db_path", path)
+
+    # ── 外部精修程序路径 (v0.15 M25) ────────────────────────
+
+    #: 合法的外部工具配置 key (GSAS-II / MAUD / FullProf)
+    EXTERNAL_TOOL_KEYS = (
+        "external_gsas2_path",
+        "external_maud_path",
+        "external_fullprof_path",
+    )
+
+    def _external_tools_file(self) -> Path:
+        return Path.home() / ".polyxrd" / "external_tools.json"
+
+    def _load_external_tools(self) -> dict:
+        """读取 external_tools.json (损坏/缺失返回空字典)。三个工具共用
+        一个文件, 读写按 key 增量合并, 不整体覆盖。"""
+        cfg_file = self._external_tools_file()
+        if not cfg_file.exists():
+            return {}
+        try:
+            data = json.loads(cfg_file.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def get_external_tool_path(self, key: str) -> Optional[Path]:
+        """读取外部工具可执行文件路径; 未配置返回 None。
+
+        注意与 ``user_db_path`` 不同: 即使路径当前不存在也返回 (UI 层
+        负责 validate 提示), 避免用户暂时断开移动硬盘等场景丢配置。
+        """
+        p = self._load_external_tools().get(key)
+        return Path(p) if p else None
+
+    def set_external_tool_path(self, key: str, path: str | Path | None) -> None:
+        """设置外部工具路径并持久化 (空值 = 清除该 key)。"""
+        if key not in self.EXTERNAL_TOOL_KEYS:
+            raise ValueError(f"未知的外部工具 key: {key}")
+        cfg_file = self._external_tools_file()
+        cfg_file.parent.mkdir(parents=True, exist_ok=True)
+        data = self._load_external_tools()
+        if not path:
+            data.pop(key, None)
+        else:
+            data[key] = str(Path(path))
+        cfg_file.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
 
 
 # 单例模式
