@@ -1,15 +1,15 @@
 @echo off
 chcp 65001 >nul
-title PolyXRD v0.15.0 打包构建器
+title PolyXRD v0.15.1 打包构建器
 echo ========================================
-echo   PolyXRD v0.15.0 打包为独立安装包
+echo   PolyXRD v0.15.1 打包为独立安装包
 echo   数据库外挂 (不随包分发)
 echo ========================================
 echo.
 
 cd /d "%~dp0"
 
-set APPVER=0.15.0
+set APPVER=0.15.1
 
 REM ── Python 定位 ──────────────────────────────────────
 if exist "venv\Scripts\python.exe" (
@@ -128,6 +128,25 @@ if %errorlevel% neq 0 (
 :no_iscc
 
 echo.
+echo [步骤 4/6 前置] 写 VERSION.txt (必须先于 Setup/Portable 打包, 否则包内缺失)...
+echo.
+
+powershell -Command "$ver = @'
+PolyXRD v%APPVER% Release
+Build Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+Version    : %APPVER%
+ICU: 依赖系统 icuuc shim (PySide6 6.11 不自带 ICU)
+Databases: 外挂, 且各库独立打包 (随包不含数据库)。按需只下一个:
+           PolyXRD-v%APPVER%-Databases-COD-inorg-index.zip  COD 无机物库 (主检索库, 推荐)
+           PolyXRD-v%APPVER%-Databases-COD-full-index.zip   COD 全库索引
+           PDF2-2004: ICDD 版权库, 不随 Release 分发, 由持授权用户自行准备。
+           解压后在菜单「数据库 ▸ 外挂数据库管理…」逐个导入 (可只挂其中一个)。
+           未导入时仅内置 118 种参考物相可用。
+Icon: 品牌化应用图标 (crystal-mark + XRD 配色, 多分辨率 ICO)
+'@; $ver | Out-File -FilePath 'dist\PolyXRD\VERSION.txt' -Encoding UTF8"
+copy /Y "dist\PolyXRD\VERSION.txt" "installer_output\VERSION_v%APPVER%.txt" >nul 2>&1
+
+echo.
 echo [步骤 4/6] 创建便携压缩包 (ZIP)...
 echo.
 
@@ -159,23 +178,12 @@ if %errorlevel% neq 0 (
 )
 
 echo.
-echo [步骤 6/6] 写 VERSION.txt...
+echo [步骤 6/6] VERSION.txt 已在前置步骤写入, 此步仅核对...
 echo.
 
-powershell -Command "$ver = @'
-PolyXRD v%APPVER% Release
-Build Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
-Version    : %APPVER%
-ICU: 依赖系统 icuuc shim (PySide6 6.11 不自带 ICU)
-Databases: 外挂, 且各库独立打包 (随包不含数据库)。按需只下一个:
-           PolyXRD-v%APPVER%-Databases-COD-inorg-index.zip  COD 无机物库 (主检索库, 推荐)
-           PolyXRD-v%APPVER%-Databases-COD-full-index.zip   COD 全库索引
-           PDF2-2004: ICDD 版权库, 不随 Release 分发, 由持授权用户自行准备。
-           解压后在菜单「数据库 ▸ 外挂数据库管理…」逐个导入 (可只挂其中一个)。
-           未导入时仅内置 118 种参考物相可用。
-Icon: 品牌化应用图标 (crystal-mark + XRD 配色, 多分辨率 ICO)
-'@; $ver | Out-File -FilePath 'dist\PolyXRD\VERSION.txt' -Encoding UTF8"
-copy /Y "dist\PolyXRD\VERSION.txt" "installer_output\VERSION_v%APPVER%.txt" >nul 2>&1
+if not exist "dist\PolyXRD\VERSION.txt" (
+    echo [警告] VERSION.txt 缺失!
+)
 
 echo.
 echo ========================================
