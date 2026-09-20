@@ -40,7 +40,7 @@ BODY = """## PolyXRD v0.15.0
 | 文件名 | 说明 |
 |---|---|
 | PolyXRD-Setup-v0.15.0.exe | Windows 独立安装包（内置 Python/Qt6/全部依赖，**不含任何数据库**） |
-| PolyXRD-v0.15.0-Databases-COD-inorg-index.zip | COD 无机物库外挂包（**主检索库，推荐**） |
+| PolyXRD-v0.15.0-Databases-COD-inorg-index.zip | COD 无机物库外挂包（**瘦身索引式**，71,199 相 + 31.1 万原子位点；CIF 由本地 `cod/cif` 目录或 COD REST 在线提供） |
 | PolyXRD-v0.15.0-Databases-COD-full-index.zip | COD 全库索引外挂包 |
 | SHA256-v0.15.0.txt | 发布产物 SHA-256 校验和 |
 
