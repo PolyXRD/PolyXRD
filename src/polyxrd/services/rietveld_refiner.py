@@ -45,6 +45,8 @@ class RietveldRefiner:
 
     def __init__(self) -> None:
         self._config = get_config()
+        # v0.15.1: CIF → |F|² 参考峰缓存 (key 见 _cif_reference_peaks)
+        self._cif_peak_cache: dict = {}
 
     # ------------------------------------------------------------------
     # 过程日志工具 (v0.12.0)
@@ -781,6 +783,98 @@ class RietveldRefiner:
     # 内置精修引擎 (最小实现)
     # ------------------------------------------------------------------
 
+    def _cif_reference_peaks(
+        self,
+        phase: Phase,
+        wavelength: float,
+        tth_range: tuple[float, float],
+    ) -> Optional[list]:
+        """v0.15.1: 从物相携带的 CIF 计算 |F(hkl)|² 参考峰 (pymatgen)。
+
+        M23/M24 结构匹配链路已把 CIF (``phase.cif_path`` 文件或
+        ``phase.atomic_sites``) 送到物相上; 本方法在内置精修启动时把它们
+        现算成参考峰表 (空间群对称性展开 + Cromer-Mann 散射因子 + LP 校正,
+        与 cod_local.get_phase(use_pymatgen_peaks=True) 同一条数学路径),
+        取代库内静态峰表 —— 内置引擎由此获得基于结构的强度模型。
+
+        优先级: cif_path 文件全文 → atomic_sites 反生成 CIF 文本。
+        任何失败返回 None (调用方回退旧参考峰, 行为不劣化)。
+
+        Results 缓存: quick/fine 两轮共用 (key = cif 来源 + λ + 2θ 范围)。
+        """
+        if not wavelength or wavelength <= 0:
+            return None
+
+        # ── 1. 拿 CIF 文本 ────────────────────────────────────────
+        cif_text: Optional[str] = None
+        cif_path = getattr(phase, "cif_path", None)
+        cache_key = None
+        if cif_path:
+            p = Path(cif_path)
+            if p.exists():
+                try:
+                    cif_text = p.read_text(encoding="utf-8", errors="ignore")
+                    cache_key = (
+                        "file", str(p), int(p.stat().st_mtime),
+                        round(float(wavelength), 5),
+                        round(tth_range[0], 3), round(tth_range[1], 3),
+                    )
+                except OSError:
+                    cif_text = None
+        if not cif_text:
+            sites = getattr(phase, "atomic_sites", None)
+            if not sites:
+                return None
+            try:
+                from polyxrd.services.phase_cif import phase_to_cif_text
+
+                cif_text = phase_to_cif_text(phase)
+            except Exception:  # noqa: BLE001
+                return None
+            import hashlib
+
+            cache_key = (
+                "text", hashlib.sha1(cif_text.encode("utf-8", "ignore")).hexdigest(),
+                round(float(wavelength), 5),
+                round(tth_range[0], 3), round(tth_range[1], 3),
+            )
+
+        cached = self._cif_peak_cache.get(cache_key)
+        if cached is not None:
+            return cached if cached != "fail" else None
+
+        peaks: Optional[list] = None
+        try:
+            import warnings
+
+            from pymatgen.analysis.diffraction.xrd import XRDCalculator
+            from pymatgen.io.cif import CifParser
+
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                parser = CifParser.from_str(cif_text, occupancy_tolerance=1.2)
+                struct = parser.parse_structures(primitive=False)[0]
+            calc = XRDCalculator(wavelength=float(wavelength))
+            pattern = calc.get_pattern(struct, two_theta_range=tth_range)
+            rows: list[tuple[tuple, float, float]] = []
+            for i in range(len(pattern.x)):
+                hkl = (0, 0, 0)
+                hkl_info = pattern.hkls[i] if i < len(pattern.hkls) else []
+                if hkl_info and isinstance(hkl_info[0], dict):
+                    raw = hkl_info[0].get("hkl", (0, 0, 0))
+                    if len(raw) >= 3:
+                        hkl = (int(raw[0]), int(raw[1]), int(raw[2]))
+                rows.append((hkl, float(pattern.x[i]), float(pattern.y[i])))
+            imax = max((r[2] for r in rows), default=0.0)
+            if rows and imax > 0:
+                # 归一到 max=100, 与库内参考峰 (COD 粉末强度) 语义一致
+                peaks = [(h, t, 100.0 * inten / imax) for h, t, inten in rows]
+        except Exception:  # noqa: BLE001 - CIF 解析/模拟失败一律回退旧峰表
+            peaks = None
+
+        self._cif_peak_cache[cache_key] = peaks if peaks is not None else "fail"
+        return peaks
+
     def _refine_builtin(
         self,
         data: XRDData,
@@ -922,12 +1016,29 @@ class RietveldRefiner:
 
         # ── 2. 参考峰收集 (v2 不做全局归一化, 避免破坏 wR 分子分母比例一致性)
         #    仅对每个物相做参考峰完整性检查; 原内置库中的参考峰强度已可比较
-        phase_peaks = []
+        #    v0.15.1: 物相带结构 CIF (M23/M24 链路的 cif_path / atomic_sites) 时,
+        #    先用 pymatgen 现算 |F(hkl)|² 参考峰取代静态峰表; 取不到结构保持旧行为。
+        use_cif_peaks = bool(kwargs.get("use_cif_peaks", True))
+        tth_lo = float(np.min(two_theta))
+        tth_hi = float(np.max(two_theta))
+        phase_peaks: list = []
+        n_cif_peaks = 0
         for phase in phases:
             ref_peaks = phase.get_reference_peaks() if hasattr(phase, 'get_reference_peaks') else []
             if not ref_peaks:
                 ref_peaks = getattr(phase, 'reference_peaks', [])
+            if use_cif_peaks and wavelength and float(wavelength) > 0:
+                cif_peaks = self._cif_reference_peaks(
+                    phase, float(wavelength), (tth_lo, tth_hi))
+                if cif_peaks:
+                    ref_peaks = cif_peaks
+                    n_cif_peaks += 1
             phase_peaks.append(ref_peaks)
+        if n_cif_peaks:
+            _plog(
+                f"[cif] {n_cif_peaks}/{len(phases)} 相使用 CIF 结构 |F|² 参考峰 "
+                "(pymatgen: 对称性展开 + 散射因子 + LP)"
+            )
 
         n_phases = len(phases)
         # v6: params = weights(n) + fwhm + eta + scale + zero_shift + U + V + W (Caglioti)
