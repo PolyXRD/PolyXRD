@@ -43,9 +43,12 @@ $bannedNames = @('cod_index.sqlite', 'COD_inorganics.sqlite', 'PDF2_2004.sqlite'
 # 槽位 → (源文件, 包名后缀, 包内文件名)。后缀必须与
 # polyxrd/services/db_import.py 的 DBKind.pkg_suffix 保持一致。
 $dbKinds = @(
-    [pscustomobject]@{ Name = 'COD-inorg-index'; Src = 'cod_data\COD_inorganics.sqlite'; File = 'COD_inorganics.sqlite' },
-    [pscustomobject]@{ Name = 'COD-full-index';  Src = 'cod_data\cod_index.sqlite';      File = 'cod_index.sqlite' },
-    [pscustomobject]@{ Name = 'PDF2';            Src = 'cod_data\PDF2_2004.sqlite';       File = 'PDF2_2004.sqlite' }
+    # v0.14.0 起发布包改发瘦身索引式无机库 (无内嵌 CIF, CIF 走 cod/cif 目录或 COD REST 回退);
+    # 源文件与包内文件名必须与 db_import.PKG_FILENAME 一致 —— 别再用完整内嵌版
+    # COD_inorganics.sqlite (1.19 GB, CIF 内嵌占 830 MB)。
+    [pscustomobject]@{ Name = 'COD-inorg-index'; Src = 'cod_data\COD_inorganics_index.sqlite'; File = 'COD_inorganics_index.sqlite' },
+    [pscustomobject]@{ Name = 'COD-full-index';  Src = 'cod_data\cod_index.sqlite';           File = 'cod_index.sqlite' },
+    [pscustomobject]@{ Name = 'PDF2';            Src = 'cod_data\PDF2_2004.sqlite';           File = 'PDF2_2004.sqlite' }
 )
 
 # ── 1. 便携包校验 ────────────────────────────────────────────
