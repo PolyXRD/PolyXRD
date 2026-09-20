@@ -686,11 +686,24 @@ class PhaseView(QWidget):
         ))
 
     def _flash_peak(self, two_theta: float) -> None:
-        """峰表点击 → 谱图上闪示该峰位 (x 轴居中临时放大可不做, 仅高亮提示)。"""
+        """峰表点击 → 谱图上闪示该峰位 (M22)。
+
+        窗口宽 = 数据全宽 × 10% (即 ±5%); 已处于闪示视图时再次点击恢复原视图。
+        """
         if not hasattr(self._plot, "_main_x") or self._plot._main_x.size == 0:
             return
-        # 简单 x 轴移到该峰附近 (窗口宽 ±8°)
-        self._plot.get_axes().set_xlim(two_theta - 8, two_theta + 8)
+        x = self._plot._main_x
+        half = max(0.5, (float(np.max(x)) - float(np.min(x))) * 0.05)
+        ax = self._plot.get_axes()
+        cur = ax.get_xlim()
+        prev = getattr(self, "_flash_prev_xlim", None)
+        if prev is not None and abs((cur[0] + cur[1]) / 2.0 - two_theta) < half * 0.5:
+            # 已在闪示视图 → 再次点击恢复原视图
+            ax.set_xlim(*prev)
+            self._flash_prev_xlim = None
+        else:
+            self._flash_prev_xlim = cur
+            ax.set_xlim(two_theta - half, two_theta + half)
         self._plot.get_figure().canvas.draw_idle()
 
     # ------------------------------------------------------------------
