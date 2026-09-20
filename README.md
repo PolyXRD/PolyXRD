@@ -7,7 +7,7 @@
     峰检测 &nbsp;·&nbsp; 多物相定性检索 &nbsp;·&nbsp; Rietveld 结构精修 &nbsp;·&nbsp; Le Bail 晶胞精修 &nbsp;·&nbsp; 全谱拟合 &nbsp;·&nbsp; 三库外挂检索 (COD 无机物 / COD 全库 / PDF2-2004)
   </p>
   <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v0.14.0-blue?style=flat-square" /></a>
+    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v0.15.0-blue?style=flat-square" /></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
     &nbsp;
@@ -335,7 +335,27 @@ PolyXRD 基于以下高质量开源项目构建，感谢各位维护者及贡献
 
 ## 📦 Release
 
-当前最新版本：**v0.14.0**（2026-09-19）→ [👉 前往 Release 下载](https://github.com/PolyXRD/PolyXRD/releases)
+当前最新版本：**v0.15.0**（2026-09-20）→ [👉 前往 Release 下载](https://github.com/PolyXRD/PolyXRD/releases)
+
+### v0.15.0 主要变化
+
+- **绘图 X 轴自适应交互（M22）** — 绘图默认收缩至数据实际范围；滚轮以光标为中心
+  缩放（±15%/格），左键拖拽平移（与峰位点击兼容，<3px 判定点击），工具栏 Home
+  重置回数据全览
+- **物相列表交互重构（M23）** — 主窗口物相树默认空、跟随物相分析页勾选实时刷新；
+  右键可导出选中物相 CIF / 查看详情；勾选集随项目持久化保存/恢复
+- **精修页布局重构（M24）** — 主谱与残差条 5:1 上下分栏、X 轴双向同步；日志面板
+  移入左栏；右栏新增「已勾选物相」列表（右键导出 CIF）与「外部精修程序」容器；
+  窗口布局版本升到 v3（旧布局自动丢弃）
+- **外部精修引擎接入（M25）** — 精修页右栏新增 GSAS-II / MAUD / FullProf 三行
+  配置面板（状态灯/路径/浏览/检测/启动，路径持久化于 `~/.polyxrd/external_tools.json`）：
+  - **FullProf**：自动生成 `.dat/.pcr` → fp2k 批处理精修 → 解析 `.sum` 回写
+    Rwp/Rexp/Rp/GoF² 与各相 R_Bragg/晶胞/含量；两遍标度自动校准 + 限位编号
+    自动发现 + 保守模式（W 扫描）三级兜底
+  - **GSAS-II / MAUD**：一键导出实验谱 + 物相 CIF 到工作目录并拉起各自 GUI
+    （"导出+拉起" 语义）
+- **新增单测** `tests/test_v015_fullprof.py`（dat/pcr 生成器纯函数 + 解析器样例文本）
+- **版本号** 0.14.0 → 0.15.0
 
 ### v0.14.0 主要变化
 
