@@ -138,7 +138,8 @@ class ExternalEnginesGroup(QGroupBox):
     def _on_browse(self, spec: ToolSpec, edit: QLineEdit) -> None:
         start = edit.text().strip() or str(get_config().get_external_tool_path(spec.key) or "")
         path, _ = QFileDialog.getOpenFileName(
-            self, f"选择 {spec.title} 可执行文件", start, "可执行文件 (*.exe *.jar);;所有文件 (*)"
+            self, f"选择 {spec.title} 可执行文件", start,
+            "可执行文件 (*.exe *.jar *.bat);;所有文件 (*)"
         )
         if path:
             edit.setText(path)

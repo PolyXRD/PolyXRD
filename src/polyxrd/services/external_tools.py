@@ -46,8 +46,9 @@ class ToolSpec:
         p = Path(path)
         if not p.exists():
             return False
-        if p.is_dir() and (p / "jdk" / "bin" / "java.exe").exists():
-            return True  # MAUD 安装根目录
+        if p.is_dir() and ((p / "jdk" / "bin" / "java.exe").exists()
+                           or (p / "maud.bat").exists()):
+            return True  # MAUD 安装根目录 (含自带 JDK 或官方启动脚本)
         if not self.exe_names:
             return True
         return p.name.lower() in {n.lower() for n in self.exe_names}
@@ -63,11 +64,14 @@ def _detect_gsas2() -> Optional[Path]:
 
 
 def _detect_maud() -> Optional[Path]:
-    """MAUD: 返回自带 JDK 的 java.exe (根目录下通常没有 Maud.jar)。"""
+    """MAUD: 优先返回根目录 ``maud.bat`` (官方启动脚本), 回退自带 JDK java.exe。"""
     try:
         from polyxrd.services.maud_par_builder import detect_maud_root
 
         root = detect_maud_root()
+        bat = root / "maud.bat"
+        if bat.exists():
+            return bat
         java = root / "jdk" / "bin" / "java.exe"
         return java if java.exists() else (root if root.exists() else None)
     except Exception:  # noqa: BLE001
@@ -105,8 +109,8 @@ GSAS2_SPEC = ToolSpec(
 MAUD_SPEC = ToolSpec(
     key="external_maud_path",
     title="MAUD",
-    # 用户可配 MAUD 安装根目录或其自带 jdk/bin/java.exe
-    exe_names=("java.exe",),
+    # 用户可配 maud.bat / MAUD 安装根目录 / 自带 jdk/bin/java.exe
+    exe_names=("maud.bat", "java.exe"),
     detect_fn=_detect_maud,
 )
 FULLPROF_SPEC = ToolSpec(
