@@ -1,6 +1,6 @@
 # PolyXRD 版本变更记录（CHANGELOG）
 
-> 覆盖范围：**v0.8.21（首次提交 / 首个 Beta）→ v0.15.0**
+> 覆盖范围：**v0.8.21（首次提交 / 首个 Beta）→ v0.15.1**
 > 生成日期：2026-09-20 ｜ 生成方式：回溯 git 提交历史 + GitHub Release 正文 + 项目工作记忆（`.workbuddy/memory/`）
 > 联系：sshztx@outlook.com
 
@@ -16,6 +16,7 @@
 
 | 版本 | 日期 | 主题 | 发布形态 | GitHub Release |
 |---|---|---|---|---|
+| **v0.15.1** | 2026-09-20 | 外部精修程序 MAUD 默认改走官方 `maud.bat`（优先于 java.exe） | 待打包 | ⬜ |
 | **v0.15.0** | 2026-09-20 | M22–M25：图谱交互 / 物相列表重构 / 精修页布局 / GSAS-II・MAUD・FullProf 外部精修集成 + 中文手册 | Setup + 2 库包 + SHA | 🟢 |
 | v0.14.0 | 2026-09-19 | 无机库默认改瘦身索引式 + 发布包改「索引版」命名 + 含 v0.13.2 数据修复 | Setup + Portable + 2 库包 + SHA | 🟢 |
 | v0.13.2 | 2026-09-18 | 无机库 `formula` 被空间群覆盖 + `cell_*` 列错位的数据修复 | Setup + Portable + 库包 | 🟡 |
@@ -30,6 +31,21 @@
 | v0.8.23 | 2026-08-24 | 内置 MCP Server（18 个工具，AI 可无 GUI 调用全流程） | Setup | 🟢 |
 | v0.8.22 | 2026-08-21 | 品牌视觉升级 + Rietveld 精修文档修正 | Setup | 🟢 |
 | v0.8.21 | 2026-08-21 | 首个正式 Beta：程序与数据库分离分发 | Setup + 库包 | 🟢 |
+
+---
+
+## v0.15.1（2026-09-20）
+
+**主题**：外部精修程序 MAUD 默认启动方式改为官方 `maud.bat`
+
+### 修复/调整
+
+- **MAUD 默认走 `maud.bat`**：精修页右下「外部精修程序」MAUD 行的自动探测改为优先返回
+  `<MAUD根>/maud.bat`（`C:\MAUD3\maud.bat` / `C:\MAUD2\maud.bat`，与用户双击启动行为一致），
+  无 bat 才回退自带 `jdk/bin/java.exe` 拼装 java 命令。
+- **`resolve_maud_root` 三形态识别**：用户配置路径支持 `maud.bat` / 安装根目录 / `jdk\bin\java.exe`，统一解析回根目录。
+- **路径校验放宽**：`ToolSpec.validate` 认 `maud.bat` 与含 `maud.bat` 的根目录；「浏览…」文件过滤器加 `*.bat`。
+- 涉及 `services/external_tools.py`、`services/launchers/maud_launcher.py`、`views/widgets/external_engines_group.py`。
 
 ---
 

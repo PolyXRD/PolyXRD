@@ -80,9 +80,11 @@ def build_gui_command(maud_root: Path, max_memory_mb: int = 4096) -> list[str]:
 
 
 def resolve_maud_root(custom: Optional[str] = None) -> Path:
-    """解析 MAUD 根目录: 用户配置 (根目录或 java.exe) → 自动探测。"""
+    """解析 MAUD 根目录: 用户配置 (maud.bat / 根目录 / java.exe) → 自动探测。"""
     if custom:
         p = Path(custom)
+        if p.name.lower() == "maud.bat" and p.exists():
+            return p.parent              # maud.bat → 根
         if p.name.lower() == "java.exe" and p.exists():
             return p.parents[2]          # jdk/bin/java.exe → 根
         if (p / "jdk" / "bin" / "java.exe").exists():
@@ -115,8 +117,14 @@ def launch_gui(
     xy_path, cif_paths = export_inputs(data, phases, workdir, stem=stem)
     log(f"[maud] 数据导出: {xy_path.name} + {len(cif_paths)} 份 CIF")
 
-    cmd = build_gui_command(maud_root)
-    log(f"[maud] 拉起 MAUD GUI: {maud_root.name}")
+    # v0.15.1: 默认走官方 maud.bat (与用户双击启动行为一致), 无 bat 才拼 java 命令
+    bat = maud_root / "maud.bat"
+    if bat.exists():
+        cmd = [str(bat)]
+        log(f"[maud] 拉起 MAUD GUI: {bat}")
+    else:
+        cmd = build_gui_command(maud_root)
+        log(f"[maud] 拉起 MAUD GUI: {maud_root.name}")
     kwargs: dict = {"cwd": str(workdir)}
     import os
 
