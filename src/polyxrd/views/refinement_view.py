@@ -227,16 +227,16 @@ class RefinementView(QWidget):
         sel_group.setLayout(sel_layout)
         right_layout.addWidget(sel_group, stretch=1)
 
-        # 外部精修程序区 (M24 容器; M25 填充 GSAS-II / MAUD / FullProf 配置)
-        self._ext_group = QGroupBox("外部精修程序")
-        ext_layout = QVBoxLayout()
-        self._ext_placeholder = QLabel(
-            "外部引擎 (GSAS-II / MAUD / FullProf) 配置与调用区 — M25 启用"
+        # 外部精修程序区 (M25-2: GSAS-II / MAUD / FullProf 配置与启动)
+        from polyxrd.views.widgets.external_engines_group import (
+            ExternalEnginesGroup,
         )
-        self._ext_placeholder.setWordWrap(True)
-        self._ext_placeholder.setStyleSheet("color: #888; font-size: 11px;")
-        ext_layout.addWidget(self._ext_placeholder)
-        self._ext_group.setLayout(ext_layout)
+
+        self._ext_engines = ExternalEnginesGroup()
+        self._ext_engines.set_context_provider(self._external_context)
+        self._ext_engines.log_message.connect(self._append_log)
+        self._ext_engines.fullprof_requested.connect(self._on_external_fullprof)
+        self._ext_group = self._ext_engines
         right_layout.addWidget(self._ext_group)
 
         main_layout.addWidget(left_widget, stretch=2)
@@ -442,6 +442,48 @@ class RefinementView(QWidget):
     # ------------------------------------------------------------------
     # 事件处理
     # ------------------------------------------------------------------
+
+    def _external_context(self):
+        """外部引擎启动面板的数据/物相提供者 (M25-2)。"""
+        return self._vm.current_data, list(self._vm._phase_vm.selected_phases)
+
+    def _on_external_fullprof(self, fp_exe: str) -> None:
+        """FullProf 批处理精修 (M25-6): 忙碌闸门内跑 auto_refine 并回写日志。"""
+        from polyxrd.services.fullprof.runner import auto_refine, new_run_dir
+
+        data = self._vm.current_data
+        phases = list(self._vm._phase_vm.selected_phases)
+        if data is None:
+            self._append_log("[fullprof] 请先加载数据")
+            return
+        if not phases:
+            self._append_log("[fullprof] 请先在物相分析页勾选物相")
+            return
+
+        self._append_log("[fullprof] ====== FullProf 精修开始 ======")
+        with busy(self, "FullProf 外部精修") as acquired:
+            if not acquired:
+                return
+            wd = new_run_dir("fullprof")
+            self._append_log(f"[fullprof] 工作目录: {wd}")
+            wavelength = float(getattr(data, "wavelength", 1.54056) or 1.54056)
+            try:
+                res = auto_refine(
+                    data, phases, wd,
+                    fp_exe=fp_exe, stem="polyxrd",
+                    on_log=self._append_log, wavelength=wavelength,
+                )
+            except Exception as exc:  # noqa: BLE001
+                self._append_log(f"[fullprof] 运行失败: {exc}")
+                return
+        if res.ok:
+            self._append_log(
+                f"[fullprof] 完成: Rwp={res.rwp:.2f}%  Rexp={res.rexp:.2f}%  "
+                f"Rp={res.rp:.2f}%  GoF²={res.chi2:.2f}"
+            )
+            self._append_log(f"[fullprof] 结果文件: {res.sum_path}")
+        else:
+            self._append_log(f"[fullprof] 未收敛: {res.error}")
 
     def _on_refine(self) -> None:
         """开始精修"""
