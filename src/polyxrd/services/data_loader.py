@@ -17,6 +17,29 @@ from polyxrd.models.xrd_data import XRDData
 from polyxrd.utils.file_utils import detect_xrd_format
 
 
+#: 靶材 → Kα1 波长 (Å)。二进制/文本头里通常只留一个 "Cu"/"Co" 之类的记号,
+#: 靠它还原波长比在数值堆里猜 1.54 更可靠 (头里还常有个 1.0 的标度因子会撞车)。
+ANODE_WAVELENGTHS = {
+    "CU": 1.5406,
+    "CO": 1.78897,
+    "CR": 2.28970,
+    "FE": 1.93604,
+    "MN": 2.10314,
+    "NI": 1.65791,
+    "MO": 0.70930,
+    "AG": 0.55941,
+}
+
+
+def wavelength_from_anode(text: str) -> Optional[float]:
+    """从文件头文本里找靶材记号并返回 Kα1 波长 (找不到返回 None)。"""
+    upper = text.upper()
+    for symbol, wl in ANODE_WAVELENGTHS.items():
+        if symbol in upper:
+            return wl
+    return None
+
+
 class DataLoader:
     """XRD数据加载器
 
@@ -27,8 +50,9 @@ class DataLoader:
     - .txt: 通用文本格式
     - .xrdml: XML格式 (Bruker)
     - .xml: 通用XRD XML
-    - .raw: 二进制格式
+    - .raw: 二进制格式 (RAW2: 定长头 + float32 强度; 其它变体走启发式兜底)
     - .brml: Bruker专用格式
+    - .mdi: MDI 文本格式 (定宽整数强度, 头含 start/step/stop)
     """
 
     def __init__(self) -> None:
@@ -74,6 +98,7 @@ class DataLoader:
             "xrdml": self._load_xrdml,
             "raw": self._load_raw,
             "brml": self._load_brml,
+            "mdi": self._load_mdi,
         }
 
         loader = loaders.get(fmt)
@@ -387,32 +412,174 @@ class DataLoader:
     def _load_raw(
         self, file_path: Path, fmt: str = "raw", **kwargs
     ) -> tuple[np.ndarray, np.ndarray, dict]:
-        """加载二进制RAW格式"""
+        """加载二进制 RAW 格式。
+
+        先按 ``RAW2`` 定长头解析 (实测结构, 见 test_xrd/geshi/4-1.raw):
+          - ``0x000``: 4 字节魔数 ``b"RAW2"``, 后接定长文本头
+          - ``0x102``: int16 LE = 数据点数 n (据此反推数据段偏移 ``len - n*4``)
+          - ``0x10C``: float32 LE = 步长     ``0x110``: float32 LE = 起始 2θ
+          - 数据段: n 个 little-endian float32 强度
+        实测该文件 = 316 字节头 + 7251 个 float32 (start=5.0, step=0.02, 首值 207),
+        与同目录 ``4-1.dat`` 完全一致。
+
+        未被识别的 RAW 变体 (Bruker 等) 仍走旧的"前半 2θ / 后半强度"启发式,
+        保持既有行为不回归。
+        """
+        raw = file_path.read_bytes()
+        if raw[:4] == b"RAW2":
+            return self._load_raw2(raw, file_path)
+
+        # ---- 旧启发式兜底 (未识别的 RAW 变体) ----
+        data = raw[100:]
+        values = np.frombuffer(data, dtype=np.float32)
+        if len(values) < 2:
+            raise ValueError(f"无法解析RAW文件 (数据段过短): {file_path}")
+        # 前半2theta，后半intensity
+        n = len(values) // 2
+        return values[:n], values[n:n * 2], {}
+
+    # RAW2 头内固定偏移 (实测)
+    _RAW2_COUNT_OFF = 0x102   # int16 LE: 点数
+    _RAW2_STEP_OFF = 0x10C    # float32 LE: 步长
+    _RAW2_START_OFF = 0x110   # float32 LE: 起始 2θ
+    _RAW2_HDR_LEN = 316       # 点数不可信时的兜底头长
+
+    def _load_raw2(
+        self, raw: bytes, file_path: Path
+    ) -> tuple[np.ndarray, np.ndarray, dict]:
+        """RAW2 定长头 + float32 强度。"""
         import struct
 
-        with open(file_path, "rb") as f:
-            header = f.read(100)  # 读取头部
-            # 跳过头部数据
-            # ...具体格式取决于仪器
+        offset = None
+        n = 0
+        if len(raw) >= self._RAW2_COUNT_OFF + 2:
+            n_hdr = struct.unpack_from("<h", raw, self._RAW2_COUNT_OFF)[0]
+            cand = len(raw) - n_hdr * 4
+            # 头长必须落在合理范围, 否则说明这个 int16 不是点数
+            if n_hdr >= 16 and 64 <= cand <= 4096:
+                offset, n = cand, n_hdr
+        if offset is None:
+            offset = self._RAW2_HDR_LEN
+            n = (len(raw) - offset) // 4
+        if n < 2:
+            raise ValueError(f"RAW2 文件数据段过短: {file_path}")
 
-            # 读取数据部分
-            # 假设是float32数组
-            data = f.read()
+        intensity = np.frombuffer(
+            raw[offset:offset + n * 4], dtype="<f4"
+        ).astype(float)
 
-        # 尝试解析
-        try:
-            values = np.frombuffer(data, dtype=np.float32)
-            if len(values) >= 2:
-                # 前半2theta，后半intensity
-                n = len(values) // 2
-                two_theta = values[:n]
-                intensity = values[n:n * 2]
-            else:
-                raise ValueError("二进制数据太短")
-        except Exception as e:
-            raise ValueError(f"无法解析RAW文件: {e}") from e
+        start, step = self._raw2_axis(raw)
+        if start is None:
+            raise ValueError(
+                f"RAW2 文件头中未找到可信的起始 2θ / 步长: {file_path}"
+            )
+        two_theta = start + step * np.arange(n, dtype=float)
 
-        return two_theta, intensity, {}
+        meta: dict = {"raw2_header_len": offset}
+        wl = wavelength_from_anode(
+            raw[:offset].decode("latin-1", errors="ignore")
+        )
+        if wl is not None:
+            meta["wavelength"] = wl
+        return two_theta, intensity, meta
+
+    @classmethod
+    def _raw2_axis(cls, raw: bytes):
+        """取 RAW2 头的 (start, step)。定长偏移优先, 失败再扫相邻 float32 对。"""
+        import math
+        import struct
+
+        def _f(off: int):
+            try:
+                return struct.unpack_from("<f", raw, off)[0]
+            except struct.error:
+                return None
+
+        step = _f(cls._RAW2_STEP_OFF)
+        start = _f(cls._RAW2_START_OFF)
+        ok = (
+            step is not None and start is not None
+            and math.isfinite(step) and math.isfinite(start)
+            and 0.0 < step <= 1.0 and 0.0 <= start < 180.0
+        )
+        if not ok:
+            step = start = None
+            for off in range(64, max(72, min(len(raw) - 8, 4096)), 4):
+                s, t = _f(off), _f(off + 4)
+                if s is None or t is None:
+                    continue
+                if not (math.isfinite(s) and math.isfinite(t)):
+                    continue
+                # 步长要"像个步长" (排除头里 0.000169 之类的杂散浮点)
+                if 0.001 <= s <= 0.5 and 0.1 <= t < 90.0:
+                    step, start = s, t
+                    break
+        if step is None:
+            return None, None
+        # RAW2 头把起始角/步长都存成 float32: 0.02 会变成 0.019999999552965164,
+        # 乘上几千个序号后累积漂移能到 3e-6° (末点 150.000 会读成 149.999997)。
+        # 用 8 位有效数字归一, 既抹掉 float32 噪声, 又保留真实的小数步长(如 0.019999)。
+        return float(f"{start:.8g}"), float(f"{step:.8g}")
+
+    def _load_mdi(
+        self, file_path: Path, fmt: str = "mdi", **kwargs
+    ) -> tuple[np.ndarray, np.ndarray, dict]:
+        """加载 MDI 文本格式 (定宽整数强度)。
+
+        实测结构 (test_xrd/geshi/4-1.mdi):
+          行1: 日期 + 样品名
+          行2: ``start  step  <scale>  <anode>  wavelength  stop  count``
+          其余: 定宽整数强度 (每行 8 个, 栏宽 8)
+
+        注意 (实测坑): 该文件 ``count=7250`` 却带着 5.000→150.000 / 步长 0.020
+        的扫描区间 —— 也就是转换时丢了**第一个**通道 (207)。若直接按 start 起算,
+        整条谱会平移一个步长 (所有峰位置错 0.02°)。故当 ``start + step*(n-1)``
+        对不上头里的 stop 时, 改以 stop 反推 start, 与 ``.dat/.txt/.xy`` 对齐。
+        """
+        text = file_path.read_text(encoding="utf-8", errors="ignore")
+        lines = [ln for ln in text.splitlines() if ln.strip()]
+        if len(lines) < 2:
+            raise ValueError(f"MDI 文件内容不足: {file_path}")
+
+        head = lines[1]
+        head_nums: list[float] = []
+        for tok in head.split():
+            try:
+                head_nums.append(float(tok))
+            except ValueError:
+                continue
+        if len(head_nums) < 2:
+            raise ValueError(f"MDI 文件头无法解析 start/step: {file_path}")
+        start, step = head_nums[0], head_nums[1]
+
+        values: list[float] = []
+        for ln in lines[2:]:
+            for tok in ln.split():
+                try:
+                    values.append(float(tok))
+                except ValueError:
+                    continue
+        if len(values) < 2:
+            raise ValueError(f"MDI 文件没有有效强度数据: {file_path}")
+        intensity = np.asarray(values, dtype=float)
+        n = len(intensity)
+
+        # 用头里的 stop 校正"丢首点"造成的整体错位
+        if step > 0:
+            want = start + step * (n - 1)
+            span = step * max(n - 1, 1)
+            cands = [c for c in head_nums[2:] if abs(c - want) <= 0.05 * span]
+            if cands:
+                stop = min(cands, key=lambda c: abs(c - want))
+                if abs(start + step * (n - 1) - stop) > step / 2:
+                    start = stop - step * (n - 1)
+
+        two_theta = start + step * np.arange(n, dtype=float)
+        meta: dict = {}
+        wl = wavelength_from_anode(head)
+        if wl is not None:
+            meta["wavelength"] = wl
+        return two_theta, intensity, meta
 
     def _load_brml(
         self, file_path: Path, fmt: str = "brml", **kwargs

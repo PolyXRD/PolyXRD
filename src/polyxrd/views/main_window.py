@@ -876,6 +876,13 @@ class MainWindow(QMainWindow):
         file_menu = self.menuBar().addMenu(tr("menu.file.title"))
         self._menus["file"] = file_menu
         file_menu.addAction(self._actions["open"])
+
+        # 谱图格式转换: 把受支持的文件另存为另一种格式 (扩展名) 的谱图文件
+        self._actions["convert_format"] = QAction(tr("menu.file.convert"), self)
+        self._actions["convert_format"].triggered.connect(self._on_convert_format)
+        self._set_action_icon(self._actions["convert_format"], "export")
+        file_menu.addAction(self._actions["convert_format"])
+
         file_menu.addAction(self._actions["save"])
 
         self._actions["save_as"] = QAction(tr("menu.file.save_as"), self)
@@ -1175,6 +1182,7 @@ class MainWindow(QMainWindow):
     def _retranslate_actions(self) -> None:
         action_translations = {
             "open": "toolbar.open",
+            "convert_format": "menu.file.convert",
             "save": "toolbar.save",
             "save_as": "menu.file.save_as",
             "export_file": "menu.report.export",
@@ -1249,6 +1257,24 @@ class MainWindow(QMainWindow):
         )
         if file_path:
             self._load_file_path(file_path)
+
+    def _on_convert_format(self) -> None:
+        """谱图格式转换 (挂在「文件 → 打开」下面)。
+
+        源文件默认取当前数据的来源文件。转换结果**不**自动载入主界面 ——
+        这类转换多半是给别的软件准备输入, 顺手替换掉当前分析反而添乱。
+        """
+        from polyxrd.views.format_convert_dialog import FormatConvertDialog
+
+        source = None
+        data = self._vm.current_data
+        if data is not None:
+            source = data.metadata.get("source_file")
+        dialog = FormatConvertDialog(self, source=source)
+        if dialog.exec() and dialog.result_path is not None:
+            self.statusBar().showMessage(
+                f"{tr('status.export_done')}: {dialog.result_path.name}", 5000
+            )
 
     def _load_file_path(self, file_path: str) -> None:
         """加载数据文件并加入最近列表。菜单打开与拖放共用。"""

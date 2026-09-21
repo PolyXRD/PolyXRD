@@ -1956,6 +1956,22 @@ class CODLocalDatabase:
         # 优先从 DB 读取原子位点 (精简模式, 不需要 CIF 全文)
         sites_fixed = self.get_atomic_sites(cod_id)
 
+        # v0.15.2: DB 位点合法性校验 —— 部分 CIF (多 loop / NoSpherA2 等)
+        # 建库时解析错位, 会存出数字"元素"行 (COD 1559793 实测 5331 行,
+        # 元素列全是 hkl/坐标数值)。非法元素占比过高 → 视为无位点,
+        # 走 CIF 全文解析兜底。
+        if sites_fixed:
+            from polyxrd.utils.formula_parser import VALID_ELEMENTS
+            n_bad = sum(1 for s in sites_fixed
+                        if str(s.get("element") or "") not in VALID_ELEMENTS)
+            if n_bad > 0.3 * len(sites_fixed):
+                log.info(
+                    "get_phase: cod_id=%d DB atomic sites invalid "
+                    "(%d/%d bad element labels) -> fallback to CIF parse",
+                    cod_id, n_bad, len(sites_fixed),
+                )
+                sites_fixed = []
+
         # 如果 DB 中没有原子位点, 回退到 CIF 全文解析
         cif_text = _cif_pre
         if not sites_fixed and cif_text is None:
@@ -2017,6 +2033,33 @@ class CODLocalDatabase:
         formula = entry.formula or ""
         sg = entry.space_group or ""
 
+        # v0.15.2: 非对称单元 → 完整晶胞 (幂等, 已展开位点原样通过)。
+        # DB 位点是 CIF 原子环的原始列表 (通常只有非对称单元), 直接按 P1
+        # 建 Structure 会让高对称结构 (R-3c / 体心 / 面心 …) 的模拟峰整体
+        # 错误 —— 实测 R-3c 方解石 104 主峰 (29.4°) 整个缺失、假峰 5.18°。
+        try:
+            from polyxrd.services.phase_cif import expand_sites_by_symmetry
+
+            sites_fixed = expand_sites_by_symmetry(sites_fixed, sg)
+        except Exception:  # noqa: BLE001 - 展开失败保持旧行为
+            pass
+
+        # v0.15.2: 密度保险丝 —— 展开后位点密度 >0.5 atoms/Å³ 必为解析垃圾
+        # (真实晶体极限约 0.2; COD 1559793 垃圾位点实测 32.9/Å³)。
+        if sites_fixed:
+            try:
+                _vol = lat.volume
+                if _vol > 0 and len(sites_fixed) / _vol > 0.5:
+                    log.info(
+                        "get_phase: cod_id=%d site density %.2f/Å³ absurd "
+                        "(%d sites, %.1f Å³) -> drop sites",
+                        cod_id, len(sites_fixed) / _vol,
+                        len(sites_fixed), _vol,
+                    )
+                    sites_fixed = []
+            except Exception:  # noqa: BLE001
+                pass
+
         # 元素集合
         _, element_csv = _parse_elements(formula)
         elements = set(e for e in element_csv.split(",") if e)
@@ -2044,10 +2087,12 @@ class CODLocalDatabase:
                     hkl = (0, 0, 0)
                     if hkl_info and isinstance(hkl_info[0], dict):
                         raw = hkl_info[0].get("hkl", (0, 0, 0))
-                        if len(raw) >= 3:
-                            hkl = (int(raw[0]), int(raw[1]), int(raw[2]))
-                        elif len(raw) == 4:
+                        if len(raw) == 4:
+                            # 六方/三方四指标 (h,k,i,l) → 保留 l (旧代码先被
+                            # len>=3 分支截断成 (h,k,i), l 全丢 → 002 记成 (0,0,0))
                             hkl = (int(raw[0]), int(raw[1]), int(raw[3]))
+                        elif len(raw) >= 3:
+                            hkl = (int(raw[0]), int(raw[1]), int(raw[2]))
                     intensity = float(pattern.y[i]) if i < len(pattern.y) else 0.0
                     reference_peaks.append((hkl, float(pattern.x[i]), intensity))
             except Exception as e:
@@ -2066,7 +2111,9 @@ class CODLocalDatabase:
                             hkl = (0, 0, 0)
                             if hkl_info and isinstance(hkl_info[0], dict):
                                 raw = hkl_info[0].get("hkl", (0, 0, 0))
-                                if len(raw) >= 3:
+                                if len(raw) == 4:
+                                    hkl = (int(raw[0]), int(raw[1]), int(raw[3]))
+                                elif len(raw) >= 3:
                                     hkl = (int(raw[0]), int(raw[1]), int(raw[2]))
                             intensity = float(pattern2.y[i]) if i < len(pattern2.y) else 0.0
                             reference_peaks.append((hkl, float(pattern2.x[i]), intensity))

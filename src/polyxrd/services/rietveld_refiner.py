@@ -878,7 +878,11 @@ class RietveldRefiner:
                 hkl_info = pattern.hkls[i] if i < len(pattern.hkls) else []
                 if hkl_info and isinstance(hkl_info[0], dict):
                     raw = hkl_info[0].get("hkl", (0, 0, 0))
-                    if len(raw) >= 3:
+                    if len(raw) == 4:
+                        # 六方/三方四指标 (h,k,i,l) → 保留 l (截断会把 002
+                        # 记成 (0,0,0), March-Dollase 织构轴 [001] 失效)
+                        hkl = (int(raw[0]), int(raw[1]), int(raw[3]))
+                    elif len(raw) >= 3:
                         hkl = (int(raw[0]), int(raw[1]), int(raw[2]))
                 rows.append((hkl, float(pattern.x[i]), float(pattern.y[i])))
             imax = max((r[2] for r in rows), default=0.0)
@@ -913,8 +917,12 @@ class RietveldRefiner:
 
         v8 性能优化 (P2):
         - 快速路径 (quick path): 先跑 use_caglioti=False + 3 起点的快检,
-          若 wR ≤ wR_threshold (默认 55%) 直接返回; 否则再启 Caglioti
-          精细模式, 最终返回两者中 wR 更优者 (结果只会更好不会变差)
+          若 wR ≤ wR_threshold (默认 20%, 即质量分级里的"可接受"线) 直接返回;
+          否则再启 Caglioti 精细模式, 最终返回两者中 wR 更优者
+          (结果只会更好不会变差)
+          v0.15.2 把阈值由 55% 下调到 20%: 实测多相试样快检常落在 20%~55% 这一带,
+          旧阈值会让它们**永远走不到 Caglioti**, 峰值宽度失配被钉进残差。
+          以 4-1/2-1 为例, 放开后 wR 明显下降; 代价是慢, 但精度优先。
         - 单起点 max_nfev 收敛上限从 max_cycles*20 收紧到
           max_nfev_per_start (默认 400): 实测获胜起点通常 ~55 nfev 收敛,
           跑满 1200 的起点均为无效局部极小, 纯耗时间
@@ -943,8 +951,9 @@ class RietveldRefiner:
             log(_stage + msg)
 
         # ── 0. 快速路径: 无 Caglioti 快检, wR 达标即返回 ────────────
-        wR_threshold = kwargs.get("wR_threshold", 55.0)
+        wR_threshold = kwargs.get("wR_threshold", 20.0)
         best_quick: Optional[RefinementResult] = None
+        _x_sink: dict = {}   # 快检最优参数向量回收槽 (供精细模式热启动)
         if wR_threshold is not None and kwargs.get("use_caglioti", True):
             quick_kw = dict(kwargs)
             quick_kw["use_caglioti"] = False
@@ -952,6 +961,7 @@ class RietveldRefiner:
             quick_kw["wR_threshold"] = None  # 防止递归再次触发快检
             quick_kw["max_nfev_per_start"] = kwargs.get("max_nfev_per_start", 400)
             quick_kw["log_stage"] = "[quick] "
+            quick_kw["_x_sink"] = _x_sink
             _plog(f"[quick] 快检启动 (wR_threshold={wR_threshold}%, use_caglioti=False)")
             try:
                 best_quick = self._refine_builtin(
@@ -1058,9 +1068,36 @@ class RietveldRefiner:
 
         n_phases = len(phases)
         # v6: params = weights(n) + fwhm + eta + scale + zero_shift + U + V + W (Caglioti)
-        n_params = n_phases + 7
+        # v0.15.2 (A 路线): 末尾再挂 n_phases 个「各向同性晶胞缩放」自由度。
+        # 旧版内置引擎的 fit 维度里**根本没有 cell** (见下方 param_mask 注释), 峰位完全
+        # 钉死在库/CCIF 晶胞上; 试样晶胞哪怕与库值差 0.1%~0.3%, 60° 附近峰位就偏
+        # 0.05°~0.15°, 残差被这一项锁住 → wR 下不来。挂在参数向量末尾, 是为了不动
+        # 既有 n_phases+0..6 的索引算术 (降低回归风险)。
+        refine_cell = bool(kwargs.get("refine_cell", True))
+        n_cell = n_phases if refine_cell else 0
+        _cell_off = n_phases + (7 if use_caglioti else 4)
+        n_params = n_phases + 7 + n_cell
         if not use_caglioti:
-            n_params = n_phases + 4
+            n_params = n_phases + 4 + n_cell
+        cell_lo, cell_hi = 0.98, 1.02  # 各向同性缩放 ±2% 足够覆盖试样与库值差异
+
+        # v0.15.2 (A 路线续): March-Dollase 择优取向修正 (仅精细模式)。
+        # 板状/层状物相 (氢氧化物、云母等) 制样后 00l 织构使实验强度系统性
+        # 偏离运动学 |F|² (4-1 Brucite 实测 001:101 = 100:24.6, 模型 64:100),
+        # 伪 Voigt + 全局 FWHM 吸收不了 → wR 地板 (4-1 实测卡 48%)。
+        # 每相一个 r 参数, 织构轴 [001]: P(α) = (r²cos²α + sin²α/r)^(-3/2),
+        # α = 晶面法线与 [001] 夹角; r<1 增强 00l, r>1 减弱; 逐相按均值归一。
+        # 快检 (use_caglioti=False) 不启用, 保持快检参数布局与热启动兼容。
+        refine_texture = bool(use_caglioti) and bool(
+            kwargs.get("refine_texture", True))
+        tex_axes: list = []
+        for _i, _peaks in enumerate(phase_peaks):
+            _lat = phases[_i].lattice if _i < len(phases) else None
+            tex_axes.append(self._texture_cos_alpha(_peaks, _lat))
+        _tex_idx = [i for i, c in enumerate(tex_axes) if c is not None]
+        n_tex = len(_tex_idx) if refine_texture else 0
+        _tex_off = _cell_off + n_cell
+        n_params += n_tex
 
         # ── 3. 智能权重估计 ──────────────────────────────────────
         # 对每个物相，找到其参考峰最接近实验最大峰处的实验强度比
@@ -1126,6 +1163,10 @@ class RietveldRefiner:
                 parts.append([float(U if U is not None else init_U),
                               float(V if V is not None else init_V),
                               float(W if W is not None else init_W)])
+            if n_cell:
+                parts.append(np.ones(n_cell, dtype=float))  # 晶胞缩放初值 = 1 (库值)
+            if n_tex:
+                parts.append(np.ones(n_tex, dtype=float))   # 织构 r 初值 = 1 (无取向)
             return np.concatenate(parts)
 
         candidates = []
@@ -1155,6 +1196,30 @@ class RietveldRefiner:
                                    U=0.01, V=-0.004, W=init_W))
         candidates = candidates[:n_starts]
 
+        # ── 4b. 热启动 (v0.15.2): 把快检的最优参数接管为精细模式第 1 个起点 ──
+        # 快检那一轮其实已经找到过不错的 权重/scale/零点/晶胞缩放; 精细模式再从网格
+        # 重头搜, 既慢又可能落进更差的局部极小。这里把快检解补上 Caglioti 初值当起点。
+        # (快检布局 = weights + fwhm + eta + scale + zs [+ cell], 比精细模式少 U/V/W)
+        if _x_sink.get("x") is not None:
+            try:
+                wx = np.asarray(_x_sink["x"], dtype=float)
+                _wn, _wcell = int(_x_sink.get("n_phases", -1)), int(_x_sink.get("n_cell", 0))
+                if (not _x_sink.get("use_caglioti", True) and _wn == n_phases
+                        and wx.shape == (n_phases + 4 + _wcell,)):
+                    w_cand = _make_x0(
+                        wx[:n_phases], wx[n_phases], wx[n_phases + 1],
+                        wx[n_phases + 2], wx[n_phases + 3],
+                        U=init_U, V=init_V,
+                        W=float(max(wx[n_phases], 0.02)) ** 2,
+                    )
+                    if n_cell and _wcell == n_cell:
+                        w_cand[_cell_off:_cell_off + n_cell] = wx[
+                            n_phases + 4:n_phases + 4 + n_cell]
+                    candidates = [w_cand] + candidates[:max(0, n_starts - 1)]
+                    _plog("[warm] 快检解已并入精细模式第 1 起点")
+            except Exception as _e:  # noqa: BLE001
+                _plog(f"[warm] 热启动候选构造失败, 忽略: {type(_e).__name__}")
+
         # ── 5. 参数边界 ──────────────────────────────────────────
         weight_upper = 30.0 if n_phases >= 2 else 1000.0
         lower_parts = [np.zeros(n_phases),
@@ -1165,6 +1230,13 @@ class RietveldRefiner:
             # U/V/W 范围: 经验合理 (FWHM 为正值的 2θ 依赖宽度系数)
             lower_parts.append(np.array([-0.05, -0.10, 1e-4]))
             upper_parts.append(np.array([0.20, 0.10, 4.0]))
+        if n_cell:
+            lower_parts.append(np.full(n_cell, cell_lo))
+            upper_parts.append(np.full(n_cell, cell_hi))
+        if n_tex:
+            # March-Dollase r: 0.6 ↔ 1.8, 覆盖 Brucite 实测所需 r≈0.66 (r^-4.5=6.35)
+            lower_parts.append(np.full(n_tex, 0.6))
+            upper_parts.append(np.full(n_tex, 1.8))
         lower = np.concatenate(lower_parts)
         upper = np.concatenate(upper_parts)
 
@@ -1178,7 +1250,7 @@ class RietveldRefiner:
         # 同时 ε > 后续 clip 边距 1e-8, 保证 x0_clipped 与 polish clip 仍为有效区间。
         param_mask = kwargs.get("_param_mask") or {
             "scale": True, "background": True, "profile": True,
-            "cell": True, "zero_shift": True,
+            "cell": True, "zero_shift": True, "texture": True,
         }
         init_eta = 0.5  # 所有起点的 eta 初值约定为 0.5
         _FREEZE_EPS = 1e-7
@@ -1198,9 +1270,16 @@ class RietveldRefiner:
                 _freeze(n_phases + 6, init_W)
         if not param_mask.get("zero_shift", True):
             _freeze(n_phases + 3, init_zero_shift)
-        # mask["background"] / mask["cell"] 在 builtin 中为 no-op:
-        #   background 由 _estimate_background 一次性预处理, 非 fit 维度;
-        #   cell 在 builtin 中固定 (未加入 fit 维度)。
+        if n_cell and not param_mask.get("cell", True):
+            # v0.15.2: cell 现在真的是 fit 维度了 (各向同性缩放), 掩码关闭即冻结为 1.0
+            for _j in range(n_cell):
+                _freeze(_cell_off + _j, 1.0)
+        if n_tex and not param_mask.get("texture", True):
+            # v0.15.2: 织构 r 掩码关闭即冻结为 1.0 (无择优取向)
+            for _j in range(n_tex):
+                _freeze(_tex_off + _j, 1.0)
+        # mask["background"] 在 builtin 中仍为 no-op:
+        #   background 由 _estimate_background 一次性预处理, 非 fit 维度。
 
         def _unpack(params):
             weights = params[:n_phases]
@@ -1208,19 +1287,36 @@ class RietveldRefiner:
             eta = params[n_phases + 1]
             scale = params[n_phases + 2]
             zs = params[n_phases + 3]
+            cs = None
             if use_caglioti:
                 U_p = params[n_phases + 4]
                 V_p = params[n_phases + 5]
                 W_p = params[n_phases + 6]
-                return weights, fwhm, eta, scale, zs, (U_p, V_p, W_p)
-            return weights, fwhm, eta, scale, zs, None
+                cag = (U_p, V_p, W_p)
+            else:
+                cag = None
+            if n_cell:
+                cs = np.asarray(params[_cell_off:_cell_off + n_cell], dtype=float)
+            tex = None
+            if n_tex:
+                tex = np.asarray(params[_tex_off:_tex_off + n_tex], dtype=float)
+            return weights, fwhm, eta, scale, zs, cag, cs, tex
+
+        def _transform_peaks(cs, tex):
+            """晶胞缩放 (峰位) + March-Dollase (峰强) 一并作用到参考峰表。"""
+            peaks = phase_peaks
+            if n_cell and cs is not None:
+                peaks = self._scale_phase_peaks(peaks, cs, wavelength)
+            if n_tex and tex is not None:
+                peaks = self._apply_texture(peaks, tex_axes, tex)
+            return peaks
 
         def residual(params):
-            weights, fwhm, eta, scale, zs, cag = _unpack(params)
+            weights, fwhm, eta, scale, zs, cag, cs, tex = _unpack(params)
             eff_two_theta = two_theta - zs if abs(zs) > 1e-9 else two_theta
             simulated = self._compute_spectrum_from_ref(
-                eff_two_theta, phase_peaks, weights, fwhm, eta, scale, peak_shape,
-                caglioti=cag
+                eff_two_theta, _transform_peaks(cs, tex), weights, fwhm, eta, scale,
+                peak_shape, caglioti=cag
             )
             r = y_exp - simulated
             if sqrt_w_fit is not None:
@@ -1240,7 +1336,9 @@ class RietveldRefiner:
         _plog(
             f"[init] n_phases={n_phases} n_params={n_params} n_starts={n_starts} "
             f"max_nfev/start={max_nfev_per_start} peak_shape={peak_shape} "
-            f"caglioti={use_caglioti} stat_weights={stat_weights_mode}"
+            f"caglioti={use_caglioti} stat_weights={stat_weights_mode} "
+            f"n_cell={n_cell} n_tex={n_tex} "
+            f"(tex: {', '.join(getattr(phases[i], 'name', '?') for i in _tex_idx) or '-'})"
         )
 
         for _start_i, x0_i in enumerate(candidates):
@@ -1262,10 +1360,10 @@ class RietveldRefiner:
                 continue
 
             # 计算该起点的 wR
-            opt_w, opt_fw, opt_et, opt_sc, opt_zs, opt_cag = _unpack(res_opt.x)
+            opt_w, opt_fw, opt_et, opt_sc, opt_zs, opt_cag, opt_cs, opt_tex = _unpack(res_opt.x)
             eff = two_theta - opt_zs if abs(opt_zs) > 1e-9 else two_theta
             sim_i = self._compute_spectrum_from_ref(
-                eff, phase_peaks, opt_w, opt_fw, opt_et, opt_sc, peak_shape,
+                eff, _transform_peaks(opt_cs, opt_tex), opt_w, opt_fw, opt_et, opt_sc, peak_shape,
                 caglioti=opt_cag
             )
             wr_i = _wr_of(sim_i)
@@ -1289,9 +1387,9 @@ class RietveldRefiner:
                 residual, candidates[0], bounds=(lower, upper),
                 max_nfev=max_nfev_per_start, method="trf",
             )
-            _w, _fw, _et, _sc, _zs, _cag = _unpack(best_result.x)
+            _w, _fw, _et, _sc, _zs, _cag, _cs, _tex = _unpack(best_result.x)
             best_simulated = self._compute_spectrum_from_ref(
-                two_theta, phase_peaks, _w, _fw, _et, _sc, peak_shape,
+                two_theta, _transform_peaks(_cs, _tex), _w, _fw, _et, _sc, peak_shape,
                 caglioti=_cag
             )
         _plog(f"[multistart] best wR={best_wR:.3f}% → 进入局部抛光")
@@ -1346,19 +1444,22 @@ class RietveldRefiner:
                                                 W_i = cur_x[n_phases + 6] * Wm
                                         else:
                                             U_i, V_i, W_i = cur_x[n_phases + 4], cur_x[n_phases + 5], cur_x[n_phases + 6]
-                                        x_t = np.concatenate([core, [U_i, V_i, W_i]])
+                                        # 晶胞缩放不参与抛光方向, 原值带过去即可
+                                        # (n_cell==0 时 cur_x[_cell_off:] 为空, 无副作用)
+                                        x_t = np.concatenate([core, [U_i, V_i, W_i],
+                                                              cur_x[_cell_off:]])
                                     else:
-                                        x_t = core
+                                        x_t = np.concatenate([core, cur_x[_cell_off:]])
                                     # 进一步稀疏: 保留 (fw==1 或 sc==1) 且 (w==1 或 zs==1) 交集约 1/3
                                     if not ((abs(fw_m - 1.0) < 1e-6 or abs(sc_m - 1.0) < 1e-6) and
                                             (abs(w_m - 1.0) < 1e-6 or abs(zs_m - 1.0) < 1e-6)):
                                         continue
                                     x_t = np.clip(x_t, lower + 1e-9, upper - 1e-9)
-                                    _uw, _ufw, _uet, _usc, _uzs, _ucag = _unpack(x_t)
+                                    _uw, _ufw, _uet, _usc, _uzs, _ucag, _ucs, _utex = _unpack(x_t)
                                     eff_t = two_theta - _uzs if abs(_uzs) > 1e-9 else two_theta
                                     sim_t = self._compute_spectrum_from_ref(
-                                        eff_t, phase_peaks, _uw, _ufw, _uet, _usc, peak_shape,
-                                        caglioti=_ucag
+                                        eff_t, _transform_peaks(_ucs, _utex), _uw, _ufw, _uet,
+                                        _usc, peak_shape, caglioti=_ucag
                                     )
                                     wr_t = _wr_of(sim_t)
                                     # 每 8 次评估汇报一次: 抛光约百余次评估, 采样过密
@@ -1376,8 +1477,24 @@ class RietveldRefiner:
             best_result_x = best_result.x
         _plog(f"[polish] 评估 {_polish_n} 次 → wR={best_wR:.3f}%")
 
+        # v0.15.2: 回收本轮最终参数向量 (供上层"快检 → 精细模式"热启动)
+        _sink = kwargs.get("_x_sink")
+        if isinstance(_sink, dict):
+            try:
+                _sink.update({
+                    "x": np.asarray(best_result_x, dtype=float).copy(),
+                    "use_caglioti": bool(use_caglioti),
+                    "n_phases": int(n_phases),
+                    "n_cell": int(n_cell),
+                })
+            except Exception:  # noqa: BLE001
+                pass
+
         # ── 8. 提取最终结果 ──────────────────────────────────────
-        opt_weights, opt_fwhm, opt_eta, opt_scale, opt_zero_shift, opt_cag = _unpack(best_result_x)
+        (opt_weights, opt_fwhm, opt_eta, opt_scale, opt_zero_shift,
+         opt_cag, opt_cell, opt_tex) = _unpack(best_result_x)
+        opt_cell_list = ([float(x) for x in opt_cell] if opt_cell is not None else [])
+        opt_tex_list = ([float(x) for x in opt_tex] if opt_tex is not None else [])
 
         # 归一化权重为百分比
         total_w = np.sum(opt_weights)
@@ -1443,11 +1560,12 @@ class RietveldRefiner:
         refined_phases = []
         for i, phase in enumerate(phases):
             lat = phase.lattice if phase.lattice else LatticeParams()
+            _s = opt_cell_list[i] if i < len(opt_cell_list) else 1.0
             refined_phases.append(Phase(
                 name=phase.name,
                 formula=phase.formula,
                 lattice=LatticeParams(
-                    a=lat.a, b=lat.b, c=lat.c,
+                    a=lat.a * _s, b=lat.b * _s, c=lat.c * _s,
                     alpha=lat.alpha, beta=lat.beta, gamma=lat.gamma,
                 ),
                 weight_fraction=float(weight_pcts[i]),
@@ -1495,6 +1613,13 @@ class RietveldRefiner:
                 "bg_chebyshev_applied": bool(bg_cheb_applied),
                 # v0.11.0 R-A1: 统计权 (目标函数与 wR 自洽), 默认 "none"
                 "stat_weights": stat_weights_mode,
+                # v0.15.2 A 路线: 各向同性晶胞缩放 (每相一个自由度, 1.0 = 库值)
+                "refine_cell": bool(refine_cell),
+                "cell_scale": opt_cell_list,
+                # v0.15.2 A 路线续: March-Dollase 织构 (仅 _tex_idx 内的相有值)
+                "refine_texture": bool(refine_texture),
+                "texture_phases": [getattr(phases[i], "name", "?") for i in _tex_idx],
+                "texture_r": opt_tex_list,
             },
         )
 
@@ -1662,6 +1787,137 @@ class RietveldRefiner:
             np.asarray(two_theta, dtype=float), phase_peaks,
             weights, fwhm, eta, scale, peak_shape, caglioti,
         )
+
+    @staticmethod
+    def _scale_phase_peaks(
+        phase_peaks: list, cell_scales, wavelength: float
+    ) -> list:
+        """按每相各向同性晶胞缩放因子平移参考峰位 (v0.15.2 A 路线)。
+
+        晶胞各向同性缩放 s 等价于 d' = d·s, 由 sinθ = λ/(2d) 得 sinθ' = sinθ/s
+        → 2θ' = 2·asin(sinθ/s)。仅改峰位, 保留原 hkl 记法与强度。
+
+        - ``cell_scales`` 与 ``phase_peaks`` 等长; 某相因子为 1.0 时该相峰表原样复用;
+        - 波长缺失或 ≤0 时整体原样返回 (不做无意义的几何换算);
+        - 缩放后 sinθ' ≥ 1 的反射落在不可测区, 直接剔除。
+        """
+        lam = float(wavelength or 0.0)
+        if lam <= 0 or not phase_peaks:
+            return phase_peaks
+        out: list = []
+        for peaks, s in zip(phase_peaks, cell_scales):
+            try:
+                s = float(s)
+            except (TypeError, ValueError):
+                s = 1.0
+            if not peaks or abs(s - 1.0) < 1e-9:
+                out.append(peaks)
+                continue
+            conv: list = []
+            for p in peaks:
+                try:
+                    tth = float(p[1])
+                    inten = float(p[2])
+                except (TypeError, ValueError, IndexError):
+                    conv.append(p)
+                    continue
+                sin_half = np.sin(np.radians(tth / 2.0))
+                if sin_half <= 0:
+                    conv.append(p)
+                    continue
+                sin_new = sin_half / s
+                if sin_new >= 1.0:
+                    continue
+                conv.append((p[0], float(2.0 * np.degrees(np.arcsin(sin_new))), inten))
+            out.append(conv)
+        return out
+
+    @staticmethod
+    def _texture_cos_alpha(peaks, lattice) -> Optional[np.ndarray]:
+        """计算每峰法线与 [001] 织构轴夹角的 cos α (March-Dollase 预计算)。
+
+        cos α = (h·G*[0,2] + k·G*[1,2] + l·G*[2,2]) / (√G*[2,2] · |g|)，
+        其中 G* = inv(直接度量矩阵 G)，|g|² = [hkl]·G*·[hkl]。
+        四指标 (h,k,i,l) 自动取 (h,k,l)。不可计算的相返回 None:
+        无晶格 / hkl 缺失或全零 / 峰数不足 / cos α 无区分度 (std < 0.05,
+        此时 r 与 scale 退化耦合, 修正无意义)。
+        """
+        if not peaks or lattice is None:
+            return None
+        try:
+            a, b, c = float(lattice.a), float(lattice.b), float(lattice.c)
+            al = np.radians(float(lattice.alpha))
+            be = np.radians(float(lattice.beta))
+            ga = np.radians(float(lattice.gamma))
+            G = np.array([
+                [a * a, a * b * np.cos(ga), a * c * np.cos(be)],
+                [a * b * np.cos(ga), b * b, b * c * np.cos(al)],
+                [a * c * np.cos(be), b * c * np.cos(al), c * c],
+            ])
+            Gs = np.linalg.inv(G)
+        except Exception:  # noqa: BLE001
+            return None
+        if len(peaks) < 4:
+            return None
+        cos_list = []
+        for p in peaks:
+            try:
+                hkl = p[0]
+                if len(hkl) == 4:  # 六方/三方四指标 (h,k,i,l) → 取 l
+                    hv = (float(hkl[0]), float(hkl[1]), float(hkl[3]))
+                elif len(hkl) == 3:
+                    hv = (float(hkl[0]), float(hkl[1]), float(hkl[2]))
+                else:
+                    return None
+            except (TypeError, ValueError, IndexError):
+                return None
+            gv = np.asarray(hv, dtype=float)
+            g2 = float(gv @ Gs @ gv)
+            if g2 <= 1e-12:
+                return None
+            num = (hv[0] * Gs[0, 2] + hv[1] * Gs[1, 2] + hv[2] * Gs[2, 2])
+            cos_list.append(abs(float(num / (np.sqrt(Gs[2, 2]) * np.sqrt(g2)))))
+        arr = np.asarray(cos_list, dtype=float)
+        if not np.all(np.isfinite(arr)) or float(arr.std()) < 0.05:
+            return None
+        return arr
+
+    @staticmethod
+    def _apply_texture(phase_peaks: list, tex_axes: list, tex_params) -> list:
+        """把 March-Dollase 修正作用到参考峰强度: I' = I·P(α)/mean(P)。
+
+        P(α) = (r²cos²α + sin²α/r)^(-3/2); r=1 时 P≡1 (无修正)。
+        tex_params 只对应 tex_axes 中非 None 的相 (顺序一致)。
+        """
+        if tex_params is None or len(tex_params) == 0:
+            return phase_peaks
+        out: list = []
+        k = 0
+        for peaks, cos_a in zip(phase_peaks, tex_axes):
+            if cos_a is None or k >= len(tex_params):
+                out.append(peaks)
+                continue
+            r = float(tex_params[k])
+            k += 1
+            try:
+                ca2 = np.asarray(cos_a, dtype=float) ** 2
+                corr = (r * r * ca2 + (1.0 - ca2) / r) ** (-1.5)
+                mean = float(np.mean(corr))
+                if mean <= 0 or not np.isfinite(mean):
+                    out.append(peaks)
+                    continue
+                corr = corr / mean
+            except Exception:  # noqa: BLE001
+                out.append(peaks)
+                continue
+            conv: list = []
+            for p, f in zip(peaks, corr):
+                try:
+                    conv.append((p[0], float(p[1]), float(p[2]) * float(f)))
+                except (TypeError, ValueError, IndexError):
+                    conv.append(p)
+            out.append(conv)
+        return out
 
     def _compute_spectrum(
         self,

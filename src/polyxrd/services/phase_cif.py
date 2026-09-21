@@ -62,6 +62,94 @@ def _element_from_label(label: str) -> str:
     return m.group(1) if m else ""
 
 
+def expand_sites_by_symmetry(sites: list[dict], space_group: object,
+                             max_sites: int = 2000) -> list[dict]:
+    """把非对称单元位点按空间群对称操作展开成完整晶胞内容 (P1 全胞).
+
+    **为什么需要** (v0.15.2 修复): COD CIF 的原子环一般只列非对称单元,
+    依赖空间群对称操作生成全胞。而 ``cod_local.get_phase`` 直建 pymatgen
+    Structure、``phase_to_cif_text`` 反生成 CIF 时都按 P1 处理 —— 高对称
+    结构 (如 R-3c 方解石, 非对称单元仅 3 位点) 的模拟峰会整体错误
+    (104 特征峰缺失、假峰出现在 5.18°), 导致精修权重塌缩 (2-1 实测
+    wR 卡 40%, 修复后预期 ≤20%)。
+
+    **幂等安全**: 若传入的位点已是完整晶胞, 完整轨道在对称群作用下映射回
+    自身 (去重后不变), 因此对"是否已展开"未知的位点无条件调用是安全的。
+
+    空间群缺失 / 解析失败 / P1 / 位点脏数据时**原样返回** (行为不劣化)。
+    """
+    import numpy as np
+
+    out_sites = list(sites) if sites else []
+    if not out_sites:
+        return out_sites
+    sg_raw = str(space_group or "").strip()
+    if not sg_raw:
+        return out_sites
+    # 剥 setting 后缀 (:H/:R/:1/:2 …) 并去空格 ("R -3 c :H" → "R-3c")
+    sg_clean = re.sub(r"\s*:\s*[A-Za-z0-9]{1,2}$", "", sg_raw)
+    sg_clean = re.sub(r"\s+", "", sg_clean)
+    if sg_clean in ("P1", "C1"):  # P1 无对称操作
+        return out_sites
+    try:
+        from pymatgen.symmetry.groups import SpaceGroup
+
+        ops = SpaceGroup(sg_clean).symmetry_ops
+    except Exception:  # noqa: BLE001 - 空间群解析失败 → 不展开
+        return out_sites
+    if not ops or len(ops) <= 1:
+        return out_sites
+
+    expanded: list[dict] = []
+    # v0.15.2 性能修复: 去重由"逐点线性扫描 _frac_close"改为"按元素分组的
+    # 向量化矩阵比较"。原实现对大晶胞×高对称群 (数百位点 × ~192 操作 →
+    # ~10 万生成点, 每点与最多 2000 个已展开点逐一比较) 是 O(10^8) 级
+    # 纯 Python 热点, 实测 4-1 样品 Fluorite 大胞候选卡死 >12min。
+    if len(out_sites) * len(ops) > 500_000:  # 病态输入保险丝
+        return out_sites
+    tol = 1e-3
+    mat_by_elem: dict[str, "np.ndarray"] = {}
+    for s in out_sites:
+        try:
+            base = np.array([float(s["x"]), float(s["y"]), float(s["z"])])
+            elem = str(s.get("element") or _element_from_label(
+                str(s.get("label") or "")))
+            occ = float(s.get("occupancy", 1.0) or 1.0)
+        except (TypeError, ValueError, KeyError):
+            return out_sites  # 脏位点 → 放弃展开, 保持旧行为
+        if not elem:
+            return out_sites
+        mat = mat_by_elem.get(elem)
+        for op in ops:
+            p = np.asarray(op.operate(base), dtype=float)
+            p = p - np.floor(p)
+            p = np.where(p < 0, p + 1.0, p)
+            if mat is not None and mat.shape[0]:
+                d = np.abs(mat - p)
+                d = np.minimum(d, 1.0 - d)
+                if bool(np.any(np.all(d < tol, axis=1))):
+                    continue  # 轨道重复点
+            expanded.append({"_elem": elem, "_c": p, "_occ": occ})
+            mat = np.vstack((mat, p)) if mat is not None else p.reshape(1, 3)
+            mat_by_elem[elem] = mat
+
+    if not expanded or len(expanded) > max_sites:
+        return out_sites  # 异常膨胀 → 放弃展开
+    counters: dict[str, int] = {}
+    result: list[dict] = []
+    for o in expanded:
+        counters[o["_elem"]] = counters.get(o["_elem"], 0) + 1
+        result.append({
+            "label": f"{o['_elem']}{counters[o['_elem']]}",
+            "element": o["_elem"],
+            "x": float(o["_c"][0]),
+            "y": float(o["_c"][1]),
+            "z": float(o["_c"][2]),
+            "occupancy": o["_occ"],
+        })
+    return result
+
+
 def phase_to_cif_text(phase: Phase) -> str:
     """生成 CIF 1.1 文本 (返回字符串). 不写盘, 由调用方负责.
 
@@ -106,6 +194,11 @@ def phase_to_cif_text(phase: Phase) -> str:
                 "x": 0.0, "y": 0.0, "z": 0.0,
                 "occupancy": 1.0,
             })
+
+    # v0.15.2: 非对称单元 → 完整晶胞 (幂等, 已展开的位点原样通过)。
+    # 否则 pymatgen/GSAS-II/FullProf 按 P1 读取高对称结构会整体算错强度。
+    if sites:
+        sites = expand_sites_by_symmetry(sites, phase.space_group)
 
     if sites:
         lines.append("loop_")
