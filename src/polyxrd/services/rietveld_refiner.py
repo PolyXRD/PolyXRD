@@ -860,18 +860,8 @@ class RietveldRefiner:
             return cached if cached != "fail" else None
 
         peaks: Optional[list] = None
-        try:
-            import warnings
 
-            from pymatgen.analysis.diffraction.xrd import XRDCalculator
-            from pymatgen.io.cif import CifParser
-
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                parser = CifParser.from_str(cif_text, occupancy_tolerance=1.2)
-                struct = parser.parse_structures(primitive=False)[0]
-            calc = XRDCalculator(wavelength=float(wavelength))
-            pattern = calc.get_pattern(struct, two_theta_range=tth_range)
+        def _pattern_to_rows(pattern):
             rows: list[tuple[tuple, float, float]] = []
             for i in range(len(pattern.x)):
                 hkl = (0, 0, 0)
@@ -888,7 +878,48 @@ class RietveldRefiner:
             imax = max((r[2] for r in rows), default=0.0)
             if rows and imax > 0:
                 # 归一到 max=100, 与库内参考峰 (COD 粉末强度) 语义一致
-                peaks = [(h, t, 100.0 * inten / imax) for h, t, inten in rows]
+                return [(h, t, 100.0 * inten / imax) for h, t, inten in rows]
+            return None
+
+        try:
+            from pymatgen.analysis.diffraction.xrd import XRDCalculator
+
+            calc = XRDCalculator(wavelength=float(wavelength))
+
+            # ── 路径 1 (v0.15.2): atomic_sites 直构 Structure ──────────
+            # 位点已经是展开全胞 (cod_local.get_phase 出口保证)。旧路径强制
+            # 走 CIF 全文 → CifParser, 会对"全胞位点 × 空间群操作"做二次
+            # 展开 (15R SiC 192 位点 × 192 操作 ≈ 3.7 万候选), 纯 Python
+            # 匹配去重实测小时级; 直构路径与 get_phase 同一数学, 秒级。
+            sites = getattr(phase, "atomic_sites", None)
+            if sites and getattr(phase, "lattice", None) is not None:
+                try:
+                    from pymatgen.core import Lattice, Structure
+
+                    lat = phase.lattice
+                    pmg_lattice = Lattice.from_parameters(
+                        lat.a, lat.b, lat.c, lat.alpha, lat.beta, lat.gamma)
+                    species = [str(s["element"]) for s in sites]
+                    coords = [[float(s["x"]), float(s["y"]), float(s["z"])]
+                              for s in sites]
+                    struct = Structure(pmg_lattice, species, coords)
+                    pattern = calc.get_pattern(struct, two_theta_range=tth_range)
+                    peaks = _pattern_to_rows(pattern)
+                except Exception:  # noqa: BLE001 - 直构失败 → CIF 全文回退
+                    peaks = None
+
+            # ── 路径 2: CIF 全文 CifParser (无位点时回退) ─────────────
+            if peaks is None and cif_text:
+                import warnings
+
+                from pymatgen.io.cif import CifParser
+
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    parser = CifParser.from_str(cif_text, occupancy_tolerance=1.2)
+                    struct = parser.parse_structures(primitive=False)[0]
+                pattern = calc.get_pattern(struct, two_theta_range=tth_range)
+                peaks = _pattern_to_rows(pattern)
         except Exception:  # noqa: BLE001 - CIF 解析/模拟失败一律回退旧峰表
             peaks = None
 

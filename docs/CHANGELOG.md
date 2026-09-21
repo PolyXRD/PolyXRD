@@ -1471,6 +1471,22 @@ v0.8.21 → v0.8.22 → v0.8.23 → v0.9.0 → v0.9.1 → v0.9.7 → v0.9.8 → 
    可评判候选（垃圾结构曾以 0 分"完美"夺冠）；`_load_phase` 同时要求命中结构
    必须有模拟峰。
 
+6. **`_cif_reference_peaks` 直构优先（7-1 卡死 5h 根治）**：旧实现强制走
+   CIF 全文 → `CifParser`，而 COD 1541661（15R SiC 多型体，192 位点）的 CIF
+   原子环列的是**全胞位点**，CifParser 再乘 192 个 R-3m 对称操作 ≈ 3.7 万
+   候选位点的纯 Python 匹配去重，实测小时级起 —— py-spy 抓栈定位（比逐阶段
+   日志高效得多）。现优先用 `atomic_sites` 直构 `Structure`
+   （与 `cod_local.get_phase` 同一数学，实测 2.3 s/相），CIF 全文解析降级为
+   无位点时的回退。
+
+**13 试样"全跑通"基准（BENCH_FAST 快检口径）**：11 样主基准
+（`bench_v0152_final.txt`，此前 3-1 卡死 1h+、现 375 s 完成）+ 7-1/7-2 限幅
+预算补跑（`bench_v0152_7x.txt`，`BENCH_NFEV=10 / BENCH_STARTS=2` —— 15R SiC
+192 位点等大结构的伪 Voigt 全矩阵合成 ~2 s/次、有限差分雅可比每迭代 21 次
+评估，全预算口径单样数小时，"全跑通"只验证链路无错无挂）。
+`failed=无`。已知慢源（后续优化项）：`spectrum_from_refs` 无峰距截断、
+`_scale_phase_peaks` 逐峰 Python 循环、雅可比稠密差分。
+
 #### B 路线 · 同质多象判别
 
 `PhaseStructureResolver` 原先在结构候选里"取第一个能加载的"，方解石会被同化学式的
