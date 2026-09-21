@@ -156,8 +156,13 @@ def main() -> int:
                 )
                 splash.show()
                 app.processEvents()
-
-                QTimer.singleShot(800, splash.close)
+                # 注意: 关闭启动图的定时器**必须**等到主窗口 show() 之后再挂。
+                # 若在此处就挂 800ms 定时器, 首次运行 (matplotlib 字体缓存/冷 .pyc,
+                # 主窗口构造要 3~4s) 期间一旦处理到事件, splash 就可能在主窗口
+                # 显形前关闭; 此时"最后一个窗口已关闭" → quitOnLastWindowClosed
+                # (默认 True) 触发 → 应用直接退出, 控制台一闪而过且**不留任何
+                # 异常日志** (v0.15.2 排查到的"run_dev.bat 闪退"路径)。
+                # 关闭动作统一放在 window.show() 之后。
         except Exception:  # noqa: BLE001 - 启动图失败不能拦住主窗口
             splash = None
     _startup_log(f"splash={'ok' if splash is not None else 'skipped'}")
@@ -165,11 +170,29 @@ def main() -> int:
     config = get_config()
     window = MainWindow(config)
     _startup_log("MainWindow OK")
-    window.show()
+
+    # 主窗口先显形, 关闭启动图的定时器**随后**才挂 (顺序不能反, 见 splash 段注释:
+    # 反过来的顺序会在冷启动慢路径上触发 quitOnLastWindowClosed → 闪退)。
+    # show() 单独包一层: 原生的窗口创建阶段若炸掉, 至少把 traceback 落盘,
+    # 不再让进程"静默消失"。
+    _startup_log("showing main window")
+    try:
+        window.show()
+    except BaseException:  # noqa: BLE001 - 兜底: 一定留下证据
+        _write_crash(*sys.exc_info())
+        _fatal_dialog(
+            "PolyXRD 启动失败",
+            "主窗口 show() 阶段发生异常, 详情见日志:\n"
+            f"{_log_dir()}\n\n"
+            + "".join(traceback.format_exception(*sys.exc_info()))[-1500:],
+        )
+        raise
     _startup_log("shown")
 
     if splash is not None:
         QTimer.singleShot(100, lambda: (splash.close(), window.activateWindow()))
+        # 兜底: 上面那条 lambda 若被任何原因吞掉, 800ms 后也一定收掉启动图
+        QTimer.singleShot(800, splash.close)
 
     code = app.exec()
     _startup_log(f"--- exit code={code}")
