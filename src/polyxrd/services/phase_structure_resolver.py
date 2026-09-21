@@ -108,6 +108,44 @@ def _candidate_score(cand: dict, phase: Phase) -> float:
     return score
 
 
+def _peak_disagreement(cif_phase: Phase, orig: Phase) -> float:
+    """候选结构模拟峰 vs 库内 d-I 峰的位置失配度 (越小越可信).
+
+    v0.15.2 新增, 用于**多形体甄别**: 方解石 (R-3c) 与文石 (Pmcn) 晶胞
+    参数接近、仅凭"空间群一致 + 晶胞接近度"排序会选错 (2-1 实测把方解石
+    匹配到 Pmcn 文石型 CaCO3, 104 主峰 29.4° 无法拟合 → wR 卡 40%)。
+    位置失配对**衍射花样**敏感, 可把多形体区分开。
+
+    双向加权平均 2θ 距离 (强峰 I≥5 参与权重)。
+    - 库侧 (orig) 无峰: 返回 0 (中性, 所有候选同样无法评判);
+    - 模拟侧 (cif_phase) 无峰: 返回 inf —— 模拟不出的结构对精修毫无
+      价值, 必须输给任何可评判的候选 (COD 1559793 教训: 垃圾位点结构
+      无模拟峰, 曾以 0 分"完美"夺冠)。
+    """
+    lib = [(float(t), float(i)) for _, t, i in
+           (orig.get_reference_peaks() if hasattr(orig, "get_reference_peaks")
+            else orig.reference_peaks) or []]
+    sim = [(float(t), float(i)) for _, t, i in
+           (getattr(cif_phase, "reference_peaks", None) or [])]
+    if not sim:
+        return float("inf")
+    if not lib:
+        return 0.0
+
+    def _one_way(src, dst) -> float:
+        pen = 0.0
+        w = 0.0
+        for t, i in src:
+            if i < 5.0:
+                continue
+            w += i
+            d = min((abs(t - tt2) for tt2, _ in dst), default=5.0)
+            pen += i * min(d, 2.0)
+        return pen / w if w else 0.0
+
+    return _one_way(sim, lib) + _one_way(lib, sim)
+
+
 class PhaseStructureResolver:
     """把检索得到的物相批量匹配到 COD 库 CIF 的解析器。
 
@@ -222,12 +260,22 @@ class PhaseStructureResolver:
             cands = []
         cands.sort(key=lambda c: _candidate_score(c, phase))
 
-        for cand in cands[:3]:
+        # v0.15.2: 多形体甄别 —— 候选结构模拟峰与库内 d-I 峰的位置失配度
+        # 参与择优 (旧逻辑取排序后第一个能加载的候选, 多形体易选错)。
+        best: Optional[tuple[float, dict, Phase]] = None
+        for cand in cands[:6]:
             cif_phase = self._load_phase(
                 db, int(cand["cod_id"]), wavelength, two_theta_range
             )
             if cif_phase is None or not cif_phase.atomic_sites:
                 continue
+            score = (_peak_disagreement(cif_phase, phase)
+                     + 0.3 * _candidate_score(cand, phase))
+            if best is None or score < best[0]:
+                best = (score, cand, cif_phase)
+
+        if best is not None:
+            cand, cif_phase = best[1], best[2]
             merged = self._merge(phase, cif_phase, int(cand["cod_id"]))
             self._cache[key] = merged
             note = (
@@ -278,6 +326,9 @@ class PhaseStructureResolver:
         except Exception:
             return None
         if p is None or not getattr(p, "atomic_sites", None):
+            return None
+        # v0.15.2: 模拟峰为空的结构无法参与 |F|² 精修也无法评判, 不算命中
+        if not getattr(p, "reference_peaks", None):
             return None
         p.cif_path = self._ensure_cif_file(db, cod_id, p.cif_path)
         return p

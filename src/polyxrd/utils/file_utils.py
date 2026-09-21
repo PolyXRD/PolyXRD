@@ -34,6 +34,7 @@ def get_file_extensions(format: str) -> list[str]:
         "xrdml": [".xrdml", ".xml"],
         "raw": [".raw"],
         "brml": [".brml"],
+        "mdi": [".mdi"],
         "cif": [".cif"],
         "gpx": [".gpx"],
         "json": [".json"],
@@ -66,6 +67,7 @@ def detect_xrd_format(file_path: str | Path) -> str:
         ".xml": "xrdml",
         ".raw": "raw",
         ".brml": "brml",
+        ".mdi": "mdi",
         ".cif": "cif",
         ".gpx": "gpx",
     }

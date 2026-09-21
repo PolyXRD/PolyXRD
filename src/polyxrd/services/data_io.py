@@ -26,7 +26,7 @@ def detect_format(path: Union[str, Path]) -> str:
     """按扩展名 + 文件头文本嗅探格式。
 
     Returns:
-        "txt"|"csv"|"xy"|"dat"|"xrdml"|"raw"|"brml"|"shimadzu"|"unknown"
+        "txt"|"csv"|"xy"|"dat"|"mdi"|"xrdml"|"raw"|"brml"|"shimadzu"|"unknown"
     """
     p = Path(path)
     ext = p.suffix.lower()
@@ -41,6 +41,8 @@ def detect_format(path: Union[str, Path]) -> str:
         return "brml"
     if ext == ".raw":
         return "raw"
+    if ext == ".mdi":
+        return "mdi"
     text_head = head.decode("utf-8", errors="ignore").lower()
     if "target" in text_head and "voltage" in text_head or "<2theta>" in text_head:
         return "shimadzu"
