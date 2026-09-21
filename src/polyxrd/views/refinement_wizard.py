@@ -521,6 +521,12 @@ class RefinementWizard(QWidget):
         self._label_wr = QLabel("--")
         result_layout.addRow(tr("wizard.execute_page.label_wr"), self._label_wr)
 
+        self._label_rexp = QLabel("--")
+        result_layout.addRow("Rexp:", self._label_rexp)
+
+        self._label_rb = QLabel("--")
+        result_layout.addRow("Rb:", self._label_rb)
+
         self._label_gof = QLabel("--")
         result_layout.addRow(tr("wizard.execute_page.label_gof"), self._label_gof)
 
@@ -1384,7 +1390,9 @@ class RefinementWizard(QWidget):
             )
 
     def _display_result(self, result: RefinementResult) -> None:
-        self._label_wr.setText(f"{result.wR:.3f} %")
+        self._label_wr.setText(f"{result.Rwp:.3f} %")
+        self._label_rexp.setText(f"{getattr(result, 'Rexp', 0.0):.3f} %")
+        self._label_rb.setText(f"{getattr(result, 'Rb', 0.0):.3f} %")
         self._label_gof.setText(f"{result.GOF:.3f}")
         self._label_quality.setText(result.quality_grade)
         self._label_cycles_done.setText(str(result.num_cycles))

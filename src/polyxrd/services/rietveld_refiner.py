@@ -370,9 +370,19 @@ class RietveldRefiner:
             sim = np.asarray(ycalc, dtype=float)
             sim_data = (data.two_theta, sim)
             resid = (data.two_theta, np.asarray(data.intensity) - sim)
+            # v0.15.2: 从回传计算谱补算 Rexp / Rb (Rwp 以 GSAS-II 回传值为准)
+            _m = self._calc_profile_metrics(
+                np.asarray(data.intensity, dtype=float), sim,
+                weight=None, n_params=0,
+            )
+            Rexp = _m["Rexp"]
+            Rb = _m["Rb"]
+            if not GOF and Rexp > 0:
+                GOF = wR / Rexp
         else:
             sim_data = (data.two_theta, data.intensity)  # 旧行为
             resid = (data.two_theta, np.zeros_like(data.two_theta))
+            Rexp, Rb = 0.0, 0.0
 
         return RefinementResult(
             phases=refined_phases,
@@ -380,6 +390,8 @@ class RietveldRefiner:
             simulated_data=sim_data,
             residual_data=resid,
             wR=wR,
+            Rexp=Rexp,
+            Rb=Rb,
             GOF=GOF,
             quality=quality,
             num_cycles=int(out.get("n_cycles", max_cycles)),
@@ -732,11 +744,13 @@ class RietveldRefiner:
             )
 
             sim_full = model.pattern(two_theta)
-            wR = self._calc_wR(intensity, sim_full)
-            n_points = len(intensity)
-            n_free = max(1, n_points - len(refine_keys))
-            ss_res = float(np.sum((intensity - sim_full) ** 2))
-            GOF = float(np.sqrt(ss_res / n_free) / (np.mean(np.abs(intensity)) + 1e-10))
+            metrics = self._calc_profile_metrics(
+                intensity, sim_full, weight=None, n_params=len(refine_keys),
+            )
+            wR = metrics["Rwp"]
+            Rexp = metrics["Rexp"]
+            Rb = metrics["Rb"]
+            GOF = metrics["GOF"]
 
             refined_a = float(model.lattice.a)
             refined_phase = Phase(
@@ -760,6 +774,8 @@ class RietveldRefiner:
                 simulated_data=(two_theta, sim_full),
                 residual_data=(two_theta, intensity - sim_full),
                 wR=wR,
+                Rexp=Rexp,
+                Rb=Rb,
                 GOF=GOF,
                 quality=quality,
                 num_cycles=int(getattr(result, "nfev", 0)),
@@ -1403,11 +1419,15 @@ class RietveldRefiner:
                 # 任何异常 → 静默回退 (守门员: 默认值已关; 走正门也不应崩)
                 bg_cheb_applied = False
 
-        # GOF
-        n_points = len(intensity)
-        n_free = max(1, n_points - n_params)
-        ss_res = np.sum(residuals ** 2)
-        GOF = float(np.sqrt(ss_res / n_free) / (np.mean(np.abs(intensity)) + 1e-10))
+        # v0.15.2: 通用 R 因子组 (Rwp / Rexp / Rb / GOF)
+        # GOF 弃用旧的非标准量, 改为标准定义 GOF = Rwp / Rexp
+        metrics = self._calc_profile_metrics(
+            intensity, simulated_full, weight=w_fit, n_params=n_params,
+        )
+        wR = metrics["Rwp"]
+        Rexp = metrics["Rexp"]
+        Rb = metrics["Rb"]
+        GOF = metrics["GOF"]
 
         # 质量等级
         if wR < 5:
@@ -1442,6 +1462,8 @@ class RietveldRefiner:
             simulated_data=(two_theta, simulated_full),
             residual_data=(two_theta, residuals),
             wR=wR,
+            Rexp=Rexp,
+            Rb=Rb,
             GOF=GOF,
             quality=quality,
             num_cycles=num_cycles,
@@ -1477,8 +1499,9 @@ class RietveldRefiner:
         )
 
         _plog(
-            "[result] wR={:.3f}% GOF={:.3f} nfev={} Rwp_quality={}".format(
-                float(wR), float(GOF), int(num_cycles), quality
+            "[result] Rwp={:.3f}% Rexp={:.3f}% Rb={:.3f}% GOF={:.3f} nfev={} quality={}".format(
+                float(wR), float(Rexp), float(Rb), float(GOF),
+                int(num_cycles), quality,
             )
         )
         _plog(
@@ -1803,6 +1826,45 @@ class RietveldRefiner:
 
         return float(np.sqrt(numerator / denominator) * 100)
 
+    @staticmethod
+    def _calc_profile_metrics(
+        observed: np.ndarray,
+        simulated: np.ndarray,
+        weight: Optional[np.ndarray] = None,
+        n_params: int = 0,
+    ) -> dict:
+        """v0.15.2: 计算通用 R 因子组 (Rwp / Rexp / Rb / GOF)。
+
+        - Rwp  = sqrt(Σ w (y_obs - y_calc)² / Σ w y_obs²) × 100  (即原 wR)
+        - Rexp = sqrt((N - P) / Σ w y_obs²) × 100  (期望 R, N=数据点, P=参数数)
+        - Rb   = Σ|y_obs - y_calc| / Σ y_obs × 100  (轮廓 Bragg R, 不加权)
+        - GOF  = Rwp / Rexp  (标准 "goodness of fit", 理想值 ≈ 1)
+
+        输入为**含背景的全谱** (与 Rietveld 惯例一致); w 缺省为单位权。
+        """
+        observed = np.asarray(observed, dtype=float)
+        simulated = np.asarray(simulated, dtype=float)
+        if weight is None:
+            weight = np.ones_like(observed)
+        else:
+            weight = np.asarray(weight, dtype=float)
+
+        rwp = RietveldRefiner._calc_wR(observed, simulated, weight)
+        n_pts = int(observed.size)
+        n_free = max(1, n_pts - max(0, int(n_params)))
+        denom = float(np.sum(weight * observed ** 2))
+        rexp = (
+            float(np.sqrt(n_free / denom) * 100)
+            if denom > 0 else 100.0
+        )
+        rb_denom = float(np.sum(observed))
+        rb = (
+            float(np.sum(np.abs(observed - simulated)) / rb_denom * 100)
+            if rb_denom > 0 else 100.0
+        )
+        gof = float(rwp / rexp) if rexp > 0 else 0.0
+        return {"Rwp": rwp, "Rexp": rexp, "Rb": rb, "GOF": gof}
+
     # ------------------------------------------------------------------
     # Le Bail 晶胞参数精修 (P4)
     # ------------------------------------------------------------------
@@ -1990,13 +2052,19 @@ class RietveldRefiner:
             elements=phase.elements,
         )
 
+        _m_lb = self._calc_profile_metrics(
+            np.asarray(intensity, dtype=float), np.asarray(best_calc, dtype=float),
+            weight=None, n_params=1,
+        )
         return RefinementResult(
             phases=[refined_phase],
             observed_data=(two_theta, intensity),
             simulated_data=(two_theta, best_calc),
             residual_data=(two_theta, intensity - best_calc),
             wR=best_rwp,
-            GOF=0.0,
+            Rexp=_m_lb["Rexp"],
+            Rb=_m_lb["Rb"],
+            GOF=_m_lb["GOF"],
             quality=quality,
             num_cycles=n_scan,
             converged=bool(best_rwp < rwp_init),

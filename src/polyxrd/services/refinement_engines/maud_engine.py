@@ -122,6 +122,8 @@ def _parse_par_rfactors(par_path: Path) -> dict:
     out = {
         "rwp": None,
         "wrp": None,
+        "rexp": None,
+        "rb": None,
         "gof": None,
         "iterations": None,
     }
@@ -130,6 +132,10 @@ def _parse_par_rfactors(par_path: Path) -> dict:
     pat = {
         "rwp": re.compile(r"^_refine_ls_R_factor_all\s+([0-9.eE+\-]+)", re.MULTILINE),
         "wrp": re.compile(r"^_refine_ls_wR_factor_all\s+([0-9.eE+\-]+)", re.MULTILINE),
+        "rexp": re.compile(
+            r"^_refine_ls_R_factor_expected\s+([0-9.eE+\-]+)", re.MULTILINE),
+        "rb": re.compile(
+            r"^_refine_ls_R_Bragg_all\s+([0-9.eE+\-]+)", re.MULTILINE),
         "gof": re.compile(r"^_refine_ls_goodness_of_fit_all\s+([0-9.eE+\-]+)", re.MULTILINE),
         "iterations": re.compile(r"^_refine_ls_number_iteration\s+([0-9]+)", re.MULTILINE),
     }
@@ -708,6 +714,8 @@ class MaudEngine:
         # 复制最终 par 到 work_dir 顶层 (供 GUI 查看); 不动 shutil.rmtree 因为可能 keep_workdir
         rwp = float(rfactors.get("rwp") or 0.0)
         wrp = float(rfactors.get("wrp") or 0.0)
+        rexp = float(rfactors.get("rexp") or 0.0)
+        rb = float(rfactors.get("rb") or 0.0)
         gof = float(rfactors.get("gof") or 0.0)
         n_iter = int(rfactors.get("iterations") or 0)
 
@@ -733,7 +741,9 @@ class MaudEngine:
             observed_data=observed,
             simulated_data=simulated,
             residual_data=residual,
-            wR=wrp,  # 用 wR (加权) 作为主要指标
+            wR=wrp,  # wR ≡ Rwp (加权轮廓 R), 用作主要指标
+            Rexp=rexp,  # MAUD par 有则带出, 无则 0
+            Rb=rb,
             GOF=gof,
             quality=quality,
             num_cycles=n_iter,

@@ -1,7 +1,7 @@
 """批量精修对话框 (v0.11.0 GSAS-II 通道打磨)。
 
 对文件夹内全部衍射数据文件, 用同一组物相 (当前已选相的深拷贝) 顺序精修,
-汇总 wR / GOF / wt% 到表格, 可导出 CSV。引擎默认 auto
+汇总 Rwp / Rexp / Rb / GOF / wt% 到表格, 可导出 CSV。引擎默认 auto
 (全相有结构 CIF 且装了 GSAS-II 时自动走真 Rietveld)。
 """
 from __future__ import annotations
@@ -78,7 +78,9 @@ class BatchRefinementWorker(QThread):
                     max_cycles=self._max_cycles,
                 )
                 row = {
-                    "wR": result.wR,
+                    "Rwp": result.Rwp,
+                    "Rexp": getattr(result, "Rexp", 0.0),
+                    "Rb": getattr(result, "Rb", 0.0),
                     "GOF": result.GOF,
                     "engine": result.fit_params.get("engine", "?"),
                     "note": result.fit_params.get("engine_fallback_reason", ""),
@@ -242,7 +244,8 @@ class BatchRefinementDialog(QDialog):
         self._append_table_row(row)
 
     def _on_file_failed(self, name: str, err: str) -> None:
-        row = {"file": name, "error": err, "wR": None, "GOF": None,
+        row = {"file": name, "error": err, "Rwp": None, "Rexp": None,
+               "Rb": None, "GOF": None,
                "engine": "-", "note": "", "phases": []}
         self._rows.append(row)
         self._append_table_row(row)
@@ -265,7 +268,7 @@ class BatchRefinementDialog(QDialog):
         for name, _ in row.get("phases", []):
             if name not in phase_names:
                 phase_names.append(name)
-        # 列结构: 文件 | wR | GOF | 引擎 | 各相 wt% ... | 备注
+        # 列结构: 文件 | Rwp | Rexp | Rb | GOF | 引擎 | 各相 wt% ... | 备注
         headers = self._current_headers(phase_names)
         self._table.setColumnCount(len(headers))
         self._table.setHorizontalHeaderLabels(headers)
@@ -277,7 +280,9 @@ class BatchRefinementDialog(QDialog):
 
         c = 0
         setitem(c, row.get("file", "")); c += 1
-        setitem(c, f"{row['wR']:.2f}" if row.get("wR") is not None else "-"); c += 1
+        setitem(c, f"{row['Rwp']:.2f}" if row.get("Rwp") is not None else "-"); c += 1
+        setitem(c, f"{row['Rexp']:.2f}" if row.get("Rexp") is not None else "-"); c += 1
+        setitem(c, f"{row['Rb']:.2f}" if row.get("Rb") is not None else "-"); c += 1
         setitem(c, f"{row['GOF']:.3f}" if row.get("GOF") is not None else "-"); c += 1
         setitem(c, str(row.get("engine", "-"))); c += 1
         wt_map = dict(row.get("phases", []))
@@ -296,7 +301,9 @@ class BatchRefinementDialog(QDialog):
     def _current_headers(self, phase_names: list[str]) -> list[str]:
         headers = [
             tr("batch_refine.col_file"),
-            "wR%",
+            "Rwp%",
+            "Rexp%",
+            "Rb%",
             "GOF",
             tr("batch_refine.col_engine"),
         ]
@@ -316,7 +323,7 @@ class BatchRefinementDialog(QDialog):
         )
         if not path:
             return
-        # 列: 文件, wR, GOF, 引擎, 各相 wt%, 备注/错误
+        # 列: 文件, Rwp, Rexp, Rb, GOF, 引擎, 各相 wt%, 备注/错误
         all_phase_names: list[str] = []
         for row in self._rows:
             for name, _ in row.get("phases", []):
@@ -325,7 +332,7 @@ class BatchRefinementDialog(QDialog):
         with open(path, "w", newline="", encoding="utf-8-sig") as f:
             w = csv.writer(f)
             w.writerow(
-                ["file", "wR_percent", "GOF", "engine"]
+                ["file", "Rwp_percent", "Rexp_percent", "Rb_percent", "GOF", "engine"]
                 + [f"{n}_wt_percent" for n in all_phase_names]
                 + ["note"]
             )
@@ -334,7 +341,9 @@ class BatchRefinementDialog(QDialog):
                 w.writerow(
                     [
                         row.get("file", ""),
-                        row.get("wR"),
+                        row.get("Rwp"),
+                        row.get("Rexp"),
+                        row.get("Rb"),
                         row.get("GOF"),
                         row.get("engine", ""),
                         *[wt_map.get(n, "") for n in all_phase_names],
