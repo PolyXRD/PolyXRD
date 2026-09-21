@@ -2,7 +2,7 @@
 
 > 覆盖范围：**v0.3.0（可追溯最早版本）→ v0.15.1（2026-09-20）**
 > 合并日期：2026-09-21 ｜ 由 4 份历史变更记录（CHANGELOG01 / 02 / 03 与原 CHANGELOG）合并去重而成
-> 数据来源：git 提交历史 + GitHub Release 正文 + 项目工作记忆（`.workbuddy/`、`.trae-cn/`）+ 交接期源码包回溯
+> 数据来源：git 提交历史 + GitHub Release 正文 + 项目工作记忆（逐日工作日志）+ 交接期源码包回溯
 > 联系：sshztx@outlook.com
 >
 > **结构导览**：
@@ -172,7 +172,7 @@
 
 - Profile Fitting 峰形拟合物相分析（无需寻峰）
 
-- 传统 Search/Match (FOM) 物相识别
+- 传统 FOM 检索匹配物相识别
 
 - 物相匹配可视化 (已匹配/未匹配峰标注)
 
@@ -535,7 +535,7 @@
 
 ### 新增
 
-- **MCP Server (Model Context Protocol)**: 新增 `src/polyxrd/mcp_server/` 包，将 PolyXRD 的完整 XRD 分析流水线通过 MCP 协议暴露给 AI 大模型 (Claude / GPT / TraeCode 等)，无需 GUI 即可调用
+- **MCP Server (Model Context Protocol)**: 新增 `src/polyxrd/mcp_server/` 包，将 PolyXRD 的完整 XRD 分析流水线通过 MCP 协议暴露给 AI 大模型 (Claude / GPT 等)，无需 GUI 即可调用
 
   - `server.py`: 注册 **18 个 MCP Tools**，覆盖全流水线
 
@@ -616,7 +616,7 @@ v0.8.21 → v0.8.22 → v0.8.23 → v0.9.0 → v0.9.1 → v0.9.7 → v0.9.8 → 
 | v0.9.0 🏷️ | 2026-08-29 | 识别准确率跃升 + wR 引擎重写 | 命中率 45.1%→**68.6%**；`_refine_builtin` v1→v8；双 COD 库外挂 | Setup + 2 库包 |
 | v0.9.1 🚫 | 2026-08-30 | 性能 + GUI 双库切换 + Le Bail | Rietveld 长测试 11–12 min→**4 min**；Le Bail 落地；COD 元素约束检索 | 源码/本地 |
 | **v0.9.7** 🏷️ | 2026-09-07 | **Sprint 1/2/3 + M20 GUI**（M01–M20 全量落地） | 19 个服务层模块 + GUI 交互；ICU 加载修复；交接文档 | Setup + Portable |
-| v0.9.8 🚫 | 2026-09-09 | M21 物相分析 v2 进包 | 双区谱图控件（Match! 式）；两库全含 | Setup + Portable |
+| v0.9.8 🚫 | 2026-09-09 | M21 物相分析 v2 进包 | 双区谱图控件（对标同类商业软件）；两库全含 | Setup + Portable |
 | v0.9.9 🚫 | 2026-09-09 | 两处用户反馈改进 | 开新自动清数据；**高精度寻峰引擎**（ZnO 15→35 峰） | Setup + Portable |
 | v0.9.10 🏷️ | 2026-09-09 | 品牌化应用图标 | 图标从"纯黑方块"→品牌图标；GitHub 发布跑通 | Setup + Portable + 2 库包 |
 | v0.9.11 🚫 | 2026-09-10 | 四态元素过滤 + FoM 重构 + 检索提速 + PDF2 对接 | 检索 22.5 s→**8.8 s**；PDF2 163,834 相；倒排索引方案实测回退 | 源码/本地 |
@@ -707,7 +707,7 @@ v0.8.21 → v0.8.22 → v0.8.23 → v0.9.0 → v0.9.1 → v0.9.7 → v0.9.8 → 
 - **GSAS-II 桥 v2**：数据 FWHM 自动估计匹配仪器峰形；立方晶系峰位定种按空间群消光序列对齐；尺度网格多起点安全评分防零梯度；4×10 轮 Cell+峰形精修
   - 验证：合成 Si 从 **a=5.30 远起点恢复收敛至 5.431（wR≈1.4）**，`RietveldRefiner engine=gsas2` 端到端通过
 - **同日产出路线图**：`docs/物相分析路线图与模块拆分.md` —— **M01–M20 共 20 个模块**，每个叶子方法给足签名 / 输入输出 / 算法步骤 / 边界 / 验收 / 依赖，可直接交付分批实现；建议顺序 Sprint1（M05/M06/M08/M10/M11）→ Sprint2（M03/M07/M13/M14）→ Sprint3（产品化+进阶）
-- 约定：commit message 不得出现软件全名，文档内统一用 "Match!" 短名
+- 约定：commit message 不得出现第三方商业软件品牌字样
 
 ---
 
@@ -767,7 +767,7 @@ v0.8.21 → v0.8.22 → v0.8.23 → v0.9.0 → v0.9.1 → v0.9.7 → v0.9.8 → 
 - 说明：缩放/平移/追踪由 matplotlib NavigationToolbar 提供；峰点击编辑等高级交互留 M20 v2
 
 **⑥ 打包 0.9.7 与两个环境坑**
-- **PyInstaller 沙盒坑**：WorkBuddy 注入的 `sitecustomize` 把 `rmtree`/`os.remove` 劫持到回收站，沙盒回收站不可用 → `--clean`/覆盖 exe 均失败。解法：先用 shell `rm -rf` 清 dist/build 中间文件，再运行 PyInstaller（**不用 `--clean`**）
+- **PyInstaller 沙盒坑**：开发环境注入的 `sitecustomize` 把 `rmtree`/`os.remove` 劫持到回收站，沙盒回收站不可用 → `--clean`/覆盖 exe 均失败。解法：先用 shell `rm -rf` 清 dist/build 中间文件，再运行 PyInstaller（**不用 `--clean`**）
 - **Inno 6.7.3 无 `ChineseSimplified.isl`** → 移除安装器中文语言行（安装器语言回退到 En/Ja）
 - 产物（当日构建日志）：`dist\PolyXRD\PolyXRD.exe` **38.7 MB** / `PolyXRD-Setup-v0.9.7.exe` **261 MB** / `PolyXRD-v0.9.7-Portable.zip` **411 MB**
 
@@ -832,7 +832,7 @@ v0.8.21 → v0.8.22 → v0.8.23 → v0.9.0 → v0.9.1 → v0.9.7 → v0.9.8 → 
 - `POLYXRD_NO_COD_DB=1` + 含 `COD_inorganics.sqlite`：PyInstaller 32 m 44 s，**COLLECT 本次直接成功**（`CODEBUDDY_SAFE_DELETE_ENABLED=0` 生效），dist 1.3 GB
 - **ICU 关键结论修正**：本机 `System32\icuuc.dll`（29 KB）是 Windows 转发 shim，Qt 6.11 经其解析全部符号可正常启动；**从 gsas2main 复制 ICU 78 进 dist 反而 WinError 127**（缺 Qt 所需符号）→ 移除 dist 内全部 `icu*.dll` 后冒烟通过；`build.bat` 的 ICU 步骤由"收集"改为"删除"
 
-**⑦ M21 物相分析 v2（Match! 式展示层）S1–S5 全部完成**
+**⑦ M21 物相分析 v2（对标同类商业软件的展示层）S1–S5 全部完成**
 - 用户反馈：多相样品选中一个物相后应在谱图上叠加（不同颜色）、下方可见已匹配/未匹配（残差）峰
 - 设计稿 `docs/DESIGN-phase-analysis-v2.md`（M21-A..E 原子规格），**纯展示层重设计，不动识别算法/精修/报告**
 - 实施：
@@ -840,7 +840,7 @@ v0.8.21 → v0.8.22 → v0.8.23 → v0.9.0 → v0.9.1 → v0.9.7 → v0.9.8 → 
   - **谱合成内核 `spectrum_from_refs` 从 refiner 提取**并做回归等价证明（纯函数可单测）
   - `widgets/pattern_display.py`：双区 `GridSpec(2,1,4:1, sharex)` —— 主区实验黑线 / 计算红线 / 残差灰线，棒区逐相参考棒（每相一行基线下移、棒高∝I/100、相色、相名左标）；`set_peak_assignments` 峰顶归属标记
   - `widgets/peak_match_table.py` 峰-归属表 + `phase_vm.update_selection(Max 8, 去重按 name+formula)`
-  - `phase_view.py` 接线：候选可勾选 → `itemChanged` → `update_selection` → `selection_changed` → `_refresh_overlay` **单一路径驱动**；单击未勾选候选 = 单选叠加（Match! 浏览习惯）
+  - `phase_view.py` 接线：候选可勾选 → `itemChanged` → `update_selection` → `selection_changed` → `_refresh_overlay` **单一路径驱动**；单击未勾选候选 = 单选叠加（同类软件浏览习惯）
 - 注意：`tests/` 目录整体被 gitignore → **测试文件不提交，只提交 src**
 
 ---
@@ -1148,7 +1148,7 @@ v0.8.21 → v0.8.22 → v0.8.23 → v0.9.0 → v0.9.1 → v0.9.7 → v0.9.8 → 
 
 **④ 测试与提交**
 - 新增 23 项（`test_v012_yscale` 9 / `test_v012_element_order` 5 / `test_v012_refinement_log` 9）；全量 **745 passed / 1 skipped**
-- 提交 `9524291`（15 files / +1096 −72）；**只提交 src + pyproject**（`tests/` 与 `.workbuddy/` 仍 gitignore）
+- 提交 `9524291`（15 files / +1096 −72）；**只提交 src + pyproject**（`tests/` 等仍 gitignore）
 - **工具坑（写进红线）**：同一消息里发多个 Edit 调用时，**靠前的会静默丢失**（工具报成功但文件没改）→ 关键 edit 一个一个发 + 发完立刻 grep 验证
 
 **⑤ 编译二进制供 GUI 人工验收（未做 Inno/zip）**
@@ -1376,7 +1376,7 @@ v0.8.21 → v0.8.22 → v0.8.23 → v0.9.0 → v0.9.1 → v0.9.7 → v0.9.8 → 
 | M18 | 报告导出 | v0.9.7（v0.9.8 修 LO 转换） | SVG / HTML / CSV / CIF |
 | M19 | 脚本 / 批量 | v0.9.7 | 管线 DSL + 批量处理 |
 | M20 | GUI 交互 | v0.9.7（v0.9.8/v2 续） | 拖放 / 主题 / 峰表右键 |
-| M21 | 物相分析 v2 展示层 | v0.9.8 | 双区谱图 + 峰归属表（Match! 式） |
+| M21 | 物相分析 v2 展示层 | v0.9.8 | 双区谱图 + 峰归属表（对标同类商业软件） |
 | M22 | 图谱 X 轴自适应交互 | v0.15.0 | 滚轮缩放 / 拖动平移 |
 | M23 | 物相列表勾选驱动 + CIF 导出 | v0.15.0 | 勾选集随项目持久化 |
 | M24 | 精修页布局重构 | v0.15.0 | 窗口布局版本 → v3 |
@@ -1438,7 +1438,7 @@ v0.8.21 → v0.8.22 → v0.8.23 → v0.9.0 → v0.9.1 → v0.9.7 → v0.9.8 → 
 2. **Portable 免安装包自 v0.11.0 起不随 Release 发布**（按需提供）；v0.15.1 起二进制**整体不推送**
 3. **每个 EXE 发布前必须双击人工验收**（自动启动检查不可替代）
 4. 数据库文件（`.sqlite` / `tar.xz`）与 `tests/` 目录**不入 git**（只提交 `src`）
-5. **commit message 采用「更新代码修正: …」风格**；**严禁出现 "Crystal Impact Match" 字样**（文档内统一用 "Match!" 短名）
+5. **commit message 采用「更新代码修正: …」风格**；**严禁出现第三方商业软件品牌字样**
 6. 两条精修 GUI 路径（快速精修 / 多步精修向导）**保留为独立路径，不合并**
 7. 精修**前后端分离**：分步向导自带 refiner → 结果必须经 `result_ready` → `MainViewModel.adopt_refinement_result` 回灌（`emit` 必须在 `accept()` 之前）
 8. 界面引擎下拉**处处一致** = `[auto, gsas2, maud, builtin, powerxrd]`，且与 `get_engine_status()` 键集合对应
@@ -1477,7 +1477,7 @@ v0.8.21 → v0.8.22 → v0.8.23 → v0.9.0 → v0.9.1 → v0.9.7 → v0.9.8 → 
 7. **v0.13.1 的启动崩溃最终病灶未定位**：PNG 方案是**实测有效的规避**（修复前 0/3、修复后 4/4），不是理论修复。
 8. **v0.15.0 的 986.5 MiB 库包**曾在 Release 上短暂存在，已于当日替换为 134.1 MiB；若有第三方在此期间下载，其 SHA256 与当前发布页不一致。
 9. **v0.15.1 未打包库包**（库数据未变），因此其"数据库兼容性"沿用 v0.14.0/v0.15.0 的瘦身索引式包。
-10. **v0.8.21 之前的记录等级有限**：git 首笔提交即 `V0.8.21 initial commit`（2026-08-21）。更早历史（v0.3.0 / 0.4.1 / 原型 / 0.6.0 / 0.8.0~0.8.20）来自交接期源码包回溯与 `.trae-cn` 工作记忆整理（原 CHANGELOG01/02），无 git 提交与二进制产物可交叉验证，细节以第一部分所载为准。
+10. **v0.8.21 之前的记录等级有限**：git 首笔提交即 `V0.8.21 initial commit`（2026-08-21）。更早历史（v0.3.0 / 0.4.1 / 原型 / 0.6.0 / 0.8.0~0.8.20）来自交接期源码包回溯与交接期工作记忆整理（原 CHANGELOG01/02），无 git 提交与二进制产物可交叉验证，细节以第一部分所载为准。
 
 ---
 
