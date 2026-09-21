@@ -178,6 +178,12 @@ class RefinementView(QWidget):
         self._label_rwp = QLabel("--")
         result_layout.addRow(tr("view.refinement.label_rwp"), self._label_rwp)
 
+        self._label_rexp = QLabel("--")
+        result_layout.addRow("Rexp:", self._label_rexp)
+
+        self._label_rb = QLabel("--")
+        result_layout.addRow("Rb:", self._label_rb)
+
         self._label_gof = QLabel("--")
         result_layout.addRow(tr("view.refinement.label_gof"), self._label_gof)
 
@@ -559,7 +565,9 @@ class RefinementView(QWidget):
         self._progress.setValue(100)
 
         # 更新结果显示
-        self._label_rwp.setText(f"{result.wR:.3f} %")
+        self._label_rwp.setText(f"{result.Rwp:.3f} %")
+        self._label_rexp.setText(f"{getattr(result, 'Rexp', 0.0):.3f} %")
+        self._label_rb.setText(f"{getattr(result, 'Rb', 0.0):.3f} %")
         self._label_gof.setText(f"{result.GOF:.3f}")
         self._label_quality.setText(result.quality_grade)
         self._label_cycles.setText(str(result.num_cycles))
@@ -568,7 +576,7 @@ class RefinementView(QWidget):
         self._append_log(
             tr(
                 "view.refinement.log_result",
-                wr=f"{result.wR:.3f}",
+                wr=f"{result.Rwp:.3f}",
                 gof=f"{result.GOF:.3f}",
                 quality=result.quality_grade,
                 cycles=result.num_cycles,

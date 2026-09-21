@@ -22,8 +22,10 @@ class RefinementResult:
         observed_data: 实验数据 (x, y)
         simulated_data: 模拟数据 (x, y)
         residual_data: 残差数据 (x, y)
-        wR: 加权R因子 (%)
-        GOF: 优良度因子
+        wR: 加权轮廓 R 因子 (与 Rwp 同一量, 保留字段名兼容旧代码/旧项目文件)
+        Rexp: 期望 R 因子 (%) — Rexp = sqrt((N-P) / Σ w·y_obs²) × 100
+        Rb: 轮廓 Bragg R 因子 (%) — Rb = Σ|y_obs - y_calc| / Σ y_obs × 100 (不加权)
+        GOF: 优良度因子 (v0.15.2 起为标准定义 GOF = Rwp / Rexp)
         quality: 质量评级
         num_cycles: 精修循环次数
         converged: 是否收敛
@@ -35,12 +37,19 @@ class RefinementResult:
     simulated_data: Optional[tuple[np.ndarray, np.ndarray]] = None
     residual_data: Optional[tuple[np.ndarray, np.ndarray]] = None
     wR: float = 0.0
+    Rexp: float = 0.0
+    Rb: float = 0.0
     GOF: float = 0.0
     quality: str = ""
     num_cycles: int = 0
     converged: bool = False
     time_seconds: float = 0.0
     fit_params: dict = field(default_factory=dict)
+
+    @property
+    def Rwp(self) -> float:
+        """加权轮廓 R 因子 (通用记法) — 与内部字段 wR 同一数值。"""
+        return self.wR
 
     @property
     def quality_grade(self) -> str:
@@ -71,8 +80,10 @@ class RefinementResult:
         lines.append("-" * 40)
         lines.append("精修质量指标")
         lines.append("-" * 40)
-        lines.append(f"  wR (加权R因子): {self.wR:.4f} %")
-        lines.append(f"  GOF (优良度):   {self.GOF:.4f}")
+        lines.append(f"  Rwp (加权轮廓R): {self.Rwp:.4f} %")
+        lines.append(f"  Rexp (期望R):    {self.Rexp:.4f} %")
+        lines.append(f"  Rb (Bragg R):    {self.Rb:.4f} %")
+        lines.append(f"  GOF (=Rwp/Rexp): {self.GOF:.4f}")
         lines.append(f"  质量评级:       {self.quality_grade}")
         lines.append("")
         lines.append("-" * 40)
@@ -107,6 +118,8 @@ class RefinementResult:
         return {
             "phases": [p.to_dict() for p in self.phases],
             "wR": self.wR,
+            "Rexp": self.Rexp,
+            "Rb": self.Rb,
             "GOF": self.GOF,
             "quality": self.quality,
             "quality_grade": self.quality_grade,
@@ -122,6 +135,8 @@ class RefinementResult:
         return cls(
             phases=phases,
             wR=data.get("wR", 0),
+            Rexp=data.get("Rexp", 0),
+            Rb=data.get("Rb", 0),
             GOF=data.get("GOF", 0),
             quality=data.get("quality", ""),
             num_cycles=data.get("num_cycles", 0),
