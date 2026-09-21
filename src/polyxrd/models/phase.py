@@ -83,6 +83,9 @@ class Phase:
     match_score: float = 0.0
     cif_path: Optional[str] = None
     elements: set[str] = field(default_factory=set)
+    # 密度 (g/cm³); COD/PDF2 库有实测/计算值时填入, 无则 None
+    # (可由 services.search_restraints.estimate_density 按晶胞+化学式估算)
+    density: Optional[float] = None
 
     def get_reference_peaks(self) -> list[tuple[tuple[int, int, int], float, float]]:
         """获取参考峰的 (hkl, 2θ, 强度) 列表
@@ -107,6 +110,7 @@ class Phase:
             "match_score": self.match_score,
             "cif_path": self.cif_path,
             "elements": sorted(self.elements),
+            "density": self.density,
         }
 
     @classmethod
@@ -135,6 +139,7 @@ class Phase:
             match_score=data.get("match_score", 0),
             cif_path=data.get("cif_path"),
             elements=elements,
+            density=data.get("density"),
         )
 
 

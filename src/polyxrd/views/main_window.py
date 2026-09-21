@@ -388,6 +388,11 @@ class CIFBrowserDialog(QDialog):
 
         right_layout.addWidget(detail_group)
 
+        # M17: 晶体结构 3D 视图 (点击左侧物相即渲染)
+        from polyxrd.views.widgets.structure_view import StructureView
+        self._structure_view = StructureView(height=300)
+        right_layout.addWidget(self._structure_view)
+
         btn_row = QHBoxLayout()
         self._export_btn = QPushButton(tr("common.export"))
         self._export_btn.clicked.connect(self._on_export_cif)
@@ -458,6 +463,28 @@ class CIFBrowserDialog(QDialog):
             self._info_labels["alpha"].setText(f"{lattice.get('alpha', '--'):.2f}")
             self._info_labels["beta"].setText(f"{lattice.get('beta', '--'):.2f}")
             self._info_labels["gamma"].setText(f"{lattice.get('gamma', '--'):.2f}")
+            # M17: 渲染该物相的晶体结构
+            try:
+                phase = self._cif_db.get_mineral_phase(key) \
+                    if hasattr(self._cif_db, "get_mineral_phase") else None
+                if phase is None:
+                    from polyxrd.models.phase import LatticeParams, Phase
+                    phase = Phase(
+                        name=info.get("name", ""),
+                        formula=info.get("formula", ""),
+                        space_group=info.get("space_group", ""),
+                        lattice=LatticeParams(
+                            a=lattice.get("a", 0), b=lattice.get("b", 0),
+                            c=lattice.get("c", 0),
+                            alpha=lattice.get("alpha", 90),
+                            beta=lattice.get("beta", 90),
+                            gamma=lattice.get("gamma", 90),
+                        ),
+                        atomic_sites=info.get("atomic_sites", []) or [],
+                    )
+                self._structure_view.set_phase(phase)
+            except Exception:  # noqa: BLE001 - 结构渲染失败不阻断详情
+                self._structure_view.clear()
 
     def _on_export_cif(self) -> None:
         if not self._current_key:

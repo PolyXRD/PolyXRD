@@ -28,6 +28,9 @@ class SearchOptions:
     must: list = field(default_factory=list)        # 含有 (至少一个)
     maybe: list = field(default_factory=list)       # 可能 (可选)
     exclude: list = field(default_factory=list)     # 没有
+    # 密度范围 (g/cm³, 闭区间); None = 不过滤。
+    # 相无密度且无法估算时放行 (宁多勿漏)。
+    density_range: Optional[tuple] = None           # (min, max)
     # 名称 (大小写敏感通配, 如 "*corundum*")
     name_pattern: Optional[str] = None
     # 匹配质量

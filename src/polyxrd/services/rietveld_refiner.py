@@ -1835,6 +1835,7 @@ class RietveldRefiner:
         lam = float(wavelength or 0.0)
         if lam <= 0 or not phase_peaks:
             return phase_peaks
+        import math as _math
         out: list = []
         for peaks, s in zip(phase_peaks, cell_scales):
             try:
@@ -1852,14 +1853,14 @@ class RietveldRefiner:
                 except (TypeError, ValueError, IndexError):
                     conv.append(p)
                     continue
-                sin_half = np.sin(np.radians(tth / 2.0))
+                sin_half = _math.sin(_math.radians(tth / 2.0))
                 if sin_half <= 0:
                     conv.append(p)
                     continue
                 sin_new = sin_half / s
                 if sin_new >= 1.0:
                     continue
-                conv.append((p[0], float(2.0 * np.degrees(np.arcsin(sin_new))), inten))
+                conv.append((p[0], 2.0 * _math.degrees(_math.asin(sin_new)), inten))
             out.append(conv)
         return out
 
