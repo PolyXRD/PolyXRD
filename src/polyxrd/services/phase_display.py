@@ -167,18 +167,28 @@ def spectrum_from_refs(
     scale: float,
     peak_shape: str = "pseudo-voigt",
     caglioti=None,
+    cutoff_fwhm: Optional[float] = 100.0,
 ) -> np.ndarray:
-    """从每相的参考峰合成模拟谱 (分块向量化)。
+    """从每相的参考峰合成模拟谱 (峰距截断窗口化)。
 
     与 RietveldRefiner._compute_spectrum_from_ref 原实现数学等价
     (见该处 v8 说明): 展平参考峰 → 逐峰固定/Caglioti FWHM →
-    分块累加 pseudo-voigt/lorentzian/gaussian 贡献 → scale×(basis @ weights)。
+    逐峰在 ``cutoff_fwhm × FWHM`` 窗口内累加 pseudo-voigt/lorentzian/
+    gaussian 贡献 → scale×(basis @ weights)。
+
+    v0.15.2 性能改造: 原实现对全部 (点 × 峰) 做全矩阵 (7251 点 ×
+    ~3000 峰 ≈ 2×10⁷ 点运算/次评估, 精修雅可比每迭代 21 次评估 →
+    小时级)。截断依据: lorentz 分量在 |Δ| = 50×FWHM 处贡献
+    g²/Δ² = 2.5×10⁻⁵ (相对峰高), 高斯分量 exp(-0.5×(50×2.355)²) ≈ 0,
+    截断误差远低于 wR 的有效精度。``cutoff_fwhm=None`` 退回全矩阵
+    路径 (等价旧行为, 供数值一致性验证)。
 
     参数
     ----
     phase_peaks : list[list[(hkl, 2θ, I)]]  每相的参考峰
     weights     : 每相权重 (长度 = len(phase_peaks), 会逐相广播乘到其贡献上)
     caglioti    : (U,V,W) 或 None; None → 所有峰用固定 fwhm
+    cutoff_fwhm : 截断半窗宽 (单位: FWHM 倍数); None → 全矩阵
     """
     n_phases = len(phase_peaks)
     simulated = np.zeros_like(two_theta, dtype=float)
@@ -212,41 +222,64 @@ def spectrum_from_refs(
     gamma2_all = (fw_p / 2.0) ** 2
     n_points = len(two_theta)
     basis = np.zeros((n_points, n_phases))
-    chunk = 16
     is_gauss = peak_shape == "gaussian"
     is_lorentz = peak_shape == "lorentzian"
     one_minus_eta = 1.0 - eta
 
-    offset = 0
-    for i, peaks in enumerate(phase_peaks):
-        n_i = 0
-        for peak_data in peaks:
-            if (len(peak_data) >= 3
-                    and two_theta[0] <= peak_data[1] <= two_theta[-1]):
-                n_i += 1
-        if n_i == 0:
+    if cutoff_fwhm is None:
+        # 全矩阵路径 (旧行为, 分块向量化), 供一致性验证/兜底
+        chunk = 16
+        offset = 0
+        for i, peaks in enumerate(phase_peaks):
+            n_i = 0
+            for peak_data in peaks:
+                if (len(peak_data) >= 3
+                        and two_theta[0] <= peak_data[1] <= two_theta[-1]):
+                    n_i += 1
+            if n_i == 0:
+                continue
+            sl = slice(offset, offset + n_i)
+            pts_p = peak_tt[sl]
+            sigma_p = sigma_all[sl]
+            gamma2_p = gamma2_all[sl]
+            inten_p = peak_int[sl]
+            for s in range(0, n_i, chunk):
+                e = min(s + chunk, n_i)
+                delta = two_theta[:, None] - pts_p[None, s:e]
+                if is_gauss:
+                    prof = np.exp(-0.5 * (delta / sigma_p[None, s:e]) ** 2)
+                elif is_lorentz:
+                    g2 = gamma2_p[None, s:e]
+                    prof = g2 / (delta * delta + g2)
+                else:  # pseudo-voigt
+                    gauss = np.exp(-0.5 * (delta / sigma_p[None, s:e]) ** 2)
+                    g2 = gamma2_p[None, s:e]
+                    lorentz = g2 / (delta * delta + g2)
+                    prof = eta * gauss + one_minus_eta * lorentz
+                prof *= inten_p[None, s:e]
+                basis[:, i] += prof.sum(axis=1)
+            offset += n_i
+        return scale * (basis @ np.asarray(weights, dtype=float))
+
+    # ── 窗口化路径: 逐峰 searchsorted 截断累加 ──
+    for j in range(len(peak_tt)):
+        t0 = peak_tt[j]
+        fw = fw_p[j]
+        cut = cutoff_fwhm * fw
+        lo = int(np.searchsorted(two_theta, t0 - cut))
+        hi = int(np.searchsorted(two_theta, t0 + cut, side="right"))
+        if hi <= lo:
             continue
-        sl = slice(offset, offset + n_i)
-        pts_p = peak_tt[sl]
-        sigma_p = sigma_all[sl]
-        gamma2_p = gamma2_all[sl]
-        inten_p = peak_int[sl]
-        for s in range(0, n_i, chunk):
-            e = min(s + chunk, n_i)
-            delta = two_theta[:, None] - pts_p[None, s:e]
-            if is_gauss:
-                prof = np.exp(-0.5 * (delta / sigma_p[None, s:e]) ** 2)
-            elif is_lorentz:
-                g2 = gamma2_p[None, s:e]
-                prof = g2 / (delta * delta + g2)
-            else:  # pseudo-voigt
-                gauss = np.exp(-0.5 * (delta / sigma_p[None, s:e]) ** 2)
-                g2 = gamma2_p[None, s:e]
-                lorentz = g2 / (delta * delta + g2)
-                prof = eta * gauss + one_minus_eta * lorentz
-            prof *= inten_p[None, s:e]
-            basis[:, i] += prof.sum(axis=1)
-        offset += n_i
+        delta = two_theta[lo:hi] - t0
+        if is_gauss:
+            prof = np.exp(-0.5 * (delta / sigma_all[j]) ** 2)
+        elif is_lorentz:
+            prof = gamma2_all[j] / (delta * delta + gamma2_all[j])
+        else:  # pseudo-voigt
+            gauss = np.exp(-0.5 * (delta / sigma_all[j]) ** 2)
+            lorentz = gamma2_all[j] / (delta * delta + gamma2_all[j])
+            prof = eta * gauss + one_minus_eta * lorentz
+        basis[lo:hi, peak_phase[j]] += peak_int[j] * prof
     return scale * (basis @ np.asarray(weights, dtype=float))
 
 

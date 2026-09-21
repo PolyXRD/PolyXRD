@@ -258,8 +258,13 @@ def _name_matches(name: str, pattern: str) -> bool:
     import fnmatch
     if not pattern:
         return True
-    return (fnmatch.fnmatchcase(name, pattern)
-            or pattern.lower() in name.lower())
+    if any(ch in pattern for ch in "*?"):
+        # 带通配符: fnmatchcase 之外再对小写化两侧匹配一次,
+        # 否则 "*corundum*" 永远命中不了 "Corundum" (M09 修复)
+        if fnmatch.fnmatchcase(name, pattern):
+            return True
+        return fnmatch.fnmatchcase(name.lower(), pattern.lower())
+    return pattern.lower() in name.lower()
 
 
 def _passes_options(phase: Phase, opts: SearchOptions) -> bool:
