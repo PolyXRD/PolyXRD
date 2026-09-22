@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
     QToolTip,
 )
 
+from polyxrd.i18n import tr
 from polyxrd.utils.formula_parser import LIGHT_ELEMENTS
 
 
@@ -65,19 +66,40 @@ STATE_HEX = {
     ElementState.EXCLUDE: "#f44336",
 }
 
-STATE_LABELS = {
-    ElementState.MUST_HAVE: "必有",
-    ElementState.MUST: "含有",
-    ElementState.MAYBE: "可能",
-    ElementState.EXCLUDE: "没有",
+# 状态文案 / 提示都是语言相关的, 因此不能在模块层求值 (否则永久定格在
+# 导入时的语言) —— 统一在 state_label() / state_tip() 里按当前语言解析。
+_STATE_LABEL_KEYS = {
+    ElementState.MUST_HAVE: "vw.element_periodic_table.state_must_have",
+    ElementState.MUST: "vw.element_periodic_table.state_must",
+    ElementState.MAYBE: "vw.element_periodic_table.state_maybe",
+    ElementState.EXCLUDE: "vw.element_periodic_table.state_exclude",
 }
 
-STATE_TIPS = {
-    ElementState.MUST_HAVE: "必有: 物相必须全部含有这些元素 (AND)",
-    ElementState.MUST: "含有: 物相由这些元素构成, 至少含其中一个",
-    ElementState.MAYBE: "可能: 允许出现但不要求 (只放宽候选元素池)",
-    ElementState.EXCLUDE: "没有: 含任一这些元素的物相被淘汰",
+_STATE_TIP_KEYS = {
+    ElementState.MUST_HAVE: "vw.element_periodic_table.tip_must_have",
+    ElementState.MUST: "vw.element_periodic_table.tip_must",
+    ElementState.MAYBE: "vw.element_periodic_table.tip_maybe",
+    ElementState.EXCLUDE: "vw.element_periodic_table.tip_exclude",
 }
+
+
+def state_label(state: "ElementState") -> str:
+    """图例文字 (按当前语言解析)。"""
+    key = _STATE_LABEL_KEYS.get(state)
+    return tr(key) if key else ""
+
+
+def state_tip(state: "ElementState") -> str:
+    """状态提示; 未选中的中性态用 tip_default。"""
+    key = _STATE_TIP_KEYS.get(state, "vw.element_periodic_table.tip_default")
+    return tr(key)
+
+
+def element_name(symbol: str) -> str:
+    """元素本地化名称; 缺键时回退元素符号。"""
+    key = f"elem.{symbol}"
+    val = tr(key)
+    return symbol if val == key else val
 
 # 单击循环顺序 (v0.12.0: 「必有」放到最后)
 STATE_CYCLE = (
@@ -210,9 +232,11 @@ class ElementButton(QPushButton):
         self._update_tooltip()
 
     def _update_tooltip(self) -> None:
-        name = ELEMENT_NAMES.get(self._element, self._element)
-        tip = STATE_TIPS.get(self._state, "未勾选 = 没有 (默认排除)")
-        self.setToolTip(f"{name} ({self._element})\n{tip}")
+        name = element_name(self._element)
+        tip = state_tip(self._state)
+        # 名称回退成符号时不要再拼一次, 免得出现 "H (H)"
+        head = self._element if name == self._element else f"{name} ({self._element})"
+        self.setToolTip(f"{head}\n{tip}")
 
     def _update_style(self) -> None:
         bg = STATE_HEX[self._state]
@@ -263,19 +287,16 @@ class ElementPeriodicTable(QWidget):
 
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(6)
-        self._btn_light = QPushButton("轻元素设为含有 (O,C,H,N,S)")
+        self._btn_light = QPushButton(tr("vw.element_periodic_table.btn_light"))
         self._btn_light.setFixedHeight(24)
-        self._btn_light.setToolTip(
-            "EDX/EDS 常测不出轻元素, 但 XRD 中氢氧化物/碳酸盐/水合物极常见。\n"
-            "一键把 O/C/H/N/S 设为「含有」, 避免它们因未勾选而被默认排除。"
-        )
+        self._btn_light.setToolTip(tr("vw.element_periodic_table.btn_light_tip"))
         self._btn_light.setStyleSheet(
             "QPushButton { font-size: 11px; padding: 2px 8px; }"
         )
         self._btn_light.clicked.connect(self.apply_light_elements)
         btn_layout.addWidget(self._btn_light)
 
-        self._btn_reset = QPushButton("重置选择")
+        self._btn_reset = QPushButton(tr("vw.element_periodic_table.btn_reset"))
         self._btn_reset.setFixedHeight(24)
         self._btn_reset.setStyleSheet(
             "QPushButton { font-size: 11px; padding: 2px 8px; }"
@@ -319,9 +340,9 @@ class ElementPeriodicTable(QWidget):
             f"QFrame {{ background-color: {STATE_HEX[state]}; border: 1px solid #999; border-radius: 3px; }}"
         )
 
-        label = QLabel(STATE_LABELS[state])
+        label = QLabel(state_label(state))
         label.setStyleSheet("QLabel { font-size: 11px; }")
-        label.setToolTip(STATE_TIPS[state])
+        label.setToolTip(state_tip(state))
 
         layout.addWidget(color_box)
         layout.addWidget(label)
@@ -345,16 +366,16 @@ class ElementPeriodicTable(QWidget):
         must_have, has, maybe, exclude = self.get_selection()
         parts = []
         if must_have:
-            parts.append(f"必有: {', '.join(must_have)}")
+            parts.append(tr("vw.element_periodic_table.status_must_have", items=', '.join(must_have)))
         if has:
-            parts.append(f"含有: {', '.join(has)}")
+            parts.append(tr("vw.element_periodic_table.status_must", items=', '.join(has)))
         if maybe:
-            parts.append(f"可能: {', '.join(maybe)}")
+            parts.append(tr("vw.element_periodic_table.status_maybe", items=', '.join(maybe)))
         if exclude:
-            parts.append(f"没有: {', '.join(exclude)}")
+            parts.append(tr("vw.element_periodic_table.status_exclude", items=', '.join(exclude)))
 
         if not parts:
-            self._status_label.setText("未选择任何元素 → 全库搜索 (不做元素过滤)")
+            self._status_label.setText(tr("vw.element_periodic_table.status_none"))
             return
 
         text = " | ".join(parts)
@@ -362,7 +383,8 @@ class ElementPeriodicTable(QWidget):
             # 闭环: 未勾选元素一律视为「没有」
             excluded = sorted(set(ALL_POSITIONS) - set(must_have) - set(has) - set(maybe))
             preview = ", ".join(excluded[:12]) + ("…" if len(excluded) > 12 else "")
-            text += f"\n未勾选 {len(excluded)} 种元素默认按「没有」排除: {preview}"
+            text += tr("vw.element_periodic_table.status_excluded",
+                       count=len(excluded), preview=preview)
         self._status_label.setText(text)
 
     def _emit_selection(self) -> None:

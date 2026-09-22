@@ -110,8 +110,8 @@ def launch_gui(
         raise RuntimeError("GSAS-II 源码目录缺少 GUI 入口 (G2.py)")
 
     xy_path, cif_paths = export_inputs(data, phases, workdir, stem=stem)
-    log(f"[gsas2] 数据导出: {xy_path.name} + {len(cif_paths)} 份 CIF")
-    log(f"[gsas2] 拉起 GSAS-II GUI: {py.name} {g2.name}")
+    log(f"[gsas2] export: {xy_path.name} + {len(cif_paths)} CIF")
+    log(f"[gsas2] launch GSAS-II GUI: {py.name} {g2.name}")
 
     try:
         from polyxrd.services.rietveld_refiner import RietveldRefiner

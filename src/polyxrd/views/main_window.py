@@ -1819,9 +1819,9 @@ class MainWindow(QMainWindow):
                 for i in range(self._phase_tree.topLevelItemCount())
             ]
 
-        act_export = menu.addAction("导出 CIF 文件…")
+        act_export = menu.addAction(tr("vw.main_window.export_cif_ctx"))
         act_export.setEnabled(bool(phases))
-        act_detail = menu.addAction("查看结构详情…")
+        act_detail = menu.addAction(tr("vw.main_window.view_struct_ctx"))
         act_detail.setEnabled(bool(phases))
         chosen = menu.exec(self._phase_tree.viewport().mapToGlobal(pos))
         if chosen is act_export:
@@ -1888,16 +1888,17 @@ class MainWindow(QMainWindow):
             cell = (
                 f"a={lat.a:.4f} b={lat.b:.4f} c={lat.c:.4f} Å, "
                 f"α={lat.alpha:.2f} β={lat.beta:.2f} γ={lat.gamma:.2f}°"
-                if lat is not None else "晶胞: --"
+                if lat is not None else tr("vw.main_window.cell_unknown")
             )
+            name = getattr(p, "name", "")
+            formula = getattr(p, "formula", "")
+            space_group = getattr(p, "space_group", "") or "--"
             n_sites = len(getattr(p, "atomic_sites", None) or [])
-            lines.append(
-                f"• {getattr(p, 'name', '')}  {getattr(p, 'formula', '')}\n"
-                f"  空间群: {getattr(p, 'space_group', '') or '--'}   "
-                f"位点: {n_sites}\n  {cell}"
-            )
+            lines.append(tr("vw.main_window.phase_detail",
+                name=name, formula=formula, space_group=space_group,
+                n_sites=n_sites, cell=cell))
         QMessageBox.information(
-            self, "结构详情", "\n\n".join(lines)
+            self, tr("vw.main_window.struct_detail_title"), "\n\n".join(lines)
         )
 
     def _on_refinement_completed(self, result) -> None:

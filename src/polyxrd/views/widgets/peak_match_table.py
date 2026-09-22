@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QTableWidget,
                                QTableWidgetItem, QHeaderView,
                                QAbstractItemView)
 
+from polyxrd.i18n import tr
 from polyxrd.services.phase_display import PeakAssignment, phase_color
 
 
@@ -23,13 +24,23 @@ class PeakMatchTable(QWidget):
 
     peak_row_clicked = Signal(float)   # 点击某行 → 该峰 2θ
 
-    COLUMNS = ["2θ (°)", "d (Å)", "I", "归属物相", "Δ2θ", "hkl"]
+    # 表头 (语言相关, 故在构造时求值; "I"/"Δ2θ"/"hkl" 为通用记法, 无需翻译)
+    @property
+    def COLUMNS(self) -> list:
+        return [
+            tr("vw.peak_match_table.col_2theta"),
+            tr("vw.peak_match_table.col_d"),
+            "I",
+            tr("vw.peak_match_table.col_phase"),
+            "Δ2θ",
+            "hkl",
+        ]
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
-        self._title = QLabel("峰归属")
+        self._title = QLabel(tr("vw.peak_match_table.title"))
         lay.addWidget(self._title)
         self._table = QTableWidget(0, len(self.COLUMNS))
         self._table.setHorizontalHeaderLabels(self.COLUMNS)
@@ -47,7 +58,7 @@ class PeakMatchTable(QWidget):
         self._table.setRowCount(len(ordered))
         for row, a in enumerate(ordered):
             self._set_row(row, a)
-        self._title.setText(f"峰归属 ({len(ordered)})")
+        self._title.setText(tr("vw.peak_match_table.title_count", n=len(ordered)))
 
     def _set_row(self, row: int, a: PeakAssignment) -> None:
         cols = [
@@ -63,7 +74,7 @@ class PeakMatchTable(QWidget):
             self._table.setItem(row, c, it)
         # 归属列 (色块 + 相名)
         if is_unmatched:
-            it = QTableWidgetItem("—未解释—")
+            it = QTableWidgetItem(tr("vw.peak_match_table.unexplained"))
             it.setBackground(self._light_red())
             it.setForeground(Qt.GlobalColor.red)
         else:
@@ -89,7 +100,7 @@ class PeakMatchTable(QWidget):
     def clear_table(self) -> None:
         self._table.setRowCount(0)
         self._assignments = []
-        self._title.setText("峰归属")
+        self._title.setText(tr("vw.peak_match_table.title"))
 
     # ── 颜色工具 ──────────────────────────────────────────
     @staticmethod

@@ -131,7 +131,7 @@ class RefinementView(QWidget):
         # 峰形参数
         self._peak_shape_combo = QComboBox()
         self._peak_shape_combo.addItems(["pseudo-voigt", "voigt", "gaussian", "lorentzian"])
-        ctrl_layout.addRow("峰形:", self._peak_shape_combo)
+        ctrl_layout.addRow(tr("vw.refinement_view.peak_shape"), self._peak_shape_combo)
 
         self._fwhm_spin = QDoubleSpinBox()
         self._fwhm_spin.setRange(0.05, 2.0)
@@ -139,12 +139,12 @@ class RefinementView(QWidget):
         self._fwhm_spin.setSingleStep(0.01)
         self._fwhm_spin.setDecimals(2)
         self._fwhm_spin.setSuffix("°")
-        ctrl_layout.addRow("初始 FWHM:", self._fwhm_spin)
+        ctrl_layout.addRow(tr("vw.refinement_view.init_fwhm"), self._fwhm_spin)
 
         # 背景参数
         self._bg_combo = QComboBox()
         self._bg_combo.addItems(["snip", "als", "polynomial", "median", "rolling"])
-        ctrl_layout.addRow("背景方法:", self._bg_combo)
+        ctrl_layout.addRow(tr("vw.refinement_view.bg_method"), self._bg_combo)
 
         # 仪器参数
         self._zero_shift_spin = QDoubleSpinBox()
@@ -153,13 +153,13 @@ class RefinementView(QWidget):
         self._zero_shift_spin.setSingleStep(0.01)
         self._zero_shift_spin.setDecimals(3)
         self._zero_shift_spin.setSuffix("°")
-        ctrl_layout.addRow("零点偏移:", self._zero_shift_spin)
+        ctrl_layout.addRow(tr("vw.refinement_view.zero_shift"), self._zero_shift_spin)
 
         self._btn_refine = QPushButton(tr("view.refinement.btn_start_refine"))
         self._btn_refine.clicked.connect(self._on_refine)
         ctrl_layout.addRow(self._btn_refine)
 
-        self._btn_cancel = QPushButton("取消")
+        self._btn_cancel = QPushButton(tr("vw.refinement_view.cancel"))
         self._btn_cancel.setEnabled(False)
         ctrl_layout.addRow(self._btn_cancel)
 
@@ -194,7 +194,7 @@ class RefinementView(QWidget):
         result_layout.addRow(tr("view.refinement.label_cycles"), self._label_cycles)
 
         self._label_time = QLabel("--")
-        result_layout.addRow("耗时:", self._label_time)
+        result_layout.addRow(tr("vw.refinement_view.time_spent"), self._label_time)
 
         result_group.setLayout(result_layout)
         right_layout.addWidget(result_group)
@@ -220,7 +220,7 @@ class RefinementView(QWidget):
         right_layout.addWidget(phase_group, stretch=1)
 
         # 已勾选物相 (M24: 继承物相分析页勾选集合, 右键导出 CIF)
-        sel_group = QGroupBox("已勾选物相")
+        sel_group = QGroupBox(tr("vw.refinement_view.selected_phases"))
         sel_layout = QVBoxLayout()
         self._selected_phase_list = QListWidget()
         self._selected_phase_list.setContextMenuPolicy(
@@ -339,7 +339,7 @@ class RefinementView(QWidget):
         if phase is None:
             return
         menu = QMenu(self)
-        act_export = menu.addAction("导出 CIF 文件…")
+        act_export = menu.addAction(tr("vw.refinement_view.export_cif"))
         chosen = menu.exec(self._selected_phase_list.viewport().mapToGlobal(pos))
         if chosen is not act_export:
             return
@@ -351,18 +351,25 @@ class RefinementView(QWidget):
         )
 
         path, _ = QFileDialog.getSaveFileName(
-            self, "导出 CIF 文件",
+            self,
+            tr("vw.refinement_view.export_cif_title"),
             default_cif_filename(phase, resolve_cod_id(phase)),
-            "CIF 文件 (*.cif)",
+            tr("vw.refinement_view.cif_filter"),
         )
         if not path:
             return
         try:
             export_phase_cif(phase, path)
         except CifUnavailableError as exc:
-            QMessageBox.warning(self, "导出 CIF", str(exc))
+            QMessageBox.warning(
+                self, tr("vw.refinement_view.export_cif_warn_title"), str(exc)
+            )
         except OSError as exc:
-            QMessageBox.warning(self, "导出 CIF", f"写盘失败: {exc}")
+            QMessageBox.warning(
+                self,
+                tr("vw.refinement_view.export_cif_warn_title"),
+                tr("vw.refinement_view.export_cif_write_failed", exc=exc),
+            )
 
     # ------------------------------------------------------------------
     # 精修方式 (向导式 / 手动)
@@ -467,7 +474,7 @@ class RefinementView(QWidget):
             return
 
         self._append_log("[fullprof] ====== FullProf 精修开始 ======")
-        with busy(self, "FullProf 外部精修") as acquired:
+        with busy(self, tr("vw.refinement_view.fullprof_busy")) as acquired:
             if not acquired:
                 return
             wd = new_run_dir("fullprof")

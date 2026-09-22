@@ -120,12 +120,12 @@ class PhaseIdentifier:
                     data = json.load(f)
                 self._reference_data = data.get("phases", [])
                 self._phase_database = self._build_phases_from_db(self._reference_data)
-                print(f"[PhaseIdentifier] 已加载 {len(self._phase_database)} 种参考物相")
+                print(f"[PhaseIdentifier] loaded {len(self._phase_database)} reference phases")
             except Exception as e:
-                print(f"[PhaseIdentifier] 加载参考数据库失败: {e}")
+                print(f"[PhaseIdentifier] failed to load reference database: {e}")
                 self._load_default_phases()
         else:
-            print("[PhaseIdentifier] 参考数据库不存在，使用默认物相")
+            print("[PhaseIdentifier] reference database missing, using default phases")
             self._load_default_phases()
 
     def _build_phases_from_db(self, ref_data: list[dict]) -> list[Phase]:

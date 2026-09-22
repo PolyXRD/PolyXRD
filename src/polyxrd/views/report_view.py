@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QLabel,
 )
 
+from polyxrd.i18n import tr
 from polyxrd.viewmodels.main_vm import MainViewModel
 
 
@@ -35,16 +36,16 @@ class ReportView(QWidget):
         # 工具栏
         toolbar = QHBoxLayout()
 
-        self._btn_preview = QPushButton("生成报告")
+        self._btn_preview = QPushButton(tr("vw.report_view.btn_preview"))
         self._btn_preview.clicked.connect(self._on_preview)
         toolbar.addWidget(self._btn_preview)
 
-        toolbar.addWidget(QLabel("导出格式:"))
+        toolbar.addWidget(QLabel(tr("vw.report_view.label_export_format")))
         self._format_combo = QComboBox()
         self._format_combo.addItems(["json", "txt", "csv", "all"])
         toolbar.addWidget(self._format_combo)
 
-        self._btn_export = QPushButton("导出")
+        self._btn_export = QPushButton(tr("vw.report_view.btn_export"))
         self._btn_export.clicked.connect(self._on_export)
         toolbar.addWidget(self._btn_export)
 
@@ -52,7 +53,7 @@ class ReportView(QWidget):
         main_layout.addLayout(toolbar)
 
         # 报告预览区
-        report_group = QGroupBox("报告预览")
+        report_group = QGroupBox(tr("vw.report_view.group_preview"))
         report_layout = QVBoxLayout()
 
         self._report_text = QTextEdit()
@@ -74,7 +75,7 @@ class ReportView(QWidget):
         """生成报告预览"""
         result = self._vm.refinement_result
         if result is None:
-            self._report_text.setPlainText("没有精修结果可显示。\n\n请先在\"结构精修\"页面执行Rietveld精修。")
+            self._report_text.setPlainText(tr("vw.report_view.no_result"))
             return
 
         self._report_text.setPlainText(result.summary())
@@ -85,7 +86,7 @@ class ReportView(QWidget):
         if result is None:
             return
 
-        export_dir = QFileDialog.getExistingDirectory(self, "选择导出目录")
+        export_dir = QFileDialog.getExistingDirectory(self, tr("vw.report_view.export_dir_title"))
         if export_dir:
             self._vm.export_result(export_dir, format=self._format_combo.currentText())
 

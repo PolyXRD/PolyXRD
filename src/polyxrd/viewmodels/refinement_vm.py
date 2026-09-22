@@ -9,6 +9,7 @@ from typing import Optional
 
 from PySide6.QtCore import QObject, Signal
 
+from polyxrd.i18n import tr
 from polyxrd.models.phase import Phase
 from polyxrd.models.refinement import RefinementResult
 from polyxrd.services.export_service import ExportService
@@ -68,7 +69,7 @@ class RefinementViewModel(QObject):
             phases = self._selected_phases
 
         if not phases:
-            self.error.emit("请先选择物相")
+            self.error.emit(tr("error.no_phase_selected"))
             return
 
         self.refinement_started.emit()
@@ -92,7 +93,7 @@ class RefinementViewModel(QObject):
             self.refinement_completed.emit(result)
         except Exception as e:
             self.refinement_failed.emit(str(e))
-            self.error.emit(f"精修失败: {e}")
+            self.error.emit(tr("error.refine_failed", error=e))
 
     def get_summary(self) -> str:
         """获取精修摘要"""
@@ -121,7 +122,7 @@ class RefinementViewModel(QObject):
     def export_result(self, path: str, format: str = "all") -> None:
         """导出精修结果"""
         if self._result is None:
-            self.error.emit("没有精修结果可导出")
+            self.error.emit(tr("error.no_refinement"))
             return
 
         try:
@@ -129,4 +130,4 @@ class RefinementViewModel(QObject):
                 self._result, path, format=format
             )
         except Exception as e:
-            self.error.emit(f"导出失败: {e}")
+            self.error.emit(tr("error.export_failed", error=e))

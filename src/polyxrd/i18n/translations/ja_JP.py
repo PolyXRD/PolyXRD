@@ -3,7 +3,7 @@ translations = {
         "name": "PolyXRD",
         "title": "PolyXRD v{version}",
         "error_title": "アプリケーションエラー",
-        "error_unhandled": "未処理の例外が発生しました：\n\n{error}\n\n詳細はコンソール出力を確認してください。",
+        "error_unhandled": "未処理の例外が発生しました：\n\n{error}\n\n詳細はコンソール出力を確認してください。"
     },
     "menu": {
         "file": {
@@ -17,6 +17,9 @@ translations = {
             "recent_files": "最近のファイル",
             "no_recent": "（最近のファイルなし）",
             "clear_recent": "最近の記録をクリア",
+            "load_project": "プロジェクトを開く",
+            "project_filter": "PolyXRDプロジェクトファイル (*.pxrd)",
+            "save_project": "プロジェクトを保存"
         },
         "data_processing": {
             "title": "データ処理",
@@ -24,11 +27,12 @@ translations = {
             "smooth": "スムージング",
             "kalpha2": "Kα2除去",
             "normalize": "正規化",
+            "reset": "原始データにリセット"
         },
         "database": {
             "title": "データベース",
             "manage": "外部データベース管理…",
-            "open_dir": "データベースフォルダを開く",
+            "open_dir": "データベースフォルダを開く"
         },
         "phase_analysis": {
             "title": "相分析",
@@ -37,6 +41,8 @@ translations = {
             "profile_fitting": "Profile Fitting (ピーク検出不要)",
             "cif_browser": "CIFデータベース参照",
             "cod_search": "CODオンライン検索",
+            "simulate": "XRDパターンをシミュレーション",
+            "view_database": "参照データベースを表示"
         },
         "structure_refinement": {
             "title": "結晶構造精密化",
@@ -46,24 +52,24 @@ translations = {
             "wizard_full": "精密化ウィザード（ステップ形式）",
             "quick_refine": "クイック精密化",
             "batch_refine": "一括精密化",
-            "templates": "テンプレート管理",
+            "templates": "テンプレート管理"
         },
         "view": {
             "title": "ビュー",
             "language": "言語",
             "reset_layout": "レイアウトをリセット",
-            "dark_theme": "ダークテーマ",
+            "dark_theme": "ダークテーマ"
         },
         "report": {
             "title": "レポート",
             "export": "エクスポート",
-            "generate": "レポート生成",
+            "generate": "レポート生成"
         },
         "help": {
             "title": "ヘルプ",
             "about": "PolyXRDについて",
-            "about_qt": "Qtについて",
-        },
+            "about_qt": "Qtについて"
+        }
     },
     "toolbar": {
         "main": "メインツールバー",
@@ -82,6 +88,7 @@ translations = {
         "refine_wizard_tip": "精密化ウィザード：クリックで簡易版、右の矢印で「簡易／ステップ形式」を選択",
         "cod_search": "COD検索",
         "export": "エクスポート",
+        "reset": "原始データにリセット"
     },
     "common": {
         "ok": "OK",
@@ -96,19 +103,11 @@ translations = {
         "retry": "再試行",
         "search": "検索",
         "select_all": "すべて選択",
-        "clear": "クリア",
+        "clear": "クリア"
     },
     "db_manager": {
         "title": "外部データベース管理",
-        "intro": (
-            "0.10.0 以降、インストーラーはデータベースを同梱しません。3つの"
-            "データベースは個別のアーカイブとして配布され、それぞれ独立して"
-            "マウントできます——1つだけ導入しても問題ありません。\n"
-            "該当するアーカイブを解凍し、その行の「インポート…」で .sqlite "
-            "ファイルを選択してください。パスは記憶され、次回起動時に自動で"
-            "読み込まれます。いずれも未マウントの場合、内蔵の118種の参照相のみ"
-            "利用できます。"
-        ),
+        "intro": "0.10.0 以降、インストーラーはデータベースを同梱しません。3つのデータベースは個別のアーカイブとして配布され、それぞれ独立してマウントできます——1つだけ導入しても問題ありません。\n該当するアーカイブを解凍し、その行の「インポート…」で .sqlite ファイルを選択してください。パスは記憶され、次回起動時に自動で読み込まれます。いずれも未マウントの場合、内蔵の118種の参照相のみ利用できます。",
         "pkg_hint": "ダウンロード: {pkg}　→　{file} を展開",
         "pkg_hint_local": "本ライブラリはリリースに含まれません: {file} をご自身で用意し、ここからインポートしてください",
         "recheck": "再検出",
@@ -116,26 +115,13 @@ translations = {
         "clear": "マウント解除",
         "import_title": "データベースファイルを選択",
         "import_failed": "インポート失敗",
-        "import_failed_body": (
-            "このファイルはデータベースとして使用できません。\n\n"
-            "ファイル：{path}\n理由：{detail}"
-        ),
-        "save_failed_body": (
-            "設定の書き込みに失敗しました。パスは保存されていません。\n\n"
-            "{error}"
-        ),
+        "import_failed_body": "このファイルはデータベースとして使用できません。\n\nファイル：{path}\n理由：{detail}",
+        "save_failed_body": "設定の書き込みに失敗しました。パスは保存されていません。\n\n{error}",
         "kind_mismatch": "データベース種別が一致しません",
-        "kind_mismatch_body": (
-            "選択したファイルは「{got}」であり、「{want}」ではありません。\n\n"
-            "「{got}」のスロットにインポートしますか？"
-        ),
+        "kind_mismatch_body": "選択したファイルは「{got}」であり、「{want}」ではありません。\n\n「{got}」のスロットにインポートしますか？",
         "import_ok": "インポート成功",
         "import_ok_body": "{rows} 件のレコードをマウントしました。\n{path}",
-        "clear_confirm": (
-            "「{name}」をマウント解除しますか？\n"
-            "解除すると既定の場所に戻ります。既定の場所にもデータベースが"
-            "無い場合、このデータソースは使用できなくなります。"
-        ),
+        "clear_confirm": "「{name}」をマウント解除しますか？\n解除すると既定の場所に戻ります。既定の場所にもデータベースが無い場合、このデータソースは使用できなくなります。",
         "status_ok": "マウント済み",
         "status_bad": "使用不可",
         "status_missing": "見つかりません",
@@ -146,32 +132,16 @@ translations = {
         "kind": {
             "cod_inorganics": "COD 無機物データベース",
             "pdf2": "PDF2-2004 データベース",
-            "cod_index": "COD 全庫インデックス",
+            "cod_index": "COD 全庫インデックス"
         },
         "notice": {
-            "pdf2": (
-                "【正規ライセンスをお持ちかご確認ください】PDF2-2004 は "
-                "ICDD の商用データベースです。本ソフトウェアは形式変換と"
-                "オフラインインデックスのみを提供し、ライセンスは一切"
-                "付随しません。ご利用前に正規ライセンスの有無を"
-                "ご確認ください。"
-            ),
+            "pdf2": "【正規ライセンスをお持ちかご確認ください】PDF2-2004 は ICDD の商用データベースです。本ソフトウェアは形式変換とオフラインインデックスのみを提供し、ライセンスは一切付随しません。ご利用前に正規ライセンスの有無をご確認ください。"
         },
         "first_run_title": "データベース未導入",
-        "first_run_body": (
-            "0.10.0 以降、インストーラーにデータベースは同梱されません。\n\n"
-            "3つのデータベースは個別のアーカイブで配布されます。必要なものだけ"
-            "ダウンロードしてください:\n"
-            "　· COD 無機物　　　…-Databases-COD-inorg.zip\n"
-            "　· COD 全庫インデックス　…-Databases-COD-full.zip\n"
-            "　· PDF2-2004　　　配布なし（ICDD ライセンス、ご自身で用意）\n\n"
-            "解凍後、「データベース ▸ 外部データベース管理…」から順に"
-            "インポートしてください。\n"
-            "未導入の場合、内蔵の 118 種の参照相のみ利用できます。"
-        ),
+        "first_run_body": "0.10.0 以降、インストーラーにデータベースは同梱されません。\n\n3つのデータベースは個別のアーカイブで配布されます。必要なものだけダウンロードしてください:\n　· COD 無機物　　　…-Databases-COD-inorg.zip\n　· COD 全庫インデックス　…-Databases-COD-full.zip\n　· PDF2-2004　　　配布なし（ICDD ライセンス、ご自身で用意）\n\n解凍後、「データベース ▸ 外部データベース管理…」から順にインポートしてください。\n未導入の場合、内蔵の 118 種の参照相のみ利用できます。"
     },
     "action": {
-        "strip_kalpha2": "Kα2除去",
+        "strip_kalpha2": "Kα2除去"
     },
     "batch_refine": {
         "title": "一括精修",
@@ -195,7 +165,7 @@ translations = {
         "export_csv": "CSV 出力",
         "exported": "出力済み: {path}",
         "nothing_to_export": "出力する結果がありません",
-        "close": "閉じる",
+        "close": "閉じる"
     },
     "convert": {
         "title": "スペクトル形式変換",
@@ -224,8 +194,8 @@ translations = {
             "mdi": "MDI（Jade）",
             "raw": "RAW2 バイナリ",
             "xrdml": "XML（XRDML）",
-            "json": "JSON（本アプリ）",
-        },
+            "json": "JSON（本アプリ）"
+        }
     },
     "busy": {
         "title": "しばらくお待ちください",
@@ -239,7 +209,7 @@ translations = {
         "identify_profile": "プロファイルフィッティングによる相検索を実行中です。しばらくお待ちください…",
         "refine": "Rietveld 精密化を実行中です。しばらくお待ちください…",
         "cif_match": "CIF構造を照合中です。しばらくお待ちください…",
-        "repeat_ignored": "タスクが実行中です。完了までお待ちください",
+        "repeat_ignored": "タスクが実行中です。完了までお待ちください"
     },
     "dialog": {
         "open_file_title": "XRDデータファイルを開く",
@@ -247,22 +217,7 @@ translations = {
         "save_as_title": "名前を付けて保存",
         "export_dir_title": "エクスポートディレクトリを選択",
         "about_title": "PolyXRDについて",
-        "about_text": (
-            "<div style='text-align:center; min-width:360px;'>"
-            "<h2 style='margin:8px 0 4px 0; font-size:20px; color:#1a5276;'>PolyXRD</h2>"
-            "<p style='margin:0 0 12px 0; font-size:13px; color:#555;'>バージョン v{version}</p>"
-            "<hr style='border:none; border-top:1px solid #ddd; margin:8px 0;'/>"
-            "<p style='margin:8px 0 4px 0; font-size:12px; color:#333;'>X線回折データ解析ソフトウェア</p>"
-            "<p style='margin:4px 0; font-size:11px; color:#666;'>"
-            "相同定 &middot; ピークフィッティング &middot; Rietveld精密化 &middot; オフラインデータベース"
-            "</p>"
-            "<hr style='border:none; border-top:1px solid #ddd; margin:12px 0;'/>"
-            "<p style='margin:4px 0; font-size:11px; color:#555;'>"
-            "お問い合わせ：<a href='mailto:sshztx@outlook.com' style='color:#2980b9; text-decoration:none;'>sshztx@outlook.com</a>"
-            "</p>"
-            "<p style='margin:8px 0 4px 0; font-size:11px; color:#888;'>© 2026 All Rights Reserved</p>"
-            "</div>"
-        ),
+        "about_text": "<div style='text-align:center; min-width:360px;'><h2 style='margin:8px 0 4px 0; font-size:20px; color:#1a5276;'>PolyXRD</h2><p style='margin:0 0 12px 0; font-size:13px; color:#555;'>バージョン v{version}</p><hr style='border:none; border-top:1px solid #ddd; margin:8px 0;'/><p style='margin:8px 0 4px 0; font-size:12px; color:#333;'>X線回折データ解析ソフトウェア</p><p style='margin:4px 0; font-size:11px; color:#666;'>相同定 &middot; ピークフィッティング &middot; Rietveld精密化 &middot; オフラインデータベース</p><hr style='border:none; border-top:1px solid #ddd; margin:12px 0;'/><p style='margin:4px 0; font-size:11px; color:#555;'>お問い合わせ：<a href='mailto:sshztx@outlook.com' style='color:#2980b9; text-decoration:none;'>sshztx@outlook.com</a></p><p style='margin:8px 0 4px 0; font-size:11px; color:#888;'>© 2026 All Rights Reserved</p></div>",
         "error": "エラー",
         "warning": "警告",
         "info": "情報",
@@ -299,13 +254,36 @@ translations = {
         "cif_export_failed": "エクスポートに失敗しました。",
         "cif_import_done": "CIFファイルが正常にインポートされました。",
         "cif_import_failed": "インポートに失敗しました: {error}",
+        "fom_confidence": "信頼度",
+        "fom_excellent": "極めて良好な一致",
+        "fom_fair": "普通の一致",
+        "fom_good": "良好な一致",
+        "fom_matched": "一致ピーク数",
+        "fom_poor": "不一致の可能性",
+        "fom_score": "FOMスコア",
+        "fom_title": "FOMマッチング結果",
+        "project_load_failed": "プロジェクトの読み込みに失敗しました：{error}",
+        "project_loaded": "プロジェクトを読み込みました：{name}",
+        "project_save_failed": "プロジェクトの保存に失敗しました：{error}",
+        "project_saved": "プロジェクトを保存しました：{path}",
+        "ref_db_details": "相の詳細",
+        "ref_db_info": "オフライン参照データベース：{count}相",
+        "ref_db_phase_count": "相の数",
+        "ref_db_search": "相を検索...",
+        "ref_db_simulate": "パターンを生成",
+        "ref_db_title": "参照データベース",
+        "simulate_btn": "シミュレーションパターンを生成",
+        "simulate_done": "シミュレーションパターンを生成しました",
+        "simulate_failed": "シミュレーションに失敗しました：{error}",
+        "simulate_phase": "相を選択",
+        "simulate_range": "2θ範囲",
+        "simulate_title": "XRDパターンシミュレーション",
+        "simulate_wavelength": "波長",
+        "simulate_width": "ピーク幅"
     },
     "status": {
         "ready": "準備完了",
-        "no_database": (
-            "外部データベースが検出されません。内蔵の 118 種の参照相のみ利用できます。"
-            "「データベース ▸ 外部データベース管理…」からインポートしてください。"
-        ),
+        "no_database": "外部データベースが検出されません。内蔵の 118 種の参照相のみ利用できます。「データベース ▸ 外部データベース管理…」からインポートしてください。",
         "loading_file": "ファイル読み込み中: {path}",
         "background_subtract": "バックグラウンド除去を実行中 ({method})",
         "smoothing": "スムージングを実行中 ({method})",
@@ -314,7 +292,7 @@ translations = {
         "fitting_peaks": "ピークフィッティングを実行中 ({model})",
         "identifying_phases": "相の同定を実行中",
         "rietveld_refine": "Rietveld精密化を実行中 ({engine})",
-        "data_loaded": "データ読み込み完了: {count} データポイント",
+        "data_loaded": "データを読み込み完了",
         "peaks_found": "{count} 個のピークが検出されました",
         "phase_identified": "相同定完了: 最良一致 '{name}' (スコア: {score}%)",
         "refine_completed": "精密化完了: wR={wr}%, 相数={count}",
@@ -324,6 +302,13 @@ translations = {
         "layout_reset": "レイアウトがリセットされました",
         "language_info": "言語: {lang}",
         "wavelength_info": "波長: {wl} Å",
+        "database_loading": "参照データベースを読み込み中",
+        "database_ready": "参照データベース準備完了: {count}相",
+        "simulating_pattern": "シミュレーションXRDパターンを生成中",
+        "data_loaded_count": "データ読み込み完了: {count} 点",
+        "data_cleared": "現在のデータをクリアしました",
+        "finding_peaks_hi": "高精度ピーク検出を実行中 (バックグラウンド差し引き＋サブステップ精密化)",
+        "identifying_profile": "Profile Fitting による相同定を実行中"
     },
     "error": {
         "file_not_found": "ファイルが見つかりません: {path}",
@@ -332,7 +317,7 @@ translations = {
         "no_data": "先にデータを読み込んでください",
         "no_phase": "先に相を同定・選択してください",
         "no_refinement": "エクスポートする精密化結果がありません。",
-        "load_failed": "ファイルの読み込みに失敗しました: {error}",
+        "load_failed": "ファイルの読み込みに失敗",
         "export_failed": "エクスポートに失敗しました: {error}",
         "refine_failed": "精密化に失敗しました: {error}",
         "identify_failed": "相の同定に失敗しました: {error}",
@@ -340,6 +325,13 @@ translations = {
         "peak_fit_failed": "ピークフィッティングに失敗しました: {error}",
         "background_failed": "バックグラウンド除去に失敗しました: {error}",
         "smooth_failed": "スムージングに失敗しました: {error}",
+        "no_data_save": "保存するデータがありません",
+        "kalpha2_failed": "Kα2除去に失敗しました：{error}",
+        "peak_finder_hi_failed": "高精度ピーク検出に失敗しました：{error}",
+        "no_peaks": "先にピークを検出してください",
+        "no_phase_selected": "先に相を選択してください",
+        "refine_window_no_overlap": "2θ ウィンドウ [{lo}, {hi}] がデータ範囲 [{dlo}, {dhi}] と重なりません。精密化できません",
+        "refine_window_too_few": "2θ ウィンドウ [{lo}, {hi}] 内のデータ点は {n} 点のみで精密化に不足します (3 点以上必要)。範囲を広げてください"
     },
     "view": {
         "y_scale": {
@@ -348,7 +340,7 @@ translations = {
             "log": "対数",
             "sqrt": "平方根",
             "menu_title": "縦軸スケール",
-            "hint": "縦軸: {mode}  (Y 軸を左クリックで切替 / 右クリックで選択)",
+            "hint": "縦軸: {mode}  (Y 軸を左クリックで切替 / 右クリックで選択)"
         },
         "data": {
             "title": "データ",
@@ -364,7 +356,7 @@ translations = {
             "peak_distance": "最小距離:",
             "btn_find_peaks": "ピーク検出",
             "btn_fit_peaks": "ピークフィット",
-            "label_experimental": "実験データ",
+            "label_experimental": "実験データ"
         },
         "phase": {
             "title": "相分析",
@@ -404,8 +396,8 @@ translations = {
                 "status_maybe": "可能: {elements}",
                 "status_exclude": "なし: {elements}",
                 "status_closed_world": "未選択の元素は「なし」として除外されます",
-                "hint": "元素をクリックして切替: なし → 含有(緑) → 可能(黄) → なし(赤) → 必須含む(濃緑)",
-            },
+                "hint": "元素をクリックして切替: なし → 含有(緑) → 可能(黄) → なし(赤) → 必須含む(濃緑)"
+            }
         },
         "refinement": {
             "title": "結晶構造精密化",
@@ -413,7 +405,7 @@ translations = {
             "group_result": "精密化結果",
             "group_phases": "相含有量",
             "label_compare": "精密化比較",
-            "label_residual": "残差プロット",
+            "label_residual": "残差",
             "label_engine": "エンジン:",
             "label_strategy": "戦略:",
             "label_max_cycles": "最大サイクル数:",
@@ -423,12 +415,7 @@ translations = {
             "label_cycles": "サイクル数:",
             "btn_start_refine": "精密化開始",
             "wizard_style": "精密化ウィザード方式（推奨）",
-            "wizard_style_tip": (
-                "精密化ウィザードの推奨設定（エンジン builtin、戦略 sequential、"
-                "ピーク形状 pseudo-voigt、バックグラウンド snip、最大サイクル 20）を"
-                "適用し、下のログに過程データをリアルタイム出力します。"
-                "チェックを外すとパラメータを手動調整できます。"
-            ),
+            "wizard_style_tip": "精密化ウィザードの推奨設定（エンジン builtin、戦略 sequential、ピーク形状 pseudo-voigt、バックグラウンド snip、最大サイクル 20）を適用し、下のログに過程データをリアルタイム出力します。チェックを外すとパラメータを手動調整できます。",
             "group_log": "精密化プロセスログ",
             "log_placeholder": "精密化を実行すると、ここに過程データがリアルタイムで流れます…",
             "btn_clear_log": "ログをクリア",
@@ -448,8 +435,7 @@ translations = {
             "col_b": "b(Å)",
             "col_c": "c(Å)",
             "label_observed": "実験値",
-            "label_simulated": "計算値",
-            "label_residual": "残差",
+            "label_simulated": "計算値"
         },
         "report": {
             "title": "レポート",
@@ -457,7 +443,7 @@ translations = {
             "btn_generate": "レポート生成",
             "btn_export": "エクスポート",
             "label_format": "エクスポート形式:",
-            "no_result": "表示する精密化結果がありません。\n\n先に「結晶構造精密化」ページでRietveld精密化を実行してください。",
+            "no_result": "表示する精密化結果がありません。\n\n先に「結晶構造精密化」ページでRietveld精密化を実行してください。"
         },
         "peak_table": {
             "col_id": "番号",
@@ -469,8 +455,8 @@ translations = {
             "col_phase": "相",
             "action_delete": "選択項目を削除",
             "action_clear": "すべてクリア",
-            "action_export_csv": "CSVエクスポート",
-        },
+            "action_export_csv": "CSVエクスポート"
+        }
     },
     "sci": {
         "two_theta": "2θ",
@@ -491,7 +477,7 @@ translations = {
         "match_score": "マッチスコア",
         "gof": "GOF",
         "rwp": "Rwp",
-        "wr": "wR",
+        "wr": "wR"
     },
     "params": {
         "panel_title": "パラメータパネル",
@@ -533,6 +519,22 @@ translations = {
         "strategy_sequential": "順次",
         "strategy_auto": "自動",
         "strategy_manual": "手動",
+        "database_info": "参照データベース情報",
+        "database_source": "データソース",
+        "database_total": "相の総数",
+        "database_wavelength": "標準波長",
+        "match_elements": "元素フィルタ",
+        "match_tolerance": "許容誤差 (°)",
+        "match_top_n": "候補数",
+        "simulate_peak_width": "ピーク幅 (°)",
+        "simulate_phase_select": "相",
+        "simulate_range_max": "終了 2θ (°)",
+        "simulate_range_min": "開始 2θ (°)",
+        "simulate_wavelength": "波長 (Å)",
+        "engine_available": "利用可能",
+        "engine_maud_missing_cif": "MAUDエンジンは各相に cif_path または cod_id が必要です。現在未満たしています。内蔵エンジンへフォールバックしますか？",
+        "engine_status_label": "エンジン状態",
+        "engine_unavailable": "未インストール"
     },
     "wizard": {
         "btn_prev": "前へ",
@@ -545,7 +547,7 @@ translations = {
             "phase": "相の選択",
             "params": "パラメータ設定",
             "preview": "プレビュー確認",
-            "execute": "精密化実行",
+            "execute": "精密化実行"
         },
         "data_page": {
             "info_title": "データ情報",
@@ -558,7 +560,7 @@ translations = {
             "range_title": "精密化範囲",
             "range_min": "開始2θ (°)",
             "range_max": "終了2θ (°)",
-            "range_invalid": "開始2θは終了2θより小さくなければなりません",
+            "range_invalid": "開始2θは終了2θより小さくなければなりません"
         },
         "phase_page": {
             "tab_cif": "CIFデータベース",
@@ -567,9 +569,7 @@ translations = {
             "cif_list_searching": "マウント済みデータベースを検索中…",
             "cif_list_browsing": "選択した相の候補 CIF を検索中…",
             "cif_for_phase": "{phase} → {cif}",
-            "cif_list_hint": ("上のリストは選択可能な CIF 構造です。化学式 / 鉱物名 / COD 番号を"
-                              "入力するとマウント済み DB を検索できます（同一相に複数の CIF が"
-                              "ある場合があります）。下は初期構造として選択済みの相です。"),
+            "cif_list_hint": "上のリストは選択可能な CIF 構造です。化学式 / 鉱物名 / COD 番号を入力するとマウント済み DB を検索できます（同一相に複数の CIF がある場合があります）。下は初期構造として選択済みの相です。",
             "cif_list_count": "{count} 件の CIF を表示中",
             "cif_list_count_builtin": "内蔵鉱物相 {count} 件（検索で同一相の全 CIF を表示）",
             "cif_list_no_db": "（DB 未マウント — 内蔵相のみ。「選択した相を追加」で CIF は自動照合されます）",
@@ -593,7 +593,7 @@ translations = {
             "col_space_group": "空間群",
             "col_action": "操作",
             "btn_clear": "すべてクリア",
-            "phase_already_added": "相 '{name}' はすでにリストにあります",
+            "phase_already_added": "相 '{name}' はすでにリストにあります"
         },
         "params_page": {
             "template_title": "テンプレート選択",
@@ -604,7 +604,7 @@ translations = {
             "strategy": "戦略",
             "background": "バックグラウンド方法",
             "peak_shape": "ピーク形状",
-            "max_cycles": "最大サイクル数",
+            "max_cycles": "最大サイクル数"
         },
         "preview": {
             "title": "精密化設定プレビュー",
@@ -616,7 +616,7 @@ translations = {
             "phase_section": "相リスト",
             "no_phase": "相なし",
             "params_section": "精密化パラメータ",
-            "advanced_section": "高度なパラメータ",
+            "advanced_section": "高度なパラメータ"
         },
         "execute_page": {
             "progress_title": "精密化進捗",
@@ -644,14 +644,373 @@ translations = {
             "log_result_quality": "品質: {quality}",
             "log_converged": "精密化が収束しました",
             "log_not_converged": "精密化が完全には収束しませんでした",
-            "log_phase": "相 {name}: 質量分率 {weight}%",
+            "log_phase": "相 {name}: 質量分率 {weight}%"
         },
         "template": {
             "save_title": "テンプレート保存",
             "save_name_prompt": "テンプレート名を入力してください:",
             "default_description": "カスタム精密化テンプレート",
             "save_success": "テンプレート '{name}' が正常に保存されました",
-            "save_failed": "テンプレートの保存に失敗しました: {error}",
-        },
+            "save_failed": "テンプレートの保存に失敗しました: {error}"
+        }
     },
+    "vw": {
+        "element_periodic_table": {
+            "state_must_have": "必須含有",
+            "state_must": "含有",
+            "state_maybe": "可能",
+            "state_exclude": "除外",
+            "tip_must_have": "必須含有: 物相はこれらすべての元素を含む必要があります (AND)",
+            "tip_must": "含有: 物相はこれらの元素から構成され、少なくとも1つを含む",
+            "tip_maybe": "可能: 出現してもよいが必須ではない (候補元素プールを緩和するのみ)",
+            "tip_exclude": "除外: これらの元素のいずれかを含む物相は除外される",
+            "tip_default": "未チェック = 除外 (デフォルトで除外)",
+            "btn_light": "軽元素を「含有」に設定 (O,C,H,N,S)",
+            "btn_light_tip": "EDX/EDS では軽元素を検出できないことが多いですが、XRD では水酸化物/炭酸塩/水和物が非常に一般的です。\nワンクリックで O/C/H/N/S を「含有」に設定し、未チェック時のデフォルト除外を防ぎます。",
+            "btn_reset": "選択をリセット",
+            "status_must_have": "必須含有: {items}",
+            "status_must": "含有: {items}",
+            "status_maybe": "可能: {items}",
+            "status_exclude": "除外: {items}",
+            "status_none": "要素が選択されていません → 全データベース検索 (元素フィルタなし)",
+            "status_excluded": "\n未チェックの {count} 元素はデフォルトで「除外」として扱われます: {preview}"
+        },
+        "element_filter_dialog": {
+            "title": "元素フィルタ - 4状態選択",
+            "btn_clear": "選択をクリア",
+            "btn_ok": "OK",
+            "btn_cancel": "キャンセル",
+            "summary_must_have": "<b>必須含有 (すべて含む):</b> {items}",
+            "summary_must": "<b>含有 (少なくとも1つ):</b> {items}",
+            "summary_maybe": "<b>可能:</b> {items}",
+            "summary_exclude": "<b>除外:</b> {items}",
+            "summary_none": "現在のフィルタ: 要素が選択されていません (全データベース検索を使用)",
+            "summary_prefix": "現在のフィルタ: ",
+            "summary_excluded": "<br><span style='color:#b71c1c;'>未チェックの {count} 元素はデフォルトで「除外」として扱われます (クローズドループ): {preview}</span>",
+            "summary_open_world": "<br><span style='color:#b71c1c;'>「除外」のみチェック→オープンワールド、これらの元素のみ除外、それ以外は制限なし</span>"
+        },
+        "database_dialog": {
+            "file_filter": "SQLite データベース (*.sqlite *.sqlite3 *.db);;すべてのファイル (*)"
+        },
+        "structure_view": {
+            "placeholder": "(構造なし)"
+        },
+        "report_view": {
+            "btn_preview": "レポート生成",
+            "label_export_format": "エクスポート形式:",
+            "btn_export": "エクスポート",
+            "group_preview": "レポートプレビュー",
+            "no_result": "表示できる精修結果がありません。\n\nまず「構造精修」ページでRietveld精修を実行してください。",
+            "export_dir_title": "エクスポート先ディレクトリを選択"
+        },
+        "plot_widget": {
+            "add_peak_btn": "ピークを追加",
+            "reset_view_btn": "ビューをリセット",
+            "export_img_btn": "画像をエクスポート",
+            "y_scale_hint_tip": "Y軸領域を左クリックでモード切替; 図内の任意の場所を右クリックで選択メニューを表示。\n対数 / 平方根軸でも目盛ラベルは実強度のまま。",
+            "export_img_dlg_title": "画像のエクスポート",
+            "export_img_filter": "画像ファイル (*.png *.pdf *.svg *.eps)"
+        },
+        "pattern_display": {
+            "y_scale_hint_tip": "Y軸領域を左クリックでモード切替; 図内の任意の場所を右クリックで選択メニューを表示。\n対数 / 平方根軸でも目盛ラベルは実強度のまま。",
+            "legend_exp": "実験データ",
+            "legend_calc": "計算パターン",
+            "legend_resid": "残差"
+        },
+        "main_window": {
+            "phase_confirmed_status": "物相を確認: {phase_name}、構造リファインメントに切替",
+            "exp_data_title": "実験データ",
+            "export_cif_ctx": "CIFファイルをエクスポート…",
+            "view_struct_ctx": "構造詳細を表示…",
+            "export_cif_dlg_title": "CIFファイルのエクスポート",
+            "export_cif_filter": "CIFファイル (*.cif)",
+            "choose_cif_dir": "CIFエクスポート先ディレクトリを選択",
+            "export_cif_result_title": "CIFエクスポート",
+            "export_cif_result": "成功 {ok}、失敗 {failed_count}:\n{failed_details}",
+            "exported_cif_status": "{ok} 個のCIFファイルをエクスポートしました",
+            "cell_unknown": "単位胞: --",
+            "phase_detail": "• {name}  {formula}\n  空間群: {space_group}   サイト: {n_sites}\n  {cell}",
+            "struct_detail_title": "構造詳細"
+        },
+        "phase_view": {
+            "group_phase": "物相同定",
+            "btn_element_filter": "元素フィルタ (周期表)",
+            "tip_element_filter": "クリックで周期表による元素フィルタダイアログを開く",
+            "btn_clear_filter": "クリア",
+            "no_element_filter": "元素フィルタ未選択",
+            "label_db_source": "データベースソース:",
+            "btn_profile_fitting": "Profile Fitting (推奨)",
+            "tip_profile_fitting": "プロファイルフィッティングによる物相同定。事前のピーク検出は不要。\nXRD曲線全体の形状を比較し、ピークの重なりや複雑な背景に適する。",
+            "label_tolerance": "許容差:",
+            "tip_tolerance": "2θ マッチング許容差：参考ピークと実験ピークの距離がこの範囲内なら一致とみなす",
+            "btn_traditional": "従来の Search/Match",
+            "tip_traditional": "従来の物相同定。事前のピーク検出が必要。\nFOM (Figure of Merit) アルゴリズムでピーク位置をマッチング。",
+            "btn_quick": "クイック (フィルタなし)",
+            "btn_select_phase": "物相を選択 →",
+            "btn_auto_mix": "自動混合解析",
+            "tip_auto_mix": "現在の候補物相に対して多相線形結合フィッティングを行い、\n各物相の質量分率 (wt%) を自動計算。",
+            "btn_clear_sel": "クリア",
+            "btn_overlay_calc": "計算プロファイル重畳",
+            "btn_show_resid": "残差を表示",
+            "filter_must_have": "必須: {items}",
+            "filter_has": "含有: {items}",
+            "filter_maybe": "可能性: {items}",
+            "filter_exclude": "不含: {items}",
+            "filter_prefix": "フィルタ: ",
+            "filter_default_exclude": " (未選択の元素は既定で除外)",
+            "db_builtin": "内蔵ライブラリ (118 相)",
+            "db_cod_inorg": "COD 無機物ライブラリ",
+            "db_cod_full": "COD 全ライブラリ",
+            "db_merged": "内蔵 + COD全 (統合)",
+            "db_pdf2": "PDF2-2004 ライブラリ",
+            "db_label_count": "{base} ({count:,})",
+            "db_unmounted": " (未マウント)",
+            "db_combo_tip_main": "物相検索に使用するデータベースを選択 (従来の Search/Match とクイック同定に適用):\n· 内蔵: アプリ付属の一般的な 118 相 (最速)\n· COD 無機物: 外付け 71,199 相 (d-I ピーク事前計算, Hanawalt プリスクリーニング)\n· COD 全: 外付け 113,223 件の CIF インデックス (ローカル検索)\n· 統合: 内蔵 + COD全 の結果を統合してランク付け\n· PDF2-2004: ICDD PDF-2 2004 版, 163,834 相, 空間群と格子定数を内蔵\n  (格子 81.8% / 空間群 72.8%); ヒットはそのまま精修の開始構造に使用可能。\n",
+            "db_combo_tip_import": "データベースはインストーラに同梱されません。別途ダウンロード・解凍し、\nメニュー「データベース ▸ 外付けデータベース管理…」からインポート。",
+            "pdf2_coverage": "  ローカルライブラリ: {total} 相, 空間群 {sg}%, 格子 {cell}%。\n",
+            "db_unmounted_hint": "このデータベースはマウントされていません。メニュー「データベース ▸ 外付けデータベース管理…」から解凍済みライブラリをインポート。",
+            "no_match": "一致する物相が見つかりません",
+            "result_profile": "Profile Fitting 結果 [{db_src}] (相関が100%に近いほど良好)",
+            "result_search": "Search/Match 結果 [{db_src}] (FOMが小さいほど良好)",
+            "cand_profile": "{name} - 一致度: {score:.1f}% (R={rfactor:.3f}){sg}{elem}",
+            "cand_fom": "{name} - FOM: {score:.3f}{sg}{elem}",
+            "detail_formula": "化学式: {formula}",
+            "detail_sg": "空間群: {sg}",
+            "detail_cell": "格子: a={a:.4f} b={b:.4f} c={c:.4f} Å",
+            "detail_angles": "      α={a:.2f} β={b:.2f} γ={c:.2f}°",
+            "detail_volume": "      V={v:.2f} Å³",
+            "detail_refpeaks": "参考ピーク: {n} 本",
+            "act_export_cif": "CIF ファイルを書き出し…",
+            "dlg_export_cif_title": "CIF ファイルの書き出し",
+            "dlg_export_cif_filter": "CIF ファイル (*.cif)",
+            "msg_export_cif": "CIF 書き出し",
+            "msg_write_fail": "書き込み失敗: {exc}",
+            "msg_tip": "ヒント",
+            "msg_pick_phase": "リストから先に物相を選択してください",
+            "dlg_confirm_phase_title": "物相の確認",
+            "dlg_confirm_phase_body": "選択した物相: <b>{name}</b>\n\n構造精修ページへ移動して Rietveld 精修を行いますか？\n\n(「いいえ」で他の物相を選択継続)",
+            "msg_run_identify": "先に物相同定を実行してください",
+            "msg_load_xrd": "先に XRD データを読み込んでください",
+            "msg_no_mix_phase": "混合解析に利用できる物相がありません"
+        },
+        "peak_table": {
+            "col_id": "番号",
+            "col_2theta": "2θ (°)",
+            "col_d": "d (Å)",
+            "col_intensity": "強度",
+            "col_fwhm": "FWHM (°)",
+            "col_phase": "物相",
+            "act_del_selected": "選択を削除",
+            "act_clear": "クリア",
+            "act_export_csv": "CSV 書き出し",
+            "act_copy_row": "選択行をコピー",
+            "dlg_export_peaks_caption": "ピークリストの書き出し",
+            "dlg_export_peaks_filter": "CSV ファイル (*.csv)"
+        },
+        "peak_match_table": {
+            "col_2theta": "2θ (°)",
+            "col_d": "d (Å)",
+            "col_phase": "帰属物相",
+            "title": "ピーク帰属",
+            "title_count": "ピーク帰属 ({n})",
+            "unexplained": "—帰属なし—"
+        },
+        "data_view": {
+            "data_preprocess": "データ前処理",
+            "bg_method": "背景手法:",
+            "exec_bg_subtract": "背景差し引きを実行",
+            "smooth_method": "スムージング手法:",
+            "window_size": "ウィンドウサイズ:",
+            "exec_smooth": "スムージングを実行",
+            "strip_kalpha2": "Kα2除去",
+            "peak_detection": "ピーク検出",
+            "min_peak_height": "最小ピーク高さ:",
+            "peak_distance_tip": "ピーク間の最小 2θ 間隔 (度)。XRD ピークの半値幅は通常 0.05〜0.5°、0.2〜1.0 を推奨。大きすぎる (例: 5°) は近接する強線を落とし、物相同定の再現率を低下させます。",
+            "min_distance": "最小距離:",
+            "high_precision": "高精度 (背景差し引き＋サブステップ)",
+            "peak_hi_tip": "高精度ピーク検出を有効化: 自動背景差し引き＋サブステップでのピーク位置精密化＋重なりピークの同時フィッティング。\nピーク位置精度は ~0.001° に達し、弱いピークも検出しやすくなります。解除すると従来の高さ閾値法を使用。",
+            "detect_peaks": "ピーク検出",
+            "fit_peaks": "ピークフィッティング",
+            "experimental_data": "実験データ"
+        },
+        "refinement_view": {
+            "peak_shape": "ピーク形状:",
+            "init_fwhm": "初期 FWHM:",
+            "bg_method": "背景手法:",
+            "zero_shift": "零点シフト:",
+            "cancel": "キャンセル",
+            "time_spent": "所要時間:",
+            "selected_phases": "選択済み物相",
+            "export_cif": "CIF ファイルを書き出し…",
+            "export_cif_title": "CIF ファイルの書き出し",
+            "cif_filter": "CIF ファイル (*.cif)",
+            "export_cif_warn_title": "CIF 書き出し",
+            "export_cif_write_failed": "書き込み失敗: {exc}",
+            "fullprof_busy": "FullProf 外部リファインメント"
+        },
+        "external_engines_group": {
+            "title": "外部リファイン・プログラム",
+            "status_tip": "{title} の利用状態",
+            "placeholder": "自動検出、または実行ファイルを選択",
+            "browse": "参照…",
+            "detect": "検出",
+            "detect_tip": "ローカルインストールの自動検出を再実行",
+            "start_refine": "リファイン開始",
+            "launch_gui": "GUI を起動",
+            "run_tip": "{title} で現在のデータと選択物相をリファイン",
+            "detected_placeholder": "自動検出: {path}",
+            "status_ok": "利用可能",
+            "status_bad": "設定済みだが利用不可",
+            "status_off": "未設定かつ未検出",
+            "light_tip": "{title}: {tip}",
+            "select_exe": "{title} の実行ファイルを選択",
+            "exe_filter": "実行ファイル (*.exe *.jar *.bat);;すべてのファイル (*)",
+            "log_detected": "[外部プログラム] {title}: 検出 {path}",
+            "log_not_detected": "[外部プログラム] {title}: ローカルインストールが検出されませんでした",
+            "log_unavailable": "[外部プログラム] {title} は利用不可: 先に実行ファイルを選択するか検出を実行してください",
+            "log_need_data": "[外部プログラム] 先にデータを読み込んでください",
+            "log_need_phases": "[外部プログラム] 先に相分析ページで相を選択してください",
+            "log_gsas2_wd": "[gsas2] 作業ディレクトリ: {wd}",
+            "log_maud_wd": "[maud] 作業ディレクトリ: {wd}",
+            "log_launch_failed": "[外部プログラム] {title} の起動に失敗: {exc}"
+        },
+        "refinement_wizard": {
+            "tpl_builtin": "[組込] {name}",
+            "tpl_user": "[ユーザー] {name}"
+        }
+    },
+    "elem": {
+        "Ac": "アクチニウム",
+        "Ag": "銀",
+        "Al": "アルミニウム",
+        "Am": "アメリシウム",
+        "Ar": "アルゴン",
+        "As": "ヒ素",
+        "At": "アスタチン",
+        "Au": "金",
+        "B": "ホウ素",
+        "Ba": "バリウム",
+        "Be": "ベリリウム",
+        "Bi": "ビスマス",
+        "Bk": "バークリウム",
+        "Br": "臭素",
+        "C": "炭素",
+        "Ca": "カルシウム",
+        "Cd": "カドミウム",
+        "Ce": "セリウム",
+        "Cf": "カリホルニウム",
+        "Cl": "塩素",
+        "Cm": "キュリウム",
+        "Co": "コバルト",
+        "Cr": "クロム",
+        "Cs": "セシウム",
+        "Cu": "銅",
+        "Dy": "ジスプロシウム",
+        "Er": "エルビウム",
+        "Es": "アインスタイニウム",
+        "Eu": "ユウロピウム",
+        "F": "フッ素",
+        "Fe": "鉄",
+        "Fm": "フェルミウム",
+        "Fr": "フランシウム",
+        "Ga": "ガリウム",
+        "Gd": "ガドリニウム",
+        "Ge": "ゲルマニウム",
+        "H": "水素",
+        "He": "ヘリウム",
+        "Hf": "ハフニウム",
+        "Hg": "水銀",
+        "Ho": "ホルミウム",
+        "I": "ヨウ素",
+        "In": "インジウム",
+        "Ir": "イリジウム",
+        "K": "カリウム",
+        "Kr": "クリプトン",
+        "La": "ランタン",
+        "Li": "リチウム",
+        "Lr": "ローレンシウム",
+        "Lu": "ルテチウム",
+        "Md": "メンデレビウム",
+        "Mg": "マグネシウム",
+        "Mn": "マンガン",
+        "Mo": "モリブデン",
+        "N": "窒素",
+        "Na": "ナトリウム",
+        "Nb": "ニオブ",
+        "Nd": "ネオジム",
+        "Ne": "ネオン",
+        "Ni": "ニッケル",
+        "No": "ノーベリウム",
+        "Np": "ネプツニウム",
+        "O": "酸素",
+        "Os": "オスミウム",
+        "P": "リン",
+        "Pa": "プロトアクチニウム",
+        "Pb": "鉛",
+        "Pd": "パラジウム",
+        "Pm": "プロメチウム",
+        "Po": "ポロニウム",
+        "Pr": "プラセオジム",
+        "Pt": "白金",
+        "Pu": "プルトニウム",
+        "Ra": "ラジウム",
+        "Rb": "ルビジウム",
+        "Re": "レニウム",
+        "Rh": "ロジウム",
+        "Rn": "ラドン",
+        "Ru": "ルテニウム",
+        "S": "硫黄",
+        "Sb": "アンチモン",
+        "Sc": "スカンジウム",
+        "Se": "セレン",
+        "Si": "ケイ素",
+        "Sm": "サマリウム",
+        "Sn": "スズ",
+        "Sr": "ストロンチウム",
+        "Ta": "タンタル",
+        "Tb": "テルビウム",
+        "Tc": "テクネチウム",
+        "Te": "テルル",
+        "Th": "トリウム",
+        "Ti": "チタン",
+        "Tl": "タリウム",
+        "Tm": "ツリウム",
+        "U": "ウラン",
+        "V": "バナジウム",
+        "W": "タングステン",
+        "Xe": "キセノン",
+        "Y": "イットリウム",
+        "Yb": "イッテルビウム",
+        "Zn": "亜鉛",
+        "Zr": "ジルコニウム"
+    },
+    "quality": {
+        "excellent": "優秀",
+        "good": "良好",
+        "fair": "普通",
+        "poor": "不良",
+        "bad": "極めて不良"
+    },
+    "report": {
+        "title": "PolyXRD Rietveld 精密化レポート",
+        "phase_count": "相の数: {count}",
+        "cycles": "精密化サイクル: {cycles}",
+        "converged": "収束状態: はい",
+        "not_converged": "収束状態: いいえ",
+        "time": "所要時間: {time} 秒",
+        "quality_section": "精密化品質指標",
+        "phase_section": "相分析",
+        "rwp_line": "  Rwp (重み付けプロファイルR): {value} %",
+        "rexp_line": "  Rexp (期待R):      {value} %",
+        "rb_line": "  Rb (Bragg R):      {value} %",
+        "gof_line": "  GOF (=Rwp/Rexp):   {value}",
+        "quality_line": "  品質グレード:      {value}",
+        "phase_header": "相 {index}: {name}",
+        "formula": "  化学式: {formula}",
+        "weight_fraction": "  質量分率: {value} %",
+        "cell_params": "  格子定数: a={a}, b={b}, c={c} Å",
+        "cell_angles": "            α={alpha}, β={beta}, γ={gamma}°",
+        "cell_volume": "  格子体積: {volume} Å³",
+        "total_fraction": "相の総含有量: {value} %"
+    }
 }

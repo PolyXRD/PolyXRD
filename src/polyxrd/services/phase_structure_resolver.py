@@ -201,7 +201,7 @@ class PhaseStructureResolver:
             log(f"[cif] {note}")
             if resolved is not phase:
                 n_ok += 1
-        log(f"[cif] 结构匹配: {n_ok}/{len(phases)} 相已载入 CIF 基础结构")
+        log(f"[cif] structure match: {n_ok}/{len(phases)} phases loaded with CIF base structure")
         return out
 
     # ── 单相解析 ────────────────────────────────────────────

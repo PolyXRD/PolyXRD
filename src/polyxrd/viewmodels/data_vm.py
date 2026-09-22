@@ -10,6 +10,7 @@ from typing import Optional
 
 from PySide6.QtCore import QObject, Signal
 
+from polyxrd.i18n import tr
 from polyxrd.models.xrd_data import XRDData, BackgroundResult
 from polyxrd.services.data_loader import DataLoader, save_xy
 from polyxrd.services.data_preprocessor import DataPreprocessor
@@ -77,7 +78,7 @@ class DataViewModel(QObject):
         """保存数据"""
         data = self.current_data
         if data is None:
-            self.error.emit("没有数据可保存")
+            self.error.emit(tr("error.no_data_save"))
             return
 
         try:
@@ -93,7 +94,7 @@ class DataViewModel(QObject):
         """背景扣除"""
         data = self.current_data
         if data is None:
-            self.error.emit("请先加载数据")
+            self.error.emit(tr("error.no_data"))
             return
 
         try:
@@ -103,7 +104,7 @@ class DataViewModel(QObject):
             self.background_subtracted.emit(result)
             self.data_updated.emit(self._processed_data)
         except Exception as e:
-            self.error.emit(f"背景扣除失败: {e}")
+            self.error.emit(tr("error.background_failed", error=e))
 
     def smooth_data(
         self,
@@ -114,7 +115,7 @@ class DataViewModel(QObject):
         """平滑数据"""
         data = self.current_data
         if data is None:
-            self.error.emit("请先加载数据")
+            self.error.emit(tr("error.no_data"))
             return
 
         try:
@@ -122,7 +123,7 @@ class DataViewModel(QObject):
             self._processed_data = smoothed
             self.data_updated.emit(smoothed)
         except Exception as e:
-            self.error.emit(f"平滑失败: {e}")
+            self.error.emit(tr("error.smooth_failed", error=e))
 
     def strip_ka_alpha2(
         self,
@@ -133,7 +134,7 @@ class DataViewModel(QObject):
         """Kα2峰剥离"""
         data = self.current_data
         if data is None:
-            self.error.emit("请先加载数据")
+            self.error.emit(tr("error.no_data"))
             return
 
         try:
@@ -143,7 +144,7 @@ class DataViewModel(QObject):
             self._processed_data = corrected
             self.data_updated.emit(corrected)
         except Exception as e:
-            self.error.emit(f"Kα2剥离失败: {e}")
+            self.error.emit(tr("error.kalpha2_failed", error=e))
 
     def reset_to_raw(self) -> None:
         """重置为原始数据"""
@@ -167,7 +168,7 @@ class DataViewModel(QObject):
         """归一化"""
         data = self.current_data
         if data is None:
-            self.error.emit("请先加载数据")
+            self.error.emit(tr("error.no_data"))
             return
         self._processed_data = data.normalize()
         self.data_updated.emit(self._processed_data)
@@ -176,7 +177,7 @@ class DataViewModel(QObject):
         """裁剪2θ范围"""
         data = self.current_data
         if data is None:
-            self.error.emit("请先加载数据")
+            self.error.emit(tr("error.no_data"))
             return
         self._processed_data = data.crop(two_theta_min, two_theta_max)
         self.data_updated.emit(self._processed_data)

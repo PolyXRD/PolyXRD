@@ -18,6 +18,7 @@ from matplotlib.widgets import SpanSelector
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
 
+from polyxrd.i18n import tr
 from polyxrd.models.peak import Peak
 from polyxrd.models.xrd_data import XRDData
 from polyxrd.utils.mpl_font import ensure_cjk_font
@@ -94,25 +95,22 @@ class PlotWidget(QWidget):
         # 操作按钮
         btn_layout = QHBoxLayout()
 
-        self._btn_add_peak = QPushButton("添加峰")
+        self._btn_add_peak = QPushButton(tr("vw.plot_widget.add_peak_btn"))
         self._btn_add_peak.clicked.connect(self._on_add_peak_mode)
         btn_layout.addWidget(self._btn_add_peak)
 
-        self._btn_reset = QPushButton("重置视图")
+        self._btn_reset = QPushButton(tr("vw.plot_widget.reset_view_btn"))
         self._btn_reset.clicked.connect(self.reset_view)
         btn_layout.addWidget(self._btn_reset)
 
-        self._btn_export = QPushButton("导出图片")
+        self._btn_export = QPushButton(tr("vw.plot_widget.export_img_btn"))
         self._btn_export.clicked.connect(self._on_export)
         btn_layout.addWidget(self._btn_export)
 
         # 纵坐标模式提示 (随切换实时更新)
         self._y_scale_hint = QLabel()
         self._y_scale_hint.setStyleSheet("QLabel { color: #555; font-size: 11px; }")
-        self._y_scale_hint.setToolTip(
-            "左键点击 Y 轴区域循环切换; 右键点击图内任意位置弹出选择菜单。\n"
-            "对数 / 方根刻度下刻度标签仍是真实强度值。"
-        )
+        self._y_scale_hint.setToolTip(tr("vw.plot_widget.y_scale_hint_tip"))
         btn_layout.addWidget(self._y_scale_hint)
 
         btn_layout.addStretch()
@@ -497,9 +495,9 @@ class PlotWidget(QWidget):
 
         path, _ = QFileDialog.getSaveFileName(
             self,
-            "导出图片",
+            tr("vw.plot_widget.export_img_dlg_title"),
             "xrd_pattern.png",
-            "图片文件 (*.png *.pdf *.svg *.eps)",
+            tr("vw.plot_widget.export_img_filter"),
         )
         if path:
             dpi = 300

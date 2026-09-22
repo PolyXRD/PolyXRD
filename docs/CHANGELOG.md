@@ -1,14 +1,14 @@
 # PolyXRD 版本变更记录（CHANGELOG）
 
-> 覆盖范围：**v0.3.0（可追溯最早版本）→ v1.0.1（2026-09-22，已发布）+ v1.0.2（启动稳健性修复，已收口未发布）**
+> 覆盖范围：**v0.3.0（可追溯最早版本）→ v1.0.1（2026-09-22，已发布）+ v1.0.2（启动稳健性修复，已收口未发布）+ v1.1.1（界面国际化补全，当前工作版本）**
 > 合并日期：2026-09-21 ｜ 由 4 份历史变更记录（CHANGELOG01 / 02 / 03 与原 CHANGELOG）合并去重而成
-> 最后更新：2026-09-22（补 v1.0.1 正式发布记录 + Release 附件清单 + **v1.0.2 启动稳健性修复（版本号已定，EXE 暂不重建）** + v1.0.1 遗留的版本号收口补正与 `pyproject.toml` 元数据补齐）
+> 最后更新：2026-09-22（补 v1.0.1 正式发布记录 + Release 附件清单 + **v1.0.2 启动稳健性修复（版本号已定，EXE 暂不重建）** + v1.0.1 遗留的版本号收口补正与 `pyproject.toml` 元数据补齐 + **v1.1.1 英/日界面翻译全量补全**）
 > 数据来源：git 提交历史 + GitHub Release 正文 + 项目工作记忆（逐日工作日志）+ 交接期源码包回溯
 > 联系：sshztx@outlook.com
 >
 > **结构导览**：
 > - 第一部分 · 早期史（v0.3.0 → v0.8.20，无 git 记录，回溯整理）
-> - 第二部分 · 正式发布逐版详情（v0.8.21 → v1.0.1 + **v1.0.2 启动稳健性修复（未发布）** + v1.0.1 遗留收口补正，其中 v0.8.21–v0.8.23 沿用首份日志的详细节）
+> - 第二部分 · 正式发布逐版详情（v0.8.21 → v1.1.1，其中 v0.8.21–v0.8.23 沿用首份日志的详细节）
 > - 附录 A–F（路线图对照 / 库包演进 / 量化指标 / 发布红线 / 版本收口点 / 不确定项）＋ G 开源致谢 ＋ H 兼容性矩阵
 
 ---
@@ -348,7 +348,7 @@
 
 ---
 
-# 第二部分 · 正式发布逐版详情（v0.8.21 → v0.15.1）
+# 第二部分 · 正式发布逐版详情（v0.8.21 → v1.1.1）
 
 ## \[0.8.21] — 2026-08-21
 
@@ -602,7 +602,7 @@ v0.8.21 → v0.8.22 → v0.8.23 → v0.9.0 → v0.9.1 → v0.9.7 → v0.9.8 → 
 
 ---
 
-## 版本速览表（v0.3.0 → v1.0.1）
+## 版本速览表（v0.3.0 → v1.1.1）
 
 | 版本 | 日期 | 主题 | 关键交付 | 产物形态 |
 |---|---|---|---|---|
@@ -632,6 +632,8 @@ v0.8.21 → v0.8.22 → v0.8.23 → v0.9.0 → v0.9.1 → v0.9.7 → v0.9.8 → 
 | v0.15.1 🚫 | 2026-09-20 | 内置引擎接入 CIF \|F\|² + MAUD 走官方 bat | 合成基准 wR 58.13%→**10.32%** | Setup + Portable（**不发 Release**） |
 | v0.15.2 🚫 | 2026-09-21 | 精修 A/B/C 三路线收口 + 格式互转 | **4-1 wR 52.7%→19.69%（March-Dollase 织构 + 对称展开向量化）**；Rwp/Rexp/Rb/GOF 标准化；8 格式互转；参考库 0.5.1 | 源码/本地构建 |
 | **v1.0.1** 🏷️ | 2026-09-22 | **1.0 正式版：主路线图 M01–M25 全部交付** | M09 候选检索与约束 / M15 指标化（立方·四方·六方）/ M17 3D 晶体结构视图 / M26 谱合成窗口化（**1467→270 ms，5.4×**）；修大峰表组合卡死；全量回归 **991 过 / 2 跳过**；版本号 0.15.3→**1.0.1** | Setup + 2 索引库包（**PDF2 / Portable 不入 Release**） |
+| v1.0.2 🚫 | 2026-09-22 | **启动稳健性修复**（现场"关掉后双击打不开"） | kill-safe 单实例守卫（命名互斥量）/ `app.exec()` 硬退出看门狗 / `--diagnose` 无 GUI 诊断 / `faulthandler` 原生崩溃落盘 / `--safe-render` 保守渲染开关；结论：**死于 `MainWindow.show()` 内部（Qt6Widgets.dll 0xC0000005）**，疑 Qt 6.11.1×老旧显卡驱动 | 源码（**EXE 暂不重建、不发 Release**） |
+| **v1.1.1** 🚫 | 2026-09-22 | **界面国际化补全（英语 / 日语全量覆盖）** | 补齐 **384** 个翻译键（`vw.*` 193 / `elem.*` 103 / `dialog.*` 26 / `report.*` 20 / `params.*` 16 …）；三语键集 **894×3 完全对齐**（此前 zh **562** / en **550** / ja **510** 互不相等）；ViewModel（37 处）+ 结果模型（报告正文/质量等级）+ 服务层日志（改符号化 ASCII）全部纳入；`I18nManager` 增 **zh_CN 回退链** | 源码（待打包） |
 
 > 说明：v0.15.3 从未独立发布，其全部内容（M09 / M15 / M17 / M26 + 7-1 卡死修复）已在 v1.0.1 中转正发布。
 
@@ -1763,6 +1765,85 @@ GUI 引擎选择与回退提示），本轮回归复核通过，无需改动。
 
 双击的**是哪一个** exe；双击后是完全无反应、还是启动图一闪而过、还是弹了报错框；
 关闭后任务管理器里 `PolyXRD.exe` 是否还在；以及是否只在**安装版**上出现。
+
+### v1.1.1 — 2026-09-22 · 界面国际化补全（英语 / 日语全量覆盖）🚫
+
+**用户诉求**（2026-09-22）：中文界面没问题，但**英/日界面大量残留中文**（部分按钮、分组标题、
+状态提示、右键菜单、报告正文等），要求把版本推进到 **1.1.1** 并系统性补全英/日二语。
+
+#### 问题定位（量化，三步）
+
+1. **翻译表本身就"不等长"**。以 v1.0.2 工作区基线（`HEAD`）为准统计三语键数：
+   **`zh_CN` 562 / `en_US` 550 / `ja_JP` 510** —— 三语键集**互不相等**（en 比 zh 少 12 个键、
+   ja 少 52 个）。这意味着**即使切到英文，也有键取不到值**，只能回退显示中文原键。
+2. **视图层两类硬伤**：① 约 **21 处**界面文案是**硬编码中文字面量**（压根没进翻译表）；
+   ② 曾引入 **31 个"幽灵键"**（如 `vw.data_view.find_peaks_btn`）——翻译表里**根本不存在该键**，
+   `tr()` 解析失败后按"缺键"语义回退，结果把**裸键名**直接显示在界面上。
+3. **非视图层整片未纳入 i18n**：ViewModel 的状态/错误提示（约 37 处）、报告正文与质量等级、
+   服务层诊断日志、元素周期表的 103 个元素名与状态标签，此前**完全没走 `tr()`**（或作为
+   模块级常量在导入期求值，切语言后**不会更新**）。
+
+#### 本轮改动
+
+- **补齐翻译键 384 个**（按"至少在一种语言里此前缺失"计），分域如下：
+
+  | 域 | 新增 | 代表键 |
+  |---|---|---|
+  | `vw.*`（视图） | 193 | `vw.phase_view.db_cod_inorg` / `vw.report_view.btn_export` / `vw.peak_table.col_2theta` |
+  | `elem.*`（元素中文名） | 103 | `elem.H` / `elem.Fe` / `elem.Po` … |
+  | `dialog.*` | 26 | `dialog.simulate_title` / `dialog.fom_title` / `dialog.ref_db_search` |
+  | `report.*`（报告正文） | 20 | `report.rwp_line` / `report.phase_header` / `report.weight_fraction` |
+  | `params.*` | 16 | `params.engine_status_label` / `params.match_tolerance` |
+  | `error.*` | 7 | `error.no_phase_selected` / `error.refine_window_no_overlap` |
+  | `status.*` | 7 | `status.database_loading` / `status.simulating_pattern` |
+  | `menu.*` / `quality.*` / `toolbar.*` | 12 | `menu.file.load_project` / `quality.excellent` / `toolbar.reset` |
+
+- **三语键集对齐到 894 × 3，两两完全相等**（此前 zh 562 / en 550 / ja 510）。
+  翻译文件仍以 `json.dumps(..., ensure_ascii=False, indent=4)` + LF 重写，**键集相等**是硬不变量。
+- **31 个"幽灵键"逐条回挂真实键**（涉及 11 个视图文件）：每个幽灵键都在翻译表里找到语义对应的
+  既有键后重映射，例如 `find_peaks_btn → vw.data_view.detect_peaks`、`run_bg_btn → exec_bg_subtract`、
+  `_label / _db_label → db_builtin / db_cod_inorg / db_cod_full / db_pdf2`。另修正 2 处键名笔误
+  （`msg_no_identify → vw.phase_view.msg_run_identify`、`msg_no_data → msg_load_xrd`）。
+- **补齐约 21 处硬编码中文控件**：报告页 / 峰表 / 峰归属表 / 元素过滤对话框 / 元素周期表 /
+  外部引擎面板 / 绘图控件 / 精修页 / 主窗口右键菜单等，全部改走 `tr()`。
+- **ViewModel 国际化**：`main_vm`（18 处）、`data_vm`（9 处）、`phase_vm`（6 处）、
+  `refinement_vm`（4 处）的 `status.*` / `error.*` / `menu.*` 文案全部改走 `tr()`。
+- **结果模型国际化**：`models/refinement.py` 的 `quality_grade`（`quality.*`）与
+  `summary()`（导出报告正文，`report.*`）改走 `tr()`，报告随界面语言切换。
+- **服务层日志改符号化 ASCII**：`services/` 层按设计**不依赖 Qt、不调用 `tr()`**（模块文档即如此约定），
+  因此**不引入 i18n**，而是把 FullProf runner / GSAS-II·MAUD 启动器 / 物相识别 / 结构解析 /
+  MAUD 引擎 / `rietveld_refiner` 等处的**中文诊断日志**统一改写成 `[tag] key=value` 符号化写法
+  （`rietveld_refiner` 单文件 26 处），保留可读性的同时避免"中英混杂"；回退原因亦改为 ASCII。
+- **元素周期表延迟求值**：模块级 `STATE_LABELS` / `STATE_TIPS` 常量 → `_STATE_LABEL_KEYS` /
+  `_STATE_TIP_KEYS` + 运行时函数 `state_label()` / `state_tip()` / `element_name()`，切语言即时生效。
+- **补 7 个文件的 `from polyxrd.i18n import tr`**（此前已调用 `tr()` 却未导入 → `NameError` 隐患）：
+  `report_view` / `element_filter_dialog` / `element_periodic_table` / `external_engines_group` /
+  `peak_match_table` / `peak_table` / `plot_widget`。
+- **`i18n_manager` 增加 zh_CN 回退链**：解析顺序改为 **当前语言 → `zh_CN` → 原始键**，
+  之后任何语言临时缺键也能显示可读中文，不会再漏裸键名。
+
+#### 验证
+
+| 项 | 结果 |
+|---|---|
+| 语法编译 | **110 / 110** 源文件通过 |
+| 三语键数 | `zh=894` / `en=894` / `ja=894` |
+| 键集对齐 | `zh==en` **True**、`zh==ja` **True** |
+| `tr()` 覆盖扫描 | 字面量键 **580**，缺失 **0**，占位符不匹配 **0** |
+| 离屏冒烟（隔离 QSettings，分别以 en_US / ja_JP 构建主窗口） | en_US 残留 **2**、ja_JP 残留 **3**，**全部为预期**：`ACT:中文` / `ACT:日本語` 是语言菜单自身以本族文字显示；ja 的第 3 项 `BTN:検出` 是**合法日文汉字**（検出＝detection）。**无真实未翻译控件** |
+| 相关回归 `pytest`（DB 对话框 / 精修日志 / 纵坐标 / busy 闸门 / 向导 MAUD） | **90 passed** |
+
+> 冒烟脚本带来的教训（供复现）：`MainWindow._load_settings()` 会用持久化的 `QSettings`
+> `language` **覆盖**进程内已设语言，且 `I18nManager.reset()` **不会**清掉 `i18n_manager`
+> 模块里的 `_i18n` 单例缓存 —— 冒烟测试必须**把 QSettings 引到临时目录**、**完整重置单例**
+> 并**预置 `language`**，否则会误判"翻译没生效"。另：离屏平台无字体，截图只会得到方框，
+> **文本抽取**才是可靠判据。
+
+#### 版本号收口（5 处）
+
+`src/polyxrd/__init__.py` · `src/polyxrd/config.py` · `pyproject.toml` · `build.bat` ·
+`scripts/PolyXRD-Setup.iss` —— 统一 **1.1.1**（`build.bat` 为 UTF-8 + 全 CRLF，改动按字节级替换，
+不触碰编码）。
 
 ## 附录 A · 路线图模块（M01–M25）与版本对照
 
