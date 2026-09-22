@@ -3,6 +3,7 @@ PolyXRD 应用入口
 """
 from __future__ import annotations
 
+import faulthandler
 import logging
 import os
 import sys
@@ -55,14 +56,43 @@ def _log_dir() -> Path:
 
 
 def _startup_log(message: str) -> None:
-    """启动流水日志 (带时间戳, 只追加)。"""
+    """启动流水日志 (带时间戳与 pid, 只追加)。
+
+    pid 前缀 (v1.0.2): 现场日志 (Win11) 显示双实例并发启动时两份日志交错写入,
+    没有 pid 根本分不清哪行属于哪个进程。
+    """
     try:
-        line = f"[{datetime.now():%Y-%m-%d %H:%M:%S}] {message}\n"
+        line = (
+            f"[{datetime.now():%Y-%m-%d %H:%M:%S}] "
+            f"[pid={os.getpid()}] {message}\n"
+        )
         with (_log_dir() / f"startup-{datetime.now():%Y-%m-%d}.log").open(
             "a", encoding="utf-8"
         ) as fh:
             fh.write(line)
     except Exception:  # noqa: BLE001 - 日志失败不能影响启动
+        pass
+
+
+# faulthandler 需要文件句柄存活期间一直有效, 存模块级引用
+_FAULT_LOG_FH: Optional[object] = None
+
+
+def _enable_faulthandler() -> None:
+    """原生崩溃 (access violation) 时把各线程 Python 调用栈落盘 (v1.0.2)。
+
+    现场实证 (v1.0.1, Win11): 同一次会话里 9 次启动有 6 次死在 window.show()
+    内部 —— 日志停在 "showing main window" 就没了, Python 层**没有异常**,
+    sys.excepthook 收不到, crash-*.log 不会生成。faulthandler 靠向量化异常
+    处理在原生崩溃瞬间抓 Python 栈, 正好补这个洞。
+    """
+    global _FAULT_LOG_FH
+    try:
+        path = _log_dir() / f"faulthandler-{datetime.now():%Y-%m-%d}.log"
+        _FAULT_LOG_FH = path.open("a", encoding="utf-8")
+        faulthandler.enable(file=_FAULT_LOG_FH)
+        _startup_log(f"faulthandler enabled -> {path.name}")
+    except Exception:  # noqa: BLE001 - 诊断失败不能影响启动
         pass
 
 
@@ -208,6 +238,8 @@ def _run_diagnose() -> int:
 def main() -> int:
     """主入口函数"""
     _install_excepthooks()
+    # 尽早开: 任何原生崩溃 (包括 window.show() 内部) 都要留下 Python 调用栈
+    _enable_faulthandler()
 
     if "--diagnose" in sys.argv[1:]:
         return _run_diagnose()
