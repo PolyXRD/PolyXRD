@@ -1,14 +1,42 @@
 [build-system]
-requires = ["setuptools>=64", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "polyxrd"
-version = "0.15.2"
+version = "1.0.1"
 description = "X射线衍射仪数据分析软件 - 物相分析与Rietveld结构精修"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
+license-files = []
 requires-python = ">=3.10"
+authors = [
+    {name = "PolyXRD Team", email = "sshztx@outlook.com"},
+]
+keywords = [
+    "XRD",
+    "X-ray diffraction",
+    "Rietveld refinement",
+    "phase identification",
+    "crystallography",
+    "structure refinement",
+    "materials science",
+    "scientific computing",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Win32 (MS Windows)",
+    "Intended Audience :: Science/Research",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Chemistry",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
 dependencies = [
     "numpy>=1.24",
     "scipy>=1.10",
@@ -22,6 +50,14 @@ dependencies = [
     "Pillow>=9.0.0",
     "platformdirs>=3.0.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/PolyXRD/PolyXRD"
+Repository = "https://github.com/PolyXRD/PolyXRD"
+Documentation = "https://github.com/PolyXRD/PolyXRD/blob/main/README.md"
+Changelog = "https://github.com/PolyXRD/PolyXRD/blob/main/docs/CHANGELOG.md"
+Issues = "https://github.com/PolyXRD/PolyXRD/issues"
+Releases = "https://github.com/PolyXRD/PolyXRD/releases"
 
 [project.optional-dependencies]
 dev = [
