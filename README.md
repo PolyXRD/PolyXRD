@@ -4,10 +4,10 @@
   <p>
     <b>多晶 X 射线衍射 (XRD) 图谱综合分析套件</b>
     <br />
-    峰检测 &nbsp;·&nbsp; 多物相定性检索 &nbsp;·&nbsp; Rietveld 结构精修 &nbsp;·&nbsp; Le Bail 晶胞精修 &nbsp;·&nbsp; 全谱拟合 &nbsp;·&nbsp; 三库外挂检索 (COD 无机物 / COD 全库 / PDF2-2004)
+    峰检测 &nbsp;·&nbsp; 多物相定性检索 &nbsp;·&nbsp; Rietveld 结构精修 &nbsp;·&nbsp; Le Bail 晶胞精修 &nbsp;·&nbsp; 指标化 &nbsp;·&nbsp; 3D 结构可视化 &nbsp;·&nbsp; 三库外挂检索 (COD 无机物 / COD 全库 / PDF2-2004)
   </p>
   <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v0.15.0-blue?style=flat-square" /></a>
+    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v1.0.1-blue?style=flat-square" /></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
     &nbsp;
@@ -15,7 +15,7 @@
     &nbsp;
     <img src="https://img.shields.io/badge/UI-PySide6%20(Qt6)-41cd52?style=flat-square" />
     &nbsp;
-    <img src="https://img.shields.io/badge/Tests-507%20passed-brightgreen?style=flat-square" />
+    <img src="https://img.shields.io/badge/Tests-991%20passed-brightgreen?style=flat-square" />
   </p>
 </div>
 
@@ -24,6 +24,8 @@
 ## 📖 项目说明
 
 **PolyXRD** 是一个面向材料学 / 化学 / 晶体学研究者的 **多晶 X 射线衍射 (XRD) 图谱综合分析桌面软件**。它把"**加载原始 XRD 数据 → 预处理 → 峰检测 → 多物相定性检索 → Rietveld 结构精修 → 晶胞精修 → 全谱拟合 → 出报告**"整条工作流集成在一个统一的、带 **中文/英文/日文** 三语言界面的 PySide6 (Qt6) 桌面应用里。
+
+**v1.0.1（2026-09-22）为首个 1.0 正式版**：主路线图 **M01–M25 全部交付**（含此前降级为 P3 的 M15 指标化与 M17 三维结构可视化），并经全量回归（993 项收集 / 991 通过 / 2 跳过）。
 
 核心设计哲学：
 
@@ -47,32 +49,39 @@
 | 峰搜索 | 2 阶导数 + PV 拟合，SNR ≥ 2 自动阈值；重叠峰簇联合拟合 |
 | 峰拟合 | Pseudo-Voigt / Pearson VII / Split-PV，LMFit 解算器，RWP & χ² |
 | 仪器校准 | 标准样品外标校准（`services/calibration.py`） |
+| 谱图格式互转 | 菜单「文件 ▸ 谱图格式转换」：8 种格式互转，含 `.mdi` / `.raw`(RAW2) 读写（`services/pattern_convert.py`） |
 
 ### ② 物相分析
 - 多物相定性检索：**d-I 峰匹配 + Hanawalt 复合 + FoM 打分 + 化学式/元素过滤 + 矿物关键词** → Top-N 候选
+- **候选检索约束（M09 / v1.0.1）**：密度区间 `density_range`、名称/化学式**模糊直搜** `find_phases_direct`、综合约束过滤 `apply_restraints`、搜索预设存取；`name_pattern` 通配符大小写已修正
 - **四类元素过滤语义**：必有 (`must_have`，全部命中) / 含有 (`must`，至少一个) / 可能 (`maybe`，仅放宽允许池) / 没有 (`exclude`)。未勾选元素默认并入"没有"形成闭环；LIGHT_ELEMENTS (O/C/H/N/S) 支持一键"设为含有"
 - **FoM 加权互斥匹配**：参考峰与实验峰一一对应贪心匹配（避免密集相被高估）+ 强峰加权 + 特异性项 + 强度余弦
 - 交互式元素过滤器（118 种元素周期表选择器）
 - 多物相联合拟合：生成计算谱 → 与实验谱最小二乘 → 各相 **质量分数 (%)**
-- 组合选择：候选峰位掩码分支定界，联合覆盖最大 + 纯金属 ≤20% 硬约束
+- 组合选择：候选峰位掩码分支定界，联合覆盖最大 + 纯金属 ≤20% 硬约束；**同化学式多型按峰位差异择优**（`phase_structure_resolver.py`）
 
 ### ③ 晶相与晶体学
 - **Rietveld 结构精修**：基于 COD/PDF2 数据库的晶胞与空间群信息，支持 GSAS-II / powerxrd / 内置引擎，顺序/自动/手动三种精修策略
-- 内置引擎 `_refine_builtin`：median 背景 + Caglioti U/V/W 2θ 依赖峰宽 + 多起点最小二乘 + wR 直选 + 稀疏抛光
+- 内置引擎 `_refine_builtin`：median 背景 + Caglioti U/V/W 2θ 依赖峰宽 + 多起点最小二乘 + wR 直选 + 稀疏抛光；**每相各向同性晶胞缩放自由度** + **March-Dollase 织构修正**
 - **Le Bail 晶胞参数精修**：仅精修 a/b/c/α/β/γ，无需原子占位，适用于未知结构的晶胞测定
+- **指标化（M15 / v1.0.1）**：内置立方 / 四方 / 六方三系指标化（`services/indexing.py`，验收：立方 Si → a≈5.43 Å）；外部 Treor / Dicvol 留接口
+- **3D 晶体结构可视化（M17 / v1.0.1）**：CIF 浏览器内嵌 3D 晶胞 + 原子球视图，自动按空间群**展开非对称单元**（`services/structure_viz.py`）
 - 结构模拟：从空间群/原子占位 → 计算 XRD 图谱 (Lorentz-Polarization 校正 + B 因子)
 - hkl 指标化 (d→hkl)，230 种空间群标准化 (spglib)
 - 基于 **PDF2-2004** 的空间群（72.8%）与晶胞（81.8%）映射，命中相可直接作精修起始结构
+- **谱合成内核窗口化（M26 / v1.0.1）**：`spectrum_from_refs` 峰距截断（默认 100×FWHM），7251 点 × ~3000 峰单次评估 **1467 ms → 270 ms（5.4×）**，wR 等效差 < 0.05 个百分点
+- **外部精修程序集成（M25）**：FullProf 自动生成 `.dat/.pcr` → fp2k 批处理 → 解析 `.sum` 回写 Rwp/Rexp/Rp/GoF² 与各相 R_Bragg/晶胞/含量；GSAS-II / MAUD 一键"导出 + 拉起 GUI"
 
 ### ④ 项目 & 报告
 - `.polyxrd` 项目保存/打开/另存为（JSON 格式参数 + 图谱全归档）
-- 导出：峰列表 CSV / PNG+SVG 图像 / 多物相报告 PDF / 批量报告
+- 导出：峰列表 CSV / PNG+SVG 图像 / 多物相报告 PDF / 批量报告 / 选中物相 CIF
 - 脚本化接口（`services/scripting.py`）
 
 ### ⑤ 界面 & 多语言
 - PySide6 (Qt6) + PyQtGraph 双画布（主图 + 残差图），支持可停靠面板
+- 主谱与残差条 5:1 分栏、X 轴双向同步；绘图 X 轴自适应（滚轮以光标为中心缩放、左键拖拽平移）
 - **简体中文 / English / 日本語** 三语言切换，切换无需重启
-- 白天/深色主题，Fusion 风格，HiDPI 适配
+- 白天/深色主题，Fusion 风格，HiDPI 适配；纵坐标线性 / log / sqrt 切换
 - 交互式元素周期表（双击选择，带原子量与特征波长）
 - **数据库管理对话框**：三个槽位各自显示「已挂载/未挂载」、记录数、体积，并直接标明该槽位对应哪个下载包
 
@@ -86,7 +95,7 @@
 - 路径优先级：**GUI 导入的持久化路径 (`~/.polyxrd/user_db_paths.json`) > 默认位置（存在才用）> `~/.polyxrd/cif_db/` 兜底**
 - 导入时自动**校验库类型**：三库表名有重合（COD 无机物与 PDF2 都叫 `phases`），选错槽位会提示而非静默失败
 - 导入后立即生效，**无需重启**；物相分析面板的「数据库源」下拉同步刷新，未挂载的源自动置灰
-- 三个库完全独立，可只装其中一个；一个都不装也能用内置的 118 种参考物相
+- 三个库完全独立，可只装其中一个；一个都不装也能用内置的 **106 种参考物相**
 
 ---
 
@@ -101,20 +110,31 @@ PolyXRD/
 │   ├── i18n/                   # 多语言翻译 (zh_CN / en_US / ja_JP)
 │   ├── mcp_server/             # MCP 服务端 (供外部智能体调用)
 │   ├── resources/              # 图标 / 周期表数据 / 样式表 / 内置物相库
-│   ├── models/                 # 数据模型 (xrd_data / phase / peak / refinement / fom ...)
+│   ├── models/                 # 数据模型
+│   │   ├── xrd_data.py             # 图谱数据 + 实验元数据
+│   │   ├── experiment.py           # 实验信息 / 会话文档
+│   │   ├── phase.py / peak.py / fom.py / rir.py
+│   │   ├── search_options.py       # ★ 检索约束/预设 (M09)
+│   │   └── refinement.py / refinement_options.py
 │   ├── viewmodels/             # MVVM 视图模型层 (main_vm / data_vm / phase_vm / refinement_vm)
-│   ├── utils/                  # 工具函数 (resources / formula_parser / math_utils / validators)
+│   ├── utils/                  # 工具函数 (resources / formula_parser / math_utils / file_utils / mpl_font)
 │   ├── services/               # 核心算法服务 (无 UI, 可独立单元测试)
-│   │   ├── data_io.py              # 多格式 XRD 加载 (xrdml/raw/txt/csv/prf)
+│   │   ├── data_io.py / data_loader.py / data_processor.py
 │   │   ├── raw_processing.py       # 原始数据流水线
 │   │   ├── data_preprocessor.py    # 背景扣除 / 平滑 / Kα2 剥离
-│   │   ├── peak_detection.py       # 峰检测
-│   │   ├── peak_finder.py          # 峰搜索 (2 阶导数 + 自动阈值)
-│   │   ├── peak_manager.py         # 峰管理
+│   │   ├── background.py           # 背景估计 (SNIP / 多项式 / 控制点插值)
+│   │   ├── peak_detection.py / peak_finder.py / peak_manager.py
+│   │   ├── peak_fitter.py          # 单峰拟合内核
 │   │   ├── peak_fitting.py         # 峰拟合 (PV/PVII/Split-PV, LMFit)
 │   │   ├── calibration.py          # 仪器校准
 │   │   ├── phase_identifier.py     # 多物相检索 + 联合拟合
+│   │   ├── phase_structure_resolver.py # 检索结果 → 初始结构 (同质多象按峰位择优)
 │   │   ├── phase_display.py        # 峰-物相归属 (双向, 一峰只归一相)
+│   │   ├── phase_cif.py            # CIF 解析 / 对称展开 (expand_sites_by_symmetry)
+│   │   ├── phase_cif_export.py     # 物相 CIF 导出
+│   │   ├── search_restraints.py    # ★ M09 候选检索约束 (密度/名称/化学式/预设)
+│   │   ├── indexing.py             # ★ M15 指标化 (立方/四方/六方)
+│   │   ├── structure_viz.py        # ★ M17 3D 结构数据 (晶胞 + 原子球)
 │   │   ├── foam.py                 # FoM 打分 + 置信度分档
 │   │   ├── multiphase.py           # 多相迭代识别
 │   │   ├── cod_local.py            # COD 本地库 / 索引构建 / CIF 兜底链
@@ -124,22 +144,23 @@ PolyXRD/
 │   │   ├── db_import.py            # 外挂数据库识别/校验/挂载 (Qt-free)
 │   │   ├── user_database.py        # 用户自建物相库
 │   │   ├── rietveld_refiner.py     # ★ Rietveld / Le Bail 精修 (GSAS-II / powerxrd / 内置)
+│   │   ├── maud_par_builder.py     # ★ MAUD 批处理输入生成
 │   │   ├── refinement_templates.py # 精修预设模板管理
+│   │   ├── external_tools.py       # ★ 外部精修程序注册表 + 启动器 (M25)
 │   │   ├── profile_fitting.py      # 全谱拟合 (PV/PVII)
 │   │   ├── structure_simulator.py  # 计算 XRD 图谱 (Lorentz-Polarization + B 因子)
-│   │   ├── rir.py                  # RIR 半定量
-│   │   ├── crystallite.py          # 微晶尺寸 / 微观应变
-│   │   ├── background.py           # 背景估计 (SNIP / 多项式 / 控制点插值, M04)
-│   │   ├── report.py               # 报告生成
-│   │   ├── project_service.py      # .polyxrd 项目读写
-│   │   ├── export_service.py       # CSV/PNG/SVG/PDF 导出
+│   │   ├── pattern_convert.py      # ★ 谱图 8 格式互转
+│   │   ├── rir.py / crystallite.py # RIR 半定量 / 微晶尺寸-微观应变
+│   │   ├── report.py / project_service.py / export_service.py
 │   │   └── scripting.py            # 脚本化接口
 │   └── views/                  # UI 视图层 (PySide6)
 │       ├── main_window.py          # 主窗口 / 菜单 / 工具栏 / 拖放
 │       ├── data_view.py            # 数据视图
 │       ├── phase_view.py           # 物相检索视图
 │       ├── refinement_view.py      # ★ Rietveld 精修视图
-│       ├── refinement_wizard.py    # 精修向导 (逐步引导)
+│       ├── refinement_wizard.py    # 精修向导 (快速版 + 分步版)
+│       ├── batch_refinement_dialog.py  # 批量精修
+│       ├── format_convert_dialog.py    # 谱图格式转换
 │       ├── report_view.py          # 报告视图
 │       ├── theme.py                # 白天/深色主题
 │       └── widgets/                # 自定义控件
@@ -148,30 +169,46 @@ PolyXRD/
 │           ├── element_filter_dialog.py  # 元素过滤器
 │           ├── pattern_display.py        # 图谱画布
 │           ├── plot_widget.py            # 绘图控件
+│           ├── y_scale.py                # 纵坐标 log / sqrt 切换
 │           ├── peak_table.py             # 峰表
 │           ├── peak_match_table.py       # 峰匹配表
+│           ├── structure_view.py         # ★ M17 3D 结构视图
+│           ├── external_engines_group.py # ★ 外部精修引擎配置面板
 │           └── busy_indicator.py         # ★ 长任务忙碌提示 + 防重入闸门
 │
 ├── scripts/                    # 交付性构建脚本
 │   ├── PolyXRD-Setup.iss           # Inno Setup 安装脚本
 │   ├── verify_release.ps1          # 发布产物校验 + 各库独立包生成 + SHA-256
-│   ├── create_github_release_v0.10.0.ps1  # ★ 创建 Release + 上传附件 (内置 PDF2 禁传守卫)
-│   ├── create_github_release_v0.9.10.ps1  # 上一版模板 (保留备查)
-│   ├── upload_release_assets.ps1   # 已废弃 (旧盘符路径, 仅留占位)
+│   ├── _verify_release_py.py       # ★ v1.0.1 起主用: Python 版产物校验 (逐字节对账)
+│   ├── _release_v101.py            # ★ 建 Release + curl 流式上传 (内置 PDF2/Portable 禁传自检)
+│   ├── _askpass.py                 # 非交互 git 认证辅助
+│   ├── _pyinst_collect.py / _build_finish.py / _portable_and_version.py  # 构建链各步
+│   ├── build_inorg_index_db.py     # 从完整内嵌版派生瘦身索引库
+│   ├── regenerate_reference_db_peaks.py  # 内置参考库峰表重算
+│   ├── dedup_reference_db.py       # 内置参考库同名条目去重
+│   ├── migrate_inorg_formula.py    # 无机库 formula 修复迁移 (v0.13.2)
+│   ├── repair_inorg_cell.py        # 无机库 cell_* 列错位修复 (v0.13.2)
 │   ├── gsas2_bridge.py             # GSAS-II 调用桥
-│   ├── (已清理) _pe_imports.py      # 原 DLL 导入表诊断探针, fa9c9ab 移除 (git 可取回)
-│   └── _pyinst_collect.py          # COLLECT 步骤兜底
+│   ├── create_github_release_v*.ps1  # 历史 Release 模板 (保留备查)
+│   └── upload_release_assets.ps1   # 已废弃 (旧盘符路径, 仅留占位)
 │
 ├── docs/                       # 文档
+│   ├── CHANGELOG.md                # ★ 完整版本变更记录 (v0.3.0 → v1.0.1)
 │   ├── HANDOVER-v0.9.7.md          # ★ 交接文档 (重装系统必读)
-│   ├── 外挂数据库使用说明.md        # ★ v0.10.0 外挂库下载/导入/排错
+│   ├── 外挂数据库使用说明.md        # ★ 外挂库下载/导入/排错
+│   ├── 路线图-v0.15.0.md            # 路线图与模块规格
 │   ├── 物相分析路线图与模块拆分.md  # M01–M20 模块规格
 │   ├── 算法内部原理.md              # 算法说明
+│   ├── 精修算法改进与MAUD引擎接入方案.md
+│   ├── MAUD-2.999x与3.04版本差异分析.md / MAUD批处理侦察报告.md
+│   ├── 参考库峰表重算报告-v0.15.2.txt
 │   ├── COD检索召回率优化方案.md     # 检索优化记录
 │   ├── PDF2-2004对接说明.md         # PDF2 库对接细节
 │   ├── 基准报告-v0.9.11.md          # 检索/精修基准数据
 │   ├── DESIGN-phase-analysis-v2.md  # 物相分析 v2 设计
-│   └── 5分钟上手_4-1样例.md         # 快速上手
+│   ├── 验收清单-v0.11.0.md          # 人工验收项
+│   ├── 5分钟上手_4-1样例.md         # 快速上手
+│   └── manual/                      # ★ 中文手册 (HTML / PPTX / PDF)
 │
 ├── cod_data/                   # 数据库目录 (SQLite 不入库; v0.14.0 起三库统一于此)
 │   ├── COD_inorganics_index.sqlite  # COD 无机物库·瘦身索引式 (71,199 物相, 362 MB) ← 运行时默认
@@ -182,24 +219,12 @@ PolyXRD/
 │
 ├── build.bat                   # ★ 一键构建: 图标 → PyInstaller → ISCC → 便携包 → 数据库包 → 校验
 ├── build_icon.py               # 品牌化应用图标生成 (512→7 档 ICO)
-├── build_top_peaks.py          # 为库补预截断强峰列 (检索提速)
-├── download_cod.py             # COD 官方归档下载
-├── extract_cod.py              # COD 归档解压
-├── rebuild_cod_from_tar.py     # 从归档重建 COD 全库索引
-├── rebuild_cod_lean.py         # 重建精简版索引 (不存 CIF BLOB)
-├── shrink_cod_db_to_lean.py    # 索引瘦身
-├── generate_test_data.py       # 测试数据生成
-├── generate_xrd_from_cif.py    # 从 CIF 正向生成 XRD 模拟谱
-├── inspect_db.py               # 数据库结构速查
-│
-├── tests/                      # 测试 (整体不入库)
-│   ├── test_*.py                   # 507 项单元 / 集成测试
-│   └── bench_*.py                  # 基准脚本 (可复现 docs/基准报告)
-│
+├── run_dev.bat                 # ★ 源码一键启动 (人工验收用, 永远跑最新 src/)
 ├── PolyXRD.spec                # PyInstaller 打包配置 (onedir / PySide6 + pymatgen + scipy)
 ├── pyproject.toml              # Python 项目配置 / 依赖版本
 ├── requirements.txt            # 运行依赖
 ├── app.manifest                # Windows 应用程序清单 (DPI)
+├── Thx2OpenSource.md           # 开源致谢 (独立版)
 ├── .gitignore                  # 本仓库忽略规则 (测试/数据库/构建产物)
 └── README.md                   # 本文件
 ```
@@ -211,13 +236,13 @@ PolyXRD/
 ### 方式 A · 普通用户 (推荐, 无需 Python)
 
 ```
-① 下载 PolyXRD-Setup-v0.14.0.exe (Windows x64)
+① 下载 PolyXRD-Setup-v1.0.1.exe (Windows x64)
    ↓
 ② 安装 (默认 C:\Program Files\PolyXRD\) 后直接运行 PolyXRD.exe
    ↓
 ③ 按需下载数据库包 —— 各库独立，需要哪个下哪个
-   ③-a PolyXRD-v0.14.0-Databases-COD-inorg-index.zip  131 MB  →  COD_inorganics_index.sqlite  (日常推荐, 瘦身索引式)
-   ③-b PolyXRD-v0.14.0-Databases-COD-full-index.zip   193 MB  →  cod_index.sqlite              (COD 全库/合并检索)
+   ③-a PolyXRD-v1.0.1-Databases-COD-inorg-index.zip   130.8 MB  →  COD_inorganics_index.sqlite  (日常推荐, 瘦身索引式)
+   ③-b PolyXRD-v1.0.1-Databases-COD-full-index.zip    193.1 MB  →  cod_index.sqlite              (COD 全库/合并检索)
    解压到任意目录（必须真正解压到磁盘，不要直接在压缩包里打开）
    ↓
 ④ 启动 PolyXRD → 菜单「数据库 ▸ 外挂数据库管理…」
@@ -227,16 +252,20 @@ PolyXRD/
 ⑤ 开始使用! 参考 docs/5分钟上手_4-1样例.md
 ```
 
-> **v0.14.0 瘦身无机库说明**：索引式无机库不含内嵌 CIF。本机若有 COD 原始
+> **v1.0.1 发布口径**：Release 仅提供 **Setup 安装包 + 两个 COD 索引库包**。
+> 便捷版（Portable）与 PDF2-2004 包**不随 Release 分发**（后者为 ICDD 版权库），
+> 需要时请联系作者。
+
+> **瘦身无机库说明**：索引式无机库不含内嵌 CIF。本机若有 COD 原始
 > `cod/cif/` 归档（四级分片目录）则直接按需读取；没有时会自动回退到 COD
 > 官网接口按编号下载 CIF 并缓存（需要联网）。若希望完全离线且单文件自包含，
-> 可改用 v0.13.x 的完整内嵌版 `COD_inorganics.sqlite`（1.19 GB），两者数据一致。
+> 可改用完整内嵌版 `COD_inorganics.sqlite`（1.19 GB），两者数据一致。
 
 > **关于 PDF2-2004 库**：该库为 ICDD 商品数据库，**受版权保护，本仓库不分发、Release 不提供下载**。
 > 持有正版授权的用户可自行准备 `PDF2_2004.sqlite` 并在「外挂数据库管理…」中作为 PDF2 槽位导入；
 > 未授权时该槽位留空即可，其余功能不受影响（详见 [docs/外挂数据库使用说明.md](docs/外挂数据库使用说明.md)）。
 
-> 一个库都不装也能用：程序内置 118 种常见参考物相。
+> 一个库都不装也能用：程序内置 **106 种**常见参考物相。
 > 详细说明与排错见 [docs/外挂数据库使用说明.md](docs/外挂数据库使用说明.md)。
 
 ### 方式 B · 开发者 / 二次开发 (源码运行)
@@ -261,6 +290,8 @@ python -m polyxrd.main
 python -m pytest -q
 ```
 
+> 测试规模：**993 项收集 / 991 通过 / 2 跳过**（v1.0.1 全量回归）。
+
 #### 一键源码启动（人工验收用）
 
 仓库根目录的 `run_dev.bat` 已封装好 PYTHONPATH，双击即可：
@@ -276,7 +307,7 @@ run_dev.bat
 ### 构建发布产物
 
 ```bat
-:: 改 build.bat 顶部的 set APPVER=0.10.0 后:
+:: 改 build.bat 顶部的 set APPVER=1.0.1 后:
 build.bat
 ```
 
@@ -288,7 +319,7 @@ Inno Setup 编译安装包 → 打便携包 → 生成三个独立数据库包 �
 >
 > 仅校验 / 重新生成发布产物（不重新构建 exe）：
 > ```powershell
-> pwsh -NoProfile -File scripts\verify_release.ps1 -Version 0.10.0
+> pwsh -NoProfile -File scripts\verify_release.ps1 -Version 1.0.1
 > ```
 
 ### 5 分钟快速上手 (工作流示例)
@@ -301,7 +332,7 @@ Inno Setup 编译安装包 → 打便携包 → 生成三个独立数据库包 �
    → Top 候选: MgAl₂O₄ Spinel ✅
 ⑤ Rietveld 精修: 选中共存相 → 精修向导 → 内置引擎 → 顺序策略
    → 精修完成, 查看 wR 与残差图
-⑥ 导出: 文件 → 保存项目 (.polyxrd) 或 导出报告 (CSV/PDF)
+⑥ 需要时: CIF 浏览器看 3D 晶胞 / 指标化求晶胞参数 / 导出报告 (CSV/PDF)
 ```
 
 ---
@@ -335,7 +366,53 @@ PolyXRD 基于以下高质量开源项目构建，感谢各位维护者及贡献
 
 ## 📦 Release
 
-当前最新版本：**v0.15.0**（2026-09-20）→ [👉 前往 Release 下载](https://github.com/PolyXRD/PolyXRD/releases)
+当前最新版本：**v1.0.1**（2026-09-22）→ [👉 前往 Release 下载](https://github.com/PolyXRD/PolyXRD/releases/tag/v1.0.1)
+
+### v1.0.1 主要变化
+
+**首个 1.0 系列版本：主路线图 M01–M25 全部交付，全量回归 993 项收集 / 991 通过 / 2 跳过。**
+
+- **M09 候选检索与约束** — 新增密度约束 `density_range`、名称/化学式模糊直搜
+  `find_phases_direct`、综合约束过滤 `apply_restraints`、搜索预设存取；
+  修复 `name_pattern` 通配符大小写失效（`*corundum*` 曾命中不了 "Corundum"）
+- **M15 指标化**（原 P3 项补齐）— 内置立方 / 四方 / 六方指标化
+  （验收：立方 Si → a≈5.43 Å）；外部 Treor / Dicvol 留接口
+- **M17 晶体结构可视化**（原 P3 项补齐）— CIF 浏览器新增 3D 晶胞 + 原子球视图
+  （自动按空间群展开非对称单元）
+- **精修引擎提速 5.4×（M26）** — 谱合成内核峰距截断窗口化（7251 点 × ~3000 峰
+  单次评估 **1467 ms → 270 ms**），wR 等效差 < 0.05 个百分点
+- **修复大峰表组合卡死** — `_cif_reference_peaks` 改为 `atomic_sites` 直构，
+  不再对已展开的全胞位点做 CIF 二次对称展开
+- **承接 v0.15.2** — Rwp/Rexp/Rb/GOF 标准 R 因子组、March-Dollase 织构修正、
+  对称展开向量化（4-1 wR 52.7% → 19.69%）、谱图 8 格式互转、
+  内置参考库重算（0.5.1，106 条）
+- **版本号** 0.15.3 → **1.0.1**
+
+### 发布附件 (v1.0.1)
+
+| 附件 | 大小 | 说明 |
+|---|---|---|
+| **PolyXRD-Setup-v1.0.1.exe** | 246.3 MB | Windows 独立安装包（内置 Python/Qt6/全部依赖，不含任何数据库） |
+| **PolyXRD-v1.0.1-Databases-COD-inorg-index.zip** | 130.8 MB | COD 无机物库·瘦身索引式（71,199 物相 + 31.1 万原子位点，不内嵌 CIF，主检索库，推荐） |
+| **PolyXRD-v1.0.1-Databases-COD-full-index.zip** | 193.1 MB | COD 全库索引外挂包（113,223 条目，不内嵌 CIF） |
+| **Source code (.zip / .tar.gz)** | — | 完整源码快照 |
+
+> **v1.0.1 起发布口径**：Release 只提供 **Setup 安装包 + 两个 COD 索引库包**。
+> 便捷版（Portable）自 v0.11.0 起不随 Release 发布（按需联系作者获取）；
+> `…-Databases-PDF2.zip` **不在 Release 中提供** —— PDF2-2004 为 ICDD 版权数据库，
+> 仓库仅提供挂载能力，分发包由用户依授权自行准备。
+
+SHA-256 校验值（体积单位为资源管理器口径 = 1,048,576 字节）：
+
+```
+3ac4fc3a9fc4402bbb7c7164166cc261aed98deb245df0bd0276e1d09ffb024e  PolyXRD-Setup-v1.0.1.exe                        246.3 MB
+b6097d83916afee2a9bcbdfc3e9ad33e630e2aaa0fadd87706f413efab9ef144  PolyXRD-v1.0.1-Databases-COD-inorg-index.zip    130.8 MB
+ed33680c4b5f2c45e38b84fba24ce6c6159e94f5ba95d15910c49003f2db2709  PolyXRD-v1.0.1-Databases-COD-full-index.zip     193.1 MB
+```
+
+> 完整清单（含未发布的 Portable / PDF2 包）见本地 `SHA256-v1.0.1.txt`。
+> 下载数据库包后建议核对 SHA-256，尤其是大文件传输中断导致 SQLite 尾部截断的情况
+> —— 截断的库能被 SQLite 打开，但读到尾部记录才会报错。
 
 ### v0.15.0 主要变化
 
@@ -412,37 +489,14 @@ PolyXRD 基于以下高质量开源项目构建，感谢各位维护者及贡献
 - **COD 候选排序重做** — `0.3 × Hanawalt 复合 + 0.7 × (1 − FoM)`，基准 Top-1 12%→14% / Top-5 22%→25% / Top-10 24%→27%
 - **元素过滤四语义定稿** — 必有 / 含有 / 可能 / 没有，未勾选默认并入"没有"；LIGHT_ELEMENTS 一键设为含有
 
-### 发布附件 (v0.14.0)
-
-| 附件 | 大小 | 说明 |
-|---|---|---|
-| **PolyXRD-Setup-v0.14.0.exe** | 247.6 MB | Windows 独立安装包（内置 Python/Qt6/全部依赖，不含任何数据库） |
-| **PolyXRD-v0.14.0-Databases-COD-inorg-index.zip** | 130.8 MB | COD 无机物库·瘦身索引式（71,199 物相 + 31.1 万原子位点，不内嵌 CIF，主检索库，推荐） |
-| **PolyXRD-v0.14.0-Databases-COD-full-index.zip** | 193.1 MB | COD 全库索引外挂包（113,223 条目 + 513 万原子位点，不内嵌 CIF） |
-| **Source code (.zip / .tar.gz)** | — | 完整源码快照 |
-
-> **v0.14.0 起免安装 Portable 包不随 Release 发布**（按需联系作者获取）。
-> `…-Databases-PDF2.zip` **不在 Release 中提供**：PDF2-2004 为 ICDD 版权数据库，
-> 仓库仅提供挂载能力，分发包由用户依授权自行准备。
-
-SHA-256 校验值（完整清单见发布附件中的 `SHA256-v0.14.0.txt`，体积单位为资源管理器口径 = 1,048,576 字节）：
-
-```
-2611cab20cbcb00e66fec5d1fbe005c648b5f2adfc1ebcd5b29b0480180e2c5e  PolyXRD-Setup-v0.14.0.exe                        247.6 MB
-8423b856e98d88c2205c32b1bf9f3eafcfab92b16319caa2c8763c0af301b9fc  PolyXRD-v0.14.0-Databases-COD-inorg-index.zip    130.8 MB
-2896bab8e3c4da84654732806df64480976ebd1743d017c7826b841c9f415024  PolyXRD-v0.14.0-Databases-COD-full-index.zip     193.1 MB
-```
-
-> 下载数据库包后建议核对 SHA-256，尤其是大文件传输中断导致 SQLite 尾部截断的情况
-> —— 截断的库能被 SQLite 打开，但读到尾部记录才会报错。
-
 ---
 
 ## 📝 版本兼容性 & License
 
 | PolyXRD | COD 无机物库 | COD 全库索引 | PDF2-2004 |
 |---|---|---|---|
-| **0.14.0** | `…-Databases-COD-inorg-index.zip`（瘦身索引式, 默认; 内嵌版仍可导入） | `…-Databases-COD-full-index.zip` | 用户自行准备（ICDD 授权，仓库不分发） |
+| **1.0.1** | `…-Databases-COD-inorg-index.zip`（瘦身索引式, 默认; 内嵌版仍可导入） | `…-Databases-COD-full-index.zip` | 用户自行准备（ICDD 授权，仓库不分发） |
+| 0.14.0 – 0.15.x | 同上 | 同上 | 同上 |
 | 0.11.0–0.13.2 | `…-Databases-COD-inorg.zip`（v2, 内嵌 CIF） | `…-Databases-COD-full.zip` | 用户自行准备（ICDD 授权，仓库不分发） |
 | 0.10.0 | `…-Databases-COD-inorg.zip`（v1, 仅 d-I 峰） | `…-Databases-COD-full.zip` | 用户自行准备（ICDD 授权，仓库不分发） |
 | 0.9.10 及以前 | 内嵌或 `PolyXRD_COD_Inorganics_v0.9.x.zip` | 内嵌或 `PolyXRD_COD_Full_v0.9.x.zip` | 不支持 |
@@ -452,5 +506,5 @@ SHA-256 校验值（完整清单见发布附件中的 `SHA256-v0.14.0.txt`，体
 ---
 
 <div align="right">
-  <i>PolyXRD Team · 2025 — 2026 · 文档版本 0.14.0 (2026-09-19) · 联系：sshztx@outlook.com</i>
+  <i>PolyXRD Team · 2025 — 2026 · 文档版本 1.0.1 (2026-09-22) · 联系：sshztx@outlook.com</i>
 </div>
