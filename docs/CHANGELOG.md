@@ -1355,56 +1355,6 @@ v0.8.21 → v0.8.22 → v0.8.23 → v0.9.0 → v0.9.1 → v0.9.7 → v0.9.8 → 
 
 ---
 
-### v0.15.3 — 2026-09-21 · 路线图收口（M09/M15/M17 + 引擎提速 M26）🚫 未发布
-
-**主题**：1.0.0 正式版前的路线图清尾 —— 主路线图 M01–M25 从此**全部交付**（M15/M17
-两个 P3 项亦补齐），另含谱合成内核性能改造。
-
-### 新增 · M09 候选检索与约束（补齐）
-
-- `models/search_options.py` 新增 `density_range`；`models/phase.py` 新增 `density` 字段
-  （含 to_dict/from_dict 往返）。
-- 新服务 `services/search_restraints.py`：`formula_mass` / `estimate_density`
-  （ρ = z·M/(N_A·V)，Z=1 为下限估计）/ `effective_density`（库存实测值优先）/
-  `apply_restraints`（元素 + 名称 + 密度综合过滤，密度缺失放行）/
-  `find_phases_direct`（名称/化学式模糊直搜：前缀 > 子串 > 化学式排序）/
-  预设存取 `save_preset` / `load_preset` / `list_presets` / `delete_preset`
-  （`~/.polyxrd/search_presets.json`，增量合并）。
-- **连带修复** `foam._name_matches` 通配符大小写 bug：`name_pattern="*corundum*"`
-  原先永远命中不了 "Corundum"（带通配符时子串分支失效），现通配/子串均不区分大小写。
-
-### 新增 · M15 指标化（P3 补齐）
-
-- 新服务 `services/indexing.py`：`to_d_spacings`（2θ→d，布拉格）/
-  `index_builtin`（立方 q=N²/a² 单峰假设枚举 + 四方/六方双峰低指数方程组解
-  (1/a², 1/c²)，全峰验证，解释率 × 体积惩罚排序）/ `rank_cells` / `IndexedCell`。
-- 验收达成：合成立方 Si → a≈5.43；NaCl（面心立方）、金红石（四方）同过。
-- 外部 Treor90 / Dicvol06 留接口（`index_treor` / `index_dicvol` 抛
-  NotImplementedError），按需后续接入。
-
-### 新增 · M17 晶体结构可视化（P3 补齐）
-
-- 新服务 `services/structure_viz.py`：共价半径表（Cordero 2008 子集）+ CPK 配色、
-  `build_cell_mesh`（晶胞 12 棱）、`build_atom_spheres`（元素/笛卡尔坐标/半径/颜色）、
-  `render_structure`（matplotlib 3D；原子球用散点近似，离线可测）；对称展开复用
-  `phase_cif.expand_sites_by_symmetry`（幂等，向量化）。
-- 新控件 `views/widgets/structure_view.py`（`StructureView`），挂入 **CIF 浏览器**
-  详情区：点击左侧物相即渲染 3D 晶胞 + 原子球（数据缺失/渲染失败安全降级为占位）。
-- 验收达成：Si（Fd-3m 8a）→ 8 原子金刚石晶胞（Agg 与 Qt 离屏双验证）。
-
-### 性能 · M26 谱合成内核窗口化（精修提速 5.4×）
-
-- `phase_display.spectrum_from_refs` 新增峰距截断（默认 `cutoff_fwhm=100`）：
-  pseudo-voigt 的 lorentz 分量在 100×FWHM 外贡献 <2.5×10⁻⁵（相对峰高），
-  逐峰 `searchsorted` 窗口化替代全矩阵 —— 7-1 实测量级（7251 点 × ~3000 峰）
-  单次评估 **1467ms → 270ms（5.4×）**，稠密雅可比每迭代 21 次评估等比受益。
-  `cutoff_fwhm=None` 保留全矩阵路径供一致性验证；窗口化 vs 全矩阵 wR 差
-  <0.05 个百分点（5% 噪声口径，远低于真实施工起点间波动）。
-- `rietveld_refiner._scale_phase_peaks`：np 标量运算换 `math`（~3000 峰/评估的
-  调用开销去除）。
-- 新测试 `tests/test_search_restraints_m09.py`（13）/ `tests/test_indexing_m15.py`（9）/
-  `tests/test_structure_viz_m17.py`（8）/ `tests/test_spectrum_windowed_m26.py`（7）。
-
 ### v0.15.2 — 2026-09-21 · 精修指标通用化 + 启动加固 + 谱图格式互转 🚫
 
 **主题**：评价因子从内部记法 wR 正名为通用记法 **Rwp**，并补齐标准 R 因子组
@@ -1582,6 +1532,39 @@ v0.11.0 已落地（R-C1..C6：`maud_par_builder` / `maud_engine` / `refine()` �
 GUI 引擎选择与回退提示），本轮回归复核通过，无需改动。
 
 ---
+
+---
+
+### v1.0.1 — 2026-09-22 · 1.0 正式版（待人工验收）
+
+**主题**：v0.15.3 路线图收口内容转正为 1.0 系列；产物全面重建，进入人工验收。
+
+### 版本与产物
+
+- 版本号 `__version__` / `config.app_version` / Inno Setup 默认 `AppVersion` 统一升至 **1.0.1**。
+- 重建产物（本地构建，**未推送 GitHub，待人工验收后发布**）：
+  - `PolyXRD-Setup-v1.0.1.exe` / `PolyXRD-v1.0.1-Portable.zip`
+  - 三个外挂数据库包（每库独立）：
+    `PolyXRD-v1.0.1-Databases-COD-inorg-index.zip`（COD 无机索引库，主检索库，推荐）、
+    `PolyXRD-v1.0.1-Databases-COD-full-index.zip`（COD 全库索引）、
+    `PolyXRD-v1.0.1-Databases-PDF2.zip`（PDF2-2004，**仅本地构建，不入 Release**，需正版授权）。
+  - `SHA256-v1.0.1.txt` 全产物校验值；发布产物校验脚本 `_verify_release_py.py`
+    的库路径同步更新（cod_index.sqlite 已在 cod_data/，无机库用 index 变体）。
+
+### 相对 v0.15.2 的功能变化（= v0.15.3 未发布内容）
+
+- **M09 候选检索与约束补齐**：`density_range` / `find_phases_direct` /
+  `apply_restraints` / 预设存取；连带修复 `name_pattern` 通配符大小写 bug。
+- **M15 指标化（P3）**：`services/indexing.py` 立方/四方/六方内置指标化
+  （验收：立方 Si → a≈5.43）；外部 Treor/Dicvol 留接口。
+- **M17 晶体结构可视化（P3）**：`services/structure_viz.py` + `StructureView`
+  控件挂入 CIF 浏览器（验收：Si → 8 原子金刚石晶胞）。
+- **M26 谱合成内核窗口化**：`spectrum_from_refs` 峰距截断（默认 100×FWHM），
+  7251 点 × ~3000 峰单次评估 **1467ms → 270ms（5.4×）**，wR 等效差 <0.05pp；
+  `_scale_phase_peaks` 去 np 标量开销。
+- 修复 7-1 卡死：`_cif_reference_peaks` 优先 atomic_sites 直构（不再对全胞
+  位点 CIF 过 CifParser 二次展开）；基准脚本新增 `BENCH_NFEV`/`BENCH_STARTS`。
+- 新增测试 37 项（M09 13 / M15 9 / M17 8 / M26 7），全套件回归通过。
 
 ## 附录 A · 路线图模块（M01–M25）与版本对照
 
