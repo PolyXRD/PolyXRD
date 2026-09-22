@@ -96,6 +96,32 @@ def _enable_faulthandler() -> None:
         pass
 
 
+def _apply_safe_render_overrides(argv: list) -> list:
+    """保守渲染模式 (v1.0.2): `--safe-render` 或环境变量 POLYXRD_SAFE_RENDER=1。
+
+    现场实证 (v1.0.1, Win11 24H2 + i5-13500H Iris Xe, 驱动 2023-06-15):
+    9 次启动 6 次死在 window.show() 内部, 事件查看器 faulting module =
+    **Qt6Widgets.dll 6.11.1 (0xC0000005 访问冲突)** ×5 +
+    **ucrtbase.dll (0xC0000409 fail-fast, 即 qFatal/abort)** ×1;
+    本机 (开发机) 同版本 Qt 完全不复现 → 疑与该机 GPU 驱动 / 24H2 主题挂钩。
+    本开关在 QApplication 创建**之前**关掉全部 GPU / 主题捷径, 用于二分定位:
+      QT_OPENGL=software                  -> Qt 全部走软件 GL
+      QT_QPA_PLATFORM=windows:darkmode=0  -> 关闭 Win11 深色模式挂钩 (Qt 6.5+ 默认开)
+      QT_ENABLE_HIGHDPI_SCALING=0         -> 关闭 DPI 缩放
+    setdefault 语义: 用户显式设置的变量不被覆盖。返回清理后的 argv。
+    """
+    if "--safe-render" not in argv and os.environ.get("POLYXRD_SAFE_RENDER") != "1":
+        return argv
+    os.environ.setdefault("QT_OPENGL", "software")
+    os.environ.setdefault("QT_QPA_PLATFORM", "windows:darkmode=0")
+    os.environ.setdefault("QT_ENABLE_HIGHDPI_SCALING", "0")
+    _startup_log(
+        "safe-render mode: software GL / darkmode=0 / no DPI scaling "
+        f"(QT_OPENGL={os.environ.get('QT_OPENGL')})"
+    )
+    return [a for a in argv if a != "--safe-render"]
+
+
 def _write_crash(exc_type, exc_value, exc_tb) -> Optional[Path]:
     """把异常写进 crash 日志并返回日志路径。"""
     try:
@@ -240,6 +266,8 @@ def main() -> int:
     _install_excepthooks()
     # 尽早开: 任何原生崩溃 (包括 window.show() 内部) 都要留下 Python 调用栈
     _enable_faulthandler()
+    # 保守渲染开关: 必须在 QApplication 创建之前生效
+    sys.argv = _apply_safe_render_overrides(sys.argv)
 
     if "--diagnose" in sys.argv[1:]:
         return _run_diagnose()

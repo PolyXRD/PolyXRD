@@ -345,7 +345,8 @@ Inno Setup 编译安装包 → 打便携包 → 生成三个独立数据库包 �
 | **双击没有任何反应** | PolyXRD 是**单实例**程序：若已有实例在跑，双击会**把已有窗口拉到前台**（窗口被最小化或被挡住时会闪任务栏提示）。若任务管理器里有 `PolyXRD.exe` 却找不到窗口（幽灵实例），直接结束它；新版遇到这种情况会**照常启动**，不会再被挡住 |
 | **关掉后进程还在**（任务管理器里仍能看到 `PolyXRD.exe`） | 新版在窗口关闭后进程**必定退出**（事件循环结束后有 5 秒硬退出兜底）。旧版遇到请手动结束进程 |
 | **想确诊"为什么打不开"** | 命令行执行 `PolyXRD.exe --diagnose` —— 不起界面，直接生成报告（`%USERPROFILE%\.polyxrd\logs\diagnose-*.txt`），并用 Windows Restart Manager 指明**是哪个进程占用了程序文件**（这类文件占用正是"必须重启电脑"最典型的成因） |
-| **查启动 / 崩溃日志** | `%USERPROFILE%\.polyxrd\logs\`：`startup-YYYY-MM-DD.log`（启动流水，出现 `shown visible=True` 才算真起来）、`crash-*.log`（Python 异常）、`startup-failure-*.log`（含占用进程诊断） |
+| **查启动 / 崩溃日志** | `%USERPROFILE%\.polyxrd\logs\`：`startup-YYYY-MM-DD.log`（启动流水，每行带 `[pid=]`，出现 `shown visible=True` 才算真起来）、`crash-*.log`（Python 异常）、`startup-failure-*.log`（含占用进程诊断）、`faulthandler-*.log`（**原生崩溃**时自动落盘各线程 Python 调用栈） |
+| **个别 Win11 机器上启动图一闪就退**（事件查看器指向 `Qt6Widgets.dll`） | 先**更新显卡驱动**（现场实证：2023-06-15 版 Intel Iris Xe 驱动 + Qt 6.11 触发 `window.show()` 内原生崩溃）。仍复现时用保守渲染模式：命令行 `PolyXRD.exe --safe-render`，或先 `set POLYXRD_SAFE_RENDER=1` 再双击（软件 GL + 关深色模式 + 关 DPI 缩放，用于二分定位） |
 
 > 启动稳健性设计（2026-09-22 起）：**单实例守卫用内核命名互斥量实现** —— 上一个实例
 > 无论正常退出还是被任务管理器强杀，都不会影响下一次启动；守卫本身"拿不准就放行"，

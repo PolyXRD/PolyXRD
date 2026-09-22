@@ -1672,6 +1672,30 @@ GUI 引擎选择与回退提示），本轮回归复核通过，无需改动。
   相关测试 38 项通过（`test_main_entry` / `test_v013_startup_robustness` /
   `test_instance_guard`）；全量回归在重建 1.0.2 EXE 前再跑。
 
+#### 事件查看器取证（2026-09-22，用户截图）—— 排除杀软，锁定 Qt 原生崩溃
+
+- **Application Error 事件 ID 1000 与启动日志逐一对应**：
+  10:30:06 / 10:31:05 / 10:31:40 / 10:47:43 ×2 / 10:48:49 —— 正好是 6 次失败启动
+  各 +1~2 秒。
+- **崩溃签名（5/6）**：出错模块 **Qt6Widgets.dll，版本 6.11.1.0**，异常代码
+  **0xC0000005（访问冲突）** —— 与本仓打包的 PySide6/Qt **6.11.1** 完全一致。
+- **崩溃签名（1/6）**：**ucrtbase.dll，异常代码 0xC0000409**（fail-fast，
+  即 C 运行时 abort()/__fastfail —— 典型来源 qFatal / 未捕获 C++ 异常 terminate）。
+- **杀软排除**：Windows 安全中心"保护历史"在 9/22 **无任何 PolyXRD 相关条目**
+  （仅 9/20 17:05 一条 Severe"已阻止的威胁"，与本次时间线不符）。
+- **WER ReportQueue / Temp 均为空**（0 字节）→ 无现成 dump 可分析。
+- **环境**：Win11 24H2（ucrtbase 10.0.26100），i5-13500H 集成显卡
+  **Intel Iris Xe Graphics，驱动 31.0.101.4502（2023-06-15，三年未更新）**。
+- **判读**：崩溃在 Qt 原生层、开发机不复现、同日出现两种签名 —— 最像
+  **Qt 6.11.1 与该机环境（老旧显卡驱动 / 24H2）的组合问题**。缓解按序：
+  1. **更新 Intel 显卡驱动**（零代码改动，优先验证）；
+  2. v1.0.2 已新增 **`--safe-render` / `POLYXRD_SAFE_RENDER=1`** 保守渲染开关：
+     在 QApplication 创建之前 `setdefault` 三个环境变量 ——
+     `QT_OPENGL=software` / `QT_QPA_PLATFORM=windows:darkmode=0` /
+     `QT_ENABLE_HIGHDPI_SCALING=0`，用于二分定位（软件 GL / 关 24H2 深色模式挂钩 /
+     关 DPI 缩放）；对 v1.0.1 的旧 exe 也可以在 cmd 里手动 `set` 同样三个变量复测；
+  3. 若 1、2 均无法消除，重建 1.0.2 时**降级 PySide6 至成熟版本**（如 6.9.x）后全量回归。
+
 #### 本轮改动
 
 - **新增 `services/instance_guard.py` —— kill-safe 单实例守卫。**
