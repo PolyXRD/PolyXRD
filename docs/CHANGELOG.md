@@ -2,13 +2,13 @@
 
 > 覆盖范围：**v0.3.0（可追溯最早版本）→ v1.0.1（2026-09-22，已发布）**
 > 合并日期：2026-09-21 ｜ 由 4 份历史变更记录（CHANGELOG01 / 02 / 03 与原 CHANGELOG）合并去重而成
-> 最后更新：2026-09-22（补 v1.0.1 正式发布记录 + Release 附件清单 + **未发布的启动稳健性修复** + `pyproject.toml` 元数据补齐）
+> 最后更新：2026-09-22（补 v1.0.1 正式发布记录 + Release 附件清单 + **未发布的启动稳健性修复** + 版本号收口补正（`pyproject.toml` / `build.bat`）与元数据补齐）
 > 数据来源：git 提交历史 + GitHub Release 正文 + 项目工作记忆（逐日工作日志）+ 交接期源码包回溯
 > 联系：sshztx@outlook.com
 >
 > **结构导览**：
 > - 第一部分 · 早期史（v0.3.0 → v0.8.20，无 git 记录，回溯整理）
-> - 第二部分 · 正式发布逐版详情（v0.8.21 → v1.0.1 + 未发布的启动稳健性修复 + pyproject 元数据补齐，其中 v0.8.21–v0.8.23 沿用首份日志的详细节）
+> - 第二部分 · 正式发布逐版详情（v0.8.21 → v1.0.1 + 未发布的启动稳健性修复 + 版本号收口补正与元数据补齐，其中 v0.8.21–v0.8.23 沿用首份日志的详细节）
 > - 附录 A–F（路线图对照 / 库包演进 / 量化指标 / 发布红线 / 版本收口点 / 不确定项）＋ G 开源致谢 ＋ H 兼容性矩阵
 
 ---
@@ -1654,11 +1654,17 @@ GUI 引擎选择与回退提示），本轮回归复核通过，无需改动。
   A 首实例出窗口 / B 二次启动不重复开窗而是安静退出 / C 强杀后能重启 /
   D 关窗后进程真的消失（rc=0）/ E 干净关闭后能再启动。
 
-#### 同批同步收口 · `pyproject.toml` 元数据补齐（2026-09-22）
+#### 同批同步收口 · 版本号与 `pyproject.toml` 元数据补齐（2026-09-22）
 
-- **版本号同步**：`version` `0.15.2` → **`1.0.1`**（此前只改了 `__init__.py` /
-  `config.py` / `PolyXRD-Setup.iss` 三处，`pyproject.toml` 漏改，构成元数据不一致）。
-- **补齐缺失的标准元数据**：`authors`（PolyXRD Team <sshztx@outlook.com>）、
+- **版本号同步（共 2 处漏改）**：
+  - `pyproject.toml` → `version` `0.15.2` → **`1.0.1`**；
+  - `build.bat` → `set APPVER=` `0.15.2` → **`1.0.1`**（顶部 `title` 与 `echo` banner
+    两处同步；该变量驱动 `PolyXRD-Setup-v*.exe` / `PolyXRD-v*-Portable.zip` /
+    `VERSION_v*.txt` / 两个库包 zip 的命名，以及 `verify_release.ps1 -Version`）。
+  此前只改了 `__init__.py` / `config.py` / `PolyXRD-Setup.iss` 三处，构成元数据不一致。
+  ⚠️ `build.bat` 为 UTF-8（`chcp 65001`）+ 全 CRLF，改动用**字节级替换**完成
+  （3 处 `0.15.2` → `1.0.1`，CRLF 计数 203 前后不变），不触碰文件编码。
+- **补齐 `pyproject.toml` 缺失的标准元数据**：`authors`（PolyXRD Team <sshztx@outlook.com>）、
   `keywords`（8 项）、`classifiers`（12 项，含 Development Status 5 / Win32 /
   Science::Research / Python 3.10–3.13 / Chemistry·Physics·Visualization）、
   `[project.urls]`（Homepage / Repository / Documentation / Changelog / Issues / Releases）。
@@ -1669,6 +1675,8 @@ GUI 引擎选择与回退提示），本轮回归复核通过，无需改动。
   `setuptools>=64` → **`>=77`**（SPDX 写法的最低版本要求）。
 - **验证**：`prepare_metadata_for_build_wheel` 生成 `Metadata-Version: 2.4` /
   `Version: 1.0.1` / `License-Expression: MIT`，**零警告**；`read_configuration` 解析正常。
+  ⚠️ 本次**未重建二进制产物** —— 上述改动不参与二进制行为，Release 上的
+  Setup / 两个 COD 库包与本次改动**无字节差异**；待下次发版时才会体现。
 
 #### 仍需现场信息才能收口
 
@@ -1799,11 +1807,14 @@ GUI 引擎选择与回退提示），本轮回归复核通过，无需改动。
 
 **v1.0.1 实际收口记录**：`__init__.__version__` / `config.app_version` / `PolyXRD-Setup.iss`
 的 `AppVersion` 三处同改（本轮 Inno 未走 `build.bat` 的 `set APPVER=` 入口，直接改 iss 默认值）；
-`pyproject.toml` 的 `version` 首次收口时**漏改**（仍为 `0.15.2`），已于 2026-09-22
-**补正为 `1.0.1`**，并同步补齐 `authors` / `keywords` / `classifiers` / `[project.urls]`
+**上表第 4、1 条首次收口时均漏改**（`pyproject.toml` 与 `build.bat` 都仍为 `0.15.2`），
+已于 2026-09-22 一并**补正为 `1.0.1`** —— `build.bat` 顶部 `set APPVER=` 与
+`title` / `echo` banner 两处（用字节级替换改，保持 UTF-8 + CRLF 不变）；
+`pyproject.toml` 同时补齐 `authors` / `keywords` / `classifiers` / `[project.urls]`
 （`license` 改 PEP 639 SPDX 写法、`requires` 升 `setuptools>=77`）——
-详见第二部分「同批同步收口 · `pyproject.toml` 元数据补齐」。
-→ **下次发版请把上表第 4 条（`pyproject.toml`）一并列入改动清单**，避免再次漏收。
+详见第二部分「同批同步收口」。
+→ **下次发版请把上表 5 条逐条核对**，尤其第 1 条（`build.bat`，输出名/安装包名都由它驱动）
+与第 4 条（`pyproject.toml`），避免再次漏收。
 
 ---
 

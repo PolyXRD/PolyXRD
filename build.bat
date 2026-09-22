@@ -1,15 +1,15 @@
 @echo off
 chcp 65001 >nul
-title PolyXRD v0.15.2 打包构建器
+title PolyXRD v1.0.1 打包构建器
 echo ========================================
-echo   PolyXRD v0.15.2 打包为独立安装包
+echo   PolyXRD v1.0.1 打包为独立安装包
 echo   数据库外挂 (不随包分发)
 echo ========================================
 echo.
 
 cd /d "%~dp0"
 
-set APPVER=0.15.2
+set APPVER=1.0.1
 
 REM ── Python 定位 ──────────────────────────────────────
 if exist "venv\Scripts\python.exe" (
