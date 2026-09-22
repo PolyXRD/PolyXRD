@@ -1642,6 +1642,36 @@ GUI 引擎选择与回退提示），本轮回归复核通过，无需改动。
   3. Portable 解压到了什么路径（是否含中文 / 空格 / OneDrive 同步目录）；
   4. 新机的显卡型号/驱动状态（Qt/OpenGL 初始化失败是"闪退无进程"的常见来源）。
 
+#### 现场日志取证结论（2026-09-22 晚，用户从 Win11 拷回 `%USERPROFILE%\.polyxrd`）
+
+日志仅一个文件 `logs/startup-2026-09-22.log`（9 次启动），**无 crash-*.log、
+无 startup-failure-*.log** —— 失败不是 Python 异常（excepthook 未触发）：
+
+- **成功 3 次**：10:29:44 / 10:29:47（双实例并发，双双 `shown` 后 `exit code=0`）、
+  10:34:01（`shown` 后连续跑了 8+ 分钟 —— `external_runs/` 里有 10:36~10:42 的
+  GSAS2 / MAUD / FullProf 实跑与 CIF 缓存下载；**该实例全程没有 `--- exit code=` 行**，
+  结局待确认）。
+- **失败 6 次**：10:30:04 / 10:31:03 / 10:31:38 / 10:47:39 ×2（用户连点两次）/
+  10:48:48 —— **全部停在 `showing main window`，下一行 `shown` 永远没出现**。
+- **崩溃点钉死**：对照 v1.0.1 源码（`4772d81`），`showing main window` 与 `shown`
+  之间只有 `window.show()` 一行 → 6 次全部**死在 MainWindow.show() 内部** =
+  原生窗口创建阶段，**无任何 Python 异常**（若为 Python 异常，excepthook 必然落盘
+  crash log）。`MainWindow` 无 `showEvent`/`paintEvent` 重载，`restoreState` 在
+  构造函数内（已过 `MainWindow OK`）→ 死因在**原生层**。
+- **时序特征**：首日冷启动反而成功（10:29 两次），随后 10:30/10:31 连败、10:34 又
+  成功（跑满 8 分钟）、10:47/10:48 又连败 —— **间歇性**，与冷/热启动、解压路径
+  （`D:\PolyXRD-test\1.0.1\{Portable, PolyXRD-v1.0.1-Portable}` 两套都试过）、
+  实例数均无关。
+- **候选成因（按可能性，未定案）**：① 杀软/Defender **行为查杀中途杀进程**
+  （PyInstaller 常见误报模式；首启通过、被标记后杀，间歇性吻合）；② Qt 原生建窗在
+  该机显卡/驱动上崩溃；③ 其它原生层因素。**定案必须靠 faulting module**。
+- **v1.0.2 随即落地的两件诊断武器**（趁 EXE 未重建先入库）：
+  1. **`faulthandler` 启动即启用** → 原生崩溃瞬间把各线程 Python 调用栈落盘到
+     `faulthandler-*.log`，补上"死在 show() 内部且无 Python 异常"这个证据空洞；
+  2. **启动日志每行加 `[pid=]` 前缀** —— 现场日志双实例交错写入，无 pid 分不清行。
+  相关测试 38 项通过（`test_main_entry` / `test_v013_startup_robustness` /
+  `test_instance_guard`）；全量回归在重建 1.0.2 EXE 前再跑。
+
 #### 本轮改动
 
 - **新增 `services/instance_guard.py` —— kill-safe 单实例守卫。**
