@@ -1,13 +1,14 @@
 # PolyXRD 版本变更记录（CHANGELOG）
 
-> 覆盖范围：**v0.3.0（可追溯最早版本）→ v0.15.3（2026-09-21，未发布）**
+> 覆盖范围：**v0.3.0（可追溯最早版本）→ v1.0.1（2026-09-22，已发布）**
 > 合并日期：2026-09-21 ｜ 由 4 份历史变更记录（CHANGELOG01 / 02 / 03 与原 CHANGELOG）合并去重而成
+> 最后更新：2026-09-22（补 v1.0.1 正式发布记录与 Release 附件清单）
 > 数据来源：git 提交历史 + GitHub Release 正文 + 项目工作记忆（逐日工作日志）+ 交接期源码包回溯
 > 联系：sshztx@outlook.com
 >
 > **结构导览**：
 > - 第一部分 · 早期史（v0.3.0 → v0.8.20，无 git 记录，回溯整理）
-> - 第二部分 · 正式发布逐版详情（v0.8.21 → v0.15.1，其中 v0.8.21–v0.8.23 沿用首份日志的详细节）
+> - 第二部分 · 正式发布逐版详情（v0.8.21 → v1.0.1，其中 v0.8.21–v0.8.23 沿用首份日志的详细节）
 > - 附录 A–F（路线图对照 / 库包演进 / 量化指标 / 发布红线 / 版本收口点 / 不确定项）＋ G 开源致谢 ＋ H 兼容性矩阵
 
 ---
@@ -601,7 +602,7 @@ v0.8.21 → v0.8.22 → v0.8.23 → v0.9.0 → v0.9.1 → v0.9.7 → v0.9.8 → 
 
 ---
 
-## 版本速览表（v0.3.0 → v0.15.3）
+## 版本速览表（v0.3.0 → v1.0.1）
 
 | 版本 | 日期 | 主题 | 关键交付 | 产物形态 |
 |---|---|---|---|---|
@@ -610,7 +611,6 @@ v0.8.21 → v0.8.22 → v0.8.23 → v0.9.0 → v0.9.1 → v0.9.7 → v0.9.8 → 
 | 原型（pre-0.6.0） | 2026-08-12~13 | core/gui 两层架构原型 | 30 参考物相 + SMZ/钨系列验证 | 源码（无产物） |
 | v0.6.0 | 2026-08-18/19 | 项目交接起点, MVVM 架构定型 | 118 参考物相; nsist+7z SFX 打包 | 源码 |
 | v0.8.0~0.8.20 | 2026-08-19~21 | COD 本地库集成 + 多相分析 + 精修改造 | 71,199 相 SQLite; 测试 65→82 | 源码 |
-| v0.15.2 🚫 | 2026-09-21 | 精修指标通用化 + 启动加固 + 谱图格式互转 + 精修三路线收口 | Rwp 正名 + 新增 Rexp / Rb / GOF(标准定义)；修启动闪退隐患；新增 文件→谱图格式转换（8 种格式互转 + `.mdi` / `.raw`(RAW2) 读写）；A 路线：空间群对称展开修复 + 内置引擎新增每相「晶胞缩放」自由度 + 快检阈值 55%→20% 且热启动，B 路线：同质多象按峰位择优，数据层：内置 118 矿物参考库峰表重算（库 0.4.0→0.5.0，d>4 Å 异常条目 59→18） | 待打包 |
 | v0.8.21 🏷️ | 2026-08-21 | 首个正式 Beta：程序与库分离 | 主程序 240.9 MB + 无机物库外挂包 91.9 MB（71,199 物相）；热切换接口 | Setup + 库包 |
 | v0.8.22 🏷️ | 2026-08-21 | 品牌视觉升级 | 图标基于 crystal-mark 重生成；README Rietveld 说明修正 | Setup |
 | v0.8.23 🏷️ | 2026-08-24 | 内置 MCP Server | `python -m polyxrd.mcp_server`（stdio），18 个工具覆盖全流程 | Setup |
@@ -631,6 +631,9 @@ v0.8.21 → v0.8.22 → v0.8.23 → v0.9.0 → v0.9.1 → v0.9.7 → v0.9.8 → 
 | v0.15.0 🏷️ | 2026-09-20 | 路线图 M22–M25 + 首个中文手册 | 图谱交互 / 物相列表重构 / 精修页布局 / **外部精修三引擎（含 FullProf）** | Setup + 2 库包 + SHA |
 | v0.15.1 🚫 | 2026-09-20 | 内置引擎接入 CIF \|F\|² + MAUD 走官方 bat | 合成基准 wR 58.13%→**10.32%** | Setup + Portable（**不发 Release**） |
 | v0.15.2 🚫 | 2026-09-21 | 精修 A/B/C 三路线收口 + 格式互转 | **4-1 wR 52.7%→19.69%（March-Dollase 织构 + 对称展开向量化）**；Rwp/Rexp/Rb/GOF 标准化；8 格式互转；参考库 0.5.1 | 源码/本地构建 |
+| **v1.0.1** 🏷️ | 2026-09-22 | **1.0 正式版：主路线图 M01–M25 全部交付** | M09 候选检索与约束 / M15 指标化（立方·四方·六方）/ M17 3D 晶体结构视图 / M26 谱合成窗口化（**1467→270 ms，5.4×**）；修大峰表组合卡死；全量回归 **991 过 / 2 跳过**；版本号 0.15.3→**1.0.1** | Setup + 2 索引库包（**PDF2 / Portable 不入 Release**） |
+
+> 说明：v0.15.3 从未独立发布，其全部内容（M09 / M15 / M17 / M26 + 7-1 卡死修复）已在 v1.0.1 中转正发布。
 
 ---
 
@@ -1533,38 +1536,64 @@ GUI 引擎选择与回退提示），本轮回归复核通过，无需改动。
 
 ---
 
----
+### v1.0.1 — 2026-09-22 · 1.0 正式版 🏷️
 
-### v1.0.1 — 2026-09-22 · 1.0 正式版（待人工验收）
+**主题**：v0.15.3 路线图收口内容转正为 1.0 系列 —— **主路线图 M01–M25 全部交付**；
+产物全面重建并通过全量回归，代码已推送 GitHub、二进制 Release 已发布。
 
-**主题**：v0.15.3 路线图收口内容转正为 1.0 系列；产物全面重建，进入人工验收。
+#### 版本与产物
 
-### 版本与产物
-
-- 版本号 `__version__` / `config.app_version` / Inno Setup 默认 `AppVersion` 统一升至 **1.0.1**。
-- 重建产物（本地构建，**未推送 GitHub，待人工验收后发布**）：
-  - `PolyXRD-Setup-v1.0.1.exe` / `PolyXRD-v1.0.1-Portable.zip`
+- 版本号 `__version__` / `config.app_version` / Inno Setup `AppVersion` 统一升至 **1.0.1**。
+- 重建产物（本地 `installer_output/`，校验值见 `SHA256-v1.0.1.txt`）：
+  - `PolyXRD-Setup-v1.0.1.exe` — 246.3 MB（258,272,876 B）
+  - `PolyXRD-v1.0.1-Portable.zip` — 385.2 MB（403,953,179 B，**不随 Release 发布**）
   - 三个外挂数据库包（每库独立）：
-    `PolyXRD-v1.0.1-Databases-COD-inorg-index.zip`（COD 无机索引库，主检索库，推荐）、
-    `PolyXRD-v1.0.1-Databases-COD-full-index.zip`（COD 全库索引）、
-    `PolyXRD-v1.0.1-Databases-PDF2.zip`（PDF2-2004，**仅本地构建，不入 Release**，需正版授权）。
-  - `SHA256-v1.0.1.txt` 全产物校验值；发布产物校验脚本 `_verify_release_py.py`
-    的库路径同步更新（cod_index.sqlite 已在 cod_data/，无机库用 index 变体）。
+    `…-Databases-COD-inorg-index.zip`（COD 无机索引库，主检索库，推荐，130.8 MB）、
+    `…-Databases-COD-full-index.zip`（COD 全库索引，193.1 MB）、
+    `…-Databases-PDF2.zip`（PDF2-2004，58.0 MB，**仅本地构建，不入 Release**，需正版授权）。
+  - 发布产物校验脚本 `_verify_release_py.py` 的库路径同步更新
+    （cod_index.sqlite 已在 cod_data/，无机库用 index 变体）。
+- 代码提交 `4772d81`（`更新代码修正: 版本 1.0.1 收口`），远端 `main` 与 tag `v1.0.1` 同一 SHA。
 
-### 相对 v0.15.2 的功能变化（= v0.15.3 未发布内容）
+#### Release（已发布）
+
+- 地址：<https://github.com/PolyXRD/PolyXRD/releases/tag/v1.0.1>
+  （release id 393426603，target `main`，非 draft / 非 prerelease，发布于 2026-09-22T02:57:50Z）
+- 附件共 3 个，上传后复核均为 `state=uploaded`：
+
+| 附件 | 大小 | SHA-256 |
+|---|---|---|
+| `PolyXRD-Setup-v1.0.1.exe` | 246.3 MB | `3ac4fc3a9fc4402bbb7c7164166cc261aed98deb245df0bd0276e1d09ffb024e` |
+| `PolyXRD-v1.0.1-Databases-COD-inorg-index.zip` | 130.8 MB | `b6097d83916afee2a9bcbdfc3e9ad33e630e2aaa0fadd87706f413efab9ef144` |
+| `PolyXRD-v1.0.1-Databases-COD-full-index.zip` | 193.1 MB | `ed33680c4b5f2c45e38b84fba24ce6c6159e94f5ba95d15910c49003f2db2709` |
+
+> **PDF2-2004 与便携版（Portable）均未随本 Release 分发**，本地仍保留两份 zip 供按需取用。
+> 发布脚本 `scripts/_release_v101.py` 内置 `PDF2|Portable` 正则自检，上传后复核确认无违规附件。
+
+#### 相对 v0.15.2 的功能变化（= v0.15.3 内容）
 
 - **M09 候选检索与约束补齐**：`density_range` / `find_phases_direct` /
   `apply_restraints` / 预设存取；连带修复 `name_pattern` 通配符大小写 bug。
-- **M15 指标化（P3）**：`services/indexing.py` 立方/四方/六方内置指标化
+- **M15 指标化（原 P3 项补齐）**：`services/indexing.py` 立方/四方/六方内置指标化
   （验收：立方 Si → a≈5.43）；外部 Treor/Dicvol 留接口。
-- **M17 晶体结构可视化（P3）**：`services/structure_viz.py` + `StructureView`
+- **M17 晶体结构可视化（原 P3 项补齐）**：`services/structure_viz.py` + `StructureView`
   控件挂入 CIF 浏览器（验收：Si → 8 原子金刚石晶胞）。
 - **M26 谱合成内核窗口化**：`spectrum_from_refs` 峰距截断（默认 100×FWHM），
   7251 点 × ~3000 峰单次评估 **1467ms → 270ms（5.4×）**，wR 等效差 <0.05pp；
   `_scale_phase_peaks` 去 np 标量开销。
 - 修复 7-1 卡死：`_cif_reference_peaks` 优先 atomic_sites 直构（不再对全胞
   位点 CIF 过 CifParser 二次展开）；基准脚本新增 `BENCH_NFEV`/`BENCH_STARTS`。
-- 新增测试 37 项（M09 13 / M15 9 / M17 8 / M26 7），全套件回归通过。
+- 新增测试 37 项（M09 13 / M15 9 / M17 8 / M26 7）。
+
+#### 验收
+
+- 全量回归：**993 项收集 / 991 通过 / 2 跳过**。首跑 2 项失败均为 v0.15.2
+  参考库重算与对称展开后的**陈旧断言**（非功能缺陷），已按现行正确行为修正：
+  `get_phase` 现返回对称展开后的全胞位点（方镁石 4Mg+4O=8）；同式多候选
+  Calcite(R-3c) + Aragonite(Pmcn) 是**真实多型并存**，属数据感知去重的预期行为。
+- 打包 EXE 离屏冒烟：日志 `start v1.0.1 frozen=True` → `splash=ok` →
+  `MainWindow OK` → `shown`（原生窗口双击验收由发布方另行人工完成）。
+- 产物校验 `_verify_release_py.py` 返回 `RESULT: OK`，各产物字节对账全过。
 
 ## 附录 A · 路线图模块（M01–M25）与版本对照
 
@@ -1578,14 +1607,15 @@ GUI 引擎选择与回退提示），本轮回归复核通过，无需改动。
 | M06 | 峰管理 | v0.9.7 | 不可变增删改 + 区间屏蔽 + 残差峰 |
 | M07 | 轮廓拟合 | v0.9.7 | 重叠簇联合 Pseudo-Voigt |
 | M08 | 仪器校正 | v0.9.7 | 零点 / 样品位移 / 内标 |
+| M09 | 候选检索与约束 | **v1.0.1** | 密度约束 `density_range` / 名称·化学式模糊直搜 `find_phases_direct` / 综合约束过滤 / 搜索预设存取 |
 | M10 | 搜索匹配（FoM） | v0.9.7（v0.9.11 重构） | 乘性 → 加权互斥 |
 | M11 | 多相迭代识别 | v0.9.7 | `iterative_identify` |
 | M12 | 用户自建库 | v0.9.7 | JSON CRUD + CIF/峰表导入 |
 | M13 | RIR 半定量 | v0.9.7 | 相对 + 内标绝对 |
 | M14 | Rietveld 增强 | v0.9.7（v0.9.8 接参数掩码） | March-Dollase / DoC / 内标 |
-| M15 | 指标化（Treor/Dicvol） | **P3·暂缓** | 2026-09-07 降级 |
+| M15 | 指标化 | **v1.0.1**（原 P3·暂缓） | 内置立方 / 四方 / 六方（`services/indexing.py`，验收 Si→a≈5.43）；外部 Treor/Dicvol 留接口 |
 | M16 | 晶粒尺寸（Scherrer） | v0.9.7 | 含仪器宽化扣除 |
-| M17 | 3D 结构可视化 | **P3·暂缓** | 2026-09-07 降级 |
+| M17 | 晶体结构可视化 | **v1.0.1**（原 P3·暂缓） | `services/structure_viz.py` + `StructureView` 挂入 CIF 浏览器，自动按空间群展开非对称单元（验收 Si→8 原子金刚石晶胞） |
 | M18 | 报告导出 | v0.9.7（v0.9.8 修 LO 转换） | SVG / HTML / CSV / CIF |
 | M19 | 脚本 / 批量 | v0.9.7 | 管线 DSL + 批量处理 |
 | M20 | GUI 交互 | v0.9.7（v0.9.8/v2 续） | 拖放 / 主题 / 峰表右键 |
@@ -1594,8 +1624,11 @@ GUI 引擎选择与回退提示），本轮回归复核通过，无需改动。
 | M23 | 物相列表勾选驱动 + CIF 导出 | v0.15.0 | 勾选集随项目持久化 |
 | M24 | 精修页布局重构 | v0.15.0 | 窗口布局版本 → v3 |
 | M25 | 外部精修程序集成 | v0.15.0（v0.15.1 续） | GSAS-II / MAUD / **FullProf** |
+| M26 | 谱合成内核窗口化 | v1.0.1 | `spectrum_from_refs` 峰距截断（100×FWHM），3000 峰单次评估 1467→270 ms |
 
-> 注：上表按"实际在哪个版本交付"归集；M15 / M17 在 2026-09-07 被降为 P3·暂缓可选，至今未实施。
+> 注：上表按"实际在哪个版本交付"归集。M15 / M17 曾在 2026-09-07 降为 P3·暂缓，
+> **已于 v1.0.1 全部补齐交付**；同版另交付非路线图内的 M26（谱合成性能）与 7-1 卡死修复。
+> 至此**主路线图 M01–M25 全部完成**。
 
 ---
 
@@ -1613,6 +1646,8 @@ GUI 引擎选择与回退提示），本轮回归复核通过，无需改动。
 | v0.14.0 | **130.8 MiB（瘦身索引式）** | 193.1 MiB | — | 命名加 `-index` 后缀；CIF 走 `cod/cif` 或 REST |
 | v0.15.0 | 986.5 MiB（**回归**）→ 已修 **134.1 MiB** | 205.9 MiB | 58.9 MB（本地） | 命名真源 = `db_import.DBKind.pkg_suffix` |
 | v0.15.1 | 未重建（库数据未变） | — | — | — |
+| v0.15.2 | 未重建（库数据未变） | — | — | 仅内置参考库 JSON 重算（0.4.0→0.5.1，118→106 条） |
+| **v1.0.1** | **130.8 MB** | **193.1 MB** | 58.0 MB（本地，不入 Release） | Release 只发 Setup + 两个索引库包；PDF2 / Portable 不发布 |
 
 **结构事实（2026-09-20 实测）**：完整内嵌版 `COD_inorganics.sqlite` **1,194 MB**，其中 `cif_gz` **830.2 MB（70%）**、`peaks_d/i` 206.7 MB、`peaks_top_*` 64.6 MB、原子位点约 10 MB；因 `cif_gz` 已 gzip，zip 只能压掉 **17%**。瘦身版 `COD_inorganics_index.sqlite` **362 MB**（`cif_gz` 全空），zip 后 **134.1 MiB**。
 
@@ -1637,7 +1672,8 @@ GUI 引擎选择与回退提示），本轮回归复核通过，无需改动。
 | 内置引擎 wR（合成谱闭环基准） | 58.13%（旧，强度平） | **10.32%**（v0.15.1 接入 CIF \|F\|²） | v0.15.1 |
 | FullProf 基准（ZnO） | — | Rwp **34.8%** / R_Bragg 25.8% | v0.15.0 |
 | MAUD 基准（alzrc.par 预加载） | — | wR **0.087%** / R 0.064% / GOF 0.064 | v0.11.0 |
-| 单元测试规模 | 95（v0.9.0） | 182（v0.9.7）→ 316（v0.9.10）→ 443 → 507 → 542 → 545 → 666 → 734 → 745 → 789 → 799 | 各日日志 |
+| 单元测试规模 | 95（v0.9.0） | 182（v0.9.7）→ 316（v0.9.10）→ 443 → 507 → 542 → 545 → 666 → 734 → 745 → 789 → 799 → **993 收集 / 991 过 / 2 跳（v1.0.1）** | 各日日志 |
+| 谱合成单次评估（7251 点 × ~3000 峰） | 1467 ms | **270 ms（5.4×）**（v1.0.1 峰距截断窗口化） | v1.0.1 |
 | Portable 包体积 | 661.5 MB（v0.9.10） | **380.7 MB**（v0.10.0 外挂化后） | v0.10.0 |
 | 数据库总体积（可检索） | 无机物库 258.6 MB + 全库 431.7 MB | 无机物库(瘦身) **362 MB** + 全库 431.7 MB | v0.14.0 |
 
@@ -1648,7 +1684,10 @@ GUI 引擎选择与回退提示），本轮回归复核通过，无需改动。
 ## 附录 D · 发布红线与约定（老版本期间确立）
 
 1. **PDF2-2004 永不上传**（ICDD 版权库）：仓库只提供挂载能力；DB Manager 中显示「请确认已获得正版授权」提示；`.gitignore` + 发布脚本 `Assert-NotBanned` + 上传后自检三层守卫
-2. **Portable 免安装包自 v0.11.0 起不随 Release 发布**（按需提供）；v0.15.1 起二进制**整体不推送**
+2. **Portable 免安装包自 v0.11.0 起不随 Release 发布**（按需提供）；v0.15.1 起二进制**整体不推送**。
+   **v1.0.1 起口径定型**：Release 只发 `PolyXRD-Setup-v{ver}.exe` + 两个 COD 索引库包
+   （`…-Databases-COD-inorg-index.zip` / `…-Databases-COD-full-index.zip`）；
+   **PDF2 与 Portable 一律不入 Release**，发布脚本内设 `PDF2|Portable` 正则自检 + 上传后复核
 3. **每个 EXE 发布前必须双击人工验收**（自动启动检查不可替代）
 4. 数据库文件（`.sqlite` / `tar.xz`）与 `tests/` 目录**不入 git**（只提交 `src`）
 5. **commit message 采用「更新代码修正: …」风格**；**严禁出现第三方商业软件品牌字样**
@@ -1674,8 +1713,13 @@ GUI 引擎选择与回退提示），本轮回归复核通过，无需改动。
 | 4 | `pyproject.toml` → `version` |
 | 5 | `scripts/PolyXRD-Setup.iss` → `AppVersion`（v0.15.1 起由 `/DAppVersion` 驱动） |
 
-**发布辅助脚本**：`scripts/verify_release.ps1`（打包三库包 + 对账 + SHA256）、`scripts/create_github_release_v*.ps1`、`_create_release_py.py` / `_upload_assets_curl.py`（Python 化，curl 上传）。
+**发布辅助脚本**：`scripts/verify_release.ps1`（打包三库包 + 对账 + SHA256）、`scripts/create_github_release_v*.ps1`、`_create_release_py.py` / `_upload_assets_curl.py`（Python 化，curl 上传）、
+`_release_v101.py`（**v1.0.1 起主用**：`git credential fill` 取 token → REST API 建 Release → curl 流式上传，内置 `PDF2|Portable` 禁传自检）、`_askpass.py`（非交互 git 认证辅助）。
 **库包命名唯一真源** = `db_import.DBKind.pkg_suffix` / `db_import.PKG_FILENAME`。
+
+**v1.0.1 实际收口记录**：`__init__.__version__` / `config.app_version` / `PolyXRD-Setup.iss`
+的 `AppVersion` 三处同改（本轮 Inno 未走 `build.bat` 的 `set APPVER=` 入口，直接改 iss 默认值）；
+`pyproject.toml` 的 `version` 本轮**未同步改**（不影响产物，待下次统一）。
 
 ---
 
@@ -1691,6 +1735,15 @@ GUI 引擎选择与回退提示），本轮回归复核通过，无需改动。
 8. **v0.15.0 的 986.5 MiB 库包**曾在 Release 上短暂存在，已于当日替换为 134.1 MiB；若有第三方在此期间下载，其 SHA256 与当前发布页不一致。
 9. **v0.15.1 未打包库包**（库数据未变），因此其"数据库兼容性"沿用 v0.14.0/v0.15.0 的瘦身索引式包。
 10. **v0.8.21 之前的记录等级有限**：git 首笔提交即 `V0.8.21 initial commit`（2026-08-21）。更早历史（v0.3.0 / 0.4.1 / 原型 / 0.6.0 / 0.8.0~0.8.20）来自交接期源码包回溯与交接期工作记忆整理（原 CHANGELOG01/02），无 git 提交与二进制产物可交叉验证，细节以第一部分所载为准。
+11. **v1.0.1 的 GitHub 仓库为 private**：`https://github.com/PolyXRD/PolyXRD/releases/tag/v1.0.1`
+    匿名访问返回 404，仅在登录有权限的账号后可见；本页记录的附件与 SHA-256 均经
+    带 token 的 REST API 复核（`state=uploaded`），非网页目视确认。
+12. **v1.0.1 的 `pyproject.toml` 版本号未同步**：仍为 `0.15.2`（本轮只改了
+    `__init__.py` / `config.py` / `PolyXRD-Setup.iss` 三处）。不影响已发布产物，
+    但构成元数据不一致，**待补**（详见附录 E）。
+13. **v1.0.1 的 Portable / PDF2 包只存在于本机**：`installer_output/PolyXRD-v1.0.1-Portable.zip`
+    （385.2 MB）与 `…-Databases-PDF2.zip`（58.0 MB）未上传任何远端，SHA-256 仅见于本地
+    `SHA256-v1.0.1.txt`。
 
 ---
 
@@ -1724,15 +1777,20 @@ GUI 引擎选择与回退提示），本轮回归复核通过，无需改动。
 
 ## 附录 H · 版本兼容性矩阵
 
-## 版本兼容性矩阵
-
 | PolyXRD 版本      | COD 数据库外挂包版本                            | 数据库列名        |
 | --------------- | --------------------------------------- | ------------ |
+| **1.0.1 / 0.15.x** | `…-Databases-COD-inorg-index.zip` + `…-Databases-COD-full-index.zip` | `ref_id`（三库表名同为 `phases`，靠签名区分） |
+| 0.14.0 | 同上（无机库转瘦身索引式 `COD_inorganics_index.sqlite`） | `ref_id` |
+| 0.11.0 ~ 0.13.2 | `…-Databases-COD-inorg.zip`（v2，内嵌 CIF）/ `…-Databases-COD-full.zip` | `ref_id` |
+| 0.10.0 | `…-Databases-COD-inorg.zip`（v1，仅 d-I 峰）/ `…-Databases-COD-full.zip` | `ref_id` |
 | **0.8.23**      | PolyXRD\_COD\_Inorganics\_v0.8.21 (无变化) | ref\_id      |
 | **0.8.22**      | PolyXRD\_COD\_Inorganics\_v0.8.21 (无变化) | ref\_id      |
 | **0.8.21**      | PolyXRD\_COD\_Inorganics\_v0.8.21       | ref\_id      |
 | 0.8.0 \~ 0.8.20 | cod\_inorganics.sqlite (不兼容)            | cod\_ref\_id |
 
+> PDF2-2004 槽位自 0.10.0 起支持挂载，但**任何版本都不随 Release 分发**（ICDD 版权）。
+
 ---
 
 *本文档由 4 份历史变更记录合并而成（2026-09-21）：早期史取自交接期回溯整理，v0.9.0 起以逐日工作日志与 git 历史为据；重复版本已按内容去重，保留各自独有细节。*
+*2026-09-22 追加 v1.0.1 正式发布记录（含 Release 附件清单与 SHA-256），并回填附录 A/B/C/D/E/F/H。*
