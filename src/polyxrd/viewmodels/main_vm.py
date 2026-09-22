@@ -10,6 +10,7 @@ from typing import Optional
 
 from PySide6.QtCore import QObject, Signal
 
+from polyxrd.i18n import tr
 from polyxrd.models.peak import PeakList
 from polyxrd.models.phase import Phase, PhaseMatchResult
 from polyxrd.models.refinement import RefinementResult
@@ -106,17 +107,17 @@ class MainViewModel(QObject):
 
     def load_file(self, file_path: str | Path) -> None:
         """加载数据文件"""
-        self.status_changed.emit(f"加载文件: {file_path}")
+        self.status_changed.emit(tr("status.loading_file", path=file_path))
         self._data_vm.load_file(file_path)
 
     def subtract_background(self, method: str = "snip", **kwargs) -> None:
         """背景扣除"""
-        self.status_changed.emit(f"执行背景扣除 ({method})")
+        self.status_changed.emit(tr("status.background_subtract", method=method))
         self._data_vm.subtract_background(method=method, **kwargs)
 
     def smooth_data(self, method: str = "savgol", window: int = 11, **kwargs) -> None:
         """平滑"""
-        self.status_changed.emit(f"执行平滑 ({method})")
+        self.status_changed.emit(tr("status.smoothing", method=method))
         self._data_vm.smooth_data(method=method, window=window, **kwargs)
 
     def normalize_data(self) -> None:
@@ -125,12 +126,12 @@ class MainViewModel(QObject):
 
     def strip_kalpha2(self) -> None:
         """Kα2 剥离 (M20: 工具栏按钮真实接处理管线)"""
-        self.status_changed.emit("执行 Kα2 剥离")
+        self.status_changed.emit(tr("status.kalpha2_strip"))
         self._data_vm.strip_ka_alpha2()
 
     def reset_data(self) -> None:
         """重置为原始数据 (便于对比预处理效果)"""
-        self.status_changed.emit("重置为原始数据")
+        self.status_changed.emit(tr("menu.data_processing.reset"))
         self._data_vm.reset_to_raw()
 
     # ------------------------------------------------------------------
@@ -151,7 +152,7 @@ class MainViewModel(QObject):
 
     def clear_all_data(self) -> None:
         """显式"关闭/清除数据": 清数据 + 分析状态, 回到空状态。"""
-        self.status_changed.emit("已清除当前数据")
+        self.status_changed.emit(tr("status.data_cleared"))
         self._phase_vm.reset_analysis()
         self._refinement_vm.reset()
         self._data_vm.clear_all()
@@ -182,7 +183,7 @@ class MainViewModel(QObject):
             self.error_occurred.emit("请先加载数据")
             return
 
-        self.status_changed.emit("执行峰检测")
+        self.status_changed.emit(tr("status.finding_peaks"))
         self._phase_vm.find_peaks(
             data, height=height, distance=distance, prominence=prominence,
             detect_shoulders=detect_shoulders, sensitivity=sensitivity,
@@ -198,7 +199,7 @@ class MainViewModel(QObject):
         if data is None:
             self.error_occurred.emit("请先加载数据")
             return
-        self.status_changed.emit("执行高精度峰检测 (背景扣除+亚步长精修)")
+        self.status_changed.emit(tr("status.finding_peaks_hi"))
         self._phase_vm.find_peaks_advanced(
             data, sigma_threshold=sigma_threshold,
             distance_deg=distance_deg, bg_window_deg=bg_window_deg,
@@ -212,7 +213,7 @@ class MainViewModel(QObject):
             self.error_occurred.emit("请先加载数据")
             return
 
-        self.status_changed.emit(f"执行峰拟合 ({model})")
+        self.status_changed.emit(tr("status.fitting_peaks", model=model))
         self._phase_vm.fit_peaks(data, model=model)
 
     # ------------------------------------------------------------------
@@ -237,7 +238,7 @@ class MainViewModel(QObject):
             self.error_occurred.emit("请先加载数据")
             return
 
-        self.status_changed.emit("执行传统Search/Match物相识别")
+        self.status_changed.emit(tr("status.identifying_phases"))
         self._phase_vm.identify_phases(
             data, elements=elements, element_filter=element_filter,
             top_n=top_n, db_source=db_source,
@@ -255,7 +256,7 @@ class MainViewModel(QObject):
             self.error_occurred.emit("请先加载数据")
             return
 
-        self.status_changed.emit("执行Profile Fitting物相识别")
+        self.status_changed.emit(tr("status.identifying_profile"))
         self._phase_vm.identify_phases_profile_fitting(
             data, element_filter=element_filter, top_n=top_n, fwhm=fwhm
         )
@@ -324,7 +325,7 @@ class MainViewModel(QObject):
             log_cb=self.refinement_log.emit,
         )
 
-        self.status_changed.emit(f"执行Rietveld精修 ({engine})")
+        self.status_changed.emit(tr("status.rietveld_refine", engine=engine))
         self._refinement_vm.refine(
             data, phases, strategy=strategy, engine=engine, max_cycles=max_cycles, **kwargs
         )
@@ -357,9 +358,10 @@ class MainViewModel(QObject):
             if lo > hi:
                 # 请求窗口与数据范围完全不相交: 报"请求值"而不是空集边界, 更好懂
                 self.error_occurred.emit(
-                    f"2θ 窗口 [{req_lo:.2f}, {req_hi:.2f}] 与数据范围 "
-                    f"[{float(data.two_theta[0]):.2f}, {float(data.two_theta[-1]):.2f}] "
-                    f"没有交集, 无法精修"
+                    tr("error.refine_window_no_overlap",
+                       lo=f"{req_lo:.2f}", hi=f"{req_hi:.2f}",
+                       dlo=f"{float(data.two_theta[0]):.2f}",
+                       dhi=f"{float(data.two_theta[-1]):.2f}")
                 )
                 return None
             if lo > float(data.two_theta[0]) or hi < float(data.two_theta[-1]):
@@ -377,8 +379,9 @@ class MainViewModel(QObject):
             mask = (tt >= win[0]) & (tt <= win[1])
             if int(mask.sum()) < 3:
                 self.error_occurred.emit(
-                    f"2θ 窗口 [{req[0]:.2f}, {req[1]:.2f}] 内仅 {int(mask.sum())} 个数据点, "
-                    f"不足以精修 (需 ≥ 3), 请放宽区间"
+                    tr("error.refine_window_too_few",
+                       lo=f"{req[0]:.2f}", hi=f"{req[1]:.2f}",
+                       n=int(mask.sum()))
                 )
                 return None
             tt, ii = tt[mask], ii[mask]
@@ -416,27 +419,31 @@ class MainViewModel(QObject):
         self._refinement_vm.reset()
         self.peaks_changed.emit(PeakList(source="auto"))
         self.phase_identified.emit([])
-        self.status_changed.emit(f"数据加载完成: {len(data)} 个数据点")
+        self.status_changed.emit(
+            tr("status.data_loaded_count", count=len(data))
+        )
         self.data_changed.emit(data)
 
     def _on_data_updated(self, data) -> None:
         self.data_changed.emit(data)
 
     def _on_peaks_detected(self, peaks: PeakList) -> None:
-        self.status_changed.emit(f"检测到 {len(peaks)} 个峰")
+        self.status_changed.emit(tr("status.peaks_found", count=len(peaks)))
         self.peaks_changed.emit(peaks)
 
     def _on_phase_identified(self, results: list[PhaseMatchResult]) -> None:
         if results:
             best = results[0]
             self.status_changed.emit(
-                f"物相识别完成: 最佳匹配 '{best.phase.name}' (分数: {best.score:.1f}%)"
+                tr("status.phase_identified",
+                   name=best.phase.name, score=f"{best.score:.1f}")
             )
         self.phase_identified.emit(results)
 
     def _on_refinement_completed(self, result: RefinementResult) -> None:
         self.status_changed.emit(
-            f"精修完成: wR={result.wR:.3f}%, 物相数={len(result.phases)}"
+            tr("status.refine_completed",
+               wr=f"{result.wR:.3f}", count=len(result.phases))
         )
         self.refinement_completed.emit(result)
 

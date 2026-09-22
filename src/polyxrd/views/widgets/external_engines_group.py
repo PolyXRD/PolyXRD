@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 )
 
 from polyxrd.config import get_config
+from polyxrd.i18n import tr
 from polyxrd.services.external_tools import (
     ALL_SPECS,
     FULLPROF_SPEC,
@@ -52,7 +53,7 @@ class ExternalEnginesGroup(QGroupBox):
     log_message = Signal(str)
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
-        super().__init__("外部精修程序", parent)
+        super().__init__(tr("vw.external_engines_group.title"), parent)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(6, 6, 6, 6)
 
@@ -76,7 +77,9 @@ class ExternalEnginesGroup(QGroupBox):
 
         light = QLabel("●")
         light.setStyleSheet(_LIGHT_OFF)
-        light.setToolTip(f"{spec.title} 可用状态")
+        light.setToolTip(
+            tr("vw.external_engines_group.status_tip", title=spec.title)
+        )
         row.addWidget(light)
 
         title = QLabel(spec.title)
@@ -84,23 +87,29 @@ class ExternalEnginesGroup(QGroupBox):
         row.addWidget(title)
 
         edit = QLineEdit()
-        edit.setPlaceholderText("自动探测, 或浏览选择可执行文件")
+        edit.setPlaceholderText(tr("vw.external_engines_group.placeholder"))
         edit.editingFinished.connect(
             lambda s=spec, e=edit: self._on_path_edited(s, e)
         )
         row.addWidget(edit, stretch=1)
 
-        btn_browse = QPushButton("浏览…")
+        btn_browse = QPushButton(tr("vw.external_engines_group.browse"))
         btn_browse.clicked.connect(lambda _=False, s=spec, e=edit: self._on_browse(s, e))
         row.addWidget(btn_browse)
 
-        btn_detect = QPushButton("检测")
-        btn_detect.setToolTip("重新自动探测本机安装")
+        btn_detect = QPushButton(tr("vw.external_engines_group.detect"))
+        btn_detect.setToolTip(tr("vw.external_engines_group.detect_tip"))
         btn_detect.clicked.connect(lambda _=False, s=spec: self._on_detect(s))
         row.addWidget(btn_detect)
 
-        btn_run = QPushButton("启动精修" if spec is FULLPROF_SPEC else "拉起 GUI")
-        btn_run.setToolTip(f"使用 {spec.title} 精修当前数据与已勾选物相")
+        btn_run = QPushButton(
+            tr("vw.external_engines_group.start_refine")
+            if spec is FULLPROF_SPEC
+            else tr("vw.external_engines_group.launch_gui")
+        )
+        btn_run.setToolTip(
+            tr("vw.external_engines_group.run_tip", title=spec.title)
+        )
         btn_run.clicked.connect(lambda _=False, s=spec: self._on_launch(s))
         row.addWidget(btn_run)
 
@@ -118,15 +127,19 @@ class ExternalEnginesGroup(QGroupBox):
             if source == "user":
                 edit.setText(str(path))
             elif source == "auto" and not edit.text().strip():
-                edit.setPlaceholderText(f"自动探测: {path}")
+                edit.setPlaceholderText(
+                    tr("vw.external_engines_group.detected_placeholder", path=path)
+                )
             if path is not None and spec.validate(path):
-                light_style, tip = _LIGHT_OK, "可用"
+                light_style, tip = _LIGHT_OK, tr("vw.external_engines_group.status_ok")
             elif get_config().get_external_tool_path(spec.key):
-                light_style, tip = _LIGHT_BAD, "配置了但不可用"
+                light_style, tip = _LIGHT_BAD, tr("vw.external_engines_group.status_bad")
             else:
-                light_style, tip = _LIGHT_OFF, "未配置且未探测到"
+                light_style, tip = _LIGHT_OFF, tr("vw.external_engines_group.status_off")
             row["light"].setStyleSheet(light_style)
-            row["light"].setToolTip(f"{spec.title}: {tip}")
+            row["light"].setToolTip(
+                tr("vw.external_engines_group.light_tip", title=spec.title, tip=tip)
+            )
 
     # ── 槽 ────────────────────────────────────────────────────
     def _on_path_edited(self, spec: ToolSpec, edit: QLineEdit) -> None:
@@ -138,8 +151,8 @@ class ExternalEnginesGroup(QGroupBox):
     def _on_browse(self, spec: ToolSpec, edit: QLineEdit) -> None:
         start = edit.text().strip() or str(get_config().get_external_tool_path(spec.key) or "")
         path, _ = QFileDialog.getOpenFileName(
-            self, f"选择 {spec.title} 可执行文件", start,
-            "可执行文件 (*.exe *.jar *.bat);;所有文件 (*)"
+            self, tr("vw.external_engines_group.select_exe", title=spec.title), start,
+            tr("vw.external_engines_group.exe_filter")
         )
         if path:
             edit.setText(path)
@@ -150,16 +163,20 @@ class ExternalEnginesGroup(QGroupBox):
         auto = spec.detect_fn() if spec.detect_fn else None
         if auto is not None:
             get_config().set_external_tool_path(spec.key, str(auto))
-            self.log_message.emit(f"[外部程序] {spec.title}: 探测到 {auto}")
+            self.log_message.emit(
+                tr("vw.external_engines_group.log_detected", title=spec.title, path=auto)
+            )
         else:
-            self.log_message.emit(f"[外部程序] {spec.title}: 未探测到本机安装")
+            self.log_message.emit(
+                tr("vw.external_engines_group.log_not_detected", title=spec.title)
+            )
         self.refresh_status()
 
     def _on_launch(self, spec: ToolSpec) -> None:
         path, _src = resolve_tool(spec)
         if path is None:
             self.log_message.emit(
-                f"[外部程序] {spec.title} 不可用: 请先浏览选择或检测安装路径")
+                tr("vw.external_engines_group.log_unavailable", title=spec.title))
             return
 
         data, phases = None, []
@@ -169,10 +186,10 @@ class ExternalEnginesGroup(QGroupBox):
             except Exception:  # noqa: BLE001
                 data, phases = None, []
         if data is None:
-            self.log_message.emit("[外部程序] 请先加载数据")
+            self.log_message.emit(tr("vw.external_engines_group.log_need_data"))
             return
         if not phases:
-            self.log_message.emit("[外部程序] 请先在物相分析页勾选物相")
+            self.log_message.emit(tr("vw.external_engines_group.log_need_phases"))
             return
 
         try:
@@ -184,15 +201,22 @@ class ExternalEnginesGroup(QGroupBox):
                 from polyxrd.services.launchers.gsas2_launcher import launch_gui
 
                 wd = new_run_dir("gsas2")
-                self.log_message.emit(f"[gsas2] 工作目录: {wd}")
+                self.log_message.emit(
+                    tr("vw.external_engines_group.log_gsas2_wd", wd=wd)
+                )
                 launch_gui(data, phases, wd, on_log=self.log_message.emit)
             elif spec is MAUD_SPEC:
                 from polyxrd.services.fullprof.runner import new_run_dir
                 from polyxrd.services.launchers.maud_launcher import launch_gui
 
                 wd = new_run_dir("maud")
-                self.log_message.emit(f"[maud] 工作目录: {wd}")
+                self.log_message.emit(
+                    tr("vw.external_engines_group.log_maud_wd", wd=wd)
+                )
                 launch_gui(data, phases, wd, custom=str(path) if path else None,
                            on_log=self.log_message.emit)
         except Exception as exc:  # noqa: BLE001
-            self.log_message.emit(f"[外部程序] {spec.title} 启动失败: {exc}")
+            self.log_message.emit(
+                tr("vw.external_engines_group.log_launch_failed",
+                   title=spec.title, exc=exc)
+            )

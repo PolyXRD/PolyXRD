@@ -3,7 +3,7 @@ translations = {
         "name": "PolyXRD",
         "title": "PolyXRD v{version}",
         "error_title": "Application Error",
-        "error_unhandled": "An unhandled exception occurred:\n\n{error}\n\nSee the console output for details.",
+        "error_unhandled": "An unhandled exception occurred:\n\n{error}\n\nSee the console output for details."
     },
     "menu": {
         "file": {
@@ -19,7 +19,7 @@ translations = {
             "exit": "Exit",
             "recent_files": "Recent Files",
             "no_recent": "(No recent files)",
-            "clear_recent": "Clear Recent",
+            "clear_recent": "Clear Recent"
         },
         "data_processing": {
             "title": "Data Processing",
@@ -27,12 +27,12 @@ translations = {
             "smooth": "Smooth",
             "kalpha2": "Strip Kα2",
             "reset": "Reset to Raw Data",
-            "normalize": "Normalize",
+            "normalize": "Normalize"
         },
         "database": {
             "title": "Databases",
             "manage": "Manage External Databases…",
-            "open_dir": "Open Database Folder",
+            "open_dir": "Open Database Folder"
         },
         "phase_analysis": {
             "title": "Phase Analysis",
@@ -42,7 +42,7 @@ translations = {
             "simulate": "Simulate XRD Pattern",
             "view_database": "View Reference Database",
             "cif_browser": "Browse CIF Database",
-            "cod_search": "COD Online Search",
+            "cod_search": "COD Online Search"
         },
         "structure_refinement": {
             "title": "Structure Refinement",
@@ -52,24 +52,24 @@ translations = {
             "wizard_full": "Refinement Wizard (Step-by-step)",
             "quick_refine": "Quick Refinement",
             "batch_refine": "Batch Refinement",
-            "templates": "Template Management",
+            "templates": "Template Management"
         },
         "view": {
             "title": "View",
             "language": "Language",
             "reset_layout": "Reset Layout",
-            "dark_theme": "Dark Theme",
+            "dark_theme": "Dark Theme"
         },
         "report": {
             "title": "Report",
             "export": "Export",
-            "generate": "Generate Report",
+            "generate": "Generate Report"
         },
         "help": {
             "title": "Help",
             "about": "About",
-            "about_qt": "About Qt",
-        },
+            "about_qt": "About Qt"
+        }
     },
     "toolbar": {
         "main": "Main Toolbar",
@@ -88,7 +88,7 @@ translations = {
         "refine_wizard": "Refinement Wizard",
         "refine_wizard_tip": "Refinement Wizard: click for the quick version; use the arrow to choose between Quick and Step-by-step",
         "cod_search": "COD Search",
-        "export": "Export",
+        "export": "Export"
     },
     "common": {
         "ok": "OK",
@@ -103,19 +103,11 @@ translations = {
         "retry": "Retry",
         "search": "Search",
         "select_all": "Select All",
-        "clear": "Clear",
+        "clear": "Clear"
     },
     "db_manager": {
         "title": "External Database Manager",
-        "intro": (
-            "Since 0.10.0 the installer no longer bundles any database. The "
-            "three databases ship as separate archives and mount "
-            "independently — installing just one of them is perfectly fine.\n"
-            "Extract the matching archive, then click “Import…” on that row "
-            "and pick the .sqlite file. The path is remembered and reloaded "
-            "on the next launch. With none mounted, only the 118 built-in "
-            "reference phases are available."
-        ),
+        "intro": "Since 0.10.0 the installer no longer bundles any database. The three databases ship as separate archives and mount independently — installing just one of them is perfectly fine.\nExtract the matching archive, then click “Import…” on that row and pick the .sqlite file. The path is remembered and reloaded on the next launch. With none mounted, only the 118 built-in reference phases are available.",
         "pkg_hint": "Download: {pkg}  →  extracts {file}",
         "pkg_hint_local": "Not shipped in any release package: supply your own {file} and import it here",
         "recheck": "Re-check",
@@ -123,26 +115,13 @@ translations = {
         "clear": "Unmount",
         "import_title": "Select Database File",
         "import_failed": "Import Failed",
-        "import_failed_body": (
-            "This file cannot be used as a database.\n\nFile: {path}\n"
-            "Reason: {detail}"
-        ),
-        "save_failed_body": (
-            "Failed to write the configuration; the path was not saved.\n\n"
-            "{error}"
-        ),
+        "import_failed_body": "This file cannot be used as a database.\n\nFile: {path}\nReason: {detail}",
+        "save_failed_body": "Failed to write the configuration; the path was not saved.\n\n{error}",
         "kind_mismatch": "Wrong Database Type",
-        "kind_mismatch_body": (
-            "The selected file is a “{got}”, not a “{want}”.\n\n"
-            "Import it into the “{got}” slot instead?"
-        ),
+        "kind_mismatch_body": "The selected file is a “{got}”, not a “{want}”.\n\nImport it into the “{got}” slot instead?",
         "import_ok": "Import Successful",
         "import_ok_body": "Mounted {rows} records.\n{path}",
-        "clear_confirm": (
-            "Unmount “{name}”?\n"
-            "It will fall back to the default location; if that has no "
-            "database either, this data source becomes unavailable."
-        ),
+        "clear_confirm": "Unmount “{name}”?\nIt will fall back to the default location; if that has no database either, this data source becomes unavailable.",
         "status_ok": "Mounted",
         "status_bad": "Unusable",
         "status_missing": "Not found",
@@ -153,32 +132,16 @@ translations = {
         "kind": {
             "cod_inorganics": "COD Inorganics Database",
             "pdf2": "PDF2-2004 Database",
-            "cod_index": "COD Full Index",
+            "cod_index": "COD Full Index"
         },
         "notice": {
-            "pdf2": (
-                "[Please confirm you hold a valid licence] PDF2-2004 is a "
-                "commercial database from ICDD. This software only provides "
-                "format conversion and an offline index, and conveys no "
-                "licence of any kind - please make sure you are properly "
-                "licensed before use."
-            ),
+            "pdf2": "[Please confirm you hold a valid licence] PDF2-2004 is a commercial database from ICDD. This software only provides format conversion and an offline index, and conveys no licence of any kind - please make sure you are properly licensed before use."
         },
         "first_run_title": "No Database Imported Yet",
-        "first_run_body": (
-            "Starting with 0.10.0 the installer no longer bundles any database.\n\n"
-            "Each database ships as its own archive — download only what you need:\n"
-            "  · COD Inorganics    …-Databases-COD-inorg.zip\n"
-            "  · COD Full Index    …-Databases-COD-full.zip\n"
-            "  · PDF2-2004         not downloadable (ICDD licensed; supply your own)\n\n"
-            "After extracting, import each one via "
-            "\"Database ▸ Manage External Databases…\".\n"
-            "Without imported databases only the 118 built-in reference phases "
-            "are available."
-        ),
+        "first_run_body": "Starting with 0.10.0 the installer no longer bundles any database.\n\nEach database ships as its own archive — download only what you need:\n  · COD Inorganics    …-Databases-COD-inorg.zip\n  · COD Full Index    …-Databases-COD-full.zip\n  · PDF2-2004         not downloadable (ICDD licensed; supply your own)\n\nAfter extracting, import each one via \"Database ▸ Manage External Databases…\".\nWithout imported databases only the 118 built-in reference phases are available."
     },
     "action": {
-        "strip_kalpha2": "Strip Kα2",
+        "strip_kalpha2": "Strip Kα2"
     },
     "batch_refine": {
         "title": "Batch Refinement",
@@ -202,7 +165,7 @@ translations = {
         "export_csv": "Export CSV",
         "exported": "Exported: {path}",
         "nothing_to_export": "Nothing to export",
-        "close": "Close",
+        "close": "Close"
     },
     "convert": {
         "title": "Convert Pattern Format",
@@ -231,8 +194,8 @@ translations = {
             "mdi": "MDI (Jade)",
             "raw": "RAW2 binary",
             "xrdml": "XML (XRDML)",
-            "json": "JSON (this app)",
-        },
+            "json": "JSON (this app)"
+        }
     },
     "busy": {
         "title": "Please Wait",
@@ -246,7 +209,7 @@ translations = {
         "identify_profile": "Identifying phases by profile fitting, please wait…",
         "refine": "Running Rietveld refinement, please wait…",
         "cif_match": "Matching CIF structures, please wait…",
-        "repeat_ignored": "A task is already running; please wait for it to finish",
+        "repeat_ignored": "A task is already running; please wait for it to finish"
     },
     "dialog": {
         "open_file_title": "Open XRD Data File",
@@ -254,22 +217,7 @@ translations = {
         "save_as_title": "Save As",
         "export_dir_title": "Select Export Directory",
         "about_title": "About PolyXRD",
-        "about_text": (
-            "<div style='text-align:center; min-width:360px;'>"
-            "<h2 style='margin:8px 0 4px 0; font-size:20px; color:#1a5276;'>PolyXRD</h2>"
-            "<p style='margin:0 0 12px 0; font-size:13px; color:#555;'>Version v{version}</p>"
-            "<hr style='border:none; border-top:1px solid #ddd; margin:8px 0;'/>"
-            "<p style='margin:8px 0 4px 0; font-size:12px; color:#333;'>X-Ray Diffraction Data Analysis Software</p>"
-            "<p style='margin:4px 0; font-size:11px; color:#666;'>"
-            "Phase Identification &middot; Peak Fitting &middot; Rietveld Refinement &middot; Offline Database"
-            "</p>"
-            "<hr style='border:none; border-top:1px solid #ddd; margin:12px 0;'/>"
-            "<p style='margin:4px 0; font-size:11px; color:#555;'>"
-            "Contact: <a href='mailto:sshztx@outlook.com' style='color:#2980b9; text-decoration:none;'>sshztx@outlook.com</a>"
-            "</p>"
-            "<p style='margin:8px 0 4px 0; font-size:11px; color:#888;'>© 2026 All Rights Reserved</p>"
-            "</div>"
-        ),
+        "about_text": "<div style='text-align:center; min-width:360px;'><h2 style='margin:8px 0 4px 0; font-size:20px; color:#1a5276;'>PolyXRD</h2><p style='margin:0 0 12px 0; font-size:13px; color:#555;'>Version v{version}</p><hr style='border:none; border-top:1px solid #ddd; margin:8px 0;'/><p style='margin:8px 0 4px 0; font-size:12px; color:#333;'>X-Ray Diffraction Data Analysis Software</p><p style='margin:4px 0; font-size:11px; color:#666;'>Phase Identification &middot; Peak Fitting &middot; Rietveld Refinement &middot; Offline Database</p><hr style='border:none; border-top:1px solid #ddd; margin:12px 0;'/><p style='margin:4px 0; font-size:11px; color:#555;'>Contact: <a href='mailto:sshztx@outlook.com' style='color:#2980b9; text-decoration:none;'>sshztx@outlook.com</a></p><p style='margin:8px 0 4px 0; font-size:11px; color:#888;'>© 2026 All Rights Reserved</p></div>",
         "error": "Error",
         "warning": "Warning",
         "info": "Information",
@@ -331,15 +279,11 @@ translations = {
         "project_saved": "Project saved to: {path}",
         "project_loaded": "Project loaded: {name}",
         "project_save_failed": "Project save failed: {error}",
-        "project_load_failed": "Project load failed: {error}",
+        "project_load_failed": "Project load failed: {error}"
     },
     "status": {
         "ready": "Ready",
-        "no_database": (
-            "No external database detected — only the 118 built-in reference "
-            "phases are available. Import one via \"Database ▸ Manage External "
-            "Databases…\"."
-        ),
+        "no_database": "No external database detected — only the 118 built-in reference phases are available. Import one via \"Database ▸ Manage External Databases…\".",
         "loading_file": "Loading file: {path}",
         "background_subtract": "Performing background subtraction ({method})",
         "smoothing": "Performing smoothing ({method})",
@@ -351,7 +295,7 @@ translations = {
         "database_loading": "Loading reference database",
         "database_ready": "Reference database ready: {count} phases",
         "simulating_pattern": "Generating simulated XRD pattern",
-        "data_loaded": "Data loaded: {count} data points",
+        "data_loaded": "Data loaded",
         "peaks_found": "Detected {count} peaks",
         "phase_identified": "Phase identification complete: best match '{name}' (score: {score}%)",
         "refine_completed": "Refinement complete: wR={wr}%, phases={count}",
@@ -361,6 +305,10 @@ translations = {
         "layout_reset": "Layout reset",
         "language_info": "Language: {lang}",
         "wavelength_info": "Wavelength: {wl} Å",
+        "data_loaded_count": "Data loaded: {count} points",
+        "data_cleared": "Current data cleared",
+        "finding_peaks_hi": "High-precision peak detection (background subtraction + sub-step refinement)",
+        "identifying_profile": "Performing profile-fitting phase identification"
     },
     "error": {
         "file_not_found": "File not found: {path}",
@@ -369,7 +317,7 @@ translations = {
         "no_data": "Please load data first",
         "no_phase": "Please identify and select phases first",
         "no_refinement": "No refinement results to export.",
-        "load_failed": "Failed to load file: {error}",
+        "load_failed": "Failed to load file",
         "export_failed": "Export failed: {error}",
         "refine_failed": "Refinement failed: {error}",
         "identify_failed": "Phase identification failed: {error}",
@@ -377,6 +325,13 @@ translations = {
         "peak_fit_failed": "Peak fitting failed: {error}",
         "background_failed": "Background subtraction failed: {error}",
         "smooth_failed": "Smoothing failed: {error}",
+        "no_data_save": "No data to save",
+        "kalpha2_failed": "Kα2 stripping failed: {error}",
+        "peak_finder_hi_failed": "High-precision peak detection failed: {error}",
+        "no_peaks": "Please detect peaks first",
+        "no_phase_selected": "Please select phases first",
+        "refine_window_no_overlap": "The 2θ window [{lo}, {hi}] does not overlap the data range [{dlo}, {dhi}]; cannot refine",
+        "refine_window_too_few": "Only {n} data points inside the 2θ window [{lo}, {hi}] — not enough to refine (needs ≥ 3); widen the range"
     },
     "view": {
         "y_scale": {
@@ -385,7 +340,7 @@ translations = {
             "log": "Log",
             "sqrt": "Square Root",
             "menu_title": "Y Axis Scale",
-            "hint": "Y axis: {mode}  (left-click the Y axis to cycle / right-click to choose)",
+            "hint": "Y axis: {mode}  (left-click the Y axis to cycle / right-click to choose)"
         },
         "data": {
             "title": "Data",
@@ -401,7 +356,7 @@ translations = {
             "peak_distance": "Min Distance:",
             "btn_find_peaks": "Find Peaks",
             "btn_fit_peaks": "Fit Peaks",
-            "label_experimental": "Experimental Data",
+            "label_experimental": "Experimental Data"
         },
         "phase": {
             "title": "Phase Analysis",
@@ -441,8 +396,8 @@ translations = {
                 "status_maybe": "Maybe: {elements}",
                 "status_exclude": "Absent: {elements}",
                 "status_closed_world": "Unchecked elements are treated as Absent",
-                "hint": "Click element to cycle: None → Has(green) → Maybe(yellow) → Absent(red) → MustHave(dark green)",
-            },
+                "hint": "Click element to cycle: None → Has(green) → Maybe(yellow) → Absent(red) → MustHave(dark green)"
+            }
         },
         "refinement": {
             "title": "Structure Refinement",
@@ -450,7 +405,7 @@ translations = {
             "group_result": "Refinement Results",
             "group_phases": "Phase Contents",
             "label_compare": "Refinement Comparison",
-            "label_residual": "Residual Plot",
+            "label_residual": "Residual",
             "label_engine": "Engine:",
             "label_strategy": "Strategy:",
             "label_max_cycles": "Max Cycles:",
@@ -460,12 +415,7 @@ translations = {
             "label_cycles": "Cycles:",
             "btn_start_refine": "Start Refinement",
             "wizard_style": "Use refinement-wizard settings (recommended)",
-            "wizard_style_tip": (
-                "Applies the refinement wizard's recommended settings: engine=builtin, "
-                "strategy=sequential, peak shape=pseudo-voigt, background=snip, "
-                "max cycles=20; the process log below streams the refinement steps in "
-                "real time. Uncheck to adjust the parameters manually."
-            ),
+            "wizard_style_tip": "Applies the refinement wizard's recommended settings: engine=builtin, strategy=sequential, peak shape=pseudo-voigt, background=snip, max cycles=20; the process log below streams the refinement steps in real time. Uncheck to adjust the parameters manually.",
             "group_log": "Refinement Process Log",
             "log_placeholder": "Run a refinement and the process data will stream here in real time...",
             "btn_clear_log": "Clear Log",
@@ -485,8 +435,7 @@ translations = {
             "col_b": "b(Å)",
             "col_c": "c(Å)",
             "label_observed": "Observed",
-            "label_simulated": "Simulated",
-            "label_residual": "Residual",
+            "label_simulated": "Simulated"
         },
         "report": {
             "title": "Report",
@@ -494,7 +443,7 @@ translations = {
             "btn_generate": "Generate Report",
             "btn_export": "Export",
             "label_format": "Export Format:",
-            "no_result": "No refinement results to display.\n\nPlease perform Rietveld refinement on the \"Structure Refinement\" page first.",
+            "no_result": "No refinement results to display.\n\nPlease perform Rietveld refinement on the \"Structure Refinement\" page first."
         },
         "peak_table": {
             "col_id": "No.",
@@ -506,8 +455,8 @@ translations = {
             "col_phase": "Phase",
             "action_delete": "Delete Selected",
             "action_clear": "Clear All",
-            "action_export_csv": "Export CSV",
-        },
+            "action_export_csv": "Export CSV"
+        }
     },
     "sci": {
         "two_theta": "2θ",
@@ -528,7 +477,7 @@ translations = {
         "match_score": "Match Score",
         "gof": "GOF",
         "rwp": "Rwp",
-        "wr": "wR",
+        "wr": "wR"
     },
     "params": {
         "panel_title": "Parameter Panel",
@@ -556,8 +505,7 @@ translations = {
         "engine_available": "Available",
         "engine_unavailable": "Not installed",
         "engine_status_label": "Engine status",
-        "engine_maud_missing_cif": "MAUD engine requires cif_path or cod_id for each phase; "
-                                  "currently not satisfied. Fall back to builtin engine?",
+        "engine_maud_missing_cif": "MAUD engine requires cif_path or cod_id for each phase; currently not satisfied. Fall back to builtin engine?",
         "strategy_label": "Strategy",
         "max_cycles_label": "Max Cycles",
         "bgm_snip": "SNIP",
@@ -575,6 +523,18 @@ translations = {
         "strategy_sequential": "Sequential",
         "strategy_auto": "Auto",
         "strategy_manual": "Manual",
+        "database_info": "Reference Database Info",
+        "database_source": "Data Source",
+        "database_total": "Total Phases",
+        "database_wavelength": "Standard Wavelength",
+        "match_elements": "Element Filter",
+        "match_tolerance": "Match Tolerance (°)",
+        "match_top_n": "Max Candidates",
+        "simulate_peak_width": "Peak Width (°)",
+        "simulate_phase_select": "Phase",
+        "simulate_range_max": "End 2θ (°)",
+        "simulate_range_min": "Start 2θ (°)",
+        "simulate_wavelength": "Wavelength (Å)"
     },
     "wizard": {
         "btn_prev": "Previous",
@@ -587,7 +547,7 @@ translations = {
             "phase": "Select Phases",
             "params": "Parameter Settings",
             "preview": "Preview & Confirm",
-            "execute": "Execute Refinement",
+            "execute": "Execute Refinement"
         },
         "data_page": {
             "info_title": "Data Information",
@@ -600,7 +560,7 @@ translations = {
             "range_title": "Refinement Range",
             "range_min": "Start 2θ (°)",
             "range_max": "End 2θ (°)",
-            "range_invalid": "Start 2θ must be less than End 2θ",
+            "range_invalid": "Start 2θ must be less than End 2θ"
         },
         "phase_page": {
             "tab_cif": "CIF Database",
@@ -609,13 +569,10 @@ translations = {
             "cif_list_searching": "Searching mounted database…",
             "cif_list_browsing": "Searching candidate CIFs for the selected phases…",
             "cif_for_phase": "{phase} → {cif}",
-            "cif_list_hint": ("The list above shows selectable CIF structures; type a formula / "
-                              "mineral name / COD ID to search the mounted database (a phase may "
-                              "have several CIFs). Below are the phases used as initial structures."),
+            "cif_list_hint": "The list above shows selectable CIF structures; type a formula / mineral name / COD ID to search the mounted database (a phase may have several CIFs). Below are the phases used as initial structures.",
             "cif_list_count": "{count} CIF(s) listed",
             "cif_list_count_builtin": "{count} built-in phases (search to expand all CIFs of a phase)",
-            "cif_list_no_db": ("(No mounted database — built-in phases only; use \"Add Selected "
-                               "Phases\" and the CIF will be auto-matched)"),
+            "cif_list_no_db": "(No mounted database — built-in phases only; use \"Add Selected Phases\" and the CIF will be auto-matched)",
             "cif_db_unavailable": "No mounted database with embedded CIFs; showing built-in phases",
             "col_cif_source": "CIF Source",
             "cif_source_auto": "auto-match at refinement",
@@ -636,7 +593,7 @@ translations = {
             "col_space_group": "Space Group",
             "col_action": "Action",
             "btn_clear": "Clear All",
-            "phase_already_added": "Phase '{name}' is already in the list",
+            "phase_already_added": "Phase '{name}' is already in the list"
         },
         "params_page": {
             "template_title": "Template Selection",
@@ -647,7 +604,7 @@ translations = {
             "strategy": "Strategy",
             "background": "Background Method",
             "peak_shape": "Peak Shape",
-            "max_cycles": "Max Cycles",
+            "max_cycles": "Max Cycles"
         },
         "preview": {
             "title": "Refinement Configuration Preview",
@@ -659,7 +616,7 @@ translations = {
             "phase_section": "Phase List",
             "no_phase": "No Phase",
             "params_section": "Refinement Parameters",
-            "advanced_section": "Advanced Parameters",
+            "advanced_section": "Advanced Parameters"
         },
         "execute_page": {
             "progress_title": "Refinement Progress",
@@ -687,14 +644,373 @@ translations = {
             "log_result_quality": "Quality: {quality}",
             "log_converged": "Refinement converged",
             "log_not_converged": "Refinement did not fully converge",
-            "log_phase": "Phase {name}: weight fraction {weight}%",
+            "log_phase": "Phase {name}: weight fraction {weight}%"
         },
         "template": {
             "save_title": "Save Template",
             "save_name_prompt": "Enter template name:",
             "default_description": "Custom refinement template",
             "save_success": "Template '{name}' saved successfully",
-            "save_failed": "Failed to save template: {error}",
-        },
+            "save_failed": "Failed to save template: {error}"
+        }
     },
+    "vw": {
+        "element_periodic_table": {
+            "state_must_have": "Must have",
+            "state_must": "Contains",
+            "state_maybe": "Maybe",
+            "state_exclude": "None",
+            "tip_must_have": "Must have: phase must contain ALL of these elements (AND)",
+            "tip_must": "Contains: phase is composed of these elements, at least one of them",
+            "tip_maybe": "Maybe: allowed but not required (only relaxes candidate element pool)",
+            "tip_exclude": "None: any phase containing any of these elements is rejected",
+            "tip_default": "Unchecked = None (excluded by default)",
+            "btn_light": "Set light elements as Contains (O,C,H,N,S)",
+            "btn_light_tip": "EDX/EDS often cannot detect light elements, but hydroxides/carbonates/hydrates are very common in XRD.\nOne click sets O/C/H/N/S to \"Contains\" to avoid their default exclusion when unchecked.",
+            "btn_reset": "Reset selection",
+            "status_must_have": "Must have: {items}",
+            "status_must": "Contains: {items}",
+            "status_maybe": "Maybe: {items}",
+            "status_exclude": "Excluded: {items}",
+            "status_none": "No elements selected → search entire database (no element filter)",
+            "status_excluded": "\n{count} unchecked elements are excluded by default as \"None\": {preview}"
+        },
+        "element_filter_dialog": {
+            "title": "Element Filter - Four-state Selection",
+            "btn_clear": "Clear selection",
+            "btn_ok": "OK",
+            "btn_cancel": "Cancel",
+            "summary_must_have": "<b>Must have (all):</b> {items}",
+            "summary_must": "<b>Contains (at least one):</b> {items}",
+            "summary_maybe": "<b>Maybe:</b> {items}",
+            "summary_exclude": "<b>None:</b> {items}",
+            "summary_none": "Current filter: no elements selected (full database search will be used)",
+            "summary_prefix": "Current filter: ",
+            "summary_excluded": "<br><span style='color:#b71c1c;'>{count} unchecked elements are excluded by default as \"None\" (closed loop): {preview}</span>",
+            "summary_open_world": "<br><span style='color:#b71c1c;'>Only \"None\" checked → open world, only these elements are excluded, rest unrestricted</span>"
+        },
+        "database_dialog": {
+            "file_filter": "SQLite database (*.sqlite *.sqlite3 *.db);;All files (*)"
+        },
+        "structure_view": {
+            "placeholder": "(No structure)"
+        },
+        "report_view": {
+            "btn_preview": "Generate report",
+            "label_export_format": "Export format:",
+            "btn_export": "Export",
+            "group_preview": "Report Preview",
+            "no_result": "No refinement result to display.\n\nPlease run Rietveld refinement on the \"Structure Refinement\" page first.",
+            "export_dir_title": "Select export directory"
+        },
+        "plot_widget": {
+            "add_peak_btn": "Add Peak",
+            "reset_view_btn": "Reset View",
+            "export_img_btn": "Export Image",
+            "y_scale_hint_tip": "Left-click the Y-axis area to cycle modes; right-click anywhere in the plot to open the selection menu.\nTick labels still show real intensity under log / sqrt scales.",
+            "export_img_dlg_title": "Export Image",
+            "export_img_filter": "Image files (*.png *.pdf *.svg *.eps)"
+        },
+        "pattern_display": {
+            "y_scale_hint_tip": "Left-click the Y-axis area to cycle modes; right-click anywhere in the plot to open the selection menu.\nTick labels still show real intensity under log / sqrt scales.",
+            "legend_exp": "Experimental Data",
+            "legend_calc": "Calculated Pattern",
+            "legend_resid": "Residuals"
+        },
+        "main_window": {
+            "phase_confirmed_status": "Phase confirmed: {phase_name}, switching to structure refinement",
+            "exp_data_title": "Experimental Data",
+            "export_cif_ctx": "Export CIF File…",
+            "view_struct_ctx": "View Structure Details…",
+            "export_cif_dlg_title": "Export CIF File",
+            "export_cif_filter": "CIF files (*.cif)",
+            "choose_cif_dir": "Select CIF Export Directory",
+            "export_cif_result_title": "Export CIF",
+            "export_cif_result": "Succeeded {ok}, failed {failed_count}:\n{failed_details}",
+            "exported_cif_status": "Exported {ok} CIF file(s)",
+            "cell_unknown": "Cell: --",
+            "phase_detail": "• {name}  {formula}\n  Space group: {space_group}   Sites: {n_sites}\n  {cell}",
+            "struct_detail_title": "Structure Details"
+        },
+        "phase_view": {
+            "group_phase": "Phase Identification",
+            "btn_element_filter": "Element Filter (Periodic Table)",
+            "tip_element_filter": "Click to open the periodic-table element filter dialog",
+            "btn_clear_filter": "Clear",
+            "no_element_filter": "No element filter selected",
+            "label_db_source": "Database source:",
+            "btn_profile_fitting": "Profile Fitting (Recommended)",
+            "tip_profile_fitting": "Phase identification based on profile fitting, no prior peak picking required.\nCompares the whole XRD curve shape; suitable for overlapping peaks or complex backgrounds.",
+            "label_tolerance": "Tolerance:",
+            "tip_tolerance": "2θ matching tolerance: a reference peak within this distance of an experimental peak is considered a match",
+            "btn_traditional": "Traditional Search/Match",
+            "tip_traditional": "Traditional phase identification, requires peak detection first.\nMatches peak positions using the FOM (Figure of Merit) algorithm.",
+            "btn_quick": "Quick (No Filter)",
+            "btn_select_phase": "Select Phase →",
+            "btn_auto_mix": "Auto Mix Analysis",
+            "tip_auto_mix": "Performs a multiphase linear-combination fit of the current candidate phases,\nautomatically computing each phase's weight fraction (wt%).",
+            "btn_clear_sel": "Clear",
+            "btn_overlay_calc": "Overlay Calculated",
+            "btn_show_resid": "Show Residual",
+            "filter_must_have": "Must have: {items}",
+            "filter_has": "Contains: {items}",
+            "filter_maybe": "Possible: {items}",
+            "filter_exclude": "Exclude: {items}",
+            "filter_prefix": "Filter: ",
+            "filter_default_exclude": " (unselected elements excluded by default)",
+            "db_builtin": "Built-in Library (118 phases)",
+            "db_cod_inorg": "COD Inorganics",
+            "db_cod_full": "COD Full",
+            "db_merged": "Built-in + COD Full (Merged)",
+            "db_pdf2": "PDF2-2004",
+            "db_label_count": "{base} ({count:,})",
+            "db_unmounted": " (not mounted)",
+            "db_combo_tip_main": "Select the database used for phase search (applies to Traditional Search/Match and Quick identification):\n· Built-in: 118 common phases bundled with the app (fastest)\n· COD Inorganics: 71,199 externally mounted phases (precomputed d-I peaks, Hanawalt pre-screen)\n· COD Full: 113,223 external CIF indexes (local search)\n· Merged: Built-in + COD Full results merged and ranked\n· PDF2-2004: ICDD PDF-2 2004 edition, 163,834 phases with space groups and cells\n  (cell 81.8% / space group 72.8%); hits can be used directly as refinement starting structures.\n",
+            "db_combo_tip_import": "Databases are not bundled with the installer; download and unzip separately, then import via\nMenu “Database ▸ External Database Manager…”.",
+            "pdf2_coverage": "  Local library: {total} phases, space group {sg}%, cell {cell}%.\n",
+            "db_unmounted_hint": "This database is not mounted. Import the unzipped library file via Menu “Database ▸ External Database Manager…”.",
+            "no_match": "No matching phases found",
+            "result_profile": "Profile Fitting Result [{db_src}] (correlation closer to 100% is better)",
+            "result_search": "Search/Match Result [{db_src}] (lower FOM is better)",
+            "cand_profile": "{name} - Match: {score:.1f}% (R={rfactor:.3f}){sg}{elem}",
+            "cand_fom": "{name} - FOM: {score:.3f}{sg}{elem}",
+            "detail_formula": "Formula: {formula}",
+            "detail_sg": "Space group: {sg}",
+            "detail_cell": "Cell: a={a:.4f} b={b:.4f} c={c:.4f} Å",
+            "detail_angles": "      α={a:.2f} β={b:.2f} γ={c:.2f}°",
+            "detail_volume": "      V={v:.2f} Å³",
+            "detail_refpeaks": "Reference peaks: {n}",
+            "act_export_cif": "Export CIF File…",
+            "dlg_export_cif_title": "Export CIF File",
+            "dlg_export_cif_filter": "CIF Files (*.cif)",
+            "msg_export_cif": "Export CIF",
+            "msg_write_fail": "Write failed: {exc}",
+            "msg_tip": "Tip",
+            "msg_pick_phase": "Please select a phase from the list first",
+            "dlg_confirm_phase_title": "Confirm Phase",
+            "dlg_confirm_phase_body": "Selected phase: <b>{name}</b>\n\nSwitch to the structure refinement page for Rietveld refinement?\n\n(Click “No” to keep selecting other phases)",
+            "msg_run_identify": "Please run phase identification first",
+            "msg_load_xrd": "Please load XRD data first",
+            "msg_no_mix_phase": "No available phases for mix analysis"
+        },
+        "peak_table": {
+            "col_id": "No.",
+            "col_2theta": "2θ (°)",
+            "col_d": "d (Å)",
+            "col_intensity": "Intensity",
+            "col_fwhm": "FWHM (°)",
+            "col_phase": "Phase",
+            "act_del_selected": "Delete Selected",
+            "act_clear": "Clear",
+            "act_export_csv": "Export CSV",
+            "act_copy_row": "Copy Selected Row",
+            "dlg_export_peaks_caption": "Export Peak List",
+            "dlg_export_peaks_filter": "CSV Files (*.csv)"
+        },
+        "peak_match_table": {
+            "col_2theta": "2θ (°)",
+            "col_d": "d (Å)",
+            "col_phase": "Assigned Phase",
+            "title": "Peak Assignment",
+            "title_count": "Peak Assignment ({n})",
+            "unexplained": "—Unassigned—"
+        },
+        "data_view": {
+            "data_preprocess": "Data Preprocessing",
+            "bg_method": "Background method:",
+            "exec_bg_subtract": "Subtract Background",
+            "smooth_method": "Smoothing method:",
+            "window_size": "Window size:",
+            "exec_smooth": "Smooth",
+            "strip_kalpha2": "Strip Kα2",
+            "peak_detection": "Peak Detection",
+            "min_peak_height": "Min peak height:",
+            "peak_distance_tip": "Minimum 2θ spacing between peaks (deg). XRD peak FWHM is usually 0.05–0.5°; 0.2–1.0 is recommended. Too large (e.g. 5°) drops closely spaced strong lines and hurts phase-identification recall.",
+            "min_distance": "Min distance:",
+            "high_precision": "High precision (background subtraction + sub-step)",
+            "peak_hi_tip": "Enable high-precision peak detection: automatic background subtraction + sub-step peak-position refinement + overlapping-peak joint fitting.\nPeak position accuracy reaches ~0.001° and weak peaks are easier to detect. Uncheck to use the traditional height-threshold method.",
+            "detect_peaks": "Detect Peaks",
+            "fit_peaks": "Fit Peaks",
+            "experimental_data": "Experimental Data"
+        },
+        "refinement_view": {
+            "peak_shape": "Peak shape:",
+            "init_fwhm": "Initial FWHM:",
+            "bg_method": "Background method:",
+            "zero_shift": "Zero shift:",
+            "cancel": "Cancel",
+            "time_spent": "Time:",
+            "selected_phases": "Selected Phases",
+            "export_cif": "Export CIF File…",
+            "export_cif_title": "Export CIF File",
+            "cif_filter": "CIF Files (*.cif)",
+            "export_cif_warn_title": "Export CIF",
+            "export_cif_write_failed": "Write failed: {exc}",
+            "fullprof_busy": "FullProf External Refinement"
+        },
+        "external_engines_group": {
+            "title": "External Refinement Programs",
+            "status_tip": "{title} availability",
+            "placeholder": "Auto-detect, or browse to select the executable",
+            "browse": "Browse…",
+            "detect": "Detect",
+            "detect_tip": "Re-run automatic detection of the local install",
+            "start_refine": "Start Refinement",
+            "launch_gui": "Launch GUI",
+            "run_tip": "Use {title} to refine the current data and selected phases",
+            "detected_placeholder": "Auto-detected: {path}",
+            "status_ok": "available",
+            "status_bad": "configured but unavailable",
+            "status_off": "not configured and not detected",
+            "light_tip": "{title}: {tip}",
+            "select_exe": "Select {title} executable",
+            "exe_filter": "Executables (*.exe *.jar *.bat);;All Files (*)",
+            "log_detected": "[External tool] {title}: detected at {path}",
+            "log_not_detected": "[External tool] {title}: no local installation detected",
+            "log_unavailable": "[External tool] {title} unavailable: browse for the executable or run detection first",
+            "log_need_data": "[External tool] Load data first",
+            "log_need_phases": "[External tool] Select phases on the Phase Analysis page first",
+            "log_gsas2_wd": "[gsas2] Working directory: {wd}",
+            "log_maud_wd": "[maud] Working directory: {wd}",
+            "log_launch_failed": "[External tool] Failed to launch {title}: {exc}"
+        },
+        "refinement_wizard": {
+            "tpl_builtin": "[Built-in] {name}",
+            "tpl_user": "[User] {name}"
+        }
+    },
+    "elem": {
+        "Ac": "Actinium",
+        "Ag": "Silver",
+        "Al": "Aluminium",
+        "Am": "Americium",
+        "Ar": "Argon",
+        "As": "Arsenic",
+        "At": "Astatine",
+        "Au": "Gold",
+        "B": "Boron",
+        "Ba": "Barium",
+        "Be": "Beryllium",
+        "Bi": "Bismuth",
+        "Bk": "Berkelium",
+        "Br": "Bromine",
+        "C": "Carbon",
+        "Ca": "Calcium",
+        "Cd": "Cadmium",
+        "Ce": "Cerium",
+        "Cf": "Californium",
+        "Cl": "Chlorine",
+        "Cm": "Curium",
+        "Co": "Cobalt",
+        "Cr": "Chromium",
+        "Cs": "Caesium",
+        "Cu": "Copper",
+        "Dy": "Dysprosium",
+        "Er": "Erbium",
+        "Es": "Einsteinium",
+        "Eu": "Europium",
+        "F": "Fluorine",
+        "Fe": "Iron",
+        "Fm": "Fermium",
+        "Fr": "Francium",
+        "Ga": "Gallium",
+        "Gd": "Gadolinium",
+        "Ge": "Germanium",
+        "H": "Hydrogen",
+        "He": "Helium",
+        "Hf": "Hafnium",
+        "Hg": "Mercury",
+        "Ho": "Holmium",
+        "I": "Iodine",
+        "In": "Indium",
+        "Ir": "Iridium",
+        "K": "Potassium",
+        "Kr": "Krypton",
+        "La": "Lanthanum",
+        "Li": "Lithium",
+        "Lr": "Lawrencium",
+        "Lu": "Lutetium",
+        "Md": "Mendelevium",
+        "Mg": "Magnesium",
+        "Mn": "Manganese",
+        "Mo": "Molybdenum",
+        "N": "Nitrogen",
+        "Na": "Sodium",
+        "Nb": "Niobium",
+        "Nd": "Neodymium",
+        "Ne": "Neon",
+        "Ni": "Nickel",
+        "No": "Nobelium",
+        "Np": "Neptunium",
+        "O": "Oxygen",
+        "Os": "Osmium",
+        "P": "Phosphorus",
+        "Pa": "Protactinium",
+        "Pb": "Lead",
+        "Pd": "Palladium",
+        "Pm": "Promethium",
+        "Po": "Polonium",
+        "Pr": "Praseodymium",
+        "Pt": "Platinum",
+        "Pu": "Plutonium",
+        "Ra": "Radium",
+        "Rb": "Rubidium",
+        "Re": "Rhenium",
+        "Rh": "Rhodium",
+        "Rn": "Radon",
+        "Ru": "Ruthenium",
+        "S": "Sulfur",
+        "Sb": "Antimony",
+        "Sc": "Scandium",
+        "Se": "Selenium",
+        "Si": "Silicon",
+        "Sm": "Samarium",
+        "Sn": "Tin",
+        "Sr": "Strontium",
+        "Ta": "Tantalum",
+        "Tb": "Terbium",
+        "Tc": "Technetium",
+        "Te": "Tellurium",
+        "Th": "Thorium",
+        "Ti": "Titanium",
+        "Tl": "Thallium",
+        "Tm": "Thulium",
+        "U": "Uranium",
+        "V": "Vanadium",
+        "W": "Tungsten",
+        "Xe": "Xenon",
+        "Y": "Yttrium",
+        "Yb": "Ytterbium",
+        "Zn": "Zinc",
+        "Zr": "Zirconium"
+    },
+    "quality": {
+        "excellent": "Excellent",
+        "good": "Good",
+        "fair": "Fair",
+        "poor": "Poor",
+        "bad": "Very poor"
+    },
+    "report": {
+        "title": "PolyXRD Rietveld Refinement Report",
+        "phase_count": "Phases: {count}",
+        "cycles": "Refinement cycles: {cycles}",
+        "converged": "Converged: yes",
+        "not_converged": "Converged: no",
+        "time": "Time: {time} s",
+        "quality_section": "Refinement Quality Metrics",
+        "phase_section": "Phase Analysis",
+        "rwp_line": "  Rwp (weighted profile R): {value} %",
+        "rexp_line": "  Rexp (expected R):        {value} %",
+        "rb_line": "  Rb (Bragg R):             {value} %",
+        "gof_line": "  GOF (=Rwp/Rexp):          {value}",
+        "quality_line": "  Quality grade:            {value}",
+        "phase_header": "Phase {index}: {name}",
+        "formula": "  Formula: {formula}",
+        "weight_fraction": "  Weight fraction: {value} %",
+        "cell_params": "  Cell parameters: a={a}, b={b}, c={c} Å",
+        "cell_angles": "                  α={alpha}, β={beta}, γ={gamma}°",
+        "cell_volume": "  Cell volume: {volume} Å³",
+        "total_fraction": "Total phase content: {value} %"
+    }
 }

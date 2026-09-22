@@ -148,7 +148,7 @@ def auto_refine(
         phases, wd / f"{cal_stem}.pcr",
         title="PolyXRD scale calibration", fix_all=True, scale=1.0, **common,
     )
-    log(f"[fullprof] 标度校准试跑 ({cal_stem}) ...")
+    log(f"[fullprof] scale-calibration trial run ({cal_stem}) ...")
     cal_out = wd / f"{cal_stem}.out"
     subprocess.run(
         [str(fp_exe), cal_stem], cwd=str(wd), capture_output=True,
@@ -158,10 +158,10 @@ def auto_refine(
     scale = 1.0e-3
     if sum_ycal and sum_ycal > 0 and sum_yobs and sum_yobs > 0:
         scale = sum_yobs / sum_ycal
-        log(f"[fullprof] 校准: Σy_obs={sum_yobs:.3g}, Σy_calc={sum_ycal:.3g} "
-            f"→ scale={scale:.4g}")
+        log(f"[fullprof] calib: sum_yobs={sum_yobs:.3g}, sum_ycal={sum_ycal:.3g} "
+            f"-> scale={scale:.4g}")
     else:
-        log("[fullprof] 校准失败 (无 SumYcal 表), 用默认 scale=1e-3")
+        log("[fullprof] calib failed (no SumYcal table), using default scale=1e-3")
 
     # ── 2) 正式精修第一遍 (限位编号占位) ───────────────────────
     build_pcr(
@@ -177,7 +177,7 @@ def auto_refine(
     if not res.ok:
         zero_no, w_no = discover_limit_numbers(wd / f"{stem}.out")
         if zero_no is not None and w_no is not None:
-            log(f"[fullprof] 限位编号发现: Zero={zero_no}, W={w_no} → 重跑")
+            log(f"[fullprof] limit codes found: Zero={zero_no}, W={w_no} -> rerun")
             build_pcr(
                 phases, wd / f"{stem}.pcr",
                 title="PolyXRD FullProf Rietveld", scale=scale,
@@ -191,7 +191,7 @@ def auto_refine(
     # .sum; 固定晶胞+零点+W, 仅精修 scale/背景 — 绝对稳。峰宽未知 →
     # 对 W 扫描取最优 (fp2k 单次 <1s)。宽=√W, 0.010≈FWHM 0.10°。
     if not res.ok:
-        log("[fullprof] 常规模式未收敛, 保守模式重试 (固定晶胞/零点/W 扫描) ...")
+        log("[fullprof] no convergence, retrying conservative (fix cell/zero, scan W) ...")
         safe_stem = f"{stem}_safe"
         build_dat(data, wd / f"{safe_stem}.dat", title="PolyXRD FullProf run")
         best: Optional[FullProfResult] = None
@@ -207,7 +207,7 @@ def auto_refine(
                          or (r.rwp or 9e9) < (best.rwp or 9e9)):
                 best = r
             if r.ok:
-                log(f"[fullprof] 保守模式 W={w0:.3f}: Rwp={r.rwp:.2f}%")
+                log(f"[fullprof] conservative W={w0:.3f}: Rwp={r.rwp:.2f}%")
         if best is not None:
             res = best
         else:
@@ -343,7 +343,7 @@ def run(
         log(f"[fullprof] {res.error}")
         return res
 
-    log(f"[fullprof] fp2k 启动: {exe.name} {stem} (workdir={wd.name})")
+    log(f"[fullprof] fp2k start: {exe.name} {stem} (workdir={wd.name})")
     start = time.time()
     try:
         proc = subprocess.run(

@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
 )
 
+from polyxrd.i18n import tr
 from polyxrd.models.peak import Peak
 
 
@@ -40,9 +41,18 @@ class PeakTable(QWidget):
     peak_selected = Signal(object)
     peak_deleted = Signal(object)
 
-    COLUMNS = [
-        "编号", "2θ (°)", "d (Å)", "强度", "FWHM (°)", "hkl", "物相",
-    ]
+    # 表头 (语言相关, 故在构造时求值; "hkl" 为通用记法, 无需翻译)
+    @property
+    def COLUMNS(self) -> list:
+        return [
+            tr("vw.peak_table.col_id"),
+            tr("vw.peak_table.col_2theta"),
+            tr("vw.peak_table.col_d"),
+            tr("vw.peak_table.col_intensity"),
+            tr("vw.peak_table.col_fwhm"),
+            "hkl",
+            tr("vw.peak_table.col_phase"),
+        ]
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -55,9 +65,9 @@ class PeakTable(QWidget):
 
         # 工具栏
         toolbar = QToolBar()
-        toolbar.addAction("删除选中", self._on_delete_selected)
-        toolbar.addAction("清空", self._on_clear)
-        toolbar.addAction("导出CSV", self._on_export_csv)
+        toolbar.addAction(tr("vw.peak_table.act_del_selected"), self._on_delete_selected)
+        toolbar.addAction(tr("vw.peak_table.act_clear"), self._on_clear)
+        toolbar.addAction(tr("vw.peak_table.act_export_csv"), self._on_export_csv)
         layout.addWidget(toolbar)
 
         # 表格
@@ -189,14 +199,14 @@ class PeakTable(QWidget):
 
         menu = QMenu(self)
         has_sel = bool(self._table.selectedItems())
-        act_copy = menu.addAction("复制选中行")
+        act_copy = menu.addAction(tr("vw.peak_table.act_copy_row"))
         act_copy.setEnabled(has_sel)
-        act_del = menu.addAction("删除选中")
+        act_del = menu.addAction(tr("vw.peak_table.act_del_selected"))
         act_del.setEnabled(has_sel)
         menu.addSeparator()
-        menu.addAction("清空", self._on_clear)
+        menu.addAction(tr("vw.peak_table.act_clear"), self._on_clear)
         menu.addSeparator()
-        menu.addAction("导出CSV", self._on_export_csv)
+        menu.addAction(tr("vw.peak_table.act_export_csv"), self._on_export_csv)
 
         chosen = menu.exec(self._table.viewport().mapToGlobal(pos))
         if chosen is act_del:
@@ -229,7 +239,8 @@ class PeakTable(QWidget):
         import csv
 
         path, _ = QFileDialog.getSaveFileName(
-            self, "导出峰列表", "peaks.csv", "CSV文件 (*.csv)"
+            self, tr("vw.peak_table.dlg_export_peaks_caption"), "peaks.csv",
+            tr("vw.peak_table.dlg_export_peaks_filter")
         )
         if path:
             with open(path, "w", newline="", encoding="utf-8") as f:

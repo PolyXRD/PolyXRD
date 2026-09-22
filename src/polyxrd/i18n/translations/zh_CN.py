@@ -3,7 +3,7 @@ translations = {
         "name": "PolyXRD",
         "title": "PolyXRD v{version}",
         "error_title": "程序错误",
-        "error_unhandled": "发生未处理的异常：\n\n{error}\n\n详情请查看控制台输出。",
+        "error_unhandled": "发生未处理的异常：\n\n{error}\n\n详情请查看控制台输出。"
     },
     "menu": {
         "file": {
@@ -19,7 +19,7 @@ translations = {
             "exit": "退出",
             "recent_files": "最近打开",
             "no_recent": "（无最近文件）",
-            "clear_recent": "清除最近记录",
+            "clear_recent": "清除最近记录"
         },
         "data_processing": {
             "title": "数据处理",
@@ -27,12 +27,12 @@ translations = {
             "smooth": "平滑",
             "kalpha2": "Kα2剥离",
             "normalize": "归一化",
-            "reset": "重置为原始数据",
+            "reset": "重置为原始数据"
         },
         "database": {
             "title": "数据库",
             "manage": "外挂数据库管理…",
-            "open_dir": "打开数据库目录",
+            "open_dir": "打开数据库目录"
         },
         "phase_analysis": {
             "title": "物相分析",
@@ -42,7 +42,7 @@ translations = {
             "simulate": "模拟XRD图谱",
             "view_database": "查看参考数据库",
             "cif_browser": "浏览CIF数据库",
-            "cod_search": "COD在线搜索",
+            "cod_search": "COD在线搜索"
         },
         "structure_refinement": {
             "title": "结构精修",
@@ -52,24 +52,24 @@ translations = {
             "wizard_full": "精修向导（分步）",
             "quick_refine": "快速精修",
             "batch_refine": "批量精修",
-            "templates": "模板管理",
+            "templates": "模板管理"
         },
         "view": {
             "title": "视图",
             "language": "切换语言",
             "reset_layout": "重置布局",
-            "dark_theme": "深色主题",
+            "dark_theme": "深色主题"
         },
         "report": {
             "title": "报告",
             "export": "导出",
-            "generate": "生成报告",
+            "generate": "生成报告"
         },
         "help": {
             "title": "帮助",
             "about": "关于",
-            "about_qt": "关于Qt",
-        },
+            "about_qt": "关于Qt"
+        }
     },
     "toolbar": {
         "main": "主工具栏",
@@ -88,7 +88,7 @@ translations = {
         "refine_wizard": "精修向导",
         "refine_wizard_tip": "精修向导：点击打开快速版；点右侧小箭头可在「快速 / 分步」两套向导间选择",
         "cod_search": "COD搜索",
-        "export": "导出",
+        "export": "导出"
     },
     "common": {
         "ok": "确定",
@@ -103,17 +103,11 @@ translations = {
         "retry": "重试",
         "search": "搜索",
         "select_all": "全选",
-        "clear": "清除",
+        "clear": "清除"
     },
     "db_manager": {
         "title": "外挂数据库管理",
-        "intro": (
-            "从 0.10.0 起，安装包不再内置数据库。三个库各自独立打包、各自下载、"
-            "各自挂载——只装其中一个也能正常使用，不必成套安装。\n"
-            "把对应的压缩包解压后，在该槽位点「导入…」选中 .sqlite 文件即可；"
-            "路径会被记住，下次启动自动加载。三个库全部留空时，"
-            "仅内置的 118 种参考物相可用。"
-        ),
+        "intro": "从 0.10.0 起，安装包不再内置数据库。三个库各自独立打包、各自下载、各自挂载——只装其中一个也能正常使用，不必成套安装。\n把对应的压缩包解压后，在该槽位点「导入…」选中 .sqlite 文件即可；路径会被记住，下次启动自动加载。三个库全部留空时，仅内置的 118 种参考物相可用。",
         "pkg_hint": "下载包：{pkg}　→　解压出 {file}",
         "pkg_hint_local": "本库不随发布包分发：请自行准备 {file} 后在此导入",
         "recheck": "重新检测",
@@ -121,21 +115,13 @@ translations = {
         "clear": "取消挂载",
         "import_title": "选择数据库文件",
         "import_failed": "导入失败",
-        "import_failed_body": (
-            "该文件不能用作数据库。\n\n文件：{path}\n原因：{detail}"
-        ),
+        "import_failed_body": "该文件不能用作数据库。\n\n文件：{path}\n原因：{detail}",
         "save_failed_body": "写入配置失败，路径未保存。\n\n{error}",
         "kind_mismatch": "库类型不符",
-        "kind_mismatch_body": (
-            "选中的文件是「{got}」，不是「{want}」。\n\n"
-            "要把它导入到「{got}」槽位吗？"
-        ),
+        "kind_mismatch_body": "选中的文件是「{got}」，不是「{want}」。\n\n要把它导入到「{got}」槽位吗？",
         "import_ok": "导入成功",
         "import_ok_body": "已挂载 {rows} 条记录。\n{path}",
-        "clear_confirm": (
-            "确定要取消挂载「{name}」吗？\n"
-            "取消后将回退到默认位置；若默认位置也没有库，该数据源将不可用。"
-        ),
+        "clear_confirm": "确定要取消挂载「{name}」吗？\n取消后将回退到默认位置；若默认位置也没有库，该数据源将不可用。",
         "status_ok": "已挂载",
         "status_bad": "无法使用",
         "status_missing": "未找到",
@@ -146,28 +132,16 @@ translations = {
         "kind": {
             "cod_inorganics": "COD 无机物库",
             "pdf2": "PDF2-2004 库",
-            "cod_index": "COD 全库索引",
+            "cod_index": "COD 全库索引"
         },
         "notice": {
-            "pdf2": (
-                "【请确认您有正版授权】PDF2-2004 是 ICDD 的商业数据库。"
-                "本软件只提供格式转换与离线索引，不附带任何授权；"
-                "使用前请确认您已获得合法授权。"
-            ),
+            "pdf2": "【请确认您有正版授权】PDF2-2004 是 ICDD 的商业数据库。本软件只提供格式转换与离线索引，不附带任何授权；使用前请确认您已获得合法授权。"
         },
         "first_run_title": "尚未导入数据库",
-        "first_run_body": (
-            "从 0.10.0 起，安装包不再内置数据库。\n\n"
-            "数据库各自独立打包，需要哪个下哪个：\n"
-            "　· COD 无机物库　…-Databases-COD-inorg.zip\n"
-            "　· COD 全库索引　…-Databases-COD-full.zip\n"
-            "　· PDF2-2004 库　不提供下载（ICDD 版权库，需自行准备）\n\n"
-            "解压后从菜单「数据库 ▸ 外挂数据库管理…」逐个导入。\n"
-            "未导入数据库时，程序仍可使用内置的 118 种参考物相。"
-        ),
+        "first_run_body": "从 0.10.0 起，安装包不再内置数据库。\n\n数据库各自独立打包，需要哪个下哪个：\n　· COD 无机物库　…-Databases-COD-inorg.zip\n　· COD 全库索引　…-Databases-COD-full.zip\n　· PDF2-2004 库　不提供下载（ICDD 版权库，需自行准备）\n\n解压后从菜单「数据库 ▸ 外挂数据库管理…」逐个导入。\n未导入数据库时，程序仍可使用内置的 118 种参考物相。"
     },
     "action": {
-        "strip_kalpha2": "Kα2剥离",
+        "strip_kalpha2": "Kα2剥离"
     },
     "batch_refine": {
         "title": "批量精修",
@@ -191,7 +165,7 @@ translations = {
         "export_csv": "导出 CSV",
         "exported": "已导出: {path}",
         "nothing_to_export": "没有可导出的结果",
-        "close": "关闭",
+        "close": "关闭"
     },
     "convert": {
         "title": "谱图格式转换",
@@ -220,8 +194,8 @@ translations = {
             "mdi": "MDI（Jade）",
             "raw": "RAW2 二进制",
             "xrdml": "XML（XRDML）",
-            "json": "JSON（本程序）",
-        },
+            "json": "JSON（本程序）"
+        }
     },
     "busy": {
         "title": "请稍候",
@@ -235,7 +209,7 @@ translations = {
         "identify_profile": "正在进行 Profile Fitting 物相检索，请稍后…",
         "refine": "正在进行 Rietveld 精修，请稍后…",
         "cif_match": "正在匹配 CIF 结构，请稍后…",
-        "repeat_ignored": "已有任务正在执行，请等待其完成",
+        "repeat_ignored": "已有任务正在执行，请等待其完成"
     },
     "dialog": {
         "open_file_title": "打开XRD数据文件",
@@ -243,22 +217,7 @@ translations = {
         "save_as_title": "另存为",
         "export_dir_title": "选择导出目录",
         "about_title": "关于 PolyXRD",
-        "about_text": (
-            "<div style='text-align:center; min-width:360px;'>"
-            "<h2 style='margin:8px 0 4px 0; font-size:20px; color:#1a5276;'>PolyXRD</h2>"
-            "<p style='margin:0 0 12px 0; font-size:13px; color:#555;'>版本 v{version}</p>"
-            "<hr style='border:none; border-top:1px solid #ddd; margin:8px 0;'/>"
-            "<p style='margin:8px 0 4px 0; font-size:12px; color:#333;'>X射线衍射仪数据分析软件</p>"
-            "<p style='margin:4px 0; font-size:11px; color:#666;'>"
-            "物相识别 · 峰拟合 · Rietveld精修 · 离线数据库"
-            "</p>"
-            "<hr style='border:none; border-top:1px solid #ddd; margin:12px 0;'/>"
-            "<p style='margin:4px 0; font-size:11px; color:#555;'>"
-            "联系方式：<a href='mailto:sshztx@outlook.com' style='color:#2980b9; text-decoration:none;'>sshztx@outlook.com</a>"
-            "</p>"
-            "<p style='margin:8px 0 4px 0; font-size:11px; color:#888;'>© 2026 版权所有</p>"
-            "</div>"
-        ),
+        "about_text": "<div style='text-align:center; min-width:360px;'><h2 style='margin:8px 0 4px 0; font-size:20px; color:#1a5276;'>PolyXRD</h2><p style='margin:0 0 12px 0; font-size:13px; color:#555;'>版本 v{version}</p><hr style='border:none; border-top:1px solid #ddd; margin:8px 0;'/><p style='margin:8px 0 4px 0; font-size:12px; color:#333;'>X射线衍射仪数据分析软件</p><p style='margin:4px 0; font-size:11px; color:#666;'>物相识别 · 峰拟合 · Rietveld精修 · 离线数据库</p><hr style='border:none; border-top:1px solid #ddd; margin:12px 0;'/><p style='margin:4px 0; font-size:11px; color:#555;'>联系方式：<a href='mailto:sshztx@outlook.com' style='color:#2980b9; text-decoration:none;'>sshztx@outlook.com</a></p><p style='margin:8px 0 4px 0; font-size:11px; color:#888;'>© 2026 版权所有</p></div>",
         "error": "错误",
         "warning": "警告",
         "info": "信息",
@@ -320,14 +279,11 @@ translations = {
         "project_saved": "项目已保存到：{path}",
         "project_loaded": "项目已加载：{name}",
         "project_save_failed": "项目保存失败：{error}",
-        "project_load_failed": "项目加载失败：{error}",
+        "project_load_failed": "项目加载失败：{error}"
     },
     "status": {
         "ready": "就绪",
-        "no_database": (
-            "未检测到任何外挂数据库，当前仅内置 118 种参考物相可用。"
-            "请从菜单「数据库 ▸ 外挂数据库管理…」导入已解压的数据库文件。"
-        ),
+        "no_database": "未检测到任何外挂数据库，当前仅内置 118 种参考物相可用。请从菜单「数据库 ▸ 外挂数据库管理…」导入已解压的数据库文件。",
         "loading_file": "加载文件: {path}",
         "background_subtract": "执行背景扣除 ({method})",
         "smoothing": "执行平滑 ({method})",
@@ -339,7 +295,7 @@ translations = {
         "database_loading": "加载参考数据库",
         "database_ready": "参考数据库已就绪: {count}种物相",
         "simulating_pattern": "生成模拟XRD图谱",
-        "data_loaded": "数据加载完成: {count} 个数据点",
+        "data_loaded": "数据加载完成",
         "peaks_found": "检测到 {count} 个峰",
         "phase_identified": "物相识别完成: 最佳匹配 '{name}' (分数: {score}%)",
         "refine_completed": "精修完成: wR={wr}%, 物相数={count}",
@@ -349,6 +305,10 @@ translations = {
         "layout_reset": "布局已重置",
         "language_info": "语言: {lang}",
         "wavelength_info": "波长: {wl} Å",
+        "data_loaded_count": "数据加载完成: {count} 个数据点",
+        "data_cleared": "已清除当前数据",
+        "finding_peaks_hi": "执行高精度峰检测 (背景扣除+亚步长精修)",
+        "identifying_profile": "执行 Profile Fitting 物相识别"
     },
     "error": {
         "file_not_found": "文件不存在：{path}",
@@ -357,7 +317,7 @@ translations = {
         "no_data": "请先加载数据",
         "no_phase": "请先识别并选择物相",
         "no_refinement": "没有精修结果可导出。",
-        "load_failed": "文件加载失败：{error}",
+        "load_failed": "文件加载失败",
         "export_failed": "导出失败：{error}",
         "refine_failed": "精修失败：{error}",
         "identify_failed": "物相识别失败：{error}",
@@ -365,6 +325,13 @@ translations = {
         "peak_fit_failed": "峰拟合失败：{error}",
         "background_failed": "背景扣除失败：{error}",
         "smooth_failed": "平滑处理失败：{error}",
+        "no_data_save": "没有数据可保存",
+        "kalpha2_failed": "Kα2剥离失败：{error}",
+        "peak_finder_hi_failed": "高精度峰检测失败：{error}",
+        "no_peaks": "请先检测峰",
+        "no_phase_selected": "请先选择物相",
+        "refine_window_no_overlap": "2θ 窗口 [{lo}, {hi}] 与数据范围 [{dlo}, {dhi}] 没有交集, 无法精修",
+        "refine_window_too_few": "2θ 窗口 [{lo}, {hi}] 内仅 {n} 个数据点, 不足以精修 (需 ≥ 3), 请放宽区间"
     },
     "view": {
         "y_scale": {
@@ -373,7 +340,7 @@ translations = {
             "log": "对数",
             "sqrt": "方根",
             "menu_title": "纵坐标刻度",
-            "hint": "纵坐标: {mode}  (左键点击 Y 轴切换 / 右键选择)",
+            "hint": "纵坐标: {mode}  (左键点击 Y 轴切换 / 右键选择)"
         },
         "data": {
             "title": "数据",
@@ -389,7 +356,7 @@ translations = {
             "peak_distance": "最小距离:",
             "btn_find_peaks": "检测峰",
             "btn_fit_peaks": "拟合峰",
-            "label_experimental": "实验数据",
+            "label_experimental": "实验数据"
         },
         "phase": {
             "title": "物相分析",
@@ -429,8 +396,8 @@ translations = {
                 "status_maybe": "可能: {elements}",
                 "status_exclude": "没有: {elements}",
                 "status_closed_world": "未勾选元素默认按「没有」排除",
-                "hint": "点击元素切换状态: 无 → 含有(绿) → 可能(黄) → 没有(红) → 必有(深绿)",
-            },
+                "hint": "点击元素切换状态: 无 → 含有(绿) → 可能(黄) → 没有(红) → 必有(深绿)"
+            }
         },
         "refinement": {
             "title": "结构精修",
@@ -438,7 +405,7 @@ translations = {
             "group_result": "精修结果",
             "group_phases": "物相含量",
             "label_compare": "精修对比图",
-            "label_residual": "残差图",
+            "label_residual": "残差",
             "label_engine": "引擎:",
             "label_strategy": "策略:",
             "label_max_cycles": "最大循环:",
@@ -448,11 +415,7 @@ translations = {
             "label_cycles": "循环次数:",
             "btn_start_refine": "开始精修",
             "wizard_style": "按精修向导的方式（推荐）",
-            "wizard_style_tip": (
-                "采用精修向导的推荐配置：引擎 builtin、策略 sequential、"
-                "峰形 pseudo-voigt、背景 snip、最大循环 20，并在下方实时输出"
-                "精修过程日志。取消勾选后可自行调整参数。"
-            ),
+            "wizard_style_tip": "采用精修向导的推荐配置：引擎 builtin、策略 sequential、峰形 pseudo-voigt、背景 snip、最大循环 20，并在下方实时输出精修过程日志。取消勾选后可自行调整参数。",
             "group_log": "精修过程日志",
             "log_placeholder": "执行精修后，这里会像跑码一样实时输出过程数据…",
             "btn_clear_log": "清空日志",
@@ -472,8 +435,7 @@ translations = {
             "col_b": "b(Å)",
             "col_c": "c(Å)",
             "label_observed": "实验",
-            "label_simulated": "模拟",
-            "label_residual": "残差",
+            "label_simulated": "模拟"
         },
         "report": {
             "title": "报告",
@@ -481,7 +443,7 @@ translations = {
             "btn_generate": "生成报告",
             "btn_export": "导出",
             "label_format": "导出格式:",
-            "no_result": "没有精修结果可显示。\n\n请先在\"结构精修\"页面执行Rietveld精修。",
+            "no_result": "没有精修结果可显示。\n\n请先在\"结构精修\"页面执行Rietveld精修。"
         },
         "peak_table": {
             "col_id": "编号",
@@ -493,8 +455,8 @@ translations = {
             "col_phase": "物相",
             "action_delete": "删除选中",
             "action_clear": "清空",
-            "action_export_csv": "导出CSV",
-        },
+            "action_export_csv": "导出CSV"
+        }
     },
     "sci": {
         "two_theta": "2θ",
@@ -515,7 +477,7 @@ translations = {
         "match_score": "匹配分数",
         "gof": "GOF",
         "rwp": "Rwp",
-        "wr": "wR",
+        "wr": "wR"
     },
     "params": {
         "panel_title": "参数面板",
@@ -572,7 +534,7 @@ translations = {
         "database_source": "数据来源",
         "match_tolerance": "匹配容差 (°)",
         "match_top_n": "返回候选数",
-        "match_elements": "元素过滤",
+        "match_elements": "元素过滤"
     },
     "wizard": {
         "btn_prev": "上一步",
@@ -585,7 +547,7 @@ translations = {
             "phase": "选择物相",
             "params": "参数设置",
             "preview": "预览确认",
-            "execute": "执行精修",
+            "execute": "执行精修"
         },
         "data_page": {
             "info_title": "数据信息",
@@ -598,7 +560,7 @@ translations = {
             "range_title": "精修范围",
             "range_min": "起始 2θ (°)",
             "range_max": "结束 2θ (°)",
-            "range_invalid": "起始2θ必须小于结束2θ",
+            "range_invalid": "起始2θ必须小于结束2θ"
         },
         "phase_page": {
             "tab_cif": "CIF 数据库",
@@ -607,9 +569,7 @@ translations = {
             "cif_list_searching": "正在检索挂载数据库…",
             "cif_list_browsing": "正在检索已选物相的候选 CIF…",
             "cif_for_phase": "{phase} → {cif}",
-            "cif_list_hint": ("上方列表为可选的 CIF 结构；输入化学式 / 矿物名 / COD 编号"
-                              "可检索挂载库（同一物相可能有多条 CIF）。下方为已选作"
-                              "初始结构的物相。"),
+            "cif_list_hint": "上方列表为可选的 CIF 结构；输入化学式 / 矿物名 / COD 编号可检索挂载库（同一物相可能有多条 CIF）。下方为已选作初始结构的物相。",
             "cif_list_count": "已列出 {count} 条 CIF",
             "cif_list_count_builtin": "内置矿物相 {count} 条（搜索可展开库内同物相多条 CIF）",
             "cif_list_no_db": "（未挂载数据库，仅内置矿物相，可点「添加选中物相」由程序自动匹配 CIF）",
@@ -633,7 +593,7 @@ translations = {
             "col_space_group": "空间群",
             "col_action": "操作",
             "btn_clear": "清空全部",
-            "phase_already_added": "物相 '{name}' 已在列表中",
+            "phase_already_added": "物相 '{name}' 已在列表中"
         },
         "params_page": {
             "template_title": "模板选择",
@@ -644,7 +604,7 @@ translations = {
             "strategy": "策略",
             "background": "背景方法",
             "peak_shape": "峰形模型",
-            "max_cycles": "最大循环数",
+            "max_cycles": "最大循环数"
         },
         "preview": {
             "title": "精修配置预览",
@@ -656,7 +616,7 @@ translations = {
             "phase_section": "物相列表",
             "no_phase": "无物相",
             "params_section": "精修参数",
-            "advanced_section": "高级参数",
+            "advanced_section": "高级参数"
         },
         "execute_page": {
             "progress_title": "精修进度",
@@ -684,14 +644,373 @@ translations = {
             "log_result_quality": "质量评级: {quality}",
             "log_converged": "精修已收敛",
             "log_not_converged": "精修未完全收敛",
-            "log_phase": "物相 {name}: 质量分数 {weight}%",
+            "log_phase": "物相 {name}: 质量分数 {weight}%"
         },
         "template": {
             "save_title": "保存模板",
             "save_name_prompt": "请输入模板名称:",
             "default_description": "自定义精修模板",
             "save_success": "模板 '{name}' 保存成功",
-            "save_failed": "模板保存失败: {error}",
-        },
+            "save_failed": "模板保存失败: {error}"
+        }
     },
+    "vw": {
+        "element_periodic_table": {
+            "state_must_have": "必有",
+            "state_must": "含有",
+            "state_maybe": "可能",
+            "state_exclude": "没有",
+            "tip_must_have": "必有: 物相必须全部含有这些元素 (AND)",
+            "tip_must": "含有: 物相由这些元素构成, 至少含其中一个",
+            "tip_maybe": "可能: 允许出现但不要求 (只放宽候选元素池)",
+            "tip_exclude": "没有: 含任一这些元素的物相被淘汰",
+            "tip_default": "未勾选 = 没有 (默认排除)",
+            "btn_light": "轻元素设为含有 (O,C,H,N,S)",
+            "btn_light_tip": "EDX/EDS 常测不出轻元素, 但 XRD 中氢氧化物/碳酸盐/水合物极常见。\n一键把 O/C/H/N/S 设为「含有」, 避免它们因未勾选而被默认排除。",
+            "btn_reset": "重置选择",
+            "status_must_have": "必有: {items}",
+            "status_must": "含有: {items}",
+            "status_maybe": "可能: {items}",
+            "status_exclude": "没有: {items}",
+            "status_none": "未选择任何元素 → 全库搜索 (不做元素过滤)",
+            "status_excluded": "\n未勾选 {count} 种元素默认按「没有」排除: {preview}"
+        },
+        "element_filter_dialog": {
+            "title": "元素过滤 - 四态选择",
+            "btn_clear": "清空选择",
+            "btn_ok": "确定",
+            "btn_cancel": "取消",
+            "summary_must_have": "<b>必有 (全部含):</b> {items}",
+            "summary_must": "<b>含有 (至少一个):</b> {items}",
+            "summary_maybe": "<b>可能:</b> {items}",
+            "summary_exclude": "<b>没有:</b> {items}",
+            "summary_none": "当前过滤: 未选择任何元素 (将使用全库搜索)",
+            "summary_prefix": "当前过滤: ",
+            "summary_excluded": "<br><span style='color:#b71c1c;'>未勾选 {count} 种元素默认按「没有」排除 (闭环): {preview}</span>",
+            "summary_open_world": "<br><span style='color:#b71c1c;'>只勾了「没有」→ 开放世界, 仅排除这些元素, 其余不限</span>"
+        },
+        "database_dialog": {
+            "file_filter": "SQLite 数据库 (*.sqlite *.sqlite3 *.db);;所有文件 (*)"
+        },
+        "structure_view": {
+            "placeholder": "(无结构)"
+        },
+        "report_view": {
+            "btn_preview": "生成报告",
+            "label_export_format": "导出格式:",
+            "btn_export": "导出",
+            "group_preview": "报告预览",
+            "no_result": "没有精修结果可显示。\n\n请先在\"结构精修\"页面执行Rietveld精修。",
+            "export_dir_title": "选择导出目录"
+        },
+        "plot_widget": {
+            "add_peak_btn": "添加峰",
+            "reset_view_btn": "重置视图",
+            "export_img_btn": "导出图片",
+            "y_scale_hint_tip": "左键点击 Y 轴区域循环切换; 右键点击图内任意位置弹出选择菜单。\n对数 / 方根刻度下刻度标签仍是真实强度值。",
+            "export_img_dlg_title": "导出图片",
+            "export_img_filter": "图片文件 (*.png *.pdf *.svg *.eps)"
+        },
+        "pattern_display": {
+            "y_scale_hint_tip": "左键点击 Y 轴区域循环切换; 右键点击图内任意位置弹出选择菜单。\n对数 / 方根刻度下刻度标签仍是真实强度值。",
+            "legend_exp": "实验数据",
+            "legend_calc": "计算谱",
+            "legend_resid": "残差"
+        },
+        "main_window": {
+            "phase_confirmed_status": "已确认物相: {phase_name}，切换到结构精修",
+            "exp_data_title": "实验数据",
+            "export_cif_ctx": "导出 CIF 文件…",
+            "view_struct_ctx": "查看结构详情…",
+            "export_cif_dlg_title": "导出 CIF 文件",
+            "export_cif_filter": "CIF 文件 (*.cif)",
+            "choose_cif_dir": "选择 CIF 导出目录",
+            "export_cif_result_title": "导出 CIF",
+            "export_cif_result": "成功 {ok} 个, 失败 {failed_count} 个:\n{failed_details}",
+            "exported_cif_status": "已导出 {ok} 个 CIF 文件",
+            "cell_unknown": "晶胞: --",
+            "phase_detail": "• {name}  {formula}\n  空间群: {space_group}   位点: {n_sites}\n  {cell}",
+            "struct_detail_title": "结构详情"
+        },
+        "phase_view": {
+            "group_phase": "物相识别",
+            "btn_element_filter": "元素过滤 (周期表)",
+            "tip_element_filter": "点击打开元素周期表过滤对话框",
+            "btn_clear_filter": "清除",
+            "no_element_filter": "未选择元素过滤",
+            "label_db_source": "数据库源:",
+            "btn_profile_fitting": "Profile Fitting (推荐)",
+            "tip_profile_fitting": "基于峰形拟合的物相识别，无需事先寻峰。\n直接比较整个XRD曲线形貌，适用于峰重叠或背景复杂的情况。",
+            "label_tolerance": "容差:",
+            "tip_tolerance": "2θ 匹配容差：参考峰与实验峰的距离在此范围内视为匹配",
+            "btn_traditional": "传统 Search/Match",
+            "tip_traditional": "传统物相识别方法，需要先进行峰检测。\n基于FOM(Figure of Merit)算法匹配峰位。",
+            "btn_quick": "快速 (无过滤)",
+            "btn_select_phase": "选中物相 →",
+            "btn_auto_mix": "自动混合分析",
+            "tip_auto_mix": "对当前候选物相进行多相线性组合拟合，\n自动计算各物相的权重比例（wt%）",
+            "btn_clear_sel": "清空",
+            "btn_overlay_calc": "叠加计算谱",
+            "btn_show_resid": "显示残差",
+            "filter_must_have": "必有: {items}",
+            "filter_has": "含有: {items}",
+            "filter_maybe": "可能: {items}",
+            "filter_exclude": "没有: {items}",
+            "filter_prefix": "过滤: ",
+            "filter_default_exclude": " (未勾选元素默认排除)",
+            "db_builtin": "内置库 (118 物相)",
+            "db_cod_inorg": "COD 无机物库",
+            "db_cod_full": "COD 全库",
+            "db_merged": "内置+COD全库合并",
+            "db_pdf2": "PDF2-2004 库",
+            "db_label_count": "{base} ({count:,})",
+            "db_unmounted": " (未挂载)",
+            "db_combo_tip_main": "选择物相检索使用的数据库 (作用于传统 Search/Match 与快速识别):\n· 内置库: 程序自带 118 种常见物相 (最快)\n· COD 无机物库: 外挂 71,199 物相 (预计算 d-I 峰, Hanawalt 预筛)\n· COD 全库: 外挂 113,223 条 CIF 索引 (本地检索)\n· 合并: 内置库 + COD 全库结果合并排序\n· PDF2-2004: ICDD PDF-2 2004 版 163,834 物相, 自带空间群与晶胞\n  (晶胞 81.8% / 空间群 72.8%), 命中相可直接作为精修起始结构。\n",
+            "db_combo_tip_import": "数据库不随安装包分发, 请单独下载解压后在\n菜单「数据库 ▸ 外挂数据库管理…」中导入。",
+            "pdf2_coverage": "  本机库: {total} 相, 空间群 {sg}%, 晶胞 {cell}%。\n",
+            "db_unmounted_hint": "该数据库未挂载。请从菜单「数据库 ▸ 外挂数据库管理…」导入已解压的库文件。",
+            "no_match": "未找到匹配物相",
+            "result_profile": "Profile Fitting 结果 [{db_src}] (相关系数越接近100%越好)",
+            "result_search": "Search/Match 结果 [{db_src}] (FOM值越低越好)",
+            "cand_profile": "{name} - 匹配度: {score:.1f}% (R={rfactor:.3f}){sg}{elem}",
+            "cand_fom": "{name} - FOM: {score:.3f}{sg}{elem}",
+            "detail_formula": "化学式: {formula}",
+            "detail_sg": "空间群: {sg}",
+            "detail_cell": "晶胞: a={a:.4f} b={b:.4f} c={c:.4f} Å",
+            "detail_angles": "      α={a:.2f} β={b:.2f} γ={c:.2f}°",
+            "detail_volume": "      V={v:.2f} Å³",
+            "detail_refpeaks": "参考峰: {n} 条",
+            "act_export_cif": "导出 CIF 文件…",
+            "dlg_export_cif_title": "导出 CIF 文件",
+            "dlg_export_cif_filter": "CIF 文件 (*.cif)",
+            "msg_export_cif": "导出 CIF",
+            "msg_write_fail": "写盘失败: {exc}",
+            "msg_tip": "提示",
+            "msg_pick_phase": "请先在列表中选择一个物相",
+            "dlg_confirm_phase_title": "确认物相",
+            "dlg_confirm_phase_body": "已选择物相: <b>{name}</b>\n\n是否切换到结构精修页面进行 Rietveld 精修？\n\n(点击\"否\"可继续选择其他物相)",
+            "msg_run_identify": "请先执行物相识别",
+            "msg_load_xrd": "请先加载 XRD 数据",
+            "msg_no_mix_phase": "无可用物相进行混合分析"
+        },
+        "peak_table": {
+            "col_id": "编号",
+            "col_2theta": "2θ (°)",
+            "col_d": "d (Å)",
+            "col_intensity": "强度",
+            "col_fwhm": "FWHM (°)",
+            "col_phase": "物相",
+            "act_del_selected": "删除选中",
+            "act_clear": "清空",
+            "act_export_csv": "导出CSV",
+            "act_copy_row": "复制选中行",
+            "dlg_export_peaks_caption": "导出峰列表",
+            "dlg_export_peaks_filter": "CSV文件 (*.csv)"
+        },
+        "peak_match_table": {
+            "col_2theta": "2θ (°)",
+            "col_d": "d (Å)",
+            "col_phase": "归属物相",
+            "title": "峰归属",
+            "title_count": "峰归属 ({n})",
+            "unexplained": "—未解释—"
+        },
+        "data_view": {
+            "data_preprocess": "数据预处理",
+            "bg_method": "背景方法:",
+            "exec_bg_subtract": "执行背景扣除",
+            "smooth_method": "平滑方法:",
+            "window_size": "窗口大小:",
+            "exec_smooth": "执行平滑",
+            "strip_kalpha2": "Kα2剥离",
+            "peak_detection": "峰检测",
+            "min_peak_height": "最小峰高:",
+            "peak_distance_tip": "两峰最小 2θ 间距 (度)。XRD 峰半高宽通常 0.05~0.5°, 建议 0.2~1.0; 设得过大 (如 5°) 会丢弃间距近的强线, 损害物相识别召回。",
+            "min_distance": "最小距离:",
+            "high_precision": "高精度(背景扣除+亚步长)",
+            "peak_hi_tip": "启用高精度峰检测: 自动背景扣除 + 亚步长峰位精修 + 重叠峰联合拟合\n峰位精度可达 ~0.001°, 弱峰更易检出。取消则用传统高度阈值法。",
+            "detect_peaks": "检测峰",
+            "fit_peaks": "拟合峰",
+            "experimental_data": "实验数据"
+        },
+        "refinement_view": {
+            "peak_shape": "峰形:",
+            "init_fwhm": "初始 FWHM:",
+            "bg_method": "背景方法:",
+            "zero_shift": "零点偏移:",
+            "cancel": "取消",
+            "time_spent": "耗时:",
+            "selected_phases": "已勾选物相",
+            "export_cif": "导出 CIF 文件…",
+            "export_cif_title": "导出 CIF 文件",
+            "cif_filter": "CIF 文件 (*.cif)",
+            "export_cif_warn_title": "导出 CIF",
+            "export_cif_write_failed": "写盘失败: {exc}",
+            "fullprof_busy": "FullProf 外部精修"
+        },
+        "external_engines_group": {
+            "title": "外部精修程序",
+            "status_tip": "{title} 可用状态",
+            "placeholder": "自动探测, 或浏览选择可执行文件",
+            "browse": "浏览…",
+            "detect": "检测",
+            "detect_tip": "重新自动探测本机安装",
+            "start_refine": "启动精修",
+            "launch_gui": "拉起 GUI",
+            "run_tip": "使用 {title} 精修当前数据与已勾选物相",
+            "detected_placeholder": "自动探测: {path}",
+            "status_ok": "可用",
+            "status_bad": "配置了但不可用",
+            "status_off": "未配置且未探测到",
+            "light_tip": "{title}: {tip}",
+            "select_exe": "选择 {title} 可执行文件",
+            "exe_filter": "可执行文件 (*.exe *.jar *.bat);;所有文件 (*)",
+            "log_detected": "[外部程序] {title}: 探测到 {path}",
+            "log_not_detected": "[外部程序] {title}: 未探测到本机安装",
+            "log_unavailable": "[外部程序] {title} 不可用: 请先浏览选择或检测安装路径",
+            "log_need_data": "[外部程序] 请先加载数据",
+            "log_need_phases": "[外部程序] 请先在物相分析页勾选物相",
+            "log_gsas2_wd": "[gsas2] 工作目录: {wd}",
+            "log_maud_wd": "[maud] 工作目录: {wd}",
+            "log_launch_failed": "[外部程序] {title} 启动失败: {exc}"
+        },
+        "refinement_wizard": {
+            "tpl_builtin": "[内置] {name}",
+            "tpl_user": "[用户] {name}"
+        }
+    },
+    "elem": {
+        "Ac": "锕",
+        "Ag": "银",
+        "Al": "铝",
+        "Am": "镅",
+        "Ar": "氩",
+        "As": "砷",
+        "At": "砹",
+        "Au": "金",
+        "B": "硼",
+        "Ba": "钡",
+        "Be": "铍",
+        "Bi": "铋",
+        "Bk": "锫",
+        "Br": "溴",
+        "C": "碳",
+        "Ca": "钙",
+        "Cd": "镉",
+        "Ce": "铈",
+        "Cf": "锎",
+        "Cl": "氯",
+        "Cm": "锔",
+        "Co": "钴",
+        "Cr": "铬",
+        "Cs": "铯",
+        "Cu": "铜",
+        "Dy": "镝",
+        "Er": "铒",
+        "Es": "锿",
+        "Eu": "铕",
+        "F": "氟",
+        "Fe": "铁",
+        "Fm": "镄",
+        "Fr": "钫",
+        "Ga": "镓",
+        "Gd": "钆",
+        "Ge": "锗",
+        "H": "氢",
+        "He": "氦",
+        "Hf": "铪",
+        "Hg": "汞",
+        "Ho": "钬",
+        "I": "碘",
+        "In": "铟",
+        "Ir": "铱",
+        "K": "钾",
+        "Kr": "氪",
+        "La": "镧",
+        "Li": "锂",
+        "Lr": "铹",
+        "Lu": "镥",
+        "Md": "钔",
+        "Mg": "镁",
+        "Mn": "锰",
+        "Mo": "钼",
+        "N": "氮",
+        "Na": "钠",
+        "Nb": "铌",
+        "Nd": "钕",
+        "Ne": "氖",
+        "Ni": "镍",
+        "No": "锘",
+        "Np": "镎",
+        "O": "氧",
+        "Os": "锇",
+        "P": "磷",
+        "Pa": "镤",
+        "Pb": "铅",
+        "Pd": "钯",
+        "Pm": "钷",
+        "Po": "钋",
+        "Pr": "镨",
+        "Pt": "铂",
+        "Pu": "钚",
+        "Ra": "镭",
+        "Rb": "铷",
+        "Re": "铼",
+        "Rh": "铑",
+        "Rn": "氡",
+        "Ru": "钌",
+        "S": "硫",
+        "Sb": "锑",
+        "Sc": "钪",
+        "Se": "硒",
+        "Si": "硅",
+        "Sm": "钐",
+        "Sn": "锡",
+        "Sr": "锶",
+        "Ta": "钽",
+        "Tb": "铽",
+        "Tc": "锝",
+        "Te": "碲",
+        "Th": "钍",
+        "Ti": "钛",
+        "Tl": "铊",
+        "Tm": "铥",
+        "U": "铀",
+        "V": "钒",
+        "W": "钨",
+        "Xe": "氙",
+        "Y": "钇",
+        "Yb": "镱",
+        "Zn": "锌",
+        "Zr": "锆"
+    },
+    "quality": {
+        "excellent": "优秀",
+        "good": "良好",
+        "fair": "一般",
+        "poor": "差",
+        "bad": "很差"
+    },
+    "report": {
+        "title": "PolyXRD Rietveld 精修报告",
+        "phase_count": "物相数量: {count}",
+        "cycles": "精修循环: {cycles}",
+        "converged": "收敛状态: 是",
+        "not_converged": "收敛状态: 否",
+        "time": "耗时: {time} 秒",
+        "quality_section": "精修质量指标",
+        "phase_section": "物相分析",
+        "rwp_line": "  Rwp (加权轮廓R): {value} %",
+        "rexp_line": "  Rexp (期望R):    {value} %",
+        "rb_line": "  Rb (Bragg R):    {value} %",
+        "gof_line": "  GOF (=Rwp/Rexp): {value}",
+        "quality_line": "  质量评级:       {value}",
+        "phase_header": "物相 {index}: {name}",
+        "formula": "  化学式: {formula}",
+        "weight_fraction": "  质量分数: {value} %",
+        "cell_params": "  晶胞参数: a={a}, b={b}, c={c} Å",
+        "cell_angles": "            α={alpha}, β={beta}, γ={gamma}°",
+        "cell_volume": "  晶胞体积: {volume} Å³",
+        "total_fraction": "物相总含量: {value} %"
+    }
 }

@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
 )
 
+from polyxrd.i18n import tr
 from polyxrd.views.widgets.element_periodic_table import ElementPeriodicTable
 
 
@@ -33,7 +34,7 @@ class ElementFilterDialog(QDialog):
 
     def __init__(self, parent=None, initial_filter: Optional[dict] = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("元素过滤 - 四态选择")
+        self.setWindowTitle(tr("vw.element_filter_dialog.title"))
         self.setMinimumSize(900, 620)
         self.resize(1000, 670)
 
@@ -65,7 +66,7 @@ class ElementFilterDialog(QDialog):
         # 按钮
         btn_layout = QHBoxLayout()
 
-        self._btn_clear = QPushButton("清空选择")
+        self._btn_clear = QPushButton(tr("vw.element_filter_dialog.btn_clear"))
         self._btn_clear.clicked.connect(self._on_clear)
         btn_layout.addWidget(self._btn_clear)
 
@@ -74,8 +75,8 @@ class ElementFilterDialog(QDialog):
         button_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
-        button_box.button(QDialogButtonBox.StandardButton.Ok).setText("确定")
-        button_box.button(QDialogButtonBox.StandardButton.Cancel).setText("取消")
+        button_box.button(QDialogButtonBox.StandardButton.Ok).setText(tr("vw.element_filter_dialog.btn_ok"))
+        button_box.button(QDialogButtonBox.StandardButton.Cancel).setText(tr("vw.element_filter_dialog.btn_cancel"))
         button_box.accepted.connect(self.accept)
         button_box.rejected.connect(self.reject)
         btn_layout.addWidget(button_box)
@@ -90,33 +91,32 @@ class ElementFilterDialog(QDialog):
         must_have, must, maybe, exclude = self._table.get_selection()
         parts = []
         if must_have:
-            parts.append(f"<b>必有 (全部含):</b> {', '.join(must_have)}")
+            parts.append(tr("vw.element_filter_dialog.summary_must_have",
+                            items=', '.join(must_have)))
         if must:
-            parts.append(f"<b>含有 (至少一个):</b> {', '.join(must)}")
+            parts.append(tr("vw.element_filter_dialog.summary_must",
+                            items=', '.join(must)))
         if maybe:
-            parts.append(f"<b>可能:</b> {', '.join(maybe)}")
+            parts.append(tr("vw.element_filter_dialog.summary_maybe",
+                            items=', '.join(maybe)))
         if exclude:
-            parts.append(f"<b>没有:</b> {', '.join(exclude)}")
+            parts.append(tr("vw.element_filter_dialog.summary_exclude",
+                            items=', '.join(exclude)))
 
         if not parts:
-            self._summary_label.setText("当前过滤: 未选择任何元素 (将使用全库搜索)")
+            self._summary_label.setText(tr("vw.element_filter_dialog.summary_none"))
             return
 
-        text = "当前过滤: " + " | ".join(parts)
+        text = tr("vw.element_filter_dialog.summary_prefix") + " | ".join(parts)
         if must_have or must or maybe:
             excluded = sorted(
                 set(self._table._buttons) - set(must_have) - set(must) - set(maybe)
             )
             preview = ", ".join(excluded[:14]) + ("…" if len(excluded) > 14 else "")
-            text += (
-                f"<br><span style='color:#b71c1c;'>未勾选 {len(excluded)} 种元素默认按"
-                f"「没有」排除 (闭环): {preview}</span>"
-            )
+            text += tr("vw.element_filter_dialog.summary_excluded",
+                       count=len(excluded), preview=preview)
         else:
-            text += (
-                "<br><span style='color:#b71c1c;'>只勾了「没有」→ 开放世界, "
-                "仅排除这些元素, 其余不限</span>"
-            )
+            text += tr("vw.element_filter_dialog.summary_open_world")
         self._summary_label.setText(text)
 
     def _on_clear(self) -> None:

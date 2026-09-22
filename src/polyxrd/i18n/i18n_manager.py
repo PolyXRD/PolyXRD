@@ -65,7 +65,9 @@ class I18nManager(QObject):
         self._initialized = True
         self._current_language: str = Language.ZH_CN
         self._translations: dict[str, dict] = {}
+        self._fallback: dict[str, dict] = {}
         self._load_translation(self._current_language)
+        self._fallback = dict(self._translations)
 
     @property
     def current_language(self) -> str:
@@ -99,14 +101,29 @@ class I18nManager(QObject):
         return text
 
     def _resolve_key(self, key: str) -> str:
+        """按 当前语言 -> 中文回退 -> 原键 的顺序解析。
+
+        v1.1.1: 之前缺键直接返回原键, 英文界面会漏出 "vw.data_view.xxx" 这类
+        内部键名; 现在缺键先回退中文 (中文是基线、最完整), 再兜底原键。
+        """
+        text = self._lookup(self._translations, key)
+        if text is not None:
+            return text
+        text = self._lookup(self._fallback, key)
+        if text is not None:
+            return text
+        return key
+
+    @staticmethod
+    def _lookup(table: dict, key: str) -> Optional[str]:
         parts = key.split(".")
-        node: Any = self._translations
+        node: Any = table
         for part in parts:
             if isinstance(node, dict) and part in node:
                 node = node[part]
             else:
-                return key
-        return node if isinstance(node, str) else key
+                return None
+        return node if isinstance(node, str) else None
 
     def _load_translation(self, language: str) -> None:
         try:
@@ -115,6 +132,7 @@ class I18nManager(QObject):
             )
             self._translations = getattr(module, "translations", {})
         except ImportError:
+            # 没有对应翻译文件的语言 (de/fr/es/ko/ru): 回退中文, 不要整屏键名
             self._translations = {}
 
     @classmethod

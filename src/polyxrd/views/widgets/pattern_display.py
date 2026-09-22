@@ -30,6 +30,7 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QLabel, QHBoxLayout, QWidget, QVBoxLayout
 
 from polyxrd.models.xrd_data import XRDData
+from polyxrd.i18n import tr
 from polyxrd.services.phase_display import (
     COLOR_CALC, COLOR_EXP, COLOR_RESIDUAL, COLOR_UNMATCHED,
     PeakAssignment, phase_color,
@@ -213,7 +214,8 @@ class PatternDisplayWidget(QWidget):
         off = -0.15 * self._main_ymax
         yr = np.asarray(y_res, dtype=float) + off
         ln = self._ax_main.plot(np.asarray(two_theta), yr, color=COLOR_RESIDUAL,
-                                linewidth=0.8, alpha=0.6, label="残差")[0]
+                                linewidth=0.8, alpha=0.6,
+                                label=tr("vw.pattern_display.legend_resid"))[0]
         ln.set_gid("resid"); self._artists.append(ln)
         zero = self._ax_main.axhline(off, color=COLOR_RESIDUAL, linewidth=0.5,
                                      alpha=0.3)

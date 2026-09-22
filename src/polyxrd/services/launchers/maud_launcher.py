@@ -115,16 +115,16 @@ def launch_gui(
         raise RuntimeError(f"未找到 MAUD 安装: {exc}") from exc
 
     xy_path, cif_paths = export_inputs(data, phases, workdir, stem=stem)
-    log(f"[maud] 数据导出: {xy_path.name} + {len(cif_paths)} 份 CIF")
+    log(f"[maud] export: {xy_path.name} + {len(cif_paths)} CIF")
 
     # v0.15.1: 默认走官方 maud.bat (与用户双击启动行为一致), 无 bat 才拼 java 命令
     bat = maud_root / "maud.bat"
     if bat.exists():
         cmd = [str(bat)]
-        log(f"[maud] 拉起 MAUD GUI: {bat}")
+        log(f"[maud] launch MAUD GUI: {bat}")
     else:
         cmd = build_gui_command(maud_root)
-        log(f"[maud] 拉起 MAUD GUI: {maud_root.name}")
+        log(f"[maud] launch MAUD GUI: {maud_root.name}")
     kwargs: dict = {"cwd": str(workdir)}
     import os
 

@@ -700,7 +700,7 @@ class MaudEngine:
                 on_progress=on_progress,
             )
         except MaudEngineError as e:
-            logger.warning("MAUD 引擎失败, 由调用方决定是否兜底: %s", e)
+            logger.warning("MAUD engine failed, caller decides fallback: %s", e)
             raise
 
         # 结果回读

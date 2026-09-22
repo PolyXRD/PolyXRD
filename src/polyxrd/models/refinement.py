@@ -10,6 +10,7 @@ from typing import Optional
 
 import numpy as np
 
+from polyxrd.i18n import tr
 from polyxrd.models.phase import Phase
 
 
@@ -53,62 +54,71 @@ class RefinementResult:
 
     @property
     def quality_grade(self) -> str:
-        """质量评级 (根据R因子)"""
+        """质量评级 (根据R因子); 文案随界面语言, 故走 i18n。"""
         if self.wR < 2.0:
-            return "优秀"
-        elif self.wR < 5.0:
-            return "良好"
-        elif self.wR < 10.0:
-            return "一般"
-        elif self.wR < 20.0:
-            return "差"
-        else:
-            return "很差"
+            return tr("quality.excellent")
+        if self.wR < 5.0:
+            return tr("quality.good")
+        if self.wR < 10.0:
+            return tr("quality.fair")
+        if self.wR < 20.0:
+            return tr("quality.poor")
+        return tr("quality.bad")
 
     def summary(self) -> str:
-        """生成文本摘要报告"""
+        """生成文本摘要报告 (随当前界面语言本地化)。"""
         lines = []
         lines.append("=" * 60)
-        lines.append("PolyXRD Rietveld精修报告")
+        lines.append(tr("report.title"))
         lines.append("=" * 60)
         lines.append("")
-        lines.append(f"物相数量: {len(self.phases)}")
-        lines.append(f"精修循环: {self.num_cycles}")
-        lines.append(f"收敛状态: {'是' if self.converged else '否'}")
-        lines.append(f"耗时: {self.time_seconds:.1f} 秒")
+        lines.append(tr("report.phase_count", count=len(self.phases)))
+        lines.append(tr("report.cycles", cycles=self.num_cycles))
+        lines.append(
+            tr("report.converged") if self.converged else tr("report.not_converged")
+        )
+        lines.append(tr("report.time", time=f"{self.time_seconds:.1f}"))
         lines.append("")
         lines.append("-" * 40)
-        lines.append("精修质量指标")
+        lines.append(tr("report.quality_section"))
         lines.append("-" * 40)
-        lines.append(f"  Rwp (加权轮廓R): {self.Rwp:.4f} %")
-        lines.append(f"  Rexp (期望R):    {self.Rexp:.4f} %")
-        lines.append(f"  Rb (Bragg R):    {self.Rb:.4f} %")
-        lines.append(f"  GOF (=Rwp/Rexp): {self.GOF:.4f}")
-        lines.append(f"  质量评级:       {self.quality_grade}")
+        lines.append(tr("report.rwp_line", value=f"{self.Rwp:.4f}"))
+        lines.append(tr("report.rexp_line", value=f"{self.Rexp:.4f}"))
+        lines.append(tr("report.rb_line", value=f"{self.Rb:.4f}"))
+        lines.append(tr("report.gof_line", value=f"{self.GOF:.4f}"))
+        lines.append(tr("report.quality_line", value=self.quality_grade))
         lines.append("")
         lines.append("-" * 40)
-        lines.append("物相分析")
+        lines.append(tr("report.phase_section"))
         lines.append("-" * 40)
 
         total_fraction = 0.0
         for i, phase in enumerate(self.phases, 1):
-            lines.append(f"\n物相 {i}: {phase.name}")
-            lines.append(f"  化学式: {phase.formula}")
-            lines.append(f"  质量分数: {phase.weight_fraction:.2f} %")
+            lines.append("")
+            lines.append(tr("report.phase_header", index=i, name=phase.name))
+            lines.append(tr("report.formula", formula=phase.formula))
+            lines.append(
+                tr("report.weight_fraction", value=f"{phase.weight_fraction:.2f}")
+            )
             total_fraction += phase.weight_fraction
 
             if phase.lattice:
                 lat = phase.lattice
                 lines.append(
-                    f"  晶胞参数: a={lat.a:.4f}, b={lat.b:.4f}, c={lat.c:.4f} Å"
+                    tr("report.cell_params",
+                       a=f"{lat.a:.4f}", b=f"{lat.b:.4f}", c=f"{lat.c:.4f}")
                 )
                 lines.append(
-                    f"            α={lat.alpha:.2f}, β={lat.beta:.2f}, γ={lat.gamma:.2f}°"
+                    tr("report.cell_angles",
+                       alpha=f"{lat.alpha:.2f}", beta=f"{lat.beta:.2f}",
+                       gamma=f"{lat.gamma:.2f}")
                 )
-                lines.append(f"  晶胞体积: {lat.volume:.2f} ų")
+                lines.append(
+                    tr("report.cell_volume", volume=f"{lat.volume:.2f}")
+                )
 
         lines.append("")
-        lines.append(f"物相总含量: {total_fraction:.2f} %")
+        lines.append(tr("report.total_fraction", value=f"{total_fraction:.2f}"))
         lines.append("")
         lines.append("=" * 60)
         return "\n".join(lines)

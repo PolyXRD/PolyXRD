@@ -84,7 +84,7 @@ class PhaseView(QWidget):
         main_layout.addWidget(self._plot, stretch=3)
 
         # ====== 下部: 控制面板 (可滚动) ======
-        control_group = QGroupBox("物相识别")
+        control_group = QGroupBox(tr("vw.phase_view.group_phase"))
         control_layout = QHBoxLayout(control_group)
         control_layout.setSpacing(8)
 
@@ -94,17 +94,17 @@ class PhaseView(QWidget):
 
         # 元素过滤 - 弹出按钮 + 已选元素显示
         filter_row = QHBoxLayout()
-        self._btn_open_filter = QPushButton("元素过滤 (周期表)")
+        self._btn_open_filter = QPushButton(tr("vw.phase_view.btn_element_filter"))
         self._btn_open_filter.setFixedHeight(32)
         self._btn_open_filter.setStyleSheet(
             "QPushButton { background-color: #607d8b; color: white; padding: 4px 12px; }"
             "QPushButton:hover { background-color: #455a64; }"
         )
-        self._btn_open_filter.setToolTip("点击打开元素周期表过滤对话框")
+        self._btn_open_filter.setToolTip(tr("vw.phase_view.tip_element_filter"))
         self._btn_open_filter.clicked.connect(self._open_element_dialog)
         filter_row.addWidget(self._btn_open_filter)
 
-        self._btn_clear_filter = QPushButton("清除")
+        self._btn_clear_filter = QPushButton(tr("vw.phase_view.btn_clear_filter"))
         self._btn_clear_filter.setFixedHeight(32)
         self._btn_clear_filter.setStyleSheet(
             "QPushButton { background-color: #9e9e9e; color: white; padding: 4px 8px; }"
@@ -117,7 +117,7 @@ class PhaseView(QWidget):
         left_panel.addLayout(filter_row)
 
         # 已选元素摘要
-        self._filter_summary = QLabel("未选择元素过滤")
+        self._filter_summary = QLabel(tr("vw.phase_view.no_element_filter"))
         self._filter_summary.setWordWrap(True)
         self._filter_summary.setStyleSheet(
             "QLabel { color: #666; font-size: 11px; padding: 4px; "
@@ -129,7 +129,7 @@ class PhaseView(QWidget):
         # 数据库源选择 (双库切换)
         db_row = QHBoxLayout()
         db_row.setSpacing(6)
-        db_row.addWidget(QLabel("数据库源:"))
+        db_row.addWidget(QLabel(tr("vw.phase_view.label_db_source")))
         self._db_combo = QComboBox()
         self._db_combo.addItems(self._db_source_labels())
         self._db_combo.setFixedHeight(28)
@@ -143,15 +143,14 @@ class PhaseView(QWidget):
         method_layout = QHBoxLayout()
         method_layout.setSpacing(6)
 
-        self._btn_profile_fitting = QPushButton("Profile Fitting (推荐)")
+        self._btn_profile_fitting = QPushButton(tr("vw.phase_view.btn_profile_fitting"))
         self._btn_profile_fitting.setFixedHeight(32)
         self._btn_profile_fitting.setStyleSheet(
             "QPushButton { background-color: #2e7d32; color: white; font-weight: bold; padding: 4px 12px; }"
             "QPushButton:hover { background-color: #1b5e20; }"
         )
         self._btn_profile_fitting.setToolTip(
-            "基于峰形拟合的物相识别，无需事先寻峰。\n"
-            "直接比较整个XRD曲线形貌，适用于峰重叠或背景复杂的情况。"
+            tr("vw.phase_view.tip_profile_fitting")
         )
         self._btn_profile_fitting.clicked.connect(self._on_profile_fitting)
         method_layout.addWidget(self._btn_profile_fitting)
@@ -166,7 +165,7 @@ class PhaseView(QWidget):
         self._fwhm_spin.setFixedWidth(80)
         method_layout.addWidget(self._fwhm_spin)
 
-        method_layout.addWidget(QLabel("容差:"))
+        method_layout.addWidget(QLabel(tr("vw.phase_view.label_tolerance")))
         self._tolerance_spin = QDoubleSpinBox()
         self._tolerance_spin.setRange(0.05, 1.0)
         self._tolerance_spin.setValue(0.2)
@@ -174,23 +173,22 @@ class PhaseView(QWidget):
         self._tolerance_spin.setDecimals(2)
         self._tolerance_spin.setSuffix("°")
         self._tolerance_spin.setFixedWidth(80)
-        self._tolerance_spin.setToolTip("2θ 匹配容差：参考峰与实验峰的距离在此范围内视为匹配")
+        self._tolerance_spin.setToolTip(tr("vw.phase_view.tip_tolerance"))
         method_layout.addWidget(self._tolerance_spin)
 
-        self._btn_identify = QPushButton("传统 Search/Match")
+        self._btn_identify = QPushButton(tr("vw.phase_view.btn_traditional"))
         self._btn_identify.setFixedHeight(32)
         self._btn_identify.setStyleSheet(
             "QPushButton { background-color: #1565c0; color: white; font-weight: bold; padding: 4px 12px; }"
             "QPushButton:hover { background-color: #0d47a1; }"
         )
         self._btn_identify.setToolTip(
-            "传统物相识别方法，需要先进行峰检测。\n"
-            "基于FOM(Figure of Merit)算法匹配峰位。"
+            tr("vw.phase_view.tip_traditional")
         )
         self._btn_identify.clicked.connect(self._on_traditional_identify)
         method_layout.addWidget(self._btn_identify)
 
-        self._btn_quick_identify = QPushButton("快速 (无过滤)")
+        self._btn_quick_identify = QPushButton(tr("vw.phase_view.btn_quick"))
         self._btn_quick_identify.setFixedHeight(32)
         self._btn_quick_identify.setStyleSheet(
             "QPushButton { background-color: #757575; color: white; padding: 4px 10px; }"
@@ -226,7 +224,7 @@ class PhaseView(QWidget):
         right_panel.addWidget(self._candidate_list, stretch=1)
 
         btn_row = QHBoxLayout()
-        self._btn_select = QPushButton("选中物相 →")
+        self._btn_select = QPushButton(tr("vw.phase_view.btn_select_phase"))
         self._btn_select.setFixedHeight(28)
         self._btn_select.setStyleSheet(
             "QPushButton { background-color: #ff6f00; color: white; font-weight: bold; padding: 4px 12px; }"
@@ -235,20 +233,19 @@ class PhaseView(QWidget):
         self._btn_select.clicked.connect(self._on_select_phase)
         btn_row.addWidget(self._btn_select)
 
-        self._btn_auto_mix = QPushButton("自动混合分析")
+        self._btn_auto_mix = QPushButton(tr("vw.phase_view.btn_auto_mix"))
         self._btn_auto_mix.setFixedHeight(28)
         self._btn_auto_mix.setStyleSheet(
             "QPushButton { background-color: #00695c; color: white; font-weight: bold; padding: 4px 12px; }"
             "QPushButton:hover { background-color: #004d40; }"
         )
         self._btn_auto_mix.setToolTip(
-            "对当前候选物相进行多相线性组合拟合，\n"
-            "自动计算各物相的权重比例（wt%）"
+            tr("vw.phase_view.tip_auto_mix")
         )
         self._btn_auto_mix.clicked.connect(self._on_auto_mix)
         btn_row.addWidget(self._btn_auto_mix)
 
-        self._btn_clear_sel = QPushButton("清空")
+        self._btn_clear_sel = QPushButton(tr("vw.phase_view.btn_clear_sel"))
         self._btn_clear_sel.setFixedHeight(28)
         self._btn_clear_sel.clicked.connect(self._on_clear_selection)
         btn_row.addWidget(self._btn_clear_sel)
@@ -257,13 +254,13 @@ class PhaseView(QWidget):
 
         # 视图切换: 叠加计算谱 / 显示残差 (M21 v2)
         view_row = QHBoxLayout()
-        self._btn_toggle_calc = QPushButton("叠加计算谱")
+        self._btn_toggle_calc = QPushButton(tr("vw.phase_view.btn_overlay_calc"))
         self._btn_toggle_calc.setCheckable(True)
         self._btn_toggle_calc.setChecked(True)
         self._btn_toggle_calc.setFixedHeight(24)
         self._btn_toggle_calc.clicked.connect(self._refresh_overlay)
         view_row.addWidget(self._btn_toggle_calc)
-        self._btn_toggle_resid = QPushButton("显示残差")
+        self._btn_toggle_resid = QPushButton(tr("vw.phase_view.btn_show_resid"))
         self._btn_toggle_resid.setCheckable(True)
         self._btn_toggle_resid.setChecked(False)
         self._btn_toggle_resid.setFixedHeight(24)
@@ -314,21 +311,21 @@ class PhaseView(QWidget):
 
         parts = []
         if must_have:
-            parts.append(f"必有: {', '.join(must_have)}")
+            parts.append(tr("vw.phase_view.filter_must_have", items=', '.join(must_have)))
         if must:
-            parts.append(f"含有: {', '.join(must)}")
+            parts.append(tr("vw.phase_view.filter_has", items=', '.join(must)))
         if maybe:
-            parts.append(f"可能: {', '.join(maybe)}")
+            parts.append(tr("vw.phase_view.filter_maybe", items=', '.join(maybe)))
         if exclude:
-            parts.append(f"没有: {', '.join(exclude)}")
+            parts.append(tr("vw.phase_view.filter_exclude", items=', '.join(exclude)))
 
         if not parts:
-            self._filter_summary.setText("未选择元素过滤")
+            self._filter_summary.setText(tr("vw.phase_view.no_element_filter"))
             return
 
-        text = "过滤: " + " | ".join(parts)
+        text = tr("vw.phase_view.filter_prefix") + " | ".join(parts)
         if must_have or must or maybe:
-            text += " (未勾选元素默认排除)"
+            text += tr("vw.phase_view.filter_default_exclude")
         self._filter_summary.setText(text)
 
     def _clear_filter(self) -> None:
@@ -380,29 +377,27 @@ class PhaseView(QWidget):
         def _n(key: str) -> int:
             return n.get(key, 0)
 
-        def _label(base: str, count: int) -> str:
-            return f"{base} ({count:,})" if count > 0 else f"{base} (未挂载)"
-
         return [
-            "内置库 (118 物相)",
-            _label("COD 无机物库", _n("cod_inorganics")),
-            _label("COD 全库", _n("cod_index")),
-            "内置+COD全库合并",
-            _label("PDF2-2004 库", _n("pdf2")),
+            tr("vw.phase_view.db_builtin"),
+            self._db_label("vw.phase_view.db_cod_inorg", _n("cod_inorganics")),
+            self._db_label("vw.phase_view.db_cod_full", _n("cod_index")),
+            tr("vw.phase_view.db_merged"),
+            self._db_label("vw.phase_view.db_pdf2", _n("pdf2")),
         ]
+
+    @staticmethod
+    def _db_label(base_key: str, count: int) -> str:
+        """库名 + 物相数; 未挂载时跟“(未挂载)”后缀。"""
+        base = tr(base_key)
+        if count > 0:
+            return tr("vw.phase_view.db_label_count", base=base, count=count)
+        return base + tr("vw.phase_view.db_unmounted")
 
     def _db_combo_tooltip(self) -> str:
         return (
-            "选择物相检索使用的数据库 (作用于传统 Search/Match 与快速识别):\n"
-            "· 内置库: 程序自带 118 种常见物相 (最快)\n"
-            "· COD 无机物库: 外挂 71,199 物相 (预计算 d-I 峰, Hanawalt 预筛)\n"
-            "· COD 全库: 外挂 113,223 条 CIF 索引 (本地检索)\n"
-            "· 合并: 内置库 + COD 全库结果合并排序\n"
-            "· PDF2-2004: ICDD PDF-2 2004 版 163,834 物相, 自带空间群与晶胞\n"
-            "  (晶胞 81.8% / 空间群 72.8%), 命中相可直接作为精修起始结构。\n"
-            f"{self._pdf2_coverage_line()}"
-            "数据库不随安装包分发, 请单独下载解压后在\n"
-            "菜单「数据库 ▸ 外挂数据库管理…」中导入。"
+            tr("vw.phase_view.db_combo_tip_main")
+            + self._pdf2_coverage_line()
+            + tr("vw.phase_view.db_combo_tip_import")
         )
 
     def _pdf2_coverage_line(self) -> str:
@@ -415,9 +410,11 @@ class PhaseView(QWidget):
             cov = db.coverage()
             if not cov:
                 return ""
-            return (
-                f"  本机库: {cov['total']:,} 相, 空间群 {cov['pct_space_group']}%, "
-                f"晶胞 {cov['pct_cell']}%。\n"
+            return tr(
+                "vw.phase_view.pdf2_coverage",
+                total=f"{cov['total']:,}",
+                sg=cov["pct_space_group"],
+                cell=cov["pct_cell"],
             )
         except Exception:
             return ""
@@ -433,8 +430,7 @@ class PhaseView(QWidget):
                 item.setEnabled(False)
                 item.setToolTip(hint)
 
-        hint = ("该数据库未挂载。请从菜单「数据库 ▸ 外挂数据库管理…」"
-                "导入已解压的库文件。")
+        hint = tr("vw.phase_view.db_unmounted_hint")
         if counts.get("cod_inorganics", 0) <= 0:
             _disable(1, hint)
         if counts.get("cod_index", 0) <= 0:
@@ -508,7 +504,7 @@ class PhaseView(QWidget):
         self._vm._phase_vm.clear_selection()
 
         if not phase_results:
-            self._method_label.setText("未找到匹配物相")
+            self._method_label.setText(tr("vw.phase_view.no_match"))
             self._match_table.clear_table()
             self._refresh_overlay()
             try:
@@ -614,7 +610,7 @@ class PhaseView(QWidget):
         if phase is None:
             return
         menu = QMenu(self)
-        act_export = menu.addAction("导出 CIF 文件…")
+        act_export = menu.addAction(tr("vw.phase_view.act_export_cif"))
         chosen = menu.exec(self._candidate_list.viewport().mapToGlobal(pos))
         if chosen is not act_export:
             return
@@ -627,16 +623,23 @@ class PhaseView(QWidget):
 
         default_name = default_cif_filename(phase, resolve_cod_id(phase))
         path, _ = QFileDialog.getSaveFileName(
-            self, "导出 CIF 文件", default_name, "CIF 文件 (*.cif)"
+            self,
+            tr("vw.phase_view.dlg_export_cif_title"),
+            default_name,
+            tr("vw.phase_view.dlg_export_cif_filter"),
         )
         if not path:
             return
         try:
             export_phase_cif(phase, path)
         except CifUnavailableError as exc:
-            QMessageBox.warning(self, "导出 CIF", str(exc))
+            QMessageBox.warning(self, tr("vw.phase_view.msg_export_cif"), str(exc))
         except OSError as exc:
-            QMessageBox.warning(self, "导出 CIF", f"写盘失败: {exc}")
+            QMessageBox.warning(
+                self,
+                tr("vw.phase_view.msg_export_cif"),
+                tr("vw.phase_view.msg_write_fail", exc=exc),
+            )
 
     def _on_candidate_toggled(self, item: QListWidgetItem) -> None:
         """勾选框状态变更 → 更新选中集合 → 刷新叠加 (itemChanged 在 populate
@@ -755,7 +758,9 @@ class PhaseView(QWidget):
         """选中物相 - 确认后切换到结构精修"""
         current_item = self._candidate_list.currentItem()
         if not current_item:
-            QMessageBox.information(self, "提示", "请先在列表中选择一个物相")
+            QMessageBox.information(
+                self, tr("vw.phase_view.msg_tip"), tr("vw.phase_view.msg_pick_phase")
+            )
             return
         
         result = current_item.data(Qt.ItemDataRole.UserRole)
@@ -767,10 +772,9 @@ class PhaseView(QWidget):
             return
         
         reply = QMessageBox.question(
-            self, "确认物相",
-            f"已选择物相: <b>{phase.name}</b>\n\n"
-            f"是否切换到结构精修页面进行 Rietveld 精修？\n\n"
-            f"(点击\"否\"可继续选择其他物相)",
+            self,
+            tr("vw.phase_view.dlg_confirm_phase_title"),
+            tr("vw.phase_view.dlg_confirm_phase_body", name=phase.name),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.Yes,
         )
@@ -827,12 +831,14 @@ class PhaseView(QWidget):
         5. 绘制实验数据、混合拟合曲线、各物相贡献
         """
         if not self._current_results:
-            QMessageBox.warning(self, "提示", "请先执行物相识别")
+            QMessageBox.warning(self, tr("vw.phase_view.msg_tip"),
+                                tr("vw.phase_view.msg_run_identify"))
             return
 
         data = self._vm.current_data or self._vm.processed_data
         if not data:
-            QMessageBox.warning(self, "提示", "请先加载 XRD 数据")
+            QMessageBox.warning(self, tr("vw.phase_view.msg_tip"),
+                                tr("vw.phase_view.msg_load_xrd"))
             return
 
         n_phases = min(5, len(self._current_results))
@@ -843,7 +849,8 @@ class PhaseView(QWidget):
                 phases.append(phase)
 
         if not phases:
-            QMessageBox.warning(self, "提示", "无可用物相进行混合分析")
+            QMessageBox.warning(self, tr("vw.phase_view.msg_tip"),
+                                tr("vw.phase_view.msg_no_mix_phase"))
             return
 
         from polyxrd.services.profile_fitting import ProfileFittingService

@@ -9,6 +9,7 @@ from typing import Optional
 
 from PySide6.QtCore import QObject, Signal
 
+from polyxrd.i18n import tr
 from polyxrd.models.peak import PeakList
 from polyxrd.models.phase import Phase, PhaseMatchResult
 from polyxrd.services.peak_finder import PeakFinder
@@ -102,7 +103,7 @@ class PhaseViewModel(QObject):
             self._peaks = peaks
             self.peaks_detected.emit(peaks)
         except Exception as e:
-            self.error.emit(f"峰检测失败: {e}")
+            self.error.emit(tr("error.peak_finder_failed", error=e))
 
     def find_peaks_advanced(
         self,
@@ -137,7 +138,7 @@ class PhaseViewModel(QObject):
             self._peaks = peaks
             self.peaks_detected.emit(peaks)
         except Exception as e:
-            self.error.emit(f"高精度峰检测失败: {e}")
+            self.error.emit(tr("error.peak_finder_hi_failed", error=e))
 
     def fit_peaks(
         self,
@@ -146,7 +147,7 @@ class PhaseViewModel(QObject):
     ) -> None:
         """峰拟合"""
         if self._peaks is None or len(self._peaks) == 0:
-            self.error.emit("请先检测峰")
+            self.error.emit(tr("error.no_peaks"))
             return
         try:
             fitted, stats = self._peak_finder.fit_peaks(
@@ -155,7 +156,7 @@ class PhaseViewModel(QObject):
             self._fitted_peaks = fitted
             self.peaks_fitted.emit(fitted, stats)
         except Exception as e:
-            self.error.emit(f"峰拟合失败: {e}")
+            self.error.emit(tr("error.peak_fit_failed", error=e))
 
     def identify_phases(
         self,
@@ -177,7 +178,7 @@ class PhaseViewModel(QObject):
                 - "pdf2": ICDD PDF-2 2004 库 (163,834 物相, 带空间群/晶胞)
         """
         if self._peaks is None or len(self._peaks) == 0:
-            self.error.emit("请先检测峰")
+            self.error.emit(tr("error.no_peaks"))
             return
         try:
             if db_source == "pdf2":
@@ -226,7 +227,7 @@ class PhaseViewModel(QObject):
             self._matched_phases = results
             self.phase_identified.emit(results)
         except Exception as e:
-            self.error.emit(f"物相识别失败: {e}")
+            self.error.emit(tr("error.identify_failed", error=e))
 
     def select_phase(self, phase: Phase) -> None:
         """选中物相"""

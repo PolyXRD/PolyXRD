@@ -1150,7 +1150,7 @@ class RefinementWizard(QWidget):
         self._template_combo.clear()
         templates = self._template_mgr.get_all_templates()
         for t in templates:
-            label = f"[内置] {t.name}" if t.is_builtin else f"[用户] {t.name}"
+            label = tr("vw.refinement_wizard.tpl_builtin", name=t.name) if t.is_builtin else tr("vw.refinement_wizard.tpl_user", name=t.name)
             self._template_combo.addItem(label, t)
 
     def _on_template_changed(self, index: int) -> None:

@@ -34,7 +34,7 @@ from polyxrd.i18n import tr
 from polyxrd.services import db_import
 from polyxrd.services.db_import import DB_KINDS, inspect_db_file
 
-_FILE_FILTER = "SQLite 数据库 (*.sqlite *.sqlite3 *.db);;所有文件 (*)"
+_FILE_FILTER = "vw.database_dialog.file_filter"
 
 
 class DatabaseManagerDialog(QDialog):
@@ -194,7 +194,7 @@ class DatabaseManagerDialog(QDialog):
     def _on_import(self, expect_kind: str) -> None:
         start = str(Path.home())
         path, _ = QFileDialog.getOpenFileName(
-            self, tr("db_manager.import_title"), start, _FILE_FILTER
+            self, tr("db_manager.import_title"), start, tr(_FILE_FILTER)
         )
         if not path:
             return

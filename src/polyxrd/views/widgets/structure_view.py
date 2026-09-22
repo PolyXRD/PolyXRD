@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from typing import Optional
 
+from polyxrd.i18n import tr
+
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
@@ -49,7 +51,7 @@ class StructureView(QWidget):
         self._figure.clear()
         ax = self._figure.add_subplot(111)
         ax.axis("off")
-        ax.text(0.5, 0.5, "(无结构)", ha="center", va="center",
+        ax.text(0.5, 0.5, tr("vw.structure_view.placeholder"), ha="center", va="center",
                 fontsize=10, color="#808080", transform=ax.transAxes)
         self._ax = None
         self._canvas.draw_idle()

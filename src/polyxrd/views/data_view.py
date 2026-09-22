@@ -61,46 +61,46 @@ class DataView(QWidget):
         right_layout = QVBoxLayout(right_widget)
 
         # 数据处理组
-        process_group = QGroupBox("数据预处理")
+        process_group = QGroupBox(tr("vw.data_view.data_preprocess"))
         process_layout = QFormLayout()
 
         self._bg_method = QComboBox()
         self._bg_method.addItems(["snip", "als", "polyfit", "median", "rolling"])
-        process_layout.addRow("背景方法:", self._bg_method)
+        process_layout.addRow(tr("vw.data_view.bg_method"), self._bg_method)
 
-        self._btn_bg = QPushButton("执行背景扣除")
+        self._btn_bg = QPushButton(tr("vw.data_view.exec_bg_subtract"))
         self._btn_bg.clicked.connect(self._on_background)
         process_layout.addRow(self._btn_bg)
 
         self._smooth_method = QComboBox()
         self._smooth_method.addItems(["savgol", "gaussian", "moving", "median"])
-        process_layout.addRow("平滑方法:", self._smooth_method)
+        process_layout.addRow(tr("vw.data_view.smooth_method"), self._smooth_method)
 
         self._smooth_window = QSpinBox()
         self._smooth_window.setRange(3, 101)
         self._smooth_window.setValue(11)
         self._smooth_window.setSingleStep(2)
-        process_layout.addRow("窗口大小:", self._smooth_window)
+        process_layout.addRow(tr("vw.data_view.window_size"), self._smooth_window)
 
-        self._btn_smooth = QPushButton("执行平滑")
+        self._btn_smooth = QPushButton(tr("vw.data_view.exec_smooth"))
         self._btn_smooth.clicked.connect(self._on_smooth)
         process_layout.addRow(self._btn_smooth)
 
-        self._btn_strip_kalpha2 = QPushButton("Kα2剥离")
+        self._btn_strip_kalpha2 = QPushButton(tr("vw.data_view.strip_kalpha2"))
         process_layout.addRow(self._btn_strip_kalpha2)
 
         process_group.setLayout(process_layout)
         right_layout.addWidget(process_group)
 
         # 峰检测组
-        peak_group = QGroupBox("峰检测")
+        peak_group = QGroupBox(tr("vw.data_view.peak_detection"))
         peak_layout = QFormLayout()
 
         self._peak_height = QSpinBox()
         self._peak_height.setRange(1, 100)
         self._peak_height.setValue(10)
         self._peak_height.setSuffix(" %")
-        peak_layout.addRow("最小峰高:", self._peak_height)
+        peak_layout.addRow(tr("vw.data_view.min_peak_height"), self._peak_height)
 
         self._peak_distance = QDoubleSpinBox()
         self._peak_distance.setRange(0.0, 100.0)
@@ -109,22 +109,20 @@ class DataView(QWidget):
         # 0.5° 而非旧值 5°: XRD 峰 FWHM 仅 0.05~0.5°, 5° 会丢弃相邻强线
         self._peak_distance.setValue(0.5)
         self._peak_distance.setToolTip(
-            "两峰最小 2θ 间距 (度)。XRD 峰半高宽通常 0.05~0.5°, 建议 0.2~1.0; "
-            "设得过大 (如 5°) 会丢弃间距近的强线, 损害物相识别召回。")
-        peak_layout.addRow("最小距离:", self._peak_distance)
+            tr("vw.data_view.peak_distance_tip"))
+        peak_layout.addRow(tr("vw.data_view.min_distance"), self._peak_distance)
 
-        self._peak_hi = QCheckBox("高精度(背景扣除+亚步长)")
+        self._peak_hi = QCheckBox(tr("vw.data_view.high_precision"))
         self._peak_hi.setChecked(True)
         self._peak_hi.setToolTip(
-            "启用高精度峰检测: 自动背景扣除 + 亚步长峰位精修 + 重叠峰联合拟合\n"
-            "峰位精度可达 ~0.001°, 弱峰更易检出。取消则用传统高度阈值法。")
+            tr("vw.data_view.peak_hi_tip"))
         peak_layout.addRow(self._peak_hi)
 
-        self._btn_find_peaks = QPushButton("检测峰")
+        self._btn_find_peaks = QPushButton(tr("vw.data_view.detect_peaks"))
         self._btn_find_peaks.clicked.connect(self._on_find_peaks)
         peak_layout.addRow(self._btn_find_peaks)
 
-        self._btn_fit_peaks = QPushButton("拟合峰")
+        self._btn_fit_peaks = QPushButton(tr("vw.data_view.fit_peaks"))
         self._btn_fit_peaks.clicked.connect(self._on_fit_peaks)
         peak_layout.addRow(self._btn_fit_peaks)
 
@@ -153,7 +151,7 @@ class DataView(QWidget):
         """数据变更"""
         self._plot.clear_plot()
         if data:
-            self._plot.plot_data(data, label="实验数据")
+            self._plot.plot_data(data, label=tr("vw.data_view.experimental_data"))
 
     def _on_peaks_changed(self, peaks) -> None:
         """峰变更"""
