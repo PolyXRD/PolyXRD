@@ -16,13 +16,14 @@ import zipfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, 'installer_output')
 
-# 与 verify_release.ps1 / db_import.py 保持一致
+# 与 db_import.py 保持一致 (1.0.1: cod_index 已移入 cod_data/, 无机库用 index 变体)
 DB_KINDS = [
-    ('COD-inorg', os.path.join(ROOT, 'cod_data', 'COD_inorganics.sqlite'), 'COD_inorganics.sqlite'),
-    ('COD-full',  os.path.join(ROOT, 'cod_index.sqlite'),                 'cod_index.sqlite'),
-    ('PDF2',      os.path.join(ROOT, 'cod_data', 'PDF2_2004.sqlite'),     'PDF2_2004.sqlite'),
+    ('COD-inorg-index', os.path.join(ROOT, 'cod_data', 'COD_inorganics_index.sqlite'), 'COD_inorganics_index.sqlite'),
+    ('COD-full-index',  os.path.join(ROOT, 'cod_data', 'cod_index.sqlite'),            'cod_index.sqlite'),
+    ('PDF2',            os.path.join(ROOT, 'cod_data', 'PDF2_2004.sqlite'),            'PDF2_2004.sqlite'),
 ]
-BANNED_NAMES = {'cod_index.sqlite', 'COD_inorganics.sqlite', 'PDF2_2004.sqlite'}
+BANNED_NAMES = {'cod_index.sqlite', 'COD_inorganics.sqlite',
+                'COD_inorganics_index.sqlite', 'PDF2_2004.sqlite'}
 ALLOWED = 'pymatgen/symmetry/symm_data_magnetic.sqlite'
 FAILS = []
 

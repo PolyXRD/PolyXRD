@@ -17,7 +17,7 @@ class AppConfig:
 
     # 应用信息
     app_name: str = "PolyXRD"
-    app_version: str = "0.15.2"
+    app_version: str = "1.0.1"
     app_org: str = "PolyXRD"
 
     # 窗口设置
