@@ -15,7 +15,7 @@
     &nbsp;
     <img src="https://img.shields.io/badge/UI-PySide6%20(Qt6)-41cd52?style=flat-square" />
     &nbsp;
-    <img src="https://img.shields.io/badge/Tests-991%20passed-brightgreen?style=flat-square" />
+    <img src="https://img.shields.io/badge/Tests-1010%20passed-brightgreen?style=flat-square" />
   </p>
 </div>
 
@@ -83,6 +83,7 @@
 - **简体中文 / English / 日本語** 三语言切换，切换无需重启
 - 白天/深色主题，Fusion 风格，HiDPI 适配；纵坐标线性 / log / sqrt 切换
 - 交互式元素周期表（双击选择，带原子量与特征波长）
+- **单实例运行**：重复双击不会开出多个窗口，而是把已在运行的窗口切到前台
 - **数据库管理对话框**：三个槽位各自显示「已挂载/未挂载」、记录数、体积，并直接标明该槽位对应哪个下载包
 
 ### ⑥ 三库外挂检索服务
@@ -119,6 +120,8 @@ PolyXRD/
 │   ├── viewmodels/             # MVVM 视图模型层 (main_vm / data_vm / phase_vm / refinement_vm)
 │   ├── utils/                  # 工具函数 (resources / formula_parser / math_utils / file_utils / mpl_font)
 │   ├── services/               # 核心算法服务 (无 UI, 可独立单元测试)
+│   │   ├── instance_guard.py       # ★ 单实例守卫 (kill-safe, 内核命名互斥量)
+│   │   ├── startup_diag.py         # ★ 启动诊断 (文件占用探测 + Restart Manager 反查)
 │   │   ├── data_io.py / data_loader.py / data_processor.py
 │   │   ├── raw_processing.py       # 原始数据流水线
 │   │   ├── data_preprocessor.py    # 背景扣除 / 平滑 / Kα2 剥离
@@ -290,7 +293,7 @@ python -m polyxrd.main
 python -m pytest -q
 ```
 
-> 测试规模：**993 项收集 / 991 通过 / 2 跳过**（v1.0.1 全量回归）。
+> 测试规模：**1012 项收集 / 1010 通过 / 2 跳过**（v1.0.1 + 启动稳健性修复）。
 
 #### 一键源码启动（人工验收用）
 
@@ -334,6 +337,19 @@ Inno Setup 编译安装包 → 打便携包 → 生成三个独立数据库包 �
    → 精修完成, 查看 wR 与残差图
 ⑥ 需要时: CIF 浏览器看 3D 晶胞 / 指标化求晶胞参数 / 导出报告 (CSV/PDF)
 ```
+
+### 启动 / 关闭异常排查
+
+| 现象 | 处理 |
+|---|---|
+| **双击没有任何反应** | PolyXRD 是**单实例**程序：若已有实例在跑，双击会**把已有窗口拉到前台**（窗口被最小化或被挡住时会闪任务栏提示）。若任务管理器里有 `PolyXRD.exe` 却找不到窗口（幽灵实例），直接结束它；新版遇到这种情况会**照常启动**，不会再被挡住 |
+| **关掉后进程还在**（任务管理器里仍能看到 `PolyXRD.exe`） | 新版在窗口关闭后进程**必定退出**（事件循环结束后有 5 秒硬退出兜底）。旧版遇到请手动结束进程 |
+| **想确诊"为什么打不开"** | 命令行执行 `PolyXRD.exe --diagnose` —— 不起界面，直接生成报告（`%USERPROFILE%\.polyxrd\logs\diagnose-*.txt`），并用 Windows Restart Manager 指明**是哪个进程占用了程序文件**（这类文件占用正是"必须重启电脑"最典型的成因） |
+| **查启动 / 崩溃日志** | `%USERPROFILE%\.polyxrd\logs\`：`startup-YYYY-MM-DD.log`（启动流水，出现 `shown visible=True` 才算真起来）、`crash-*.log`（Python 异常）、`startup-failure-*.log`（含占用进程诊断） |
+
+> 启动稳健性设计（2026-09-22 起）：**单实例守卫用内核命名互斥量实现** —— 上一个实例
+> 无论正常退出还是被任务管理器强杀，都不会影响下一次启动；守卫本身"拿不准就放行"，
+> 绝不因为残留状态把用户挡在门外。
 
 ---
 

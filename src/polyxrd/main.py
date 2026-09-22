@@ -4,8 +4,10 @@ PolyXRD 应用入口
 from __future__ import annotations
 
 import logging
+import os
 import sys
 import threading
+import time
 import traceback
 from datetime import datetime
 from pathlib import Path
@@ -16,6 +18,8 @@ from PySide6.QtGui import QPixmap, QIcon
 from PySide6.QtWidgets import QApplication, QSplashScreen
 
 from polyxrd.config import get_config
+from polyxrd.services.instance_guard import InstanceGuard, default_lock_dir
+from polyxrd.services import startup_diag
 from polyxrd.utils.resources import (
     get_app_icon_path,
     get_splash_screen_path,
@@ -32,6 +36,13 @@ from polyxrd.views.main_window import MainWindow
 # 注意: 全部用 try/except 包住, 记日志本身绝不能成为新的启动失败点。
 
 _LOG_DIR_HINT = Path.home() / ".polyxrd" / "logs"
+
+# 硬退出看门狗 (v1.0.2)
+# 现场问题: "关掉程序后进程还在 -> 再双击打不开 -> 只能重启电脑"。
+# app.exec() 返回后若解释器收尾被某个线程/句柄挂住, 进程就会一直挂在任务管理器里
+# (窗口已消失)。这里挂一个守护线程兜底: 给正常收尾留 5 秒, 超时直接 os._exit,
+# 保证**窗口一关, 进程必走**。
+_HARD_EXIT_DELAY_S = 5.0
 
 
 def _log_dir() -> Path:
@@ -71,6 +82,26 @@ def _write_crash(exc_type, exc_value, exc_tb) -> Optional[Path]:
         return path
     except Exception:  # noqa: BLE001
         return None
+
+
+def _startup_evidence(note: str = "") -> str:
+    """把"为什么起不来"的证据凑成一段人话, 供弹窗/日志使用。
+
+    关键: 这里会去查 EXE / 关键 DLL 是否**此刻被别的进程占着**
+    (Restart Manager 反查占用者) —— 这正是"必须重启电脑"最典型的成因。
+    """
+    try:
+        info = startup_diag.diagnose(sys.executable, extra_note=note or None)
+        report = startup_diag.format_report(info)
+    except Exception as exc:  # noqa: BLE001
+        report = f"(诊断模块本身失败: {exc})"
+    try:
+        path = _log_dir() / f"startup-failure-{datetime.now():%Y-%m-%d}.log"
+        with path.open("a", encoding="utf-8") as fh:
+            fh.write(report + "\n" + "=" * 70 + "\n")
+    except Exception:  # noqa: BLE001
+        pass
+    return report
 
 
 def _install_excepthooks() -> None:
@@ -115,13 +146,100 @@ def _fatal_dialog(title: str, text: str) -> None:
         pass
 
 
+def _arm_hard_exit(code: int, delay: float = _HARD_EXIT_DELAY_S) -> None:
+    """给正常收尾留 delay 秒; 到点还活着就硬退, 不留"幽灵进程"。
+
+    副作用可控: 事件循环已经结束, 该落盘的都已经落盘 (项目/设置都在
+    closeEvent / app.exec() 之内完成), 这里只负责"确保进程真的消失"。
+
+    **重要**: 在 pytest 里绝不能挂 —— 测试会把 `QApplication.exec` 换成"立即返回",
+    进程本身还要跑十几分钟, 5 秒后一发 `os._exit` 就会把整个测试进程干掉。
+    这里用 `PYTEST_CURRENT_TEST`(pytest 自动设置) 与 `POLYXRD_NO_HARD_EXIT`
+    双重开关兜住。
+    """
+    if delay <= 0 or os.environ.get("POLYXRD_NO_HARD_EXIT") or \
+            os.environ.get("PYTEST_CURRENT_TEST"):
+        _startup_log("hard exit watchdog skipped (test/opt-out)")
+        return
+
+    def _run() -> None:
+        time.sleep(delay)
+        _startup_log(f"hard exit watchdog fired (code={code}) -> os._exit")
+        try:
+            sys.stdout.flush()
+            sys.stderr.flush()
+        except Exception:  # noqa: BLE001
+            pass
+        os._exit(code)
+
+    t = threading.Thread(target=_run, name="polyxrd-hard-exit", daemon=True)
+    t.start()
+
+
+def _run_diagnose() -> int:
+    """`--diagnose`: 不起 GUI, 产出一份"为什么打不开"的报告。
+
+    典型用法: 出问题时双击打不开, 用命令行 `PolyXRD.exe --diagnose`
+    看报告 —— 会指明是哪个文件被哪个进程占用。
+    """
+    _startup_log("--- diagnose requested")
+    info = startup_diag.diagnose(sys.executable)
+    report = startup_diag.format_report(info)
+    out = None
+    try:
+        out = _log_dir() / f"diagnose-{datetime.now():%Y%m%d-%H%M%S}.txt"
+        with out.open("w", encoding="utf-8") as fh:
+            fh.write(report + "\n")
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        print(report)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        app = QApplication.instance() or QApplication(sys.argv)
+        _fatal_dialog("PolyXRD 启动诊断", report + (f"\n\n报告已保存: {out}" if out else ""))
+        _ = app
+    except Exception:  # noqa: BLE001
+        pass
+    return 0
+
+
 def main() -> int:
     """主入口函数"""
     _install_excepthooks()
+
+    if "--diagnose" in sys.argv[1:]:
+        return _run_diagnose()
+
     _startup_log(
         f"--- start v{get_config().app_version} "
         f"frozen={getattr(sys, 'frozen', False)} exe={sys.executable}"
     )
+
+    # ── 单实例守卫 (v1.0.2) ──────────────────────────────────
+    # 用内核命名互斥量而不是"锁文件存在即拒绝": 上次被任务管理器强杀后,
+    # 内核立刻回收对象, 下一次双击必然能起 —— 从机制上杜绝"关掉后再也打不开"。
+    # 三种结果:
+    #   a) 首个实例            -> 正常启动
+    #   b) 有实例且有窗口      -> 把它的窗口拉到前台, 本次安静退出 (双击=切回)
+    #   c) 有实例但找不到窗口  -> 典型"幽灵实例", **照样启动** (fail-open),
+    #                             保证双击一定出窗口
+    guard = InstanceGuard(default_lock_dir())
+    _startup_log(f"instance: is_first={guard.is_first}")
+    if not guard.is_first:
+        handles = guard.existing_window_handles()
+        if handles:
+            raised = guard.activate_existing()
+            _startup_log(
+                f"existing instance window found (n={len(handles)}, "
+                f"foreground={raised}) -> exiting quietly"
+            )
+            return 0
+        _startup_log(
+            "existing instance reported but no window found "
+            "-> starting anyway (fail-open)"
+        )
 
     app = QApplication(sys.argv)
     _startup_log("QApplication OK")
@@ -187,15 +305,30 @@ def main() -> int:
             + "".join(traceback.format_exception(*sys.exc_info()))[-1500:],
         )
         raise
-    _startup_log("shown")
+    # 记日志本身绝不能成为新的失败点: isVisible 只是"锦上添花"的证据,
+    # 取不到就算了 (测试里的桩窗口就没有这个方法)。
+    try:
+        _visible: object = bool(window.isVisible())
+    except Exception:  # noqa: BLE001
+        _visible = "unknown"
+    _startup_log(f"shown visible={_visible}")
 
     if splash is not None:
         QTimer.singleShot(100, lambda: (splash.close(), window.activateWindow()))
         # 兜底: 上面那条 lambda 若被任何原因吞掉, 800ms 后也一定收掉启动图
         QTimer.singleShot(800, splash.close)
 
+    # 窗口关掉后, 若 Qt 的收尾阶段卡住 (外部工具句柄 / 残留线程), 这里硬退。
+    try:
+        app.aboutToQuit.connect(lambda: _arm_hard_exit(0, delay=20.0))
+    except Exception:  # noqa: BLE001
+        pass
+
     code = app.exec()
     _startup_log(f"--- exit code={code}")
+    guard.release()
+    # 事件循环已经结束 = 该保存的都保存了; 只保证进程一定消失, 不再留幽灵。
+    _arm_hard_exit(code)
     return code
 
 
@@ -211,7 +344,8 @@ if __name__ == "__main__":
             "PolyXRD 启动失败",
             "程序启动时发生异常, 详情见日志:\n"
             f"{_log_dir()}\n\n"
-            + "".join(traceback.format_exception(*sys.exc_info()))[-1500:],
+            + _startup_evidence("启动异常")
+            + "\n\n"
+            + "".join(traceback.format_exception(*sys.exc_info()))[-1200:],
         )
         sys.exit(1)
-
