@@ -23,8 +23,12 @@ class RefinementTemplate:
     封装一组Rietveld精修参数预设，用于快速启动精修。
 
     Attributes:
-        name: 模板名称
+        name: 模板名称 (同时是**用户模板的标识/文件名**, 所以不能翻译)
         description: 模板描述
+        key: 内置模板的**稳定标识** (如 ``standard`` / ``quick``)。内置模板的
+            显示名走 ``template.builtin.<key>`` 翻译键 —— ``name`` 仍是中文,
+            因为它同时被 ``save_template`` 当文件名、被 ``get_template_by_name``
+            当查找键, 一旦本地化就会随语言漂移。用户模板留空 = 显示 ``name``。
         engine: 精修引擎 (gsas2 / powerxrd / builtin)
         strategy: 精修策略 (sequential / auto / manual)
         background_method: 背景扣除方法 (snip / als / polynomial / median / rolling)
@@ -36,6 +40,7 @@ class RefinementTemplate:
 
     name: str = ""
     description: str = ""
+    key: str = ""
     engine: str = "builtin"
     strategy: str = "sequential"
     background_method: str = "snip"
@@ -52,6 +57,7 @@ class RefinementTemplate:
         return cls(
             name=data.get("name", ""),
             description=data.get("description", ""),
+            key=data.get("key", ""),
             engine=data.get("engine", "builtin"),
             strategy=data.get("strategy", "sequential"),
             background_method=data.get("background_method", "snip"),
@@ -75,6 +81,7 @@ class RefinementTemplate:
 _BUILTIN_TEMPLATES: list[RefinementTemplate] = [
     RefinementTemplate(
         name="自动选择（推荐）",
+        key="auto",
         description=(
             "按样品条件自动选引擎: 全部物相都有结构 CIF 且 GSAS-II 可用时走 "
             "GSAS-II（真 Rietveld + wt% 定量），否则回退内置引擎（无结构剖面拟合）。"
@@ -90,6 +97,7 @@ _BUILTIN_TEMPLATES: list[RefinementTemplate] = [
     ),
     RefinementTemplate(
         name="标准晶态样品",
+        key="standard",
         description="适用于结晶度良好的常规样品，使用GSAS-II引擎和Voigt峰形",
         engine="gsas2",
         strategy="sequential",
@@ -101,6 +109,7 @@ _BUILTIN_TEMPLATES: list[RefinementTemplate] = [
     ),
     RefinementTemplate(
         name="快速物相分析",
+        key="quick",
         description="快速物相识别与定量分析，使用内置引擎自动精修",
         engine="builtin",
         strategy="auto",
@@ -112,6 +121,7 @@ _BUILTIN_TEMPLATES: list[RefinementTemplate] = [
     ),
     RefinementTemplate(
         name="多相混合物",
+        key="multiphase",
         description="多相混合物定量分析，支持多个物相的序贯精修",
         engine="gsas2",
         strategy="sequential",
@@ -123,6 +133,7 @@ _BUILTIN_TEMPLATES: list[RefinementTemplate] = [
     ),
     RefinementTemplate(
         name="低结晶度样品",
+        key="low_cryst",
         description="适用于无定形或低结晶度样品，使用powerxrd和Lorentzian峰形",
         engine="powerxrd",
         strategy="auto",
@@ -134,6 +145,7 @@ _BUILTIN_TEMPLATES: list[RefinementTemplate] = [
     ),
     RefinementTemplate(
         name="同步辐射数据",
+        key="synchrotron",
         description="同步辐射高精度数据精修，使用GSAS-II引擎和SNIP背景",
         engine="gsas2",
         strategy="sequential",
@@ -145,6 +157,7 @@ _BUILTIN_TEMPLATES: list[RefinementTemplate] = [
     ),
     RefinementTemplate(
         name="常规Cu靶数据",
+        key="cu_target",
         description="常规Cu靶X射线衍射数据，使用内置引擎和滚动平均背景",
         engine="builtin",
         strategy="sequential",

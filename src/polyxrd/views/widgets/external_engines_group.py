@@ -142,6 +142,26 @@ class ExternalEnginesGroup(QGroupBox):
             )
 
     # ── 槽 ────────────────────────────────────────────────────
+    def retranslate(self) -> None:
+        """切语言时重设分组标题 / 每行按钮与提示 (引擎名本身是专有名词, 不翻)。"""
+        self.setTitle(tr("vw.external_engines_group.title"))
+        for row in self._rows.values():
+            spec: ToolSpec = row["spec"]
+            row["edit"].setPlaceholderText(
+                tr("vw.external_engines_group.placeholder"))
+            row["browse"].setText(tr("vw.external_engines_group.browse"))
+            row["detect"].setText(tr("vw.external_engines_group.detect"))
+            row["detect"].setToolTip(tr("vw.external_engines_group.detect_tip"))
+            row["run"].setText(
+                tr("vw.external_engines_group.start_refine")
+                if spec is FULLPROF_SPEC
+                else tr("vw.external_engines_group.launch_gui")
+            )
+            row["run"].setToolTip(
+                tr("vw.external_engines_group.run_tip", title=spec.title))
+        # 状态灯提示里有本地化的"可用/不可用"字样 → 重跑一次状态刷新
+        self.refresh_status()
+
     def _on_path_edited(self, spec: ToolSpec, edit: QLineEdit) -> None:
         text = edit.text().strip()
         if text:

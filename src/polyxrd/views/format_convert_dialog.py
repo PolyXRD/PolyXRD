@@ -144,10 +144,16 @@ class FormatConvertDialog(QDialog):
         if not ext:
             return
         current = self._output.text().strip()
-        base = Path(current) if current else Path(self._source.text().strip() or "")
-        if not str(base):
+        src = self._source.text().strip()
+        raw = current or src
+        # ⚠️ 必须判 `raw` 而不是判 `str(Path(raw))`: `Path("")` 是 `Path(".")`,
+        # 它的 str() 是 "." (真值!) 而 `Path(".").with_suffix(".xy")` 会抛
+        # `ValueError: WindowsPath('.') has an empty name` —— 旧的写法让
+        # "未加载数据时打开格式转换对话框" 直接崩在构造阶段 (source=None 时
+        # 源/目标都为空)。这里两处都空就只能放弃自动填输出路径。
+        if not raw:
             return
-        self._output.setText(str(base.with_suffix(ext)))
+        self._output.setText(str(Path(raw).with_suffix(ext)))
 
     def _preview(self) -> None:
         """源文件可用时先读一遍, 把点数与 2θ 范围显示出来 (读不动就说明原因)。"""

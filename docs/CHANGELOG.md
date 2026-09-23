@@ -2,7 +2,7 @@
 
 > 覆盖范围：**v0.3.0（可追溯最早版本）→ v1.0.1（2026-09-22，已发布）+ v1.0.2（启动稳健性修复，已收口未发布）+ v1.1.1（国际化补全 / 全链路 UTF-8 / 素材去水印，当前工作版本）**
 > 合并日期：2026-09-21 ｜ 由 4 份历史变更记录（CHANGELOG01 / 02 / 03 与原 CHANGELOG）合并去重而成
-> 最后更新：2026-09-23（补 v1.0.1 正式发布记录 + Release 附件清单 + **v1.0.2 启动稳健性修复（版本号已定，EXE 暂不重建）** + v1.0.1 遗留的版本号收口补正与 `pyproject.toml` 元数据补齐 + **v1.1.1 英/日界面翻译全量补全 + 全链路 UTF-8 + 启动图/横幅去「AI生成」水印**）
+> 最后更新：2026-09-23（补 v1.0.1 正式发布记录 + Release 附件清单 + **v1.0.2 启动稳健性修复（版本号已定，EXE 暂不重建）** + v1.0.1 遗留的版本号收口补正与 `pyproject.toml` 元数据补齐 + **v1.1.1 英/日界面翻译全量补全 + 全链路 UTF-8 + 启动图/横幅去「AI生成」水印** + **v1.1.1 运行期切语言「整页重翻译」补修：上一轮离屏冒烟为假阴性，改用隔离 QSettings 键 + 每组独立进程的探测器后残留归零**）
 > 数据来源：git 提交历史 + GitHub Release 正文 + 项目工作记忆（逐日工作日志）+ 交接期源码包回溯
 > 联系：sshztx@outlook.com
 >
@@ -1800,6 +1800,7 @@ GUI 引擎选择与回退提示），本轮回归复核通过，无需改动。
 
 - **三语键集对齐到 894 × 3，两两完全相等**（此前 zh 562 / en 550 / ja 510）。
   翻译文件仍以 `json.dumps(..., ensure_ascii=False, indent=4)` + LF 重写，**键集相等**是硬不变量。
+  （运行期切语言补修时再补 `template.builtin.*` 7 条 → **最终 901 × 3**，双向差集为空。）
 - **31 个"幽灵键"逐条回挂真实键**（涉及 11 个视图文件）：每个幽灵键都在翻译表里找到语义对应的
   既有键后重映射，例如 `find_peaks_btn → vw.data_view.detect_peaks`、`run_bg_btn → exec_bg_subtract`、
   `_label / _db_label → db_builtin / db_cod_inorg / db_cod_full / db_pdf2`。另修正 2 处键名笔误
@@ -1827,10 +1828,10 @@ GUI 引擎选择与回退提示），本轮回归复核通过，无需改动。
 | 项 | 结果 |
 |---|---|
 | 语法编译 | **110 / 110** 源文件通过 |
-| 三语键数 | `zh=894` / `en=894` / `ja=894` |
+| 三语键数 | `zh=901` / `en=901` / `ja=901`（运行期切语言补修后终值） |
 | 键集对齐 | `zh==en` **True**、`zh==ja` **True** |
 | `tr()` 覆盖扫描 | 字面量键 **580**，缺失 **0**，占位符不匹配 **0** |
-| 离屏冒烟（隔离 QSettings，分别以 en_US / ja_JP 构建主窗口） | en_US 残留 **2**、ja_JP 残留 **3**，**全部为预期**：`ACT:中文` / `ACT:日本語` 是语言菜单自身以本族文字显示；ja 的第 3 项 `BTN:検出` 是**合法日文汉字**（検出＝detection）。**无真实未翻译控件** |
+| 离屏冒烟（首轮，**结论已作废**） | en_US 残留 **2**、ja_JP 残留 **3** —— ❌ **假阴性**。该脚本只把 `QSettings` 引到临时目录，而 `QSettings(org, app)` 在 Windows 上**仍走 Native 注册表**，`_load_settings()` 又用注册表里的 `language` **覆盖**进程内设语言 → 实际量的是**中文**界面，"没残留"是必然。**真实残留为 en 61 / ja 52**（见下节「运行期切语言的整页重翻译」） |
 | 相关回归 `pytest`（DB 对话框 / 精修日志 / 纵坐标 / busy 闸门 / 向导 MAUD） | **90 passed** |
 
 > 冒烟脚本带来的教训（供复现）：`MainWindow._load_settings()` 会用持久化的 `QSettings`
@@ -1838,6 +1839,11 @@ GUI 引擎选择与回退提示），本轮回归复核通过，无需改动。
 > 模块里的 `_i18n` 单例缓存 —— 冒烟测试必须**把 QSettings 引到临时目录**、**完整重置单例**
 > 并**预置 `language`**，否则会误判"翻译没生效"。另：离屏平台无字体，截图只会得到方框，
 > **文本抽取**才是可靠判据。
+>
+> ⚠️ **2026-09-23 修正**：上面这条"引到临时目录"**并不成立** —— `setDefaultFormat(IniFormat)`
+> + `setPath(...)` 在 Windows 上**拦不住** `QSettings(org, app)`，它照样读 HKCU 注册表。
+> 按此写的脚本得出的是**假阴性**（实际量的是中文界面）。可靠做法与实测轨迹见下节
+> 「运行期切语言的整页重翻译 › 探测器本身的两个坑」。
 
 #### 语言注册表：zh_CN 显示「简体中文」+ 预留 zh_TW
 
@@ -1912,6 +1918,66 @@ GUI 引擎选择与回退提示），本轮回归复核通过，无需改动。
   结合本项目 v1.0.2 定位到的 `window.show()` 原生崩溃（Qt6Widgets.dll）历史，
   启动阶段**少做一次重解码**是有价值的。
 - 原图备份在 `~/.polyxrd/artwork_backup_before_watermark_removal/`（不入库）。
+
+#### 运行期切语言的「整页重翻译」（本轮补修）
+
+**这一段纠正上一节的结论**：上一节"离屏残留 2 / 3 ⇒ 无真实未翻译控件"是**假阴性**（原因见验证表）。
+换成经得起检验的探测器后，真实缺陷暴露出来 —— 语言切换只刷新了**菜单栏 / 工具栏 / 四个标签页标题**，
+页面**内部**与**停靠面板**的静态文案原地不动，于是"英文界面里混着中文"。
+
+- **每个视图自实现 `retranslate()`**（沿用 Qt `retranslateUi` 惯例）：`data_view` /
+  `phase_view` / `refinement_view` / `report_view` 四个页面，以及 `pattern_display` /
+  `plot_widget` / `peak_table` / `peak_match_table` / `external_engines_group` 五个控件。
+  硬约定：**只重设构造期写死的静态文案，绝不触碰运行期数据**（谱线 / 峰表 / 候选列表），
+  否则切一次语言就冲掉用户的分析结果。
+- **`MainWindow._retranslate_views()` 递归下钻**：遍历四个页面的全部 `findChildren(QWidget)`
+  逐个调用其 `retranslate()`，嵌套控件因此只刷新一次、不会重复触发。
+- **新增 `MainWindow._retranslate_docks()`**：左侧「参数」/ 右侧「物相」两个停靠面板不属标签页，
+  需单独处理 ——
+  - 参数表单的**行标签**用 `QFormLayout.labelForField()` 反查设置。⚠️ 易漏点：
+    `_bg_method_combo` / `_smooth_method_combo` 的行标签与手工 `addRow(QLabel(...))` 插入的
+    **分节标题是两个不同 QLabel**（取同一批 key、文本一样），只改一个另一个仍留中文；
+  - 两个下拉的**条目名**本身是本地化的 → `_refill_combo()` **保住当前选择索引**后整表重建；
+  - 物相面板的「全选 / 清除」两个按钮；
+  - `_peak_hi_check`（文本 + 提示）、`_peak_distance_spin` 提示。
+- **新增 `MainWindow._apply_persisted_language()`**：在 `_setup_ui()` **之前**把 `QSettings`
+  里的语言装进 `I18nManager`。此前页面先按默认中文建好、语言随后才生效，结果是持久化语言在
+  **下次启动**时只对菜单生效、页面依旧中文。
+- **修 2 处翻译键错配 + 8 个遗漏动作**：
+  - `refine_wizard_menu` 重翻译时用了 `menu.structure_refinement.wizard`（精修向导），
+    而创建时用的是 `wizard_quick`（精修向导（快速））→ 切一次语言**菜单项悄悄改名**；
+  - `_retranslate_actions()` 补 `reset` / `export` / `clear_data` / `db_manager` /
+    `db_open_dir` / `refine_wizard_full` / `batch_refine` / `toggle_theme`；
+  - **「数据库」菜单标题**此前压根不在 `_retranslate_menus()` 的映射表里。
+  - 另补工具栏 `setWindowTitle(tr("toolbar.main"))` 与动作 tooltip 的重翻译。
+- **精修内置模板名改走 i18n**：模板名同时被当作**文件名 / 查找键**，不能直接本地化 ——
+  给 `RefinementTemplate` 增加稳定 `key` 字段，新增 `template.builtin.*` 翻译键
+  （7 条：`auto` / `standard` / `quick` / `multiphase` / `low_cryst` / `synchrotron` / `cu_target`），
+  界面显示名与内部键解耦，用户自建模板仍显示自己的 `name`。
+- **顺带修一个打开即崩**：`FormatConvertDialog._sync_output()` 在**无源文件**时
+  `Path("")` 实际得到 `Path('.')`，`with_path.with_suffix()` 抛
+  `ValueError: WindowsPath('.') has an empty name`。已改为空串直接返回。
+
+**刻意不翻译的记号**（属国际通用写法，翻反而错）：精修页 `Rexp:` / `Rb:`（IUCr 记号）、
+物相页 `FWHM:`、纵轴 `log` / `sqrt`。
+
+#### 验证（本轮）
+
+| 项 | 结果 |
+|---|---|
+| 三语键数 / 对齐 | `zh=901` / `en=901` / `ja=901`，`zh-en` / `en-zh` / `zh-ja` / `ja-zh` / `en-ja` **双向差集全部为空** |
+| 语法编译 | **110 / 110** 源文件通过 |
+| 离屏残留扫描 | en_US fresh **0** / en_US switch **0** / ja_JP fresh **0** / ja_JP switch **0**（每组各采集 1284–1287 条文本 / 控件） |
+| 对照（同一探测器，轨迹可复现） | 上一轮工作结束 **en switch 61 / ja switch 52** → 本轮首测 **10 / 7** → 修掉最后 4 处后 **0 / 0** |
+| 回归 `pytest` | `tests/` 全量 **1016 项收集 / 1014 通过 / 2 跳过 / 0 失败**（12m33s）。过程中修了 3 处**测试自身**的问题：① `test_v012_element_order.py` 仍引用 i18n 重构中已删除的模块级 `STATE_LABELS` → 收集期 `ImportError`（改用 `state_label()`）；② 测试套件对**语言环境状态**敏感 —— `I18nManager` 是进程级单例、`MainWindow` 又会用持久化 `language` 覆盖当前语言，导致同一断言"单跑绿、跑整套红" → 新增 `tests/conftest.py` 钉死 `zh_CN` 并隔离 `QSettings` 的 `language` 读写（顺带阻断测试写坏开发者真机注册表）；③ 2 条断言仍写死服务层改造前的**中文字面量**（`engine_fallback_reason` 已按 `services/` 不依赖 i18n 的硬约定改为 ASCII、报告标题因标题改动多了空格）→ 改为断言语义/译文键 |
+
+> ⚠️ **探测器本身的两个坑**（复现必读）：
+> ① `QSettings.setDefaultFormat(IniFormat)` + `setPath(...)` 在 Windows 上**拦不住**
+> `QSettings(org, app)` —— 它照样读 HKCU 注册表。可靠做法是**在类上临时拦掉 `language` 键**
+> （本仓库用 `_smoke_i18n_one.py` 猴补 `QSettings.value`），既不动用户注册表，又让语言完全由脚本掌控。
+> ② `I18nManager` 是单例、且各视图模块持有模块级 `_i18n` 引用 → **一个进程里连跑
+> （语言 × 模式）多组会互相污染**（实测曾得到"en_US 段里全是日文"的荒谬结论）。
+> 必须**每组一个独立进程**，并同时核对脚本回显的 `mgr_language` 与探针键的译文。
 
 #### 版本号收口（5 处）
 

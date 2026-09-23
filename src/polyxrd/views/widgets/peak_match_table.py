@@ -102,6 +102,14 @@ class PeakMatchTable(QWidget):
         self._assignments = []
         self._title.setText(tr("vw.peak_match_table.title"))
 
+    def retranslate(self) -> None:
+        """切语言时重设表头; 表体按已有归属重画一遍 (「未解释」这类字样在行里)。"""
+        self._table.setHorizontalHeaderLabels(self.COLUMNS)
+        if getattr(self, "_assignments", None):
+            self.set_assignments(self._assignments)
+        else:
+            self._title.setText(tr("vw.peak_match_table.title"))
+
     # ── 颜色工具 ──────────────────────────────────────────
     @staticmethod
     def _qcolor(hex_color: str):

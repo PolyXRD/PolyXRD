@@ -136,6 +136,15 @@ class PlotWidget(QWidget):
     def _on_y_scale_changed(self, _mode: str) -> None:
         self._y_scale_hint.setText(hint_text(self._y_scale.mode()))
 
+    def retranslate(self) -> None:
+        """切语言时重设本控件的静态文案 (纵坐标提示的正文也跟着刷)。"""
+        self._btn_add_peak.setText(tr("vw.plot_widget.add_peak_btn"))
+        self._btn_reset.setText(tr("vw.plot_widget.reset_view_btn"))
+        self._btn_export.setText(tr("vw.plot_widget.export_img_btn"))
+        self._y_scale_hint.setToolTip(tr("vw.plot_widget.y_scale_hint_tip"))
+        # 提示正文由 hint_text() 生成, 换语言不会自动重算 → 这里按当前模式重设一次
+        self._on_y_scale_changed(self._y_scale.mode())
+
     def set_y_scale_mode(self, mode: str) -> None:
         """外部设定纵坐标模式 (linear/log/sqrt)。"""
         self._y_scale.set_mode(mode)

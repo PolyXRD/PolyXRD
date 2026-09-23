@@ -1150,8 +1150,27 @@ class RefinementWizard(QWidget):
         self._template_combo.clear()
         templates = self._template_mgr.get_all_templates()
         for t in templates:
-            label = tr("vw.refinement_wizard.tpl_builtin", name=t.name) if t.is_builtin else tr("vw.refinement_wizard.tpl_user", name=t.name)
+            label = (tr("vw.refinement_wizard.tpl_builtin",
+                        name=self._template_display_name(t))
+                     if t.is_builtin
+                     else tr("vw.refinement_wizard.tpl_user", name=t.name))
             self._template_combo.addItem(label, t)
+
+    @staticmethod
+    def _template_display_name(template) -> str:
+        """内置模板的**显示名**: 走 ``template.builtin.<key>`` 翻译键。
+
+        模板的 ``name`` 字段不能本地化 —— 它同时是用户模板的文件名与
+        ``get_template_by_name`` 的查找键, 一旦随语言漂移就会串味。所以内置
+        模板另带一个稳定 ``key``, 只用来取显示名; 用户模板没有 key, 直接显示
+        name (用户自己起的名, 不该被翻译)。
+        """
+        key = getattr(template, "key", "")
+        if key:
+            translated = tr(f"template.builtin.{key}")
+            if translated != f"template.builtin.{key}":
+                return translated
+        return template.name
 
     def _on_template_changed(self, index: int) -> None:
         template = self._template_combo.itemData(index)

@@ -1012,5 +1012,16 @@ translations = {
         "cell_angles": "            α={alpha}, β={beta}, γ={gamma}°",
         "cell_volume": "  晶胞体积: {volume} Å³",
         "total_fraction": "物相总含量: {value} %"
+    },
+    "template": {
+        "builtin": {
+            "auto": "自动选择（推荐）",
+            "standard": "标准晶态样品",
+            "quick": "快速物相分析",
+            "multiphase": "多相混合物",
+            "low_cryst": "低结晶度样品",
+            "synchrotron": "同步辐射数据",
+            "cu_target": "常规Cu靶数据"
+        }
     }
 }

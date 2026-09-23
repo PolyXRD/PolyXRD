@@ -84,8 +84,8 @@ class PhaseView(QWidget):
         main_layout.addWidget(self._plot, stretch=3)
 
         # ====== 下部: 控制面板 (可滚动) ======
-        control_group = QGroupBox(tr("vw.phase_view.group_phase"))
-        control_layout = QHBoxLayout(control_group)
+        self._group_phase = QGroupBox(tr("vw.phase_view.group_phase"))
+        control_layout = QHBoxLayout(self._group_phase)
         control_layout.setSpacing(8)
 
         # 左侧: 元素过滤按钮 + 识别方法
@@ -129,7 +129,8 @@ class PhaseView(QWidget):
         # 数据库源选择 (双库切换)
         db_row = QHBoxLayout()
         db_row.setSpacing(6)
-        db_row.addWidget(QLabel(tr("vw.phase_view.label_db_source")))
+        self._label_db_source = QLabel(tr("vw.phase_view.label_db_source"))
+        db_row.addWidget(self._label_db_source)
         self._db_combo = QComboBox()
         self._db_combo.addItems(self._db_source_labels())
         self._db_combo.setFixedHeight(28)
@@ -165,7 +166,8 @@ class PhaseView(QWidget):
         self._fwhm_spin.setFixedWidth(80)
         method_layout.addWidget(self._fwhm_spin)
 
-        method_layout.addWidget(QLabel(tr("vw.phase_view.label_tolerance")))
+        self._label_tolerance = QLabel(tr("vw.phase_view.label_tolerance"))
+        method_layout.addWidget(self._label_tolerance)
         self._tolerance_spin = QDoubleSpinBox()
         self._tolerance_spin.setRange(0.05, 1.0)
         self._tolerance_spin.setValue(0.2)
@@ -270,7 +272,7 @@ class PhaseView(QWidget):
 
         control_layout.addLayout(right_panel, stretch=1)
 
-        main_layout.addWidget(control_group, stretch=1)
+        main_layout.addWidget(self._group_phase, stretch=1)
 
         # ====== 底部: 峰-物相归属表 (M21 v2) ======
         self._match_table = PeakMatchTable()
@@ -287,6 +289,39 @@ class PhaseView(QWidget):
     # ------------------------------------------------------------------
     # 元素过滤对话框
     # ------------------------------------------------------------------
+
+    def retranslate(self) -> None:
+        """按当前语言重设本页构造期写死的文案 (不碰候选列表/匹配表内容)。
+
+        ``FWHM:`` 这个标签刻意保留英文 —— 与轴标题上的 ``log``/``sqrt``、
+        精修页的 ``Rexp:``/``Rb:`` 一样属于国际通用技术记号。
+        """
+        self._group_phase.setTitle(tr("vw.phase_view.group_phase"))
+
+        self._btn_open_filter.setText(tr("vw.phase_view.btn_element_filter"))
+        self._btn_open_filter.setToolTip(tr("vw.phase_view.tip_element_filter"))
+        self._btn_clear_filter.setText(tr("vw.phase_view.btn_clear_filter"))
+        # 过滤摘要按当前 _filter_dict 重新拼 (四态文案都要跟着换)
+        self._update_filter_summary()
+
+        self._label_db_source.setText(tr("vw.phase_view.label_db_source"))
+        # 数据库下拉项本身是本地化的 (「内置 118 相 / COD 无机物 …」) → 整表重建
+        self.refresh_db_sources()
+
+        self._btn_profile_fitting.setText(tr("vw.phase_view.btn_profile_fitting"))
+        self._btn_profile_fitting.setToolTip(tr("vw.phase_view.tip_profile_fitting"))
+        self._label_tolerance.setText(tr("vw.phase_view.label_tolerance"))
+        self._tolerance_spin.setToolTip(tr("vw.phase_view.tip_tolerance"))
+
+        self._btn_identify.setText(tr("vw.phase_view.btn_traditional"))
+        self._btn_identify.setToolTip(tr("vw.phase_view.tip_traditional"))
+        self._btn_quick_identify.setText(tr("vw.phase_view.btn_quick"))
+        self._btn_select.setText(tr("vw.phase_view.btn_select_phase"))
+        self._btn_auto_mix.setText(tr("vw.phase_view.btn_auto_mix"))
+        self._btn_auto_mix.setToolTip(tr("vw.phase_view.tip_auto_mix"))
+        self._btn_clear_sel.setText(tr("vw.phase_view.btn_clear_sel"))
+        self._btn_toggle_calc.setText(tr("vw.phase_view.btn_overlay_calc"))
+        self._btn_toggle_resid.setText(tr("vw.phase_view.btn_show_resid"))
 
     def _open_element_dialog(self) -> None:
         """打开元素过滤对话框"""
