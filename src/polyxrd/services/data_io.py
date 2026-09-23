@@ -63,7 +63,9 @@ def detect_format(path: Union[str, Path]) -> str:
 
 def _read_numeric_rows(path: Path):
     """读取纯文本并返回数值行列表 + 分隔符, 跳过注释/空/表头。"""
-    with open(path, "r", encoding="utf-8", errors="ignore") as f:
+    # v1.1.1: utf-8-sig —— 仪器/Excel 导出的 UTF-8 文本常带 BOM, 用 utf-8 读会在
+    # 首行留下 \ufeff, 使第一列数值 float() 解析失败 (表现为"文件读进来是空的")。
+    with open(path, "r", encoding="utf-8-sig", errors="ignore") as f:
         lines = f.readlines()
     if not lines:
         raise DataFormatError(f"空文件: {path}")

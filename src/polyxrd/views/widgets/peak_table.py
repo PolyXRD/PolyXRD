@@ -243,7 +243,9 @@ class PeakTable(QWidget):
             tr("vw.peak_table.dlg_export_peaks_filter")
         )
         if path:
-            with open(path, "w", newline="", encoding="utf-8") as f:
+            # v1.1.1: 表头随界面语言本地化 (中文/日文), 因此必须带 BOM 写入,
+            # 否则 Excel / WPS 按系统 ANSI 代码页解释会全是乱码。
+            with open(path, "w", newline="", encoding="utf-8-sig") as f:
                 writer = csv.writer(f)
                 writer.writerow(self.COLUMNS)
                 for row, peak in enumerate(self._peaks):
