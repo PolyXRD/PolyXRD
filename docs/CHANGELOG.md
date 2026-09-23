@@ -2234,6 +2234,28 @@ GUI 引擎选择与回退提示），本轮回归复核通过，无需改动。
   低角侧更宽 / 低角显著高角弱 / 精修接口透传与默认值）。
 - **回归**：峰形/谱合成/精修/指标共 **138 项全通过**。
 
+#### 14. 许可证变更：MIT → 双许可（学术免费 / 商业需单独书面授权）
+
+- **变更**：本仓库**不再以 MIT 授权**。新增根目录
+  [`LICENSE`](../LICENSE)（英文）与 [`LICENSE-CN`](../LICENSE-CN)（中文），
+  两者对应同一份**双许可条款**：
+  - **学术许可**：学术研究、教学、非商业目的免费使用/修改/分发（需保留版权与许可声明）；
+  - **商业许可**：任何商业用途**必须**事先取得版权持有人单独书面授权
+    （联系 `sshztx@outlook.com`），条款第二/二节列举了商业用途的范围。
+  - 另含**引用要求**（使用本软件产出结果的论文/报告/演示需按项目文档引用）与通用条款
+    （违约自动终止、不默示授予专利权利）。
+- **README**：`## 📝 版本兼容性 & License` 段落由原来的"代码部分遵循 MIT License"
+  替换为**中英双语精简版权声明**，并指向两个许可文件；README 文件树补入 `LICENSE` / `LICENSE-CN`。
+- **元数据**：`pyproject.toml` 的 `license = "MIT"` →
+  **`license = "LicenseRef-PolyXRD-Academic-Dual"`**（SPDX 无该双许可的标准标识符，
+  按 PEP 639 使用 `LicenseRef-`），`license-files = ["LICENSE", "LICENSE-CN"]`。
+  实测 `prepare_metadata_for_build_wheel` **零警告**，产物元数据为
+  `License-Expression: LicenseRef-PolyXRD-Academic-Dual` + 两条 `License-File`。
+- **第三方许可不受影响**：PySide6 (LGPL/GPL)、pymatgen、COD、powerxrd 等**上游依赖各自的
+  许可证条款照旧**（README 开源致谢表与 `Thx2OpenSource.md` 保留）。
+- **注意**：本条目仅记录许可条款变更；**历史版本（≤ v1.1.1）的已发布内容按当时声明的 MIT 授权**，
+  新条款自本版本起对仓库内容生效。商业授权判定请以 `LICENSE` / `LICENSE-CN` 正文为准。
+
 ## 附录 A · 路线图模块（M01–M25）与版本对照
 
 | 模块 | 名称 | 落地版本 | 备注 |

@@ -7,8 +7,10 @@ name = "polyxrd"
 version = "1.1.1"
 description = "X射线衍射仪数据分析软件 - 物相分析与Rietveld结构精修"
 readme = "README.md"
-license = "MIT"
-license-files = []
+# 双许可 (学术免费 / 商业需单独书面授权): SPDX 无对应标准标识符,
+# 按 PEP 639 用 LicenseRef-, 条款正文见 LICENSE (英文) 与 LICENSE-CN (中文)。
+license = "LicenseRef-PolyXRD-Academic-Dual"
+license-files = ["LICENSE", "LICENSE-CN"]
 requires-python = ">=3.10"
 authors = [
     {name = "PolyXRD Team", email = "sshztx@outlook.com"},
