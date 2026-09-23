@@ -1245,7 +1245,68 @@ class RietveldRefiner:
         # 0.05°~0.15°, 残差被这一项锁住 → wR 下不来。挂在参数向量末尾, 是为了不动
         # 既有 n_phases+0..6 的索引算术 (降低回归风险)。
         refine_cell = bool(kwargs.get("refine_cell", True))
-        n_cell = n_phases if refine_cell else 0
+        # v1.1.2 (W18): cell_mode 决定晶胞自由度的参数化方式
+        #   "isotropic" (默认) = 每相 1 个各向同性缩放因子 (旧行为, 不变)
+        #   "full"             = 每相 6 个缩放因子 (a,b,c,α,β,γ 各自相对库值的比例),
+        #                        由 hkl 反算 d → 2θ, 能修各向异性失配
+        cell_mode = str(kwargs.get("cell_mode", "isotropic")).lower()
+        if cell_mode not in ("isotropic", "full"):
+            cell_mode = "isotropic"
+        # v1.1.2 (W18) 峰表↔晶胞一致性检查 (仅 full 模式需要):
+        # 用相自带 lattice 由 hkl 重算 2θ, 与峰表存的 2θ 比较; 中位偏差 > 0.5° 判为
+        # 不自洽 (hkl 不可信), 该相退回各向同性。内置库静态峰表多数不自洽
+        # (Corundum/Zincite/Calcite/Brucite 实测中位差 9~15°, Fluorite 0.0007°),
+        # 而 CIF/pymatgen 现算的峰表天然自洽 —— 这正是本守卫要区分的两种来源。
+        cell_consistent: list = []
+        if cell_mode == "full" and wavelength and float(wavelength) > 0:
+            for _peaks in phase_peaks:
+                _lat = None
+                try:
+                    _lat = phases[len(cell_consistent)].lattice
+                except (IndexError, AttributeError):
+                    _lat = None
+                _diffs: list = []
+                if _lat is not None:
+                    for _p in (_peaks or [])[:400]:
+                        try:
+                            _hkl = _p[0]
+                            if _hkl is None or len(_hkl) not in (3, 4):
+                                continue
+                            if len(_hkl) == 4:
+                                _h, _k, _l = int(_hkl[0]), int(_hkl[1]), int(_hkl[3])
+                            else:
+                                _h, _k, _l = int(_hkl[0]), int(_hkl[1]), int(_hkl[2])
+                            _d = self._calc_d_spacing_from_hkl(
+                                float(_lat.a), float(_lat.b), float(_lat.c),
+                                float(_lat.alpha), float(_lat.beta), float(_lat.gamma),
+                                _h, _k, _l)
+                            if _d <= 0:
+                                continue
+                            _s = float(wavelength) / (2.0 * _d)
+                            if _s >= 1.0:
+                                continue
+                            _t = 2.0 * float(np.degrees(np.arcsin(_s)))
+                            _diffs.append(abs(_t - float(_p[1])))
+                        except (TypeError, ValueError, IndexError):
+                            continue
+                cell_consistent.append(
+                    bool(_diffs) and float(np.median(_diffs)) < 0.5
+                )
+        # v1.1.2 (W18) 全有或全无:
+        # 只要有一个相的峰表与晶胞不自洽 (hkl 不可信), 就**整体**退回各向同性。
+        # 反例实录: 4-1 里只有 CaF2 自洽 (7 条峰), 放它单独上 6 个自由晶胞参数
+        # 会去追别相未被建模的残差 → wR 41%→70% (过拟合)。全有或全无可挡住。
+        use_full_cell = bool(
+            cell_mode == "full" and cell_consistent and all(cell_consistent)
+        )
+        if cell_mode == "full" and not use_full_cell:
+            _plog(
+                "[cell] full 模式请求被守卫拒绝 (存在峰表与晶胞不自洽的相: "
+                f"{[getattr(p, 'name', '?') for p, c in zip(phases, cell_consistent) if not c]}) "
+                "→ 整体退回各向同性缩放"
+            )
+        n_cell_per_phase = 6 if use_full_cell else 1
+        n_cell = (n_cell_per_phase * n_phases) if refine_cell else 0
         _cell_off = n_phases + (7 if use_caglioti else 4)
         n_params = n_phases + 7 + n_cell
         if not use_caglioti:
@@ -1420,8 +1481,15 @@ class RietveldRefiner:
             lower_parts.append(np.array([-0.05, -0.10, 1e-4]))
             upper_parts.append(np.array([0.20, 0.10, 4.0]))
         if n_cell:
-            lower_parts.append(np.full(n_cell, cell_lo))
-            upper_parts.append(np.full(n_cell, cell_hi))
+            if use_full_cell:
+                # 每相: 3 个长度比例 + 3 个角度比例 (角度 ±3% ≈ 90° 处 ±2.7°)
+                lower_parts.append(np.tile(
+                    np.array([cell_lo, cell_lo, cell_lo, 0.97, 0.97, 0.97]), n_phases))
+                upper_parts.append(np.tile(
+                    np.array([cell_hi, cell_hi, cell_hi, 1.03, 1.03, 1.03]), n_phases))
+            else:
+                lower_parts.append(np.full(n_cell, cell_lo))
+                upper_parts.append(np.full(n_cell, cell_hi))
         if n_tex:
             # March-Dollase r: 0.6 ↔ 1.8, 覆盖 Brucite 实测所需 r≈0.66 (r^-4.5=6.35)
             lower_parts.append(np.full(n_tex, 0.6))
@@ -1502,7 +1570,11 @@ class RietveldRefiner:
             """晶胞缩放 (峰位) + March-Dollase (峰强) 一并作用到参考峰表。"""
             peaks = phase_peaks
             if n_cell and cs is not None:
-                peaks = self._scale_phase_peaks(peaks, cs, wavelength)
+                if use_full_cell:
+                    peaks = self._apply_full_cell(
+                        peaks, cs, phases, wavelength, cell_consistent or None)
+                else:
+                    peaks = self._scale_phase_peaks(peaks, cs, wavelength)
             if n_tex and tex is not None:
                 peaks = self._apply_texture(peaks, tex_axes, tex)
             return peaks
@@ -1784,13 +1856,18 @@ class RietveldRefiner:
         refined_phases = []
         for i, phase in enumerate(phases):
             lat = phase.lattice if phase.lattice else LatticeParams()
-            _s = opt_cell_list[i] if i < len(opt_cell_list) else 1.0
+            if cell_mode == "full" and len(opt_cell_list) >= 6 * (i + 1):
+                _sc = opt_cell_list[6 * i:6 * i + 6]        # (sa,sb,sc,sα,sβ,sγ)
+            else:
+                _s1 = opt_cell_list[i] if i < len(opt_cell_list) else 1.0
+                _sc = [_s1, _s1, _s1, 1.0, 1.0, 1.0]
             refined_phases.append(Phase(
                 name=phase.name,
                 formula=phase.formula,
                 lattice=LatticeParams(
-                    a=lat.a * _s, b=lat.b * _s, c=lat.c * _s,
-                    alpha=lat.alpha, beta=lat.beta, gamma=lat.gamma,
+                    a=lat.a * _sc[0], b=lat.b * _sc[1], c=lat.c * _sc[2],
+                    alpha=lat.alpha * _sc[3], beta=lat.beta * _sc[4],
+                    gamma=lat.gamma * _sc[5],
                 ),
                 weight_fraction=float(weight_pcts[i]),
             ))
@@ -1865,6 +1942,13 @@ class RietveldRefiner:
                 # v0.15.2 A 路线: 各向同性晶胞缩放 (每相一个自由度, 1.0 = 库值)
                 "refine_cell": bool(refine_cell),
                 "cell_scale": opt_cell_list,
+                "cell_mode": cell_mode,   # v1.1.2 (W18): "isotropic" | "full"
+                "cell_mode_used": "full" if use_full_cell else "isotropic",
+                "cell_consistent": list(cell_consistent),
+                "cell_mode_effective": (
+                    ["full"] * n_phases if use_full_cell
+                    else ["isotropic"] * n_phases
+                ),
                 # v0.15.2 A 路线续: March-Dollase 织构 (仅 _tex_idx 内的相有值)
                 "refine_texture": bool(refine_texture),
                 "texture_phases": [getattr(phases[i], "name", "?") for i in _tex_idx],
@@ -2040,6 +2124,87 @@ class RietveldRefiner:
             np.asarray(two_theta, dtype=float), phase_peaks,
             weights, fwhm, eta, scale, peak_shape, caglioti,
         )
+
+    @staticmethod
+    def _apply_full_cell(
+        phase_peaks: list, cell_scales_flat, phases: list, wavelength: float,
+        consistent: Optional[list] = None,
+    ) -> list:
+        """全晶胞参数修正峰位 —— v1.1.2 (W18)。
+
+        ``cell_scales_flat`` 长度 = 6 × 相数, 每相 6 个**相对库值的比例**
+        (sa, sb, sc, sα, sβ, sγ); 由 hkl 用一般三斜公式反算 d, 再
+        2θ = 2·arcsin(λ/(2d))。与各向同性缩放的区别: 各方向独立 → 能吸收
+        各向异性失配 (各向同性缩放只能整体平移)。
+
+        边界: 相无晶胞 / 峰无 hkl / d≤0 → 该相或该峰原样保留;
+              sin(θ) ≥ 1 (落在不可测区) → 剔除该反射。
+        """
+        import math as _math
+
+        lam = float(wavelength or 0.0)
+        if lam <= 0 or not phase_peaks:
+            return phase_peaks
+        try:
+            scales = np.asarray(cell_scales_flat, dtype=float).reshape(-1, 6)
+        except (ValueError, TypeError):
+            return phase_peaks
+        out: list = []
+        for i, peaks in enumerate(phase_peaks):
+            lat = phases[i].lattice if i < len(phases) else None
+            if lat is None or i >= scales.shape[0]:
+                out.append(peaks)
+                continue
+            # v1.1.2 (W18) 一致性守卫: 峰表 2θ 必须能由 (hkl, lattice) 重算出来,
+            # 否则该相的 hkl 不可信 (内置库多数矿物如此, 实测中位差 9~15°),
+            # 强上 full 模式会把峰位算飞 → 该相退化为"用 sa 做各向同性缩放"。
+            if consistent is not None and not bool(consistent[i]):
+                out.append(RietveldRefiner._scale_phase_peaks(
+                    [peaks], [float(scales[i][0])], wavelength)[0])
+                continue
+            s = scales[i]
+            # ⚠ 这里**必须**用严格判零: 优化器的有限差分步长 ~1.5e-8, 而
+            # np.allclose 默认 rtol=1e-5 会把这么大的扰动也判成"等于 1",
+            # 于是早退 → 雅可比列恒为 0 → 晶胞参数永远不动 (实测踩过)。
+            if float(np.max(np.abs(np.asarray(s, dtype=float) - 1.0))) < 1e-12:
+                out.append(peaks)
+                continue
+            a = float(lat.a) * float(s[0])
+            b = float(lat.b) * float(s[1])
+            c = float(lat.c) * float(s[2])
+            al = float(lat.alpha) * float(s[3])
+            be = float(lat.beta) * float(s[4])
+            ga = float(lat.gamma) * float(s[5])
+            conv: list = []
+            for p in peaks:
+                try:
+                    hkl = p[0]
+                    if hkl is None:
+                        conv.append(p)
+                        continue
+                    if len(hkl) == 4:      # 六方/三方四指标 (h,k,i,l) → 取 l
+                        h, k, l = float(hkl[0]), float(hkl[1]), float(hkl[3])
+                    elif len(hkl) >= 3:
+                        h, k, l = float(hkl[0]), float(hkl[1]), float(hkl[2])
+                    else:
+                        conv.append(p)
+                        continue
+                    inten = float(p[2])
+                except (TypeError, ValueError, IndexError):
+                    conv.append(p)
+                    continue
+                d = RietveldRefiner._calc_d_spacing_from_hkl(
+                    a, b, c, al, be, ga,
+                    int(round(h)), int(round(k)), int(round(l)))
+                if d <= 0:
+                    conv.append(p)
+                    continue
+                sin_half = lam / (2.0 * d)
+                if sin_half >= 1.0:
+                    continue
+                conv.append((p[0], 2.0 * _math.degrees(_math.asin(sin_half)), inten))
+            out.append(conv)
+        return out
 
     @staticmethod
     def _apply_displacement(
