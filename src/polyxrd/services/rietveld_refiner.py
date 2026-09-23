@@ -43,6 +43,86 @@ class RietveldRefiner:
     - manual: 手动控制
     """
 
+    # ── v2.0.0 (W26/W27): 分阶段精修 ────────────────────────────────────
+    _MASK_ALL_ON = {
+        "scale": True, "background": True, "profile": True, "cell": True,
+        "zero_shift": True, "texture": True, "displacement": True,
+        "b_overall": True,
+    }
+
+    @classmethod
+    def _stage_schedule(cls, pipeline: str) -> list[tuple[str, dict]]:
+        """阶段表: [(阶段名, param_mask)]；mask 为 None 表示全放开。"""
+        off = dict(cls._MASK_ALL_ON)
+
+        def _mask(**on) -> dict:
+            m = {k: False for k in off}
+            m.update(on)
+            return m
+
+        if pipeline == "le_bail_then_rietveld":
+            # W26: "Le Bail 级"预处理 —— 只求把晶胞/背景/标度稳住, 轮廓与位置项先冻结
+            return [
+                ("stabilize", _mask(scale=True, background=True, cell=True)),
+                ("full", None),
+            ]
+        # W27: 渐进释放 (每个阶段只放开上一阶段的增量自由度)
+        return [
+            ("scale_bg", _mask(scale=True, background=True)),
+            ("profile", _mask(scale=True, background=True, profile=True)),
+            ("positions", _mask(scale=True, background=True, profile=True,
+                                zero_shift=True, displacement=True)),
+            ("cell", _mask(scale=True, background=True, profile=True,
+                           zero_shift=True, displacement=True, cell=True)),
+            ("structure", None),   # 全放开 (含织构 / 整体 B)
+        ]
+
+    def _refine_staged(
+        self, data: XRDData, phases: list[Phase], strategy: str,
+        max_cycles: int, kwargs: dict,
+    ) -> RefinementResult:
+        """带热启动的多阶段精修 (W26 流水线 / W27 分阶段释放)。"""
+        pipeline = str(kwargs.get("pipeline", "") or "").lower()
+        stages = self._stage_schedule(pipeline)
+        inner = dict(kwargs)
+        inner["_staged_inner"] = True
+        inner["release_stages"] = False
+        inner.pop("pipeline", None)
+        inner.pop("_x0", None)
+        log = self.make_logger(kwargs)
+
+        x0 = None
+        trace: list[dict] = []
+        result: Optional[RefinementResult] = None
+        for name, mask in stages:
+            kw = dict(inner)
+            kw.pop("_x_sink", None)          # 每阶段用独立回收槽
+            sink: dict = {}
+            kw["_x_sink"] = sink
+            kw["wR_threshold"] = None        # 阶段内不做快检早退
+            kw["log_stage"] = f"[{name}] "
+            if mask is not None:
+                kw["_param_mask"] = dict(mask)
+            if x0 is not None:
+                kw["_x0"] = x0
+            result = self._refine_builtin(data, phases, strategy, max_cycles, **kw)
+            trace.append({
+                "stage": name,
+                "wR": float(result.wR),
+                "nfev": int(getattr(result, "num_cycles", 0) or 0),
+                "mask": (None if mask is None else dict(mask)),
+            })
+            _new_x = sink.get("x")
+            x0 = np.asarray(_new_x, dtype=float) if _new_x is not None else None
+            log(f"[stage {name}] wR={float(result.wR):.3f}%")
+
+        if result is None:   # 理论不可达 (阶段表非空), 保守兜底
+            result = self._refine_builtin(data, phases, strategy, max_cycles,
+                                          **{**inner, "_staged_inner": True})
+        result.fit_params["pipeline"] = pipeline or "staged_release"
+        result.fit_params["stages"] = trace
+        return result
+
     def __init__(self) -> None:
         self._config = get_config()
         # v0.15.1: CIF → |F|² 参考峰缓存 (key 见 _cif_reference_peaks)
@@ -1124,6 +1204,22 @@ class RietveldRefiner:
         def _plog(msg: str) -> None:
             log(_stage + msg)
 
+        # ── v2.0.0 (W26/W27): 分阶段 / 流水线调度 ──────────────────────────
+        # 两个开关共用同一机制 (带热启动的多阶段拟合), 只是阶段表不同:
+        #   pipeline="le_bail_then_rietveld" (W26, 2 阶段)
+        #       ① 稳 cell+背景+标度 (轮廓/零点/织构/B 全冻结)  ← "Le Bail 级"预处理
+        #       ② 全放开
+        #   release_stages=True (W27, 5 阶段渐进释放)
+        #       scale+bg → +profile → +零点/位移 → +cell → +织构/B
+        # 每阶段用 `_x_sink` 回收解向量, 作为下一阶段热启动; 阶段内关闭快检早退,
+        # 保证每阶段真收敛 (否则"未收敛的中间解"会被当起点传下去)。
+        _pipeline = str(kwargs.get("pipeline", "") or "").lower()
+        if (bool(kwargs.get("release_stages", False))
+                or _pipeline == "le_bail_then_rietveld"):
+            if not kwargs.get("_staged_inner", False):
+                return self._refine_staged(
+                    data, phases, strategy, max_cycles, kwargs)
+
         # ── 0. 快速路径: 无 Caglioti 快检, wR 达标即返回 ────────────
         wR_threshold = kwargs.get("wR_threshold", 20.0)
         best_quick: Optional[RefinementResult] = None
@@ -1179,7 +1275,10 @@ class RietveldRefiner:
         # v2.0.0 (W25): 起点优先由**观测峰**反推 (显式 kwargs 仍然最优先)
         _seed = (self._seed_from_observed_peaks(data)
                  if bool(kwargs.get("seed_from_peaks", True)) else {})
-        init_fwhm = float(kwargs.get("fwhm", _seed.get("fwhm") or 0.15))
+        # ⚠ 实测教训: 种子**只作为额外候选**, 不替换默认起点 ——
+        # 直接替换会让 4-1 这种多相试样从 28.48% 崩到 120.64%
+        # (反解出的 U/V 把 least_squares 引到另一个盆地; 多起点的意义正是对冲坏起点)。
+        init_fwhm = float(kwargs.get("fwhm", 0.15))
         bg_method = kwargs.get("bg_method", "median")  # v4: median → 显著优于 snip
         init_zero_shift = kwargs.get("zero_shift", 0.0)
         use_caglioti = kwargs.get("use_caglioti", True)
@@ -1446,12 +1545,10 @@ class RietveldRefiner:
         init_W = init_fwhm ** 2
         init_U = kwargs.get("U", 0.005)
         init_V = kwargs.get("V", -0.001)
-        # W25: Caglioti 起点优先取观测峰反解值 (显式 kwargs 最优先; 反解不可用则用默认)
-        init_W = float(kwargs.get("W", _seed.get("W") or init_W))
-        if _seed.get("U") is not None:
-            init_U = float(kwargs.get("U", _seed["U"]))
-        if _seed.get("V") is not None:
-            init_V = float(kwargs.get("V", _seed["V"]))
+        # W25 的观测峰反解值不在此处覆盖 init_* (见下方"额外候选"的处理)
+        init_W = float(kwargs.get("W", init_W))
+        init_U = float(kwargs.get("U", init_U))
+        init_V = float(kwargs.get("V", init_V))
 
         # ── 4. 构建多起点 x0 候选 ────────────────────────────────
         def _make_x0(weights, fwhm, eta, scale, zs, U=None, V=None, W=None):
@@ -1497,6 +1594,42 @@ class RietveldRefiner:
                                    init_scale_est * 0.5, init_zero_shift,
                                    U=0.01, V=-0.004, W=init_W))
         candidates = candidates[:n_starts]
+        # ── v2.0.0 (W25): 观测峰反推的起点作为**额外候选** ──────────────
+        # 放在 `[:n_starts]` 截断**之后**, 因此它不会被截掉, 也不会挤掉原有起点 ——
+        # 多起点的价值就在于"多一条路": 种子好时它给出更好的盆地,
+        # 种子差时原有起点仍然兜底 (4-1 实测: 替换 → 120.6%, 追加 → 28.5%)。
+        if _seed and _seed.get("fwhm"):
+            try:
+                _sf = float(_seed["fwhm"])
+                _sU = _seed.get("U")
+                _sV = _seed.get("V")
+                _sW = float(_seed.get("W") or (_sf ** 2))
+                if use_caglioti:
+                    candidates.append(_make_x0(
+                        w_est, _sf, 0.5, init_scale_est, init_zero_shift,
+                        U=(init_U if _sU is None else float(_sU)),
+                        V=(init_V if _sV is None else float(_sV)),
+                        W=_sW))
+                else:
+                    candidates.append(_make_x0(
+                        w_est, _sf, 0.5, init_scale_est, init_zero_shift))
+                _plog(f"[seed] 观测峰反推起点已加入候选 (fwhm={_sf:.4f}, "
+                      f"U={_sU}, V={_sV}, W={_sW:.5f}, n_peaks={_seed.get('n_peaks')})")
+            except (TypeError, ValueError):
+                pass
+        # ── v2.0.0 (W26/W27): 外部热启动向量 ──────────────────────────────
+        # 分阶段拟合把上一阶段的解作为下一阶段第 1 个起点 (布局相同, 因为阶段只改
+        # `_param_mask` 冻结哪些参数, 不改"参数向量长度"——长度由 refine_cell /
+        # refine_texture / refine_displacement / refine_b_overall 决定)。
+        _x0_in = kwargs.get("_x0")
+        if _x0_in is not None:
+            try:
+                _x0_arr = np.asarray(_x0_in, dtype=float).ravel()
+                if _x0_arr.shape[0] == int(n_params):
+                    candidates = [_x0_arr] + candidates[:max(1, n_starts - 1)]
+                    _plog("[warm] 已并入上一阶段解作为第 1 起点")
+            except (TypeError, ValueError):
+                pass
 
         # ── 4b. 热启动 (v0.15.2): 把快检的最优参数接管为精细模式第 1 个起点 ──
         # 快检那一轮其实已经找到过不错的 权重/scale/零点/晶胞缩放; 精细模式再从网格
