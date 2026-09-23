@@ -33,6 +33,7 @@ from __future__ import annotations
 import json
 import gzip
 import logging
+import math
 import re
 import shutil
 import sqlite3
@@ -461,11 +462,30 @@ def parse_atom_sites_from_cif(text: str) -> list[dict]:
                         # label
                         li2 = col_map.get("_atom_site_label")
                         label = parts[li2] if li2 is not None and li2 < len(parts) else f"{elem}{len(sites)+1}"
+                        # ── v1.1.2 (W21): 解析 ADP ──────────────────────────
+                        # U_iso_or_equiv 优先; 否则 B_iso_or_equiv/(8π²) (B = 8π²U);
+                        # 两者都缺 → 0.005 Å² 并标 u_iso_default。与
+                        # cif_database._extract_atomic_sites 保持同一规则。
+                        _ui = col_map.get("_atom_site_U_iso_or_equiv")
+                        _bi = col_map.get("_atom_site_B_iso_or_equiv")
+                        u_val = None
+                        try:
+                            if _ui is not None and _ui < len(parts):
+                                u_val = float(parts[_ui].split("(")[0])
+                            elif _bi is not None and _bi < len(parts):
+                                u_val = float(parts[_bi].split("(")[0]) / (8.0 * math.pi ** 2)
+                        except (ValueError, IndexError):
+                            u_val = None
+                        u_def = u_val is None
+                        if u_val is None:
+                            u_val = 0.005
                         sites.append({
                             "label": label,
                             "element": elem,
                             "x": x, "y": y, "z": z,
                             "occupancy": occ,
+                            "u_iso": float(u_val),
+                            "u_iso_default": bool(u_def),
                         })
                     except (ValueError, IndexError):
                         pass
@@ -531,6 +551,7 @@ CREATE TABLE IF NOT EXISTS cod_atomic_sites (
     y          REAL NOT NULL,
     z          REAL NOT NULL,
     occupancy  REAL DEFAULT 1.0,
+    u_iso      REAL,
     PRIMARY KEY (cod_id, site_idx)
 );
 CREATE INDEX IF NOT EXISTS idx_sites_cod_id ON cod_atomic_sites(cod_id);
@@ -538,8 +559,8 @@ CREATE INDEX IF NOT EXISTS idx_sites_cod_id ON cod_atomic_sites(cod_id);
 
 _INSERT_SITES_SQL = """
 INSERT OR REPLACE INTO cod_atomic_sites
-    (cod_id, site_idx, label, element, x, y, z, occupancy)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    (cod_id, site_idx, label, element, x, y, z, occupancy, u_iso)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 _INSERT_SQL = """
@@ -920,6 +941,14 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
             # 保守迁移: 重建完整 cod_entries (含 cif_gz), 然后把旧数据迁移回来
             conn.execute("DROP TABLE IF EXISTS cod_entries_old")
             raise  # 保守起见, 抛错; 现代 SQLite 不会到这里
+    # 2) v1.1.2 (W21): cod_atomic_sites 补 u_iso 列 (可空; 旧库读侧给 0.005 默认)
+    try:
+        site_cols = {r[1] for r in conn.execute("PRAGMA table_info(cod_atomic_sites)")}
+        if site_cols and "u_iso" not in site_cols:
+            conn.execute("ALTER TABLE cod_atomic_sites ADD COLUMN u_iso REAL")
+            log.info("migrate_schema: ALTER TABLE cod_atomic_sites ADD COLUMN u_iso REAL")
+    except sqlite3.OperationalError as e:  # 极老 SQLite / 只读库 → 忽略, 读侧有默认值
+        log.warning("cod_atomic_sites 加 u_iso 列失败 (读侧将用默认值): %s", e)
     conn.commit()
 
 
@@ -1221,6 +1250,7 @@ class CODLocalIndexer:
                             cod_id, idx, s.get("label", ""),
                             s["element"], s["x"], s["y"], s["z"],
                             s.get("occupancy", 1.0),
+                            s.get("u_iso"),
                         ))
                     if len(batch) >= batch_size:
                         _flush()
@@ -1893,14 +1923,23 @@ class CODLocalDatabase:
 
         返回 [{"label": ..., "element": ..., "x": float, "y": float, "z": float, "occupancy": float}, ...]
         """
+        # v1.1.2 (W21): 优先带 u_iso 查询; 旧库/旧包没有该列时回退到不含它的查询
+        # (列缺失 → sqlite3.OperationalError), 读侧再补 0.005 默认值。
+        _sel_u = ("SELECT label, element, x, y, z, occupancy, u_iso "
+                  "FROM cod_atomic_sites WHERE cod_id = ? ORDER BY site_idx")
+        _sel_p = ("SELECT label, element, x, y, z, occupancy "
+                  "FROM cod_atomic_sites WHERE cod_id = ? ORDER BY site_idx")
+
+        def _fetch(conn, sql: str):
+            try:
+                return conn.execute(sql, (cod_id,)).fetchall()
+            except sqlite3.OperationalError:
+                return conn.execute(_sel_p, (cod_id,)).fetchall()
+
+        rows = []
         try:
             conn = connect(self.db_path)
-            cur = conn.execute(
-                "SELECT label, element, x, y, z, occupancy FROM cod_atomic_sites "
-                "WHERE cod_id = ? ORDER BY site_idx",
-                (cod_id,),
-            )
-            rows = cur.fetchall()
+            rows = _fetch(conn, _sel_u)
             conn.close()
         except Exception:
             rows = []
@@ -1909,11 +1948,7 @@ class CODLocalDatabase:
             conn = self._inorg_db()
             if conn is not None:
                 try:
-                    rows = conn.execute(
-                        "SELECT label, element, x, y, z, occupancy FROM cod_atomic_sites "
-                        "WHERE cod_id = ? ORDER BY site_idx",
-                        (cod_id,),
-                    ).fetchall()
+                    rows = _fetch(conn, _sel_u)
                 except Exception:
                     rows = []
         # v1.1.2 (W21 读侧): 与 cif_database._extract_atomic_sites 保持同一键集合。
