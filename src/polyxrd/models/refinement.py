@@ -14,6 +14,28 @@ from polyxrd.i18n import tr
 from polyxrd.models.phase import Phase
 
 
+def quality_grade_for(wr: float) -> str:
+    """按**实验室粉末 XRD**口径给 Rwp 分级 (v1.1.2 起唯一分级入口)。
+
+    历史上有两套阈值: ``RefinementResult.quality_grade`` 用 <2/<5/<10/<20
+    (同步辐射口径, 对实验室数据过于苛刻), 而 ``_refine_builtin`` 等引擎
+    内部又各写一套 <5/<10/<20 → 同一结果给出两种等级。现统一到此处:
+
+        <5 优秀 / <10 良好 / <15 一般 / <25 差 / ≥25 需改进
+
+    (实验室 XRD 的 Rwp 10~15% 已属可发表水平; 见 docs 精修方案 §2)
+    """
+    if wr < 5.0:
+        return tr("quality.excellent")
+    if wr < 10.0:
+        return tr("quality.good")
+    if wr < 15.0:
+        return tr("quality.fair")
+    if wr < 25.0:
+        return tr("quality.poor")
+    return tr("quality.bad")
+
+
 @dataclass
 class RefinementResult:
     """Rietveld精修结果
@@ -55,6 +77,8 @@ class RefinementResult:
     converged: bool = False
     time_seconds: float = 0.0
     fit_params: dict = field(default_factory=dict)
+    # v1.1.2: 面向用户的提示 (引擎回退 / 检测到 Kα2 / 指标不可解读等)
+    warnings: list[str] = field(default_factory=list)
 
     @property
     def rp_value(self) -> float:
@@ -69,15 +93,7 @@ class RefinementResult:
     @property
     def quality_grade(self) -> str:
         """质量评级 (根据R因子); 文案随界面语言, 故走 i18n。"""
-        if self.wR < 2.0:
-            return tr("quality.excellent")
-        if self.wR < 5.0:
-            return tr("quality.good")
-        if self.wR < 10.0:
-            return tr("quality.fair")
-        if self.wR < 20.0:
-            return tr("quality.poor")
-        return tr("quality.bad")
+        return quality_grade_for(self.wR)
 
     def summary(self) -> str:
         """生成文本摘要报告 (随当前界面语言本地化)。"""
@@ -162,6 +178,7 @@ class RefinementResult:
             "converged": self.converged,
             "time_seconds": self.time_seconds,
             "fit_params": self.fit_params,
+            "warnings": list(self.warnings),
         }
 
     @classmethod
@@ -183,4 +200,5 @@ class RefinementResult:
             converged=data.get("converged", False),
             time_seconds=data.get("time_seconds", 0),
             fit_params=data.get("fit_params", {}),
+            warnings=list(data.get("warnings", []) or []),
         )
