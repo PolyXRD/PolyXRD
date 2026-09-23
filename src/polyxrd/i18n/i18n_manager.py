@@ -13,9 +13,15 @@ from PySide6.QtCore import QObject, Signal
 
 
 class Language(str, Enum):
-    """支持的语言枚举"""
+    """支持的语言枚举
+
+    ``zh_TW`` 为**预留槽位**: 目前没有 ``translations/zh_TW.py``, 选中后按
+    回退链落到 ``zh_CN`` (简体)。以后补一个 ``translations/zh_TW.py`` 即可生效,
+    无需改动任何调用点。
+    """
 
     ZH_CN = "zh_CN"
+    ZH_TW = "zh_TW"
     EN_US = "en_US"
     JA_JP = "ja_JP"
     DE_DE = "de_DE"
@@ -27,7 +33,8 @@ class Language(str, Enum):
     @classmethod
     def display_names(cls) -> dict[str, str]:
         return {
-            cls.ZH_CN: "中文",
+            cls.ZH_CN: "简体中文",
+            cls.ZH_TW: "繁體中文",
             cls.EN_US: "English",
             cls.JA_JP: "日本語",
             cls.DE_DE: "Deutsch",

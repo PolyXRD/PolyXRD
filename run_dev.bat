@@ -16,6 +16,10 @@ REM  parse the file, and the window flashed and closed. Hence the
 REM  deliberately minimal, idiom-only form below.
 REM ===================================================================
 cd /d "%~dp0"
+REM -- UTF-8 everywhere (v1.1.1): keep console output in UTF-8 so that
+REM -- Chinese/Japanese never turns into mojibake on a non-CJK Windows.
+set PYTHONUTF8=1
+set PYTHONIOENCODING=utf-8
 set "PYTHONPATH=%~dp0src"
 
 echo [PolyXRD] source mode - launching...

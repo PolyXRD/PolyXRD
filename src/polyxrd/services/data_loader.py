@@ -137,7 +137,7 @@ class DataLoader:
         two_theta_col = kwargs.get("two_theta_col", 0)
         intensity_col = kwargs.get("intensity_col", 1)
 
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+        with open(file_path, "r", encoding="utf-8-sig", errors="ignore") as f:
             lines = f.readlines()
 
         if delimiter is None:
@@ -185,7 +185,7 @@ class DataLoader:
     def _detect_txt_subformat(self, file_path: Path) -> str:
         """检测txt文件的子格式（岛津/简易/通用）"""
         try:
-            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            with open(file_path, "r", encoding="utf-8-sig", errors="ignore") as f:
                 content = f.read(8192)
             content_lower = content.lower()
             if "target" in content_lower and "voltage" in content_lower:
@@ -244,7 +244,7 @@ class DataLoader:
         two_theta_col = kwargs.get("two_theta_col", 0)
         intensity_col = kwargs.get("intensity_col", 1)
 
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+        with open(file_path, "r", encoding="utf-8-sig", errors="ignore") as f:
             content = f.read()
 
         header_patterns = {
@@ -536,7 +536,7 @@ class DataLoader:
         整条谱会平移一个步长 (所有峰位置错 0.02°)。故当 ``start + step*(n-1)``
         对不上头里的 stop 时, 改以 stop 反推 start, 与 ``.dat/.txt/.xy`` 对齐。
         """
-        text = file_path.read_text(encoding="utf-8", errors="ignore")
+        text = file_path.read_text(encoding="utf-8-sig", errors="ignore")
         lines = [ln for ln in text.splitlines() if ln.strip()]
         if len(lines) < 2:
             raise ValueError(f"MDI 文件内容不足: {file_path}")
@@ -603,7 +603,7 @@ class DataLoader:
 
                 # 读取第一个数据文件
                 with zf.open(data_files[0]) as f:
-                    xml_content = f.read().decode("utf-8", errors="ignore")
+                    xml_content = f.read().decode("utf-8-sig", errors="ignore")
 
         except (zipfile.BadZipFile, KeyError) as e:
             raise ValueError(f"BRML文件解析失败: {e}") from e

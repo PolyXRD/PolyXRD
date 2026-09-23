@@ -1,8 +1,8 @@
 # PolyXRD 版本变更记录（CHANGELOG）
 
-> 覆盖范围：**v0.3.0（可追溯最早版本）→ v1.0.1（2026-09-22，已发布）+ v1.0.2（启动稳健性修复，已收口未发布）+ v1.1.1（界面国际化补全，当前工作版本）**
+> 覆盖范围：**v0.3.0（可追溯最早版本）→ v1.0.1（2026-09-22，已发布）+ v1.0.2（启动稳健性修复，已收口未发布）+ v1.1.1（国际化补全 / 全链路 UTF-8 / 素材去水印，当前工作版本）**
 > 合并日期：2026-09-21 ｜ 由 4 份历史变更记录（CHANGELOG01 / 02 / 03 与原 CHANGELOG）合并去重而成
-> 最后更新：2026-09-22（补 v1.0.1 正式发布记录 + Release 附件清单 + **v1.0.2 启动稳健性修复（版本号已定，EXE 暂不重建）** + v1.0.1 遗留的版本号收口补正与 `pyproject.toml` 元数据补齐 + **v1.1.1 英/日界面翻译全量补全**）
+> 最后更新：2026-09-23（补 v1.0.1 正式发布记录 + Release 附件清单 + **v1.0.2 启动稳健性修复（版本号已定，EXE 暂不重建）** + v1.0.1 遗留的版本号收口补正与 `pyproject.toml` 元数据补齐 + **v1.1.1 英/日界面翻译全量补全 + 全链路 UTF-8 + 启动图/横幅去「AI生成」水印**）
 > 数据来源：git 提交历史 + GitHub Release 正文 + 项目工作记忆（逐日工作日志）+ 交接期源码包回溯
 > 联系：sshztx@outlook.com
 >
@@ -633,7 +633,7 @@ v0.8.21 → v0.8.22 → v0.8.23 → v0.9.0 → v0.9.1 → v0.9.7 → v0.9.8 → 
 | v0.15.2 🚫 | 2026-09-21 | 精修 A/B/C 三路线收口 + 格式互转 | **4-1 wR 52.7%→19.69%（March-Dollase 织构 + 对称展开向量化）**；Rwp/Rexp/Rb/GOF 标准化；8 格式互转；参考库 0.5.1 | 源码/本地构建 |
 | **v1.0.1** 🏷️ | 2026-09-22 | **1.0 正式版：主路线图 M01–M25 全部交付** | M09 候选检索与约束 / M15 指标化（立方·四方·六方）/ M17 3D 晶体结构视图 / M26 谱合成窗口化（**1467→270 ms，5.4×**）；修大峰表组合卡死；全量回归 **991 过 / 2 跳过**；版本号 0.15.3→**1.0.1** | Setup + 2 索引库包（**PDF2 / Portable 不入 Release**） |
 | v1.0.2 🚫 | 2026-09-22 | **启动稳健性修复**（现场"关掉后双击打不开"） | kill-safe 单实例守卫（命名互斥量）/ `app.exec()` 硬退出看门狗 / `--diagnose` 无 GUI 诊断 / `faulthandler` 原生崩溃落盘 / `--safe-render` 保守渲染开关；结论：**死于 `MainWindow.show()` 内部（Qt6Widgets.dll 0xC0000005）**，疑 Qt 6.11.1×老旧显卡驱动 | 源码（**EXE 暂不重建、不发 Release**） |
-| **v1.1.1** 🚫 | 2026-09-22 | **界面国际化补全（英语 / 日语全量覆盖）** | 补齐 **384** 个翻译键（`vw.*` 193 / `elem.*` 103 / `dialog.*` 26 / `report.*` 20 / `params.*` 16 …）；三语键集 **894×3 完全对齐**（此前 zh **562** / en **550** / ja **510** 互不相等）；ViewModel（37 处）+ 结果模型（报告正文/质量等级）+ 服务层日志（改符号化 ASCII）全部纳入；`I18nManager` 增 **zh_CN 回退链** | 源码（待打包） |
+| **v1.1.1** 🚫 | 2026-09-22 | **国际化补全 + 全链路 UTF-8 + 素材去水印** | 补齐 **384** 个翻译键（`vw.*` 193 / `elem.*` 103 / `dialog.*` 26 / `report.*` 20 / `params.*` 16 …）；三语键集 **894×3 完全对齐**（此前 zh **562** / en **550** / ja **510** 互不相等）；ViewModel（37 处）+ 结果模型 + 服务层日志全部纳入；`I18nManager` 增 **zh_CN 回退链**；`zh_CN` 显示「简体中文」并**预留 `zh_TW`（繁體中文）**；**全链路 UTF-8**（文本 I/O 全显式编码 + 读取用 `utf-8-sig` 免疫 BOM + 入口强制 UTF-8 stdio/子进程环境 + `scripts/check_utf8_encoding.py` 静态守卫）；启动图与横幅**去除「AI生成」水印** | 源码（待打包） |
 
 > 说明：v0.15.3 从未独立发布，其全部内容（M09 / M15 / M17 / M26 + 7-1 卡死修复）已在 v1.0.1 中转正发布。
 
@@ -1766,7 +1766,7 @@ GUI 引擎选择与回退提示），本轮回归复核通过，无需改动。
 双击的**是哪一个** exe；双击后是完全无反应、还是启动图一闪而过、还是弹了报错框；
 关闭后任务管理器里 `PolyXRD.exe` 是否还在；以及是否只在**安装版**上出现。
 
-### v1.1.1 — 2026-09-22 · 界面国际化补全（英语 / 日语全量覆盖）🚫
+### v1.1.1 — 2026-09-22 · 国际化补全 + 全链路 UTF-8 + 素材去水印 🚫
 
 **用户诉求**（2026-09-22）：中文界面没问题，但**英/日界面大量残留中文**（部分按钮、分组标题、
 状态提示、右键菜单、报告正文等），要求把版本推进到 **1.1.1** 并系统性补全英/日二语。
@@ -1838,6 +1838,80 @@ GUI 引擎选择与回退提示），本轮回归复核通过，无需改动。
 > 模块里的 `_i18n` 单例缓存 —— 冒烟测试必须**把 QSettings 引到临时目录**、**完整重置单例**
 > 并**预置 `language`**，否则会误判"翻译没生效"。另：离屏平台无字体，截图只会得到方框，
 > **文本抽取**才是可靠判据。
+
+#### 语言注册表：zh_CN 显示「简体中文」+ 预留 zh_TW
+
+- `Language.display_names()` 里 `zh_CN` 由「中文」改为 **「简体中文」** —— 与
+  `zh_TW`（繁體中文）并列时语义才明确。
+- 枚举新增 **`ZH_TW = "zh_TW"`**（显示名 **「繁體中文」**，排在 `zh_CN` 之后）。
+  这是**预留槽位**：目前没有 `translations/zh_TW.py`，选中后由回退链落到 `zh_CN`；
+  以后只需补一个 `translations/zh_TW.py` 即可生效，**无需改动任何调用点**
+  （语言菜单是按 `for lang in Language` 生成的）。
+- 同一机制下 `de_DE` / `fr_FR` / `es_ES` / `ko_KR` / `ru_RU` 五个槽位维持原有行为
+  （无翻译文件 → 回退中文，不显示满屏键名）。
+
+#### 全链路 UTF-8（跨语言 Windows 不乱码）
+
+同一份产物在中文（GBK）/ 日文（CP932）/ 英文（CP1252）Windows 上行为一致。
+
+- **新增静态守卫 `scripts/check_utf8_encoding.py`**：用 `tokenize` 做词法级扫描
+  （注释 / 字符串里的 `open(...)` 不算），检查 `open` / `io.open` / `Path.read_text` /
+  `write_text` / `subprocess` / `logging.FileHandler` / `basicConfig` 是否显式指定
+  编码；二进制模式与"没有管道的 `Popen`"自动放行。带 `--selftest`（合成样例：
+  5 处必须命中、9 处必须放过）。**当前扫描结果 0 处 / exit 0**。
+- **修掉唯一一处真正缺编码的文本写入**：`services/export_service.py` 导出 JSON 的
+  `open(output_path, "w")` 未指定编码 —— 中文 Windows 上会按 GBK 落盘，换台机器打开即乱码；
+  已补 `encoding="utf-8"` 并加 `ensure_ascii=False`（与 `main_window` 既有导出写法一致）。
+- **读取用户文本一律 `utf-8-sig`（免疫 BOM）**。`utf-8` 不剥 BOM，会让首行首列带上
+  `\ufeff`，实测两处真实故障：
+  - `services/user_database.py` 导入峰表时 `float("\ufeff10.5")` 抛 `ValueError`，
+    被 `continue` 吞掉 → **第一个峰凭空消失**；
+  - `services/data_loader.py` 读 `.xrdml` 时 `decode("utf-8")` 留下 BOM → XML 解析报
+    "not well-formed"。
+  涉及 `data_loader.py`（3 处 `open` + 1 处 `read_text` + 1 处 XML `decode`）、
+  `services/data_io.py`、`services/user_database.py`。
+- **面向 Excel / WPS 的 CSV 改为 `utf-8-sig`**：表头是中文，不带 BOM 的 UTF-8 会被
+  Excel 按系统 ANSI 代码页解释 → 必然乱码。改的是 `export_service._export_phases_csv` /
+  `_export_params_csv` 与 `views/widgets/peak_table.py` 的 CSV 导出
+  （`batch_refinement_dialog` 早已是 `utf-8-sig`，本次只是统一口径）。
+  ⚠️ **程序间交换的数据文件**（`.xy` / `.dat` / 峰表）**保持不带 BOM 的 `utf-8`**，
+  避免第三方解析器把 BOM 当数据。
+- **入口强制 UTF-8**：`main.py` 新增 `_force_utf8_environment()`，在任何输出/子进程
+  之前执行 —— ① `sys.stdout`/`sys.stderr` 重挂 UTF-8 且 `errors="replace"`
+  （GBK 控制台下打印 `°`/中文不再抛 `UnicodeEncodeError`，冻结版无控制台时 `stdout`
+  为 `None` 也被安全跳过）；② `setdefault` 给**子进程**留下 `PYTHONUTF8=1` /
+  `PYTHONIOENCODING=utf-8`（GSAS-II / MAUD / FullProf 多为 Python 程序，
+  经 `os.environ.copy()` 继承）。
+  ⚠️ 该函数**不改变当前进程的文件系统编码**（那必须在解释器启动前设 `PYTHONUTF8=1`），
+  所以代码内所有文本 I/O 一律显式编码，由上面的静态守卫兜住。
+- **`build.bat` / `run_dev.bat` 加 `set PYTHONUTF8=1` + `set PYTHONIOENCODING=utf-8`**：
+  构建期与源码模式运行期都走 UTF-8。两个 `.bat` 均为**字节级插入**
+  （CRLF 计数 `build.bat` 203→207、`run_dev.bat` 30→34，均无 BOM；`run_dev.bat`
+  保持纯 ASCII）。
+
+#### 启动图 / 横幅素材去除「AI生成」水印
+
+- 三张位图素材的右下角带有工具自动添加的 **「AI生成」** 标注（一个圆角矩形框 +
+  极右下角一处极小文字）。素材是**位图**，标注已烧进像素，不是可去掉的图层，
+  因此按图像修复处理：
+
+  | 文件 | 尺寸 | 用途 |
+  |---|---|---|
+  | `resources/splash-screen.png` | 480×270 | **启动图**（PNG 由 Qt6 内建解码器读取） |
+  | `resources/splash-screen.jpg` | 2560×1440 | 启动图回退（PNG 缺失时用） |
+  | `resources/hero-banner.jpg` | 2560×1440 | 横幅 |
+
+- **修复算法**：逐列自掩膜上方干净像素做**竖向线性外推**（因此穿过掩膜的竖向网格线
+  会被自然延续），再对填充带做**横向 3 抽头重平滑**以消除 JPEG 噪声造成的竖向条纹，
+  最后只回写掩膜内像素。**掩膜外像素与修改前逐字节相同**（实测 diff 最大值 = 0.0000）。
+- **验收**：三张图右下角"最亮像素 − 局部背景"由 145/194/202 降到 15/23/47（均为
+  背景噪声量级）；掩膜边界台阶均值 ≤ 1.8 / p95 ≤ 7.0；`QPixmap` 载入全部非空；
+  `splash-screen.png` 与用户确认选用的那张**逐像素完全一致**。
+- **启动图仍是 `splash-screen.png`（480×270 预缩放版）**：这是刻意的 —— PNG 走 Qt6
+  内建解码器（不加载 `qjpeg.dll`），且**不需要在启动期解码 2560×1440 再重采样**。
+  结合本项目 v1.0.2 定位到的 `window.show()` 原生崩溃（Qt6Widgets.dll）历史，
+  启动阶段**少做一次重解码**是有价值的。
+- 原图备份在 `~/.polyxrd/artwork_backup_before_watermark_removal/`（不入库）。
 
 #### 版本号收口（5 处）
 

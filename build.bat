@@ -1,5 +1,9 @@
 @echo off
 chcp 65001 >nul
+REM -- UTF-8 everywhere (v1.1.1): build/dev also run in UTF-8 so that
+REM -- Chinese/Japanese never turns into mojibake on a non-CJK Windows.
+set PYTHONUTF8=1
+set PYTHONIOENCODING=utf-8
 title PolyXRD v1.1.1 打包构建器
 echo ========================================
 echo   PolyXRD v1.1.1 打包为独立安装包

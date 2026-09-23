@@ -211,8 +211,11 @@ class ExportService:
         elif format == "xy":
             data.export_csv(output_path, delimiter=" ")
         elif format == "json":
-            with open(output_path, "w") as f:
-                json.dump(data.to_dict(), f, indent=2)
+            # v1.1.1: 补显式编码。此前 open() 未指定 encoding, 中文 Windows 上会按
+            # GBK 落盘 —— 同一个文件在英文机器上读就是乱码。ensure_ascii=False 让
+            # 导出的 JSON 直接是可读中文 (文件本身已明确是 UTF-8)。
+            with open(output_path, "w", encoding="utf-8") as f:
+                json.dump(data.to_dict(), f, indent=2, ensure_ascii=False)
         else:
             raise ValueError(f"不支持的导出格式: {format}")
 
@@ -227,7 +230,10 @@ class ExportService:
         """导出物相CSV"""
         import csv
 
-        with open(path, "w", newline="", encoding="utf-8") as f:
+        # v1.1.1: utf-8-sig (带 BOM)。表头是中文, 而 Excel / WPS 打开**不带 BOM**
+        # 的 UTF-8 CSV 时会按系统 ANSI 代码页解释 → 中文必然是乱码。
+        # 带 BOM 后 Excel(任意语言环境)、LibreOffice、pandas 都能正确识别。
+        with open(path, "w", newline="", encoding="utf-8-sig") as f:
             writer = csv.writer(f)
             writer.writerow([
                 "物相名称", "化学式", "匹配度(%)", "质量分数(wt%)",
@@ -266,7 +272,7 @@ class ExportService:
         """导出参数CSV"""
         import csv
 
-        with open(path, "w", newline="", encoding="utf-8") as f:
+        with open(path, "w", newline="", encoding="utf-8-sig") as f:
             writer = csv.writer(f)
             writer.writerow(["参数名", "值"])
             for key, value in params.items():

@@ -213,7 +213,9 @@ def import_diffraction_peaks(
       auto: 值域主要在 [3,120] 且递增 → 2θ; 若呈递减且值 < 40 视为 d。
     """
     rows = []
-    with open(peak_file, "r", encoding="utf-8", errors="ignore") as f:
+    # v1.1.1: utf-8-sig。用 utf-8 读带 BOM 的峰表时首行会变成 "\ufeff10.5", float()
+    # 抛 ValueError 被下面的 continue 吞掉 —— 症状是"第一个峰凭空消失"。
+    with open(peak_file, "r", encoding="utf-8-sig", errors="ignore") as f:
         for ln in f:
             parts = ln.replace(",", " ").split()
             try:

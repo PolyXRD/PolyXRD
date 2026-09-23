@@ -261,8 +261,45 @@ def _run_diagnose() -> int:
     return 0
 
 
+def _force_utf8_environment() -> None:
+    """全链路 UTF-8 (v1.1.1)。
+
+    目的: 同一个 exe 在中文 / 日文 / 英文 Windows 上行为一致, 不因系统 ANSI
+    代码页 (GBK / CP932 / CP1252) 不同而产生乱码。
+
+    做两件事:
+
+    1. 把**本进程**的 stdout/stderr 重挂到 UTF-8 —— 冻结版没有控制台时这两个流
+       可能指向被重定向的文件; 在 GBK 代码页下打印 ``°``、中文或日文会抛
+       ``UnicodeEncodeError`` (dev 模式 ``run_dev.bat`` 尤其明显)。
+       ``errors="replace"`` 保证"打印"永远不会成为新的失败点。
+    2. 用 ``setdefault`` 给**子进程**留下 UTF-8 环境: 外部精修程序
+       (GSAS-II / MAUD / FullProf) 多为 Python 程序或会回写文本文件,
+       ``PYTHONUTF8=1`` + ``PYTHONIOENCODING=utf-8`` 让它们也按 UTF-8 走。
+       setdefault 语义: 用户/系统显式设置的值不被覆盖。
+
+    ⚠️ 本函数**不改变当前进程的文件系统编码** —— 那必须在解释器启动前设
+    ``PYTHONUTF8=1``。所以代码内所有文本 I/O 一律显式
+    ``encoding="utf-8"``(由 ``scripts/check_utf8_encoding.py`` 静态守护),
+    不依赖任何平台默认值。
+    """
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+    os.environ.setdefault("PYTHONUTF8", "1")
+    os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+
+
 def main() -> int:
     """主入口函数"""
+    # 最早执行: 让 stdio 与子进程环境在任何输出/子进程启动前就是 UTF-8
+    _force_utf8_environment()
     _install_excepthooks()
     # 尽早开: 任何原生崩溃 (包括 window.show() 内部) 都要留下 Python 调用栈
     _enable_faulthandler()
