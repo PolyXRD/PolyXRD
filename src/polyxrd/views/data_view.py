@@ -61,8 +61,9 @@ class DataView(QWidget):
         right_layout = QVBoxLayout(right_widget)
 
         # 数据处理组
-        process_group = QGroupBox(tr("vw.data_view.data_preprocess"))
+        self._group_process = QGroupBox(tr("vw.data_view.data_preprocess"))
         process_layout = QFormLayout()
+        self._process_form = process_layout
 
         self._bg_method = QComboBox()
         self._bg_method.addItems(["snip", "als", "polyfit", "median", "rolling"])
@@ -89,12 +90,13 @@ class DataView(QWidget):
         self._btn_strip_kalpha2 = QPushButton(tr("vw.data_view.strip_kalpha2"))
         process_layout.addRow(self._btn_strip_kalpha2)
 
-        process_group.setLayout(process_layout)
-        right_layout.addWidget(process_group)
+        self._group_process.setLayout(process_layout)
+        right_layout.addWidget(self._group_process)
 
         # 峰检测组
-        peak_group = QGroupBox(tr("vw.data_view.peak_detection"))
+        self._group_peak = QGroupBox(tr("vw.data_view.peak_detection"))
         peak_layout = QFormLayout()
+        self._peak_form = peak_layout
 
         self._peak_height = QSpinBox()
         self._peak_height.setRange(1, 100)
@@ -126,8 +128,8 @@ class DataView(QWidget):
         self._btn_fit_peaks.clicked.connect(self._on_fit_peaks)
         peak_layout.addRow(self._btn_fit_peaks)
 
-        peak_group.setLayout(peak_layout)
-        right_layout.addWidget(peak_group)
+        self._group_peak.setLayout(peak_layout)
+        right_layout.addWidget(self._group_peak)
 
         # 峰列表
         self._peak_table = PeakTable()
@@ -142,6 +144,37 @@ class DataView(QWidget):
     def _setup_connections(self) -> None:
         self._vm.data_changed.connect(self._on_data_changed)
         self._vm.peaks_changed.connect(self._on_peaks_changed)
+
+    def retranslate(self) -> None:
+        """按当前语言重设本页构造期写死的文案 (不动谱图/峰表数据)。
+
+        QFormLayout 的行标签是布局内部造的 QLabel, 拿不到引用 —— 用
+        ``labelForField(控件)`` 反查; 跨两列的 ``addRow(widget)`` 返回 None, 跳过。
+        """
+        self._group_process.setTitle(tr("vw.data_view.data_preprocess"))
+        self._group_peak.setTitle(tr("vw.data_view.peak_detection"))
+
+        rows = (
+            (self._process_form, self._bg_method, "vw.data_view.bg_method"),
+            (self._process_form, self._smooth_method, "vw.data_view.smooth_method"),
+            (self._process_form, self._smooth_window, "vw.data_view.window_size"),
+            (self._peak_form, self._peak_height, "vw.data_view.min_peak_height"),
+            (self._peak_form, self._peak_distance, "vw.data_view.min_distance"),
+        )
+        for form, field, key in rows:
+            label = form.labelForField(field)
+            if label is not None:
+                label.setText(tr(key))
+
+        self._btn_bg.setText(tr("vw.data_view.exec_bg_subtract"))
+        self._btn_smooth.setText(tr("vw.data_view.exec_smooth"))
+        self._btn_strip_kalpha2.setText(tr("vw.data_view.strip_kalpha2"))
+        self._btn_find_peaks.setText(tr("vw.data_view.detect_peaks"))
+        self._btn_fit_peaks.setText(tr("vw.data_view.fit_peaks"))
+
+        self._peak_distance.setToolTip(tr("vw.data_view.peak_distance_tip"))
+        self._peak_hi.setText(tr("vw.data_view.high_precision"))
+        self._peak_hi.setToolTip(tr("vw.data_view.peak_hi_tip"))
 
     # ------------------------------------------------------------------
     # 事件处理

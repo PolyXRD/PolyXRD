@@ -90,12 +90,14 @@ class RefinementView(QWidget):
 
         # 对比图 (M24: 拉大)
         self._compare_plot = PlotWidget()
-        left_layout.addWidget(QLabel(tr("view.refinement.label_compare")))
+        self._label_compare = QLabel(tr("view.refinement.label_compare"))
+        left_layout.addWidget(self._label_compare)
         left_layout.addWidget(self._compare_plot, stretch=5)
 
         # 残差图 (M24: 改细条, X 轴与主图双向同步)
         self._residual_plot = PlotWidget()
-        left_layout.addWidget(QLabel(tr("view.refinement.label_residual")))
+        self._label_residual = QLabel(tr("view.refinement.label_residual"))
+        left_layout.addWidget(self._label_residual)
         left_layout.addWidget(self._residual_plot, stretch=1)
         self._install_x_sync()
 
@@ -107,8 +109,9 @@ class RefinementView(QWidget):
         right_layout = QVBoxLayout(right_widget)
 
         # 精修控制
-        ctrl_group = QGroupBox(tr("view.refinement.group_control"))
+        self._group_ctrl = QGroupBox(tr("view.refinement.group_control"))
         ctrl_layout = QFormLayout()
+        self._form_ctrl = ctrl_layout
 
         # ── 精修方式: 向导式 (默认) / 手动 ─────────────────────
         self._chk_wizard = QCheckBox(tr("view.refinement.wizard_style"))
@@ -163,8 +166,8 @@ class RefinementView(QWidget):
         self._btn_cancel.setEnabled(False)
         ctrl_layout.addRow(self._btn_cancel)
 
-        ctrl_group.setLayout(ctrl_layout)
-        right_layout.addWidget(ctrl_group)
+        self._group_ctrl.setLayout(ctrl_layout)
+        right_layout.addWidget(self._group_ctrl)
 
         # 进度条
         self._progress = QProgressBar()
@@ -172,8 +175,9 @@ class RefinementView(QWidget):
         right_layout.addWidget(self._progress)
 
         # 精修结果
-        result_group = QGroupBox(tr("view.refinement.group_result"))
+        self._group_result = QGroupBox(tr("view.refinement.group_result"))
         result_layout = QFormLayout()
+        self._form_result = result_layout
 
         self._label_rwp = QLabel("--")
         result_layout.addRow(tr("view.refinement.label_rwp"), self._label_rwp)
@@ -196,11 +200,11 @@ class RefinementView(QWidget):
         self._label_time = QLabel("--")
         result_layout.addRow(tr("vw.refinement_view.time_spent"), self._label_time)
 
-        result_group.setLayout(result_layout)
-        right_layout.addWidget(result_group)
+        self._group_result.setLayout(result_layout)
+        right_layout.addWidget(self._group_result)
 
         # 物相含量表
-        phase_group = QGroupBox(tr("view.refinement.group_phases"))
+        self._group_phases = QGroupBox(tr("view.refinement.group_phases"))
         phase_layout = QVBoxLayout()
 
         self._phase_table = QTableWidget(0, 5)
@@ -216,11 +220,11 @@ class RefinementView(QWidget):
         self._phase_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         phase_layout.addWidget(self._phase_table)
 
-        phase_group.setLayout(phase_layout)
-        right_layout.addWidget(phase_group, stretch=1)
+        self._group_phases.setLayout(phase_layout)
+        right_layout.addWidget(self._group_phases, stretch=1)
 
         # 已勾选物相 (M24: 继承物相分析页勾选集合, 右键导出 CIF)
-        sel_group = QGroupBox(tr("vw.refinement_view.selected_phases"))
+        self._group_selected = QGroupBox(tr("vw.refinement_view.selected_phases"))
         sel_layout = QVBoxLayout()
         self._selected_phase_list = QListWidget()
         self._selected_phase_list.setContextMenuPolicy(
@@ -230,8 +234,8 @@ class RefinementView(QWidget):
             self._selected_phase_context_menu
         )
         sel_layout.addWidget(self._selected_phase_list)
-        sel_group.setLayout(sel_layout)
-        right_layout.addWidget(sel_group, stretch=1)
+        self._group_selected.setLayout(sel_layout)
+        right_layout.addWidget(self._group_selected, stretch=1)
 
         # 外部精修程序区 (M25-2: GSAS-II / MAUD / FullProf 配置与启动)
         from polyxrd.views.widgets.external_engines_group import (
@@ -279,7 +283,8 @@ class RefinementView(QWidget):
 
     def _build_log_panel(self) -> QWidget:
         """精修过程日志面板 (跑码式输出)。"""
-        group = QGroupBox(tr("view.refinement.group_log"))
+        self._group_log = QGroupBox(tr("view.refinement.group_log"))
+        group = self._group_log
         layout = QVBoxLayout(group)
         layout.setContentsMargins(6, 6, 6, 6)
 
@@ -315,6 +320,68 @@ class RefinementView(QWidget):
         self._vm._phase_vm.selection_changed.connect(
             self._on_selected_phases_changed
         )
+
+    def retranslate(self) -> None:
+        """按当前语言重设本页构造期写死的文案 (不碰精修结果/日志内容)。
+
+        页面里还有两行刻意不翻的标签: ``Rexp:`` 与 ``Rb:`` —— 它们是 IUCr
+        通用记号, 与轴标题上的 ``log`` / ``sqrt`` 同源。
+        """
+        # 分组标题
+        self._group_ctrl.setTitle(tr("view.refinement.group_control"))
+        self._group_result.setTitle(tr("view.refinement.group_result"))
+        self._group_phases.setTitle(tr("view.refinement.group_phases"))
+        self._group_selected.setTitle(tr("vw.refinement_view.selected_phases"))
+        self._group_log.setTitle(tr("view.refinement.group_log"))
+
+        # 图上方的小标题
+        self._label_compare.setText(tr("view.refinement.label_compare"))
+        self._label_residual.setText(tr("view.refinement.label_residual"))
+
+        # 表单行标签 (布局内部造的 QLabel, 用 labelForField 反查)
+        ctrl_rows = (
+            (self._engine_combo, "view.refinement.label_engine"),
+            (self._strategy_combo, "view.refinement.label_strategy"),
+            (self._max_cycles, "view.refinement.label_max_cycles"),
+            (self._peak_shape_combo, "vw.refinement_view.peak_shape"),
+            (self._fwhm_spin, "vw.refinement_view.init_fwhm"),
+            (self._bg_combo, "vw.refinement_view.bg_method"),
+            (self._zero_shift_spin, "vw.refinement_view.zero_shift"),
+        )
+        for field, key in ctrl_rows:
+            label = self._form_ctrl.labelForField(field)
+            if label is not None:
+                label.setText(tr(key))
+
+        result_rows = (
+            (self._label_rwp, "view.refinement.label_rwp"),
+            (self._label_gof, "view.refinement.label_gof"),
+            (self._label_quality, "view.refinement.label_quality"),
+            (self._label_cycles, "view.refinement.label_cycles"),
+            (self._label_time, "vw.refinement_view.time_spent"),
+        )
+        for field, key in result_rows:
+            label = self._form_result.labelForField(field)
+            if label is not None:
+                label.setText(tr(key))
+
+        # 按钮 / 复选框 / 占位文本
+        self._chk_wizard.setText(tr("view.refinement.wizard_style"))
+        self._chk_wizard.setToolTip(tr("view.refinement.wizard_style_tip"))
+        self._btn_refine.setText(tr("view.refinement.btn_start_refine"))
+        self._btn_cancel.setText(tr("vw.refinement_view.cancel"))
+        self._btn_clear_log.setText(tr("view.refinement.btn_clear_log"))
+        self._btn_save_log.setText(tr("view.refinement.btn_save_log"))
+        self._log_view.setPlaceholderText(tr("view.refinement.log_placeholder"))
+
+        # 物相含量表表头
+        self._phase_table.setHorizontalHeaderLabels([
+            tr("view.refinement.col_phase"),
+            tr("view.refinement.col_weight"),
+            tr("view.refinement.col_a"),
+            tr("view.refinement.col_b"),
+            tr("view.refinement.col_c"),
+        ])
 
     # ------------------------------------------------------------------
     # M24: 已勾选物相列表

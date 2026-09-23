@@ -572,6 +572,13 @@ class MainWindow(QMainWindow):
         self._language_actions: dict[str, QAction] = {}
         self._menus: dict[str, QMenu] = {}
 
+        # ⚠️ 必须在建界面**之前**套用持久化语言。
+        # 四个标签页 (Data/Phase/Refinement/Report) 里的文案都是构造期调 tr()
+        # 写死的, 页内没有 retranslate 通路时, 一旦构造发生在切换语言之前,
+        # 页内文字就会一直停在旧语言 —— 用户看到的就是"菜单是英文, 页里还是中文"。
+        # 这里提前设好, 后面 _load_settings() 再读同一键时已经是同语言, 不重复触发。
+        self._apply_persisted_language()
+
         self._setup_ui()
         self._setup_actions()
         self._setup_connections()
@@ -751,6 +758,7 @@ class MainWindow(QMainWindow):
         params_widget = QWidget()
         params_layout = QFormLayout(params_widget)
         params_layout.setContentsMargins(8, 8, 8, 8)
+        self._form_params = params_layout
 
         self._wl_spin = QDoubleSpinBox()
         self._wl_spin.setRange(0.1, 10.0)
@@ -773,7 +781,8 @@ class MainWindow(QMainWindow):
         params_layout.addRow(tr("params.two_theta_max"), self._two_theta_max_spin)
 
         params_layout.addRow(QLabel(""))
-        params_layout.addRow(QLabel(tr("params.bg_method")))
+        self._label_bg_method = QLabel(tr("params.bg_method"))
+        params_layout.addRow(self._label_bg_method)
 
         self._bg_method_combo = QComboBox()
         self._bg_method_combo.addItems([
@@ -801,7 +810,8 @@ class MainWindow(QMainWindow):
         params_layout.addRow(tr("params.smooth_window"), self._smooth_window_spin)
 
         params_layout.addRow(QLabel(""))
-        params_layout.addRow(QLabel(tr("params.peak_detect")))
+        self._label_peak_detect = QLabel(tr("params.peak_detect"))
+        params_layout.addRow(self._label_peak_detect)
 
         self._peak_hi_check = QCheckBox(tr("params.peak_hi_precision"))
         self._peak_hi_check.setChecked(True)
@@ -1185,12 +1195,43 @@ class MainWindow(QMainWindow):
 
         self._retranslate_menus()
         self._retranslate_actions()
+        self._retranslate_docks()
+        self._retranslate_views()
+
+    def _retranslate_views(self) -> None:
+        """把四个标签页**连同页内嵌套子控件**的静态文案重新翻译一遍。
+
+        约定: 谁有构造期写死的文案, 谁自己实现 ``retranslate()`` (Qt 的
+        retranslateUi 套路), 只重设文案、**不动**运行时数据, 所以切语言既不丢
+        状态也无需重建控件。这里递归遍历整棵树逐个调用 —— 视图**不要**在自己
+        的 retranslate 里再去调子控件的, 否则会被调用两次。
+        """
+        roots = (self._data_view, self._phase_view,
+                 self._refinement_view, self._report_view)
+        seen: set[int] = set()
+        for root in roots:
+            targets = [root]
+            try:
+                targets += list(root.findChildren(QWidget))
+            except Exception:  # noqa: BLE001
+                pass
+            for w in targets:
+                if id(w) in seen:
+                    continue
+                seen.add(id(w))
+                fn = getattr(w, "retranslate", None)
+                if callable(fn):
+                    try:
+                        fn()
+                    except Exception:  # noqa: BLE001 - 单个控件失败不拖垮切语言
+                        pass
 
     def _retranslate_menus(self) -> None:
         menu_translations = {
             "file": "menu.file.title",
             "process": "menu.data_processing.title",
             "phase": "menu.phase_analysis.title",
+            "database": "menu.database.title",
             "refine": "menu.structure_refinement.title",
             "view": "menu.view.title",
             "report": "menu.report.title",
@@ -1226,10 +1267,15 @@ class MainWindow(QMainWindow):
             "cod_search_menu": "menu.phase_analysis.cod_search",
             "refine": "toolbar.refine",
             "refine_wizard": "toolbar.refine_wizard",
-            "refine_wizard_menu": "menu.structure_refinement.wizard",
+            # ⚠️ 这里必须与创建时用同一个键: 该动作是精修菜单里的「精修向导（快速）」,
+            # 早先写成了 "…wizard" (精修向导), 导致切一次语言菜单项就悄悄换了个名字。
+            "refine_wizard_menu": "menu.structure_refinement.wizard_quick",
+            "refine_wizard_full": "menu.structure_refinement.wizard_full",
             "quick_refine": "menu.structure_refinement.quick_refine",
+            "batch_refine": "menu.structure_refinement.batch_refine",
             "template_mgmt": "menu.structure_refinement.templates",
             "reset_layout": "menu.view.reset_layout",
+            "toggle_theme": "menu.view.dark_theme",
             "toggle_params": "params.panel_title",
             "toggle_phases": "params.phases_title",
             "generate_report": "menu.report.generate",
@@ -1238,15 +1284,98 @@ class MainWindow(QMainWindow):
             "about_qt": "menu.help.about_qt",
             "cod_search": "toolbar.cod_search",
             "strip_kalpha2": "action.strip_kalpha2",
+            "reset": "toolbar.reset",
+            "export": "toolbar.export",
+            "clear_data": "menu.file.clear_data",
+            "db_manager": "menu.database.manage",
+            "db_open_dir": "menu.database.open_dir",
         }
         for key, tr_key in action_translations.items():
             if key in self._actions:
                 self._actions[key].setText(tr(tr_key))
 
-        if hasattr(self, "_toggle_params") and hasattr(self, "_actions"):
-            pass
+        # 工具提示也要跟着语言走 (否则鼠标悬停还是旧语言)
+        action_tips = {
+            "open": "toolbar.open_tip",
+            "profile_fitting": "toolbar.profile_fitting_tip",
+            "refine_wizard": "toolbar.refine_wizard_tip",
+            "cod_search": "dialog.cod_search_title",
+        }
+        for key, tr_key in action_tips.items():
+            if key in self._actions:
+                self._actions[key].setToolTip(tr(tr_key))
+
+        # 工具栏自身的 title (窗口管理器/右键菜单里会显示)
+        if getattr(self, "_toolbar", None) is not None:
+            self._toolbar.setWindowTitle(tr("toolbar.main"))
 
         self.statusBar().showMessage(tr("status.ready"))
+
+    def _retranslate_docks(self) -> None:
+        """左侧「参数」/「物相」停靠面板里的静态文案重翻译。
+
+        这两个面板挂在 dock 上, 不属于四个标签页, 所以不在 ``_retranslate_views``
+        的遍历范围里; 停靠窗口**标题**由 ``_retranslate_ui`` 负责, 这里管面板内容。
+        """
+        if getattr(self, "_form_params", None) is None:
+            return
+
+        rows = (
+            (self._wl_spin, "params.wavelength_label"),
+            (self._two_theta_min_spin, "params.two_theta_min"),
+            (self._two_theta_max_spin, "params.two_theta_max"),
+            (self._smooth_window_spin, "params.smooth_window"),
+            (self._peak_height_spin, "params.peak_height"),
+            (self._peak_distance_spin, "params.peak_distance"),
+            # 下面两项是**行标签**, 与上面 784/813 行手工插入的分节标题是两个
+            # 不同 QLabel (都取同一批 key, 文本一致) —— 漏一个就会残留中文。
+            (self._bg_method_combo, "params.bg_method"),
+            (self._smooth_method_combo, "params.smooth_method"),
+        )
+        for field, key in rows:
+            label = self._form_params.labelForField(field)
+            if label is not None:
+                label.setText(tr(key))
+
+        if getattr(self, "_label_bg_method", None) is not None:
+            self._label_bg_method.setText(tr("params.bg_method"))
+        if getattr(self, "_label_peak_detect", None) is not None:
+            self._label_peak_detect.setText(tr("params.peak_detect"))
+
+        # 两个下拉的条目名是本地化的 → 保住当前选择后整表重建
+        self._refill_combo(
+            self._bg_method_combo,
+            ["params.bgm_snip", "params.bgm_als", "params.bgm_polyfit",
+             "params.bgm_median", "params.bgm_rolling"],
+        )
+        self._refill_combo(
+            self._smooth_method_combo,
+            ["params.smt_savgol", "params.smt_gaussian",
+             "params.smt_moving", "params.smt_median"],
+        )
+
+        self._peak_hi_check.setText(tr("params.peak_hi_precision"))
+        self._peak_hi_check.setToolTip(tr("params.peak_hi_precision_tip"))
+        self._peak_distance_spin.setToolTip(tr("params.peak_distance_tip"))
+
+        # 物相面板底部的两个按钮也挂在 dock 上, 同样不属于标签页
+        if getattr(self, "_btn_select_all", None) is not None:
+            self._btn_select_all.setText(tr("common.select_all"))
+        if getattr(self, "_btn_clear_phases", None) is not None:
+            self._btn_clear_phases.setText(tr("common.clear"))
+
+    @staticmethod
+    def _refill_combo(combo: QComboBox, keys: list) -> None:
+        """按当前语言重建下拉条目, 并尽量保留原选中项 (按索引)。"""
+        if combo is None:
+            return
+        index = combo.currentIndex()
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItems([tr(k) for k in keys])
+        if 0 <= index < combo.count():
+            combo.setCurrentIndex(index)
+        combo.blockSignals(False)
 
     # ------------------------------------------------------------------
     # 状态栏
@@ -1982,6 +2111,19 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     # 设置持久化
     # ------------------------------------------------------------------
+
+    def _apply_persisted_language(self) -> None:
+        """在建界面之前把持久化语言套上 (见 ``__init__`` 里的说明)。
+
+        此时 ``languageChanged`` 还没有任何监听者, 所以不会触发重翻译 ——
+        界面随后是**用正确语言**首次构造出来的。
+        """
+        try:
+            language = self._settings.value("language", Language.ZH_CN)
+        except Exception:  # noqa: BLE001 - 设置损坏不该拦住启动
+            return
+        if language and language != self._i18n.current_language:
+            self._i18n.set_language(language)
 
     def _load_settings(self) -> None:
         geometry = self._settings.value("geometry")

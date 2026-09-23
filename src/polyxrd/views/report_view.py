@@ -40,7 +40,8 @@ class ReportView(QWidget):
         self._btn_preview.clicked.connect(self._on_preview)
         toolbar.addWidget(self._btn_preview)
 
-        toolbar.addWidget(QLabel(tr("vw.report_view.label_export_format")))
+        self._label_format = QLabel(tr("vw.report_view.label_export_format"))
+        toolbar.addWidget(self._label_format)
         self._format_combo = QComboBox()
         self._format_combo.addItems(["json", "txt", "csv", "all"])
         toolbar.addWidget(self._format_combo)
@@ -53,7 +54,7 @@ class ReportView(QWidget):
         main_layout.addLayout(toolbar)
 
         # 报告预览区
-        report_group = QGroupBox(tr("vw.report_view.group_preview"))
+        self._group_preview = QGroupBox(tr("vw.report_view.group_preview"))
         report_layout = QVBoxLayout()
 
         self._report_text = QTextEdit()
@@ -61,8 +62,15 @@ class ReportView(QWidget):
         self._report_text.setFontFamily("Courier")
         report_layout.addWidget(self._report_text)
 
-        report_group.setLayout(report_layout)
-        main_layout.addWidget(report_group)
+        self._group_preview.setLayout(report_layout)
+        main_layout.addWidget(self._group_preview)
+
+    def retranslate(self) -> None:
+        """把本页构造期写死的文案按当前语言重设一遍 (只动文案, 不动数据)。"""
+        self._btn_preview.setText(tr("vw.report_view.btn_preview"))
+        self._label_format.setText(tr("vw.report_view.label_export_format"))
+        self._btn_export.setText(tr("vw.report_view.btn_export"))
+        self._group_preview.setTitle(tr("vw.report_view.group_preview"))
 
     def _setup_connections(self) -> None:
         self._vm.refinement_completed.connect(self._on_refinement_completed)

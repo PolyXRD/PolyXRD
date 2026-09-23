@@ -1012,5 +1012,16 @@ translations = {
         "cell_angles": "                  α={alpha}, β={beta}, γ={gamma}°",
         "cell_volume": "  Cell volume: {volume} Å³",
         "total_fraction": "Total phase content: {value} %"
+    },
+    "template": {
+        "builtin": {
+            "auto": "Auto (recommended)",
+            "standard": "Standard crystalline sample",
+            "quick": "Quick phase analysis",
+            "multiphase": "Multiphase mixture",
+            "low_cryst": "Low-crystallinity sample",
+            "synchrotron": "Synchrotron data",
+            "cu_target": "Conventional Cu-target data"
+        }
     }
 }

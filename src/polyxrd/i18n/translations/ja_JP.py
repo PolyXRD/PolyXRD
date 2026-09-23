@@ -1012,5 +1012,16 @@ translations = {
         "cell_angles": "            α={alpha}, β={beta}, γ={gamma}°",
         "cell_volume": "  格子体積: {volume} Å³",
         "total_fraction": "相の総含有量: {value} %"
+    },
+    "template": {
+        "builtin": {
+            "auto": "自動選択（推奨）",
+            "standard": "標準結晶性試料",
+            "quick": "迅速相分析",
+            "multiphase": "多相混合物",
+            "low_cryst": "低結晶性試料",
+            "synchrotron": "放射光データ",
+            "cu_target": "通常Cuターゲットデータ"
+        }
     }
 }

@@ -111,10 +111,7 @@ class PatternDisplayWidget(QWidget):
         hint_row.setContentsMargins(2, 0, 2, 0)
         self._y_scale_hint = QLabel()
         self._y_scale_hint.setStyleSheet("QLabel { color: #555; font-size: 11px; }")
-        self._y_scale_hint.setToolTip(
-            "左键点击 Y 轴区域循环切换; 右键点击图内任意位置弹出选择菜单。\n"
-            "对数 / 方根刻度下刻度标签仍是真实强度值。"
-        )
+        self._y_scale_hint.setToolTip(tr("vw.pattern_display.y_scale_hint_tip"))
         hint_row.addWidget(self._y_scale_hint)
         hint_row.addStretch()
         lay.addLayout(hint_row)
@@ -127,6 +124,11 @@ class PatternDisplayWidget(QWidget):
     # ------------------------------------------------------------------
     def _on_y_scale_changed(self, _mode: str) -> None:
         self._y_scale_hint.setText(hint_text(self._y_scale.mode()))
+
+    def retranslate(self) -> None:
+        """切语言时重设本控件的静态文案 (提示正文按当前纵坐标模式重算)。"""
+        self._y_scale_hint.setToolTip(tr("vw.pattern_display.y_scale_hint_tip"))
+        self._on_y_scale_changed(self._y_scale.mode())
 
     def set_y_scale_mode(self, mode: str) -> None:
         """外部设定纵坐标模式 (linear/log/sqrt)。"""
@@ -190,7 +192,7 @@ class PatternDisplayWidget(QWidget):
         if x.size:
             self._main_ymax = float(np.max(y)) if np.max(y) > 0 else 1.0
             ln = self._ax_main.plot(x, y, color=COLOR_EXP, linewidth=1.1,
-                                    label="实验数据")[0]
+                                    label=tr("vw.pattern_display.legend_exp"))[0]
             ln.set_gid("exp"); self._artists.append(ln)
         self._autoscale_main()
         self._redraw()
@@ -202,7 +204,7 @@ class PatternDisplayWidget(QWidget):
             self._redraw(); return
         ln = self._ax_main.plot(np.asarray(two_theta), np.asarray(y_calc),
                                 color=COLOR_CALC, linewidth=1.0, alpha=0.85,
-                                label="计算谱")[0]
+                                label=tr("vw.pattern_display.legend_calc"))[0]
         ln.set_gid("calc"); self._artists.append(ln)
         self._redraw()
 

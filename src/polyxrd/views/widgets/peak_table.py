@@ -63,12 +63,15 @@ class PeakTable(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        # 工具栏
-        toolbar = QToolBar()
-        toolbar.addAction(tr("vw.peak_table.act_del_selected"), self._on_delete_selected)
-        toolbar.addAction(tr("vw.peak_table.act_clear"), self._on_clear)
-        toolbar.addAction(tr("vw.peak_table.act_export_csv"), self._on_export_csv)
-        layout.addWidget(toolbar)
+        # 工具栏 (留引用: 切语言时按当前语言重设文案)
+        self._toolbar = QToolBar()
+        self._act_del_selected = self._toolbar.addAction(
+            tr("vw.peak_table.act_del_selected"), self._on_delete_selected)
+        self._act_clear = self._toolbar.addAction(
+            tr("vw.peak_table.act_clear"), self._on_clear)
+        self._act_export_csv = self._toolbar.addAction(
+            tr("vw.peak_table.act_export_csv"), self._on_export_csv)
+        layout.addWidget(self._toolbar)
 
         # 表格
         self._table = QTableWidget(0, len(self.COLUMNS))
@@ -85,6 +88,13 @@ class PeakTable(QWidget):
         self._table.customContextMenuRequested.connect(self._on_context_menu)
 
         layout.addWidget(self._table)
+
+    def retranslate(self) -> None:
+        """切语言时重设表头与工具栏文案 (不动已加载的峰数据)。"""
+        self._table.setHorizontalHeaderLabels(self.COLUMNS)
+        self._act_del_selected.setText(tr("vw.peak_table.act_del_selected"))
+        self._act_clear.setText(tr("vw.peak_table.act_clear"))
+        self._act_export_csv.setText(tr("vw.peak_table.act_export_csv"))
 
     # ------------------------------------------------------------------
     # 公共方法
