@@ -2276,7 +2276,7 @@ class RietveldRefiner:
         本引擎的参考峰表按"每相 max=100"归一化, 拟合出的幅值
         `amp_p = weights_p × scale` 是**相对该归一化图谱**的, 所以需要还原:
 
-            S_p = amp_p · k_p / 100        (k_p = 未归一化 Σ|F|²·m·LP 的最大值)
+            S_p = amp_p · 100 / k_p        (k_p = 未归一化 Σ|F|²·m·LP 的最大值)
             W_p ∝ S_p · ZMV_p
 
         Args:
@@ -2299,7 +2299,9 @@ class RietveldRefiner:
             return None
         if np.any(k <= 0) or np.any(z <= 0):
             return None
-        s_phys = amp * k / 100.0          # 还原到物理标度
+        # 还原到物理标度: 归一化图谱 = 100·raw/k, 模型 sim = amp·(100·raw/k) = S·raw
+        #   ⇒ S = amp·100/k   (首版写成 amp·k/100 — 比例反了, 实测把 50/50 算成 0.6/99.4)
+        s_phys = amp * 100.0 / k
         w = s_phys * z                    # W ∝ S·(ZMV)
         tot = float(np.sum(w))
         if not np.isfinite(tot) or tot <= 0:
