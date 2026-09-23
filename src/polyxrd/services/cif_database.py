@@ -2338,6 +2338,48 @@ def _extract_atomic_sites(content: str) -> list[dict]:
 
         if "fract_x" in site:
             site.setdefault("occupancy", 1.0)
+            # ── v1.1.2 (W20): 统一键名 + 补 U_iso ───────────────────────
+            # 下游 (phase_cif.phase_to_cif_text / rietveld_refiner._cif_reference_peaks
+            # 的 pymatgen 直构 / 3D 结构视图) 一律读 x/y/z/element/label/occupancy/u_iso。
+            # 本函数此前只产出 fract_x/fract_y/fract_z (且只把 4 个列转 float), 于是
+            # 走 CIF 解析的物相在这些下游**静默失败**(KeyError 被 except 吞掉 → 回退旧峰表)。
+            # 这里补出规范键, 同时**保留原始 fract_* 键**以兼容旧调用方。
+            for _dst, _src in (("x", "fract_x"), ("y", "fract_y"),
+                               ("z", "fract_z")):
+                if _src in site and _dst not in site:
+                    try:
+                        site[_dst] = float(site[_src])
+                    except (TypeError, ValueError):
+                        pass
+            # element: 优先 element 列, 其次 CIF 惯用的 type_symbol, 再从 label 取元素前缀
+            if not site.get("element"):
+                _el = str(site.get("element") or site.get("type_symbol") or "").strip()
+                if not _el:
+                    _m = re.match(r"[A-Za-z]{1,2}", str(site.get("label", "")))
+                    _el = _m.group(0) if _m else ""
+                if _el:
+                    site["element"] = _el
+            # u_iso: U_iso_or_equiv 优先; 否则 B_iso_or_equiv / (8π²); 都没有 → 0.005 Å²
+            if "u_iso" not in site:
+                _u_raw = site.get("U_iso_or_equiv", site.get("u_iso_or_equiv"))
+                _b_raw = site.get("B_iso_or_equiv", site.get("b_iso_or_equiv"))
+                _raw, _is_b = (None, False)
+                if _u_raw is not None:
+                    _raw, _is_b = _u_raw, False
+                elif _b_raw is not None:
+                    _raw, _is_b = _b_raw, True
+                _val = None
+                if _raw is not None:
+                    try:
+                        _val = float(str(_raw).split("(")[0])   # CIF 常带 esd 括号
+                    except (TypeError, ValueError):
+                        _val = None
+                if _val is None:
+                    site["u_iso"] = 0.005
+                    site["u_iso_default"] = True
+                else:
+                    site["u_iso"] = (_val / (8.0 * np.pi ** 2)) if _is_b else _val
+                    site["u_iso_default"] = False
             sites.append(site)
 
     return sites

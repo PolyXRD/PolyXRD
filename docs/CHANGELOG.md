@@ -2128,6 +2128,25 @@ GUI 引擎选择与回退提示），本轮回归复核通过，无需改动。
 - **新增测试**：`tests/test_ka2_detect.py`（4 条：单线不报 / 双线报 / 警告进精修结果 / 可关闭）。
 - **回归**：`test_ka2_detect + test_rietveld* + test_le_bail + 指标/峰形/自动引擎` 共 **84 项全通过**。
 
+#### 8. atomic_sites 键名统一 + U_iso 解析（M6/W20、W21 读侧）
+
+- **潜伏 bug（本轮修掉）**：`cif_database._extract_atomic_sites` 只产出
+  `fract_x/fract_y/fract_z`（且只把 4 个列转 float），而下游一律读
+  `x/y/z/element/label/occupancy` —— `phase_cif.phase_to_cif_text`、
+  `rietveld_refiner._cif_reference_peaks` 的 pymatgen 直构路径、3D 结构视图都如此。
+  于是**走 CIF 解析的物相在这些下游静默失败**（KeyError 被 `except` 吞掉 → 悄悄回退旧峰表）。
+- **修正**：
+  - `_extract_atomic_sites` 补出规范键 `x/y/z/element/u_iso`（**同时保留原始 `fract_*` 键**，旧调用方不受影响）；
+    `element` 依次取 `element` 列 → CIF 惯用的 `type_symbol` → `label` 的元素前缀。
+  - `u_iso` 取值规则：`U_iso_or_equiv` 优先；否则 `B_iso_or_equiv/(8π²)`（`B = 8π²U`）；
+    两者都缺 → **0.005 Å²** 并标 `u_iso_default=True`；自动剥离 CIF 常见的 esd 括号（`0.006(1)`）。
+  - `cod_local.get_atomic_sites`（W21 读侧）保持同一键集合：`cod_atomic_sites` 目前**没有** `u_iso` 列
+    （正式加列走版本化迁移，见实施手册 W21），读不到时给同样的 0.005 默认值 + `u_iso_default` 标记，
+    使两个结构来源语义一致。
+- **新增测试**：`tests/test_atomic_sites_normalize.py`（5 条：规范键齐备且 `fract_*` 保留 /
+  U 列带 esd 解析 / B 列换算 / 缺省 0.005 / 解析出的位点能直接喂给 `phase_to_cif_text`）。
+- **回归**：CIF/COD/结构视图/识别相关 **85 项全通过**。
+
 ## 附录 A · 路线图模块（M01–M25）与版本对照
 
 | 模块 | 名称 | 落地版本 | 备注 |

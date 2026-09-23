@@ -1916,12 +1916,25 @@ class CODLocalDatabase:
                     ).fetchall()
                 except Exception:
                     rows = []
-        return [
-            {"label": r["label"] or "", "element": r["element"],
-             "x": r["x"], "y": r["y"], "z": r["z"],
-             "occupancy": r["occupancy"]}
-            for r in rows
-        ]
+        # v1.1.2 (W21 读侧): 与 cif_database._extract_atomic_sites 保持同一键集合。
+        # cod_atomic_sites 目前没有 u_iso 列 (加列走版本化迁移, 见实施手册 W21),
+        # 读不到时用 0.005 Å² 默认值并标记 u_iso_default, 使两个结构来源语义一致。
+        out: list[dict] = []
+        for r in rows:
+            try:
+                _u = r["u_iso"]
+                _is_default = False
+            except (IndexError, KeyError):
+                _u, _is_default = 0.005, True
+            if _u is None:
+                _u, _is_default = 0.005, True
+            out.append({
+                "label": r["label"] or "", "element": r["element"],
+                "x": r["x"], "y": r["y"], "z": r["z"],
+                "occupancy": r["occupancy"],
+                "u_iso": float(_u), "u_iso_default": _is_default,
+            })
+        return out
 
     # ── 转 Phase 模型 (供物相识别/精修使用) ──────────────────
     def get_phase(self, cod_id: int, lattice: Optional[LatticeParams] = None,
