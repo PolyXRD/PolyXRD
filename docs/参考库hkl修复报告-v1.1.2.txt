@@ -1,0 +1,32 @@
+Graphite                 in= 11 renamed= 10 dedup=  0 kept= 11 dropped=  0
+Zinc                     in= 11 renamed= 10 dedup=  0 kept= 11 dropped=  0
+Titanium                 in= 11 renamed=  9 dedup=  0 kept= 11 dropped=  0
+Magnesium                in= 12 renamed= 10 dedup=  0 kept= 12 dropped=  0
+Cobalt                   in=  6 renamed=  5 dedup=  0 kept=  6 dropped=  0
+Hafnium                  in= 12 renamed= 10 dedup=  0 kept= 12 dropped=  0
+Zirconium                in= 12 renamed= 10 dedup=  0 kept= 12 dropped=  0
+α-Quartz                 in= 24 renamed= 12 dedup=  0 kept= 16 dropped=  8
+Tridymite                in= 32 renamed= 20 dedup=  1 kept= 22 dropped=  9
+Corundum                 in= 24 renamed= 19 dedup=  0 kept= 21 dropped=  3
+Hematite                 in= 24 renamed= 19 dedup=  0 kept= 21 dropped=  3
+Chromium sesquioxide     in= 24 renamed= 19 dedup=  0 kept= 21 dropped=  3
+Zincite                  in= 13 renamed= 11 dedup=  0 kept= 13 dropped=  0
+Calcite                  in= 30 renamed= 23 dedup=  0 kept= 25 dropped=  5
+Aragonite                in= 70 renamed= 16 dedup=  1 kept= 62 dropped=  7
+Magnesite                in= 24 renamed= 20 dedup=  3 kept= 19 dropped=  2
+Siderite                 in= 24 renamed= 18 dedup=  0 kept= 20 dropped=  4
+Zircon                   in= 30 renamed=  9 dedup=  0 kept= 17 dropped= 13
+Fluorapatite             in= 86 renamed= 75 dedup=  0 kept= 86 dropped=  0
+Hydroxyapatite           in= 84 renamed= 74 dedup=  0 kept= 84 dropped=  0
+Perovskite               in= 53 renamed= 34 dedup=  2 kept= 49 dropped=  2
+Lithium iron phosphate   in= 99 renamed=  4 dedup=  0 kept= 98 dropped=  1
+Lithium cobalt oxide     in= 19 renamed= 11 dedup=  0 kept= 14 dropped=  5
+Titanium diboride        in= 10 renamed=  8 dedup=  0 kept= 10 dropped=  0
+Lead dioxide             in= 20 renamed=  2 dedup=  0 kept= 11 dropped=  9
+Marcasite                in= 33 renamed=  1 dedup=  0 kept= 33 dropped=  0
+Portlandite              in= 19 renamed= 16 dedup=  0 kept= 19 dropped=  0
+Brucite                  in= 14 renamed= 11 dedup=  0 kept= 14 dropped=  0
+Dolomite                 in= 34 renamed= 26 dedup=  0 kept= 29 dropped=  5
+
+合计: 输入 4612 → 保留 4526 (改名 512, 去重 7, 丢弃 79); 受影响条目 29/106
+[write] version → 0.5.2; 备份: xrd_reference_database.json.bak-2026-09-23
