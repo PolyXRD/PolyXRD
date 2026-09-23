@@ -1,10 +1,10 @@
 ; ============================================================
 ; PolyXRD Setup - Inno Setup Script
-; 使用: iscc /DAppVersion=1.1.1 /O"installer_output" /F"PolyXRD-Setup-v1.1.1" scripts\PolyXRD-Setup.iss
+; 使用: iscc /DAppVersion=2.0.0 /O"installer_output" /F"PolyXRD-Setup-v2.0.0" scripts\PolyXRD-Setup.iss
 ; ============================================================
 
 #ifndef AppVersion
-  #define AppVersion "1.1.1"
+  #define AppVersion "2.0.0"
 #endif
 
 #define AppName "PolyXRD"

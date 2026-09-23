@@ -1,19 +1,19 @@
 @echo off
 chcp 65001 >nul
-REM -- UTF-8 everywhere (v1.1.1): build/dev also run in UTF-8 so that
+REM -- UTF-8 everywhere (v2.0.0): build/dev also run in UTF-8 so that
 REM -- Chinese/Japanese never turns into mojibake on a non-CJK Windows.
 set PYTHONUTF8=1
 set PYTHONIOENCODING=utf-8
-title PolyXRD v1.1.1 打包构建器
+title PolyXRD v2.0.0 打包构建器
 echo ========================================
-echo   PolyXRD v1.1.1 打包为独立安装包
+echo   PolyXRD v2.0.0 打包为独立安装包
 echo   数据库外挂 (不随包分发)
 echo ========================================
 echo.
 
 cd /d "%~dp0"
 
-set APPVER=1.1.1
+set APPVER=2.0.0
 
 REM ── Python 定位 ──────────────────────────────────────
 if exist "venv\Scripts\python.exe" (
