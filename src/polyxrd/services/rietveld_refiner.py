@@ -588,7 +588,7 @@ class RietveldRefiner:
             residual_data=resid,
             wR=wR,
             Rexp=Rexp,
-            Rb=Rp,
+            Rb=0.0,   # v2.0.0: Rb(Bragg R) 与 Rp(轮廓 R) 是不同概念, 不再别名
             Rp=Rp,
             metrics_valid=metrics_valid,
             metric_note=metric_note,
@@ -950,7 +950,7 @@ class RietveldRefiner:
             )
             wR = metrics["Rwp"]
             Rexp = metrics["Rexp"]
-            Rb = metrics["Rb"]
+            Rb = 0.0   # 真实 Bragg R 未实现 (不再用轮廓 R 冒充)
             GOF = metrics["GOF"]
 
             refined_a = float(model.lattice.a)
@@ -2074,7 +2074,7 @@ class RietveldRefiner:
         )
         wR = metrics["Rwp"]
         Rexp = metrics["Rexp"]
-        Rb = metrics["Rb"]
+        Rb = 0.0   # 真实 Bragg R 未实现
         GOF = metrics["GOF"]
         # v1.1.2: 未加权 wR —— 供快检门限与"新旧口径"对照使用
         wR_unweighted = float(self._calc_wR(intensity, simulated_full))
@@ -2212,8 +2212,8 @@ class RietveldRefiner:
                 result.warnings.append(_d)
 
         _plog(
-            "[result] Rwp={:.3f}% Rexp={:.3f}% Rb={:.3f}% GOF={:.3f} nfev={} quality={}".format(
-                float(wR), float(Rexp), float(Rb), float(GOF),
+            "[result] Rwp={:.3f}% Rexp={:.3f}% Rp={:.3f}% GOF={:.3f} nfev={} quality={}".format(
+                float(wR), float(Rexp), float(metrics.get("Rp", 0.0)), float(GOF),
                 int(num_cycles), quality,
             )
         )
@@ -3094,8 +3094,6 @@ class RietveldRefiner:
             "Rwp": rwp,
             "Rexp": rexp,
             "Rp": rp,
-            # 兼容旧调用方: 历史字段名 Rb 实际是轮廓 R (非 Bragg R)
-            "Rb": rp,
             "GOF": gof,
             "chi2": chi2,
             "chi2_red": chi2 / float(n_free),
@@ -3298,7 +3296,7 @@ class RietveldRefiner:
             residual_data=(two_theta, intensity - best_calc),
             wR=best_rwp,
             Rexp=_m_lb["Rexp"],
-            Rb=_m_lb["Rp"],
+            Rb=0.0,   # v2.0.0: 真实 Bragg R 未实现
             Rp=_m_lb["Rp"],
             chi2=_m_lb["chi2"],
             chi2_red=_m_lb["chi2_red"],
