@@ -1270,6 +1270,18 @@ class RietveldRefiner:
         _tex_off = _cell_off + n_cell
         n_params += n_tex
 
+        # v1.1.2 (W16): 样品位移 (specimen displacement) —— 与 zero_shift 物理不同:
+        #   Δ(2θ) = −2·s·cosθ / R    (s = 样品表面偏离测角仪轴的量, R = 测角仪半径)
+        # zero_shift 是**常数**偏移; 位移项随 cosθ 变化, 高角区峰位整体漂移。
+        # 只用 zero_shift 会把高角信息吸进常数项、低角反而被拉错。
+        # 默认**关闭** (opt-in: refine_displacement=True), 参数挂在向量最末尾,
+        # 不触碰既有 n_phases+0..6 / cell / tex 的索引算术。
+        refine_displacement = bool(kwargs.get("refine_displacement", False))
+        n_disp = 1 if refine_displacement else 0
+        _disp_off = _tex_off + n_tex
+        displacement_radius_mm = float(kwargs.get("displacement_radius_mm", 240.0))
+        n_params += n_disp
+
         # ── 3. 智能权重估计 ──────────────────────────────────────
         # 对每个物相，找到其参考峰最接近实验最大峰处的实验强度比
         # 作为权重初值
@@ -1338,6 +1350,8 @@ class RietveldRefiner:
                 parts.append(np.ones(n_cell, dtype=float))  # 晶胞缩放初值 = 1 (库值)
             if n_tex:
                 parts.append(np.ones(n_tex, dtype=float))   # 织构 r 初值 = 1 (无取向)
+            if n_disp:
+                parts.append([0.0])   # v1.1.2 (W16): 样品位移初值 0 mm
             return np.concatenate(parts)
 
         candidates = []
@@ -1376,7 +1390,8 @@ class RietveldRefiner:
                 wx = np.asarray(_x_sink["x"], dtype=float)
                 _wn, _wcell = int(_x_sink.get("n_phases", -1)), int(_x_sink.get("n_cell", 0))
                 if (not _x_sink.get("use_caglioti", True) and _wn == n_phases
-                        and wx.shape == (n_phases + 4 + _wcell,)):
+                        and wx.shape == (n_phases + 4 + _wcell
+                                         + int(_x_sink.get("n_disp", 0)),)):
                     w_cand = _make_x0(
                         wx[:n_phases], wx[n_phases], wx[n_phases + 1],
                         wx[n_phases + 2], wx[n_phases + 3],
@@ -1386,6 +1401,9 @@ class RietveldRefiner:
                     if n_cell and _wcell == n_cell:
                         w_cand[_cell_off:_cell_off + n_cell] = wx[
                             n_phases + 4:n_phases + 4 + n_cell]
+                    _wdisp = int(_x_sink.get("n_disp", 0))
+                    if n_disp and _wdisp == n_disp:
+                        w_cand[_disp_off] = wx[n_phases + 4 + _wcell]
                     candidates = [w_cand] + candidates[:max(0, n_starts - 1)]
                     _plog("[warm] 快检解已并入精细模式第 1 起点")
             except Exception as _e:  # noqa: BLE001
@@ -1408,6 +1426,10 @@ class RietveldRefiner:
             # March-Dollase r: 0.6 ↔ 1.8, 覆盖 Brucite 实测所需 r≈0.66 (r^-4.5=6.35)
             lower_parts.append(np.full(n_tex, 0.6))
             upper_parts.append(np.full(n_tex, 1.8))
+        if n_disp:
+            # 样品位移 s (mm): ±1.0 mm 覆盖常见制样偏差 (R=240mm 时 100° 处 ≈0.5°)
+            lower_parts.append(np.array([-1.0]))
+            upper_parts.append(np.array([1.0]))
         lower = np.concatenate(lower_parts)
         upper = np.concatenate(upper_parts)
 
@@ -1449,6 +1471,9 @@ class RietveldRefiner:
             # v0.15.2: 织构 r 掩码关闭即冻结为 1.0 (无择优取向)
             for _j in range(n_tex):
                 _freeze(_tex_off + _j, 1.0)
+        if n_disp and not param_mask.get("displacement", True):
+            # v1.1.2 (W16): 位移掩码关闭 → 冻结为 0 (无样品位移)
+            _freeze(_disp_off, 0.0)
         # mask["background"] 在 builtin 中仍为 no-op:
         #   background 由 _estimate_background 一次性预处理, 非 fit 维度。
 
@@ -1482,11 +1507,30 @@ class RietveldRefiner:
                 peaks = self._apply_texture(peaks, tex_axes, tex)
             return peaks
 
+        def _disp_of(params) -> float:
+            """v1.1.2 (W16): 从参数向量末尾取样品位移 (不改变 _unpack 的元组长度)。"""
+            if not n_disp:
+                return 0.0
+            try:
+                return float(params[_disp_off])
+            except (IndexError, TypeError, ValueError):
+                return 0.0
+
+        def _transform_peaks_full(cs, tex, disp: float = 0.0):
+            """= _transform_peaks + 样品位移 (仅在启用时多一步, 其余路径逐点不变)。"""
+            peaks = _transform_peaks(cs, tex)
+            if n_disp and disp:
+                peaks = self._apply_displacement(
+                    peaks, disp, displacement_radius_mm)
+            return peaks
+
         def residual(params):
             weights, fwhm, eta, scale, zs, cag, cs, tex = _unpack(params)
             eff_two_theta = two_theta - zs if abs(zs) > 1e-9 else two_theta
+            _disp = _disp_of(params)
             simulated = self._compute_spectrum_from_ref(
-                eff_two_theta, _transform_peaks(cs, tex), weights, fwhm, eta, scale,
+                eff_two_theta, _transform_peaks_full(cs, tex, _disp),
+                weights, fwhm, eta, scale,
                 peak_shape, caglioti=cag
             )
             r = y_exp - simulated
@@ -1535,8 +1579,8 @@ class RietveldRefiner:
             opt_w, opt_fw, opt_et, opt_sc, opt_zs, opt_cag, opt_cs, opt_tex = _unpack(res_opt.x)
             eff = two_theta - opt_zs if abs(opt_zs) > 1e-9 else two_theta
             sim_i = self._compute_spectrum_from_ref(
-                eff, _transform_peaks(opt_cs, opt_tex), opt_w, opt_fw, opt_et, opt_sc, peak_shape,
-                caglioti=opt_cag
+                eff, _transform_peaks_full(opt_cs, opt_tex, _disp_of(res_opt.x)),
+                opt_w, opt_fw, opt_et, opt_sc, peak_shape, caglioti=opt_cag
             )
             wr_i = _wr_of(sim_i)
 
@@ -1562,8 +1606,8 @@ class RietveldRefiner:
             )
             _w, _fw, _et, _sc, _zs, _cag, _cs, _tex = _unpack(best_result.x)
             best_simulated = self._compute_spectrum_from_ref(
-                two_theta, _transform_peaks(_cs, _tex), _w, _fw, _et, _sc, peak_shape,
-                caglioti=_cag
+                two_theta, _transform_peaks_full(_cs, _tex, _disp_of(best_result.x)),
+                _w, _fw, _et, _sc, peak_shape, caglioti=_cag
             )
         _plog(f"[multistart] best wR={best_wR:.3f}% → 进入局部抛光")
         # v1.1.2: 记录抛光前的最优 wR, 供收敛判定 (抛光仍能改进 = 未卡死)
@@ -1633,8 +1677,9 @@ class RietveldRefiner:
                                     _uw, _ufw, _uet, _usc, _uzs, _ucag, _ucs, _utex = _unpack(x_t)
                                     eff_t = two_theta - _uzs if abs(_uzs) > 1e-9 else two_theta
                                     sim_t = self._compute_spectrum_from_ref(
-                                        eff_t, _transform_peaks(_ucs, _utex), _uw, _ufw, _uet,
-                                        _usc, peak_shape, caglioti=_ucag
+                                        eff_t,
+                                        _transform_peaks_full(_ucs, _utex, _disp_of(x_t)),
+                                        _uw, _ufw, _uet, _usc, peak_shape, caglioti=_ucag
                                     )
                                     wr_t = _wr_of(sim_t)
                                     # 每 8 次评估汇报一次: 抛光约百余次评估, 采样过密
@@ -1661,6 +1706,7 @@ class RietveldRefiner:
                     "use_caglioti": bool(use_caglioti),
                     "n_phases": int(n_phases),
                     "n_cell": int(n_cell),
+                    "n_disp": int(n_disp),
                 })
             except Exception:  # noqa: BLE001
                 pass
@@ -1668,6 +1714,7 @@ class RietveldRefiner:
         # ── 8. 提取最终结果 ──────────────────────────────────────
         (opt_weights, opt_fwhm, opt_eta, opt_scale, opt_zero_shift,
          opt_cag, opt_cell, opt_tex) = _unpack(best_result_x)
+        opt_disp = _disp_of(best_result_x)   # v1.1.2 (W16)
         opt_cell_list = ([float(x) for x in opt_cell] if opt_cell is not None else [])
         opt_tex_list = ([float(x) for x in opt_tex] if opt_tex is not None else [])
 
@@ -1822,6 +1869,10 @@ class RietveldRefiner:
                 "refine_texture": bool(refine_texture),
                 "texture_phases": [getattr(phases[i], "name", "?") for i in _tex_idx],
                 "texture_r": opt_tex_list,
+                # v1.1.2 (W16): 样品位移 (opt-in, 默认关)
+                "refine_displacement": bool(refine_displacement),
+                "displacement_mm": float(opt_disp),
+                "displacement_radius_mm": float(displacement_radius_mm),
             },
         )
 
@@ -1989,6 +2040,41 @@ class RietveldRefiner:
             np.asarray(two_theta, dtype=float), phase_peaks,
             weights, fwhm, eta, scale, peak_shape, caglioti,
         )
+
+    @staticmethod
+    def _apply_displacement(
+        phase_peaks: list, s_mm: float, radius_mm: float = 240.0
+    ) -> list:
+        """样品位移 (specimen displacement) 峰位修正 —— v1.1.2 (W16)。
+
+        Δ(2θ) = −2·s·cosθ / R   (s 单位 mm, R = 测角仪半径 mm, 结果弧度→度)
+
+        与 ``zero_shift`` 的区别: 零点是**常数**偏移; 样品表面偏离测角仪轴时,
+        偏移随 cosθ 变化 —— 低角几乎不动、高角整体漂移, 所以只用零点会把
+        高角信息吸进常数项。s > 0 表示样品偏向光源侧 (高角峰向低角移动)。
+        仅改峰位, 保留 hkl 与强度; 窗口化/全矩阵两条合成路径都会用到。
+        """
+        import math as _math
+
+        s = float(s_mm)
+        r = float(radius_mm)
+        if not phase_peaks or abs(s) < 1e-12 or r <= 0:
+            return phase_peaks
+        out: list = []
+        for peaks in phase_peaks:
+            conv: list = []
+            for p in peaks:
+                try:
+                    tth = float(p[1])
+                    inten = float(p[2])
+                except (TypeError, ValueError, IndexError):
+                    conv.append(p)
+                    continue
+                th = _math.radians(tth / 2.0)
+                d_rad = -2.0 * s * _math.cos(th) / r
+                conv.append((p[0], tth + _math.degrees(d_rad), inten))
+            out.append(conv)
+        return out
 
     @staticmethod
     def _scale_phase_peaks(

@@ -2147,6 +2147,46 @@ GUI 引擎选择与回退提示），本轮回归复核通过，无需改动。
   U 列带 esd 解析 / B 列换算 / 缺省 0.005 / 解析出的位点能直接喂给 `phase_to_cif_text`）。
 - **回归**：CIF/COD/结构视图/识别相关 **85 项全通过**。
 
+#### 9. 样品位移项（M5/W16，opt-in 默认关）
+
+- **为什么加**：`zero_shift` 是**常数**偏移；样品表面偏离测角仪轴时，峰位偏移按
+  **`Δ(2θ) = −2·s·cosθ/R`** 变化（R = 测角仪半径，默认 240 mm），只用零点会把
+  一类系统性偏差塞进常数项。
+- **实现**：新增 `RietveldRefiner._apply_displacement(phase_peaks, s_mm, R_mm)`；
+  位移参数挂在**参数向量最末尾**（沿用"末尾挂新自由度、不动既有索引算术"的约定），
+  `refine_displacement=True` 启用、`param_mask["displacement"]=False` 可冻结、边界 ±1.0 mm。
+  为不改动 `_unpack` 的元组长度（避免 5 处解包点全部改动），用独立取值函数 `_disp_of(params)`。
+- **默认关闭**：不影响现有行为；`fit_params` 记录 `refine_displacement / displacement_mm /
+  displacement_radius_mm`。
+- **测试**：`tests/test_sample_displacement.py`（5 条）——
+  100°/s=0.5mm/R=240mm 的解析值逐位核对（Δ=−0.1535°）、`s=0` 零改动、
+  `Δ2θ ∝ cosθ`（**低角位移量更大**，与"高角更敏感"的直觉相反，正是该式的形式）、
+  默认关闭、opt-in 后能从合成数据把 s 拟合回来且 wR 不劣化。
+- **实测发现（如实记录）**：在单相 Si（20–100°）合成谱上，真值 `s=0.40 mm`
+  只能回收 `s≈0.11 mm` —— 因为**样品位移与各向同性晶胞缩放存在部分退化**
+  （两者都能平移峰位、只是角度依赖不同）。结论：位移项应作为**联合精修**的一部分，
+  在更宽的角范围 / 晶胞已固定时回收更好；本文不据此声称定量精度。
+
+#### 10. `cod_atomic_sites.u_iso` 列与迁移（M6/W21）
+
+- **schema**：`cod_atomic_sites` 新增可空列 **`u_iso REAL`**（新库建表即带）。
+  `_migrate_schema` 增加幂等的 `ALTER TABLE ... ADD COLUMN u_iso REAL`；
+  极老 SQLite/只读库失败只告警（读侧有默认值兜底）。
+- **写入**：`parse_atom_sites_from_cif` 解析 `U_iso_or_equiv`（优先）或
+  `B_iso_or_equiv/(8π²)`，缺省 **0.005 Å²** 并标 `u_iso_default`；`_INSERT_SITES_SQL`
+  与批量写入同步为 9 列。
+- **读取**：`get_atomic_sites` 优先带 `u_iso` 查询，旧库/旧包没有该列时自动回退到
+  不含它的查询并补 0.005 默认值 —— **不强制用户重下数据库**。
+- **测试**：`tests/test_cod_u_iso_column.py`（6 条：新库带列 / 旧库幂等迁移 /
+  插入 SQL 与 schema 匹配 / U 列 / B 列换算 / 缺省值）。
+
+#### 11. 产品分层文案（M6/W24）
+
+- README 的"Rietveld 结构精修"条目改为**引擎能力分层**表述：
+  **真 Rietveld**（结构自由度 + `S·ZMV` 定量）指向 GSAS-II/FullProf/MAUD；
+  **内置引擎**明确为**免结构全谱拟合（Le Bail 级）**，其 wt% 是**相对定量**而非严格质量分数；
+  并写明 v1.1.2 起的指标口径（统计权；单位权下 `Rexp/GOF` 显示"不可解读"）。
+
 ## 附录 A · 路线图模块（M01–M25）与版本对照
 
 | 模块 | 名称 | 落地版本 | 备注 |
