@@ -1176,7 +1176,10 @@ class RietveldRefiner:
         wavelength = data.wavelength
 
         peak_shape = kwargs.get("peak_shape", "pseudo-voigt")
-        init_fwhm = kwargs.get("fwhm", 0.15)
+        # v2.0.0 (W25): 起点优先由**观测峰**反推 (显式 kwargs 仍然最优先)
+        _seed = (self._seed_from_observed_peaks(data)
+                 if bool(kwargs.get("seed_from_peaks", True)) else {})
+        init_fwhm = float(kwargs.get("fwhm", _seed.get("fwhm") or 0.15))
         bg_method = kwargs.get("bg_method", "median")  # v4: median → 显著优于 snip
         init_zero_shift = kwargs.get("zero_shift", 0.0)
         use_caglioti = kwargs.get("use_caglioti", True)
@@ -1443,6 +1446,12 @@ class RietveldRefiner:
         init_W = init_fwhm ** 2
         init_U = kwargs.get("U", 0.005)
         init_V = kwargs.get("V", -0.001)
+        # W25: Caglioti 起点优先取观测峰反解值 (显式 kwargs 最优先; 反解不可用则用默认)
+        init_W = float(kwargs.get("W", _seed.get("W") or init_W))
+        if _seed.get("U") is not None:
+            init_U = float(kwargs.get("U", _seed["U"]))
+        if _seed.get("V") is not None:
+            init_V = float(kwargs.get("V", _seed["V"]))
 
         # ── 4. 构建多起点 x0 候选 ────────────────────────────────
         def _make_x0(weights, fwhm, eta, scale, zs, U=None, V=None, W=None):
@@ -2060,6 +2069,8 @@ class RietveldRefiner:
                     if _bovr_of(best_result_x) is not None else []),
                 # v2.0.0 (W28): 拟合后诊断 (分段 R / DW / 建议)
                 "diagnostics": _diag,
+                # v2.0.0 (W25): 观测峰种子化起点 (反推出的值; 空 = 用了默认起点)
+                "seed_from_peaks": dict(_seed) if _seed else {},
             },
         )
         # W28: 把最重要的诊断作为面向用户的提示 (最多 2 条, 避免刷屏)
@@ -2314,6 +2325,94 @@ class RietveldRefiner:
                 conv.append((p[0], 2.0 * _math.degrees(_math.asin(sin_half)), inten))
             out.append(conv)
         return out
+
+    def _seed_from_observed_peaks(self, data: XRDData) -> dict:
+        """从**观测峰**反推起点 (v2.0.0 / W25)。
+
+        自动精修最大的问题之一是"起点靠手写网格"。观测峰本身已经含了峰宽与峰位信息:
+          - 各峰的 FWHM → 按 Caglioti 关系 `FWHM² = U·tan²θ + V·tanθ + W` 最小二乘反解
+            `(U, V, W)` 起点 (真实 Rietveld 程序的通行做法);
+          - 中角区 FWHM 中位数 → 固定峰宽模式的 `fwhm` 起点, 同时作为 `W` 的兜底;
+          - (零点初值需要与模型峰配对, 可靠性低, 本项不动, 仍由调用方给定/默认 0)
+
+        刻意**不用** `PeakFinder`(阈值相对 Imax, 背景高于阈值时会把噪声全判成峰 ——
+        实测合成数据上返回 120 个假峰、FWHM 10.7°), 也不用物相识别那条高精度链路
+        (`default_peak_list`, 个别试样要 30~40 s)。这里用自带轻量估计: 中值背景扣除 →
+        `k·σ` (σ 取残差 MAD) 阈值找局部极大 → 半高宽扫描测 FWHM。毫秒级且背景鲁棒。
+
+        返回 `{"fwhm","U","V","W"}` (不可用时相应键为 None); 任何异常都返回空 dict,
+        由调用方回退到原有默认起点。
+        """
+        try:
+            from scipy.ndimage import median_filter
+
+            tt_all = np.asarray(data.two_theta, dtype=float)
+            y_all = np.asarray(data.intensity, dtype=float)
+            if tt_all.size < 50:
+                return {}
+            step = float(np.median(np.diff(tt_all))) or 0.02
+            win = max(5, int(round(2.0 / step)) | 1)      # ~2° 中值窗作背景
+            bg = median_filter(y_all, size=win, mode="nearest")
+            ys = y_all - bg
+            sigma = 1.4826 * float(np.median(np.abs(ys - np.median(ys))))
+            if not np.isfinite(sigma) or sigma <= 0:
+                sigma = max(1.0, 0.01 * float(np.max(ys)))
+            thr = max(5.0 * sigma, 0.02 * float(np.max(ys)))
+            picks = np.where((ys[1:-1] > ys[:-2]) & (ys[1:-1] >= ys[2:])
+                             & (ys[1:-1] > thr))[0] + 1
+            if picks.size > 40:                            # 只取最强 40 个, 抗噪
+                picks = picks[np.argsort(ys[picks])[-40:]]
+            pts: list[tuple[float, float]] = []
+            n = ys.size
+            for i in picks:
+                half = ys[i] / 2.0
+                # 半高跨越用**线性插值**定位 (只用整数格点的话, 0.02° 步长会把
+                # FWHM 量化到 ±0.02°, 足以把 Caglioti 的 U 项拟合到 0)
+                lo = int(i)
+                while lo > 0 and ys[lo] > half:
+                    lo -= 1
+                hi = int(i)
+                while hi < n - 1 and ys[hi] > half:
+                    hi += 1
+                if lo >= i or hi <= i or hi <= lo:
+                    continue
+                yl, yl1 = ys[lo], ys[lo + 1]
+                x_lo = tt_all[lo] + ((half - yl) / (yl1 - yl) * step
+                                     if yl1 != yl else 0.0)
+                yr, yr1 = ys[hi], ys[hi - 1]
+                x_hi = tt_all[hi] - ((half - yr) / (yr1 - yr) * step
+                                     if yr1 != yr else 0.0)
+                fw = float(x_hi - x_lo)
+                if 0.01 < fw < 3.0:
+                    pts.append((float(tt_all[i]), fw))
+            if len(pts) < 3:
+                return {}
+            tth = np.asarray([p[0] for p in pts], dtype=float)
+            fw = np.asarray([p[1] for p in pts], dtype=float)
+            # 中角区 (20°~max-10°) 的 FWHM 中位数作固定宽起点: 避开低角不对称与高角弱峰
+            hi_lim = max(tth) - 10.0
+            mid = (tth >= 20.0) & (tth <= hi_lim)
+            fwhm_seed = float(np.median(fw[mid])) if np.any(mid) else float(np.median(fw))
+            # Caglioti: y = fw², x1 = tan²θ, x2 = tanθ → [U, V, W]
+            tan_t = np.tan(np.radians(tth / 2.0))
+            A = np.column_stack([tan_t * tan_t, tan_t, np.ones_like(tan_t)])
+            sol, *_ = np.linalg.lstsq(A, fw * fw, rcond=None)
+            U, V, W = (float(sol[0]), float(sol[1]), float(sol[2]))
+            # 物理合理性守卫: 在该 2θ 范围内 FWHM 必须处处为正且不过分
+            grid = np.linspace(float(np.min(tth)), float(np.max(tth)), 64)
+            tg = np.tan(np.radians(grid / 2.0))
+            fw_pred = np.sqrt(np.clip(U * tg * tg + V * tg + W, 0.0, None))
+            if not (np.all(np.isfinite(fw_pred)) and fw_pred.min() > 0.02
+                    and fw_pred.max() < 3.0):
+                U = V = None
+                W = fwhm_seed ** 2
+            return {
+                "fwhm": fwhm_seed,
+                "U": U, "V": V, "W": W,
+                "n_peaks": len(pts),
+            }
+        except Exception:  # noqa: BLE001 - 起点反推失败一律回退默认值
+            return {}
 
     @staticmethod
     def _fit_diagnostics(
