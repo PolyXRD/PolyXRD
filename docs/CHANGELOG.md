@@ -1985,6 +1985,73 @@ GUI 引擎选择与回退提示），本轮回归复核通过，无需改动。
 `scripts/PolyXRD-Setup.iss` —— 统一 **1.1.1**（`build.bat` 为 UTF-8 + 全 CRLF，改动按字节级替换，
 不触碰编码）。
 
+---
+
+### v1.1.2 — 2026-09-23 · 精修评价指标口径修正（M1/M2，进行中）
+
+> 起点：用户反馈"Rexp 貌似都不对、结果总是不理想"。深审后定位到**不是调参问题，
+> 而是评价指标本身算错了**，并顺带发现正向模型的三处结构性问题。
+> 规划文档：`docs/精修改进方案-v2-四阶段.md`（诊断）与
+> `docs/精修改进实施手册-v3-分步可执行.md`（31 个工作项 W00–W30）。
+
+#### 1. Rexp / GOF 数值错误（根因与修正）
+
+- **根因**：`_calc_profile_metrics` 用标准 Rexp 公式，但分母配的是**单位权**（或"均一化为均值 1"的
+  权重）。标准定义下 `w = 1/σ²`，计数统计 `σ² ≈ y` → 分母应为 `Σ y` 而非 `Σ y²`，
+  相差一个 `≈ y` 的量级；而归一化权重又把统计尺度乘掉。
+  **实测 2-1 的 Rexp 偏小 130.9 倍，GOF 给出 920（标准定义应为 10.8 量级）。
+  且该系数随数据强度标尺漂移 → 旧 Rexp/GOF 无物理意义。**
+- **修正**：`_calc_profile_metrics` 新增 `sigma2`（**未归一化**方差）参数，输出
+  `Rwp / Rexp / Rp / chi2 / chi2_red / GOF`；`Rb` 保留为兼容别名（其真实语义一直是**轮廓 R**，
+  即 `Σ|Δy|/Σy`，并非 Bragg R）。单测 `tests/test_metrics_selfcheck.py` 6 条自检
+  （Rwp 标尺不变 / Rexp 解析值 / GOF≈1 / Rexp ∝ 1/√计数 / Rp 公式 / chi2_red = GOF²）。
+- **默认统计权**：builtin 引擎默认 `stat_weights="poisson"`（原默认 `"none"`）。
+  理由：Rietveld 标准做法就是加权最小二乘，目标函数与评价指标必须是同一把尺；
+  单位权下 `Σw·y² = Σy²`，Rexp 无意义。显式传 `"none"` 仍可退回旧行为，
+  此时 `metrics_valid=False`，界面显示"不可解读"而非给一个漂亮数字。
+- **快检门限解耦**：20% 这条早退线是在单位权口径下标定的，统计权下加权 wR 天然更高，
+  故门限改用**未加权 wR** 判定（`fit_params.wR_unweighted`），避免白白变慢。
+- **其它引擎**：GSAS-II 桥只回传 wR（不回传 Rexp）→ 不再本地硬算，改标"不可解读"；
+  Le Bail 改用 Poisson 方差。
+- **实测（同配置前后，预算受限口径）**：
+
+  | 试样 | 修正前 Rexp / GOF | 修正后 Rexp / GOF |
+  |---|---|---|
+  | 2-1 | 0.021 % / 920.4 | **2.796 % / 10.80** |
+  | 4-1 | 0.209 % / 230.5 | **8.567 % / 4.68** |
+
+  （2-1 修正后的 2.796% 与深审阶段独立复算的 2.797% 一致，互为佐证。）
+
+#### 2. 结果模型与界面
+
+- `RefinementResult` 新增 `Rp / chi2 / chi2_red / metrics_valid / metric_note / warnings`；
+  `Rb` 字段保留（兼容旧项目文件）。
+- 精修页/向导页：`Rb:` 标签正名为 `Rp:`；`metrics_valid=False` 时 Rexp/GOF 显示"不可解读"；
+  结果区新增提示条（引擎回退 / 指标不可解读 / 后续的 Kα2 检测等），并同步写入执行日志。
+- 引擎回退不再只在日志里：`refine()` 记录 `engine_requested` 与实际引擎不一致时写入 `warnings`。
+
+#### 3. 质量分级统一
+
+- 历史上存在**两套阈值**（`quality_grade` 用 <2/<5/<10/<20 的同步辐射口径，引擎内部另写
+  <5/<10/<20/需改进）→ 同一结果两种等级。现统一到
+  `models/refinement.py::quality_grade_for`：**<5 优秀 / <10 良好 / <15 一般 / <25 差 / ≥25 需改进**
+  （实验室粉末 XRD 口径）。
+- `converged`/`num_cycles` 语义修正：不再只取多起点里的 `success`，改为"多起点成功或抛光仍有改进"，
+  并把 `nfev / converged_multistart / converged_polish_improved / wR_before_polish` 一并写入
+  `fit_params`（`num_cycles` 的实际语义就是 nfev）。
+
+#### 4. 回归
+
+- 新增 `tests/test_metrics_selfcheck.py`（6 条，改动前 5 红 1 绿 → 改动后全绿）。
+- 精修相关子集 `test_rietveld* / test_le_bail / test_report_m18 / test_phase_display /
+  test_spectrum_windowed_m26 / test_v012_refinement_log`：**111 项全通过**。
+
+#### 后续（本版进行中，见实施手册 W11–W30）
+
+峰形改面积归一（当前为"峰高归一"，导致积分强度 ∝ FWHM、η 不是混合比、Caglioti 参数被拟合到
+错误值）→ 背景进拟合 → 峰位物理（样品位移/低角不对称/全晶胞）→ 结构自由度与 `S·ZMV` 定量 →
+自动策略（观测峰种子化、先 Le Bail 后 Rietveld）。
+
 ## 附录 A · 路线图模块（M01–M25）与版本对照
 
 | 模块 | 名称 | 落地版本 | 备注 |

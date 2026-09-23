@@ -40,7 +40,7 @@ import numpy as np
 
 from polyxrd.config import get_config
 from polyxrd.models.phase import LatticeParams, Phase
-from polyxrd.models.refinement import RefinementResult
+from polyxrd.models.refinement import RefinementResult, quality_grade_for
 from polyxrd.models.xrd_data import XRDData
 from polyxrd.services.maud_par_builder import (
     MaudInsArtifacts,
@@ -719,12 +719,8 @@ class MaudEngine:
         gof = float(rfactors.get("gof") or 0.0)
         n_iter = int(rfactors.get("iterations") or 0)
 
-        quality = (
-            "优秀" if wrp < 5
-            else "良好" if wrp < 10
-            else "可接受" if wrp < 20
-            else "需改进"
-        )
+        # v1.1.2: 质量分级统一走 models.refinement.quality_grade_for
+        quality = quality_grade_for(wrp)
 
         # 残差谱: MAUD 不直接暴露 simulated_data, 用 observed 0 残差占位
         try:
@@ -744,6 +740,8 @@ class MaudEngine:
             wR=wrp,  # wR ≡ Rwp (加权轮廓 R), 用作主要指标
             Rexp=rexp,  # MAUD par 有则带出, 无则 0
             Rb=rb,
+            Rp=rb,
+            metrics_valid=bool(rexp > 0.0),
             GOF=gof,
             quality=quality,
             num_cycles=n_iter,

@@ -24,7 +24,7 @@ import numpy as np
 
 from polyxrd.config import get_config
 from polyxrd.models.phase import Phase, LatticeParams
-from polyxrd.models.refinement import RefinementResult
+from polyxrd.models.refinement import RefinementResult, quality_grade_for
 from polyxrd.models.xrd_data import XRDData
 
 logger = logging.getLogger("polyxrd.rietveld_refiner")
@@ -165,6 +165,21 @@ class RietveldRefiner:
             result.fit_params["engine_fallback_reason"] = f"{type(e).__name__}: {e}"
 
         result.time_seconds = time.time() - start_time
+        # v1.1.2: 引擎回退不再"只在日志里" —— 记录请求/实际引擎并写入 warnings,
+        # 由界面在结果区显示 (静默回退是用户最难察觉的坑)。
+        try:
+            _req = str(result.fit_params.get("engine_requested", engine))
+            _used = str(result.fit_params.get("engine", engine))
+            result.fit_params.setdefault("engine_requested", _req)
+            if _used != _req:
+                _reason = result.fit_params.get("engine_fallback_reason", "")
+                _msg = f"请求引擎 {_req} → 实际使用 {_used}"
+                if _reason:
+                    _msg += f" (原因: {_reason})"
+                if _msg not in result.warnings:
+                    result.warnings.append(_msg)
+        except Exception:  # noqa: BLE001 - 提示失败不该影响精修结果
+            pass
         log(
             "[done] engine={} wR={:.3f}% GOF={:.3f} nfev={} t={:.1f}s".format(
                 result.fit_params.get("engine", engine),
@@ -364,8 +379,8 @@ class RietveldRefiner:
 
         wR = float(out["wR"]) if out.get("wR") is not None else 100.0
         GOF = float(out["GOF"]) if out.get("GOF") is not None else 0.0
-        quality = ("优秀" if wR < 5 else "良好" if wR < 10
-                   else "可接受" if wR < 20 else "需改进")
+        # v1.1.2: 质量分级统一走 models.refinement.quality_grade_for (唯一入口)
+        quality = quality_grade_for(wR)
 
         # v1.1.2: 指标口径修正 —— GSAS-II 桥只回传 wR (可能另有 GOF), **不回传 Rexp**。
         # 本地既没有 GSAS-II 的权方案也没有它的参数计数, 硬算出来的 Rexp 是错的
@@ -782,8 +797,7 @@ class RietveldRefiner:
                 reference_peaks=phase.reference_peaks,
                 elements=phase.elements,
             )
-            quality = ("优秀" if wR < 5 else "良好" if wR < 10
-                       else "可接受" if wR < 20 else "需改进")
+            quality = quality_grade_for(wR)
 
             return RefinementResult(
                 phases=[refined_phase],
@@ -1455,6 +1469,8 @@ class RietveldRefiner:
                 caglioti=_cag
             )
         _plog(f"[multistart] best wR={best_wR:.3f}% → 进入局部抛光")
+        # v1.1.2: 记录抛光前的最优 wR, 供收敛判定 (抛光仍能改进 = 未卡死)
+        _wr_multistart = float(best_wR)
 
         # ── 7. v7 局部抛光 (性能+效果平衡) ───────────────────────
         #    取 24 个手工方向 + 9 个 Caglioti 调整方向，而不是 3^8 网格
@@ -1612,15 +1628,8 @@ class RietveldRefiner:
         # Rexp/GOF 只有在统计权下才可解读 (Rexp ∝ 1/sqrt(Σy))
         metrics_valid = stat_weights_mode != "none"
 
-        # 质量等级
-        if wR < 5:
-            quality = "优秀"
-        elif wR < 10:
-            quality = "良好"
-        elif wR < 20:
-            quality = "可接受"
-        else:
-            quality = "需改进"
+        # 质量等级 (v1.1.2: 统一走 models.refinement.quality_grade_for)
+        quality = quality_grade_for(wR)
 
         # 构建精修后物相
         refined_phases = []
@@ -1637,8 +1646,15 @@ class RietveldRefiner:
                 weight_fraction=float(weight_pcts[i]),
             ))
 
-        converged = bool(getattr(best_result, "success", True))
-        num_cycles = int(getattr(best_result, "nfev", 0))
+        # v1.1.2: converged/num_cycles 语义修正
+        #   旧实现取的是多起点里那个 res.success —— 但最终结果还经过局部抛光,
+        #   抛光可能把"多起点未收敛"的解救回来。这里改为:
+        #     converged = (多起点 success) 或 (抛光在起点解之上仍有改进)
+        #   并把两者都写进 fit_params, 便于排查。
+        _multistart_ok = bool(getattr(best_result, "success", True))
+        _polish_improved = float(best_wR) < _wr_multistart - 1e-9
+        converged = bool(np.isfinite(wR) and (_multistart_ok or _polish_improved))
+        num_cycles = int(getattr(best_result, "nfev", 0))  # 语义 = nfev (见 fit_params)
 
         result = RefinementResult(
             phases=refined_phases,
@@ -1691,6 +1707,12 @@ class RietveldRefiner:
                 # v1.1.2: 加权/未加权 wR 双口径 (快检门限用未加权)
                 "wR_weighted": float(wR),
                 "wR_unweighted": float(wR_unweighted),
+                # v1.1.2: 收敛语义 (num_cycles 实为 nfev; 多起点与抛光分开记录)
+                "nfev": int(num_cycles),
+                "num_cycles_semantics": "nfev",
+                "converged_multistart": bool(_multistart_ok),
+                "converged_polish_improved": bool(_polish_improved),
+                "wR_before_polish": float(_wr_multistart),
                 # v0.15.2 A 路线: 各向同性晶胞缩放 (每相一个自由度, 1.0 = 库值)
                 "refine_cell": bool(refine_cell),
                 "cell_scale": opt_cell_list,
@@ -2398,8 +2420,7 @@ class RietveldRefiner:
             gamma=lat.gamma * (best_scale if refine_param == "gamma" else 1.0),
         )
 
-        quality = "优秀" if best_rwp < 5 else ("良好" if best_rwp < 10
-                  else ("可接受" if best_rwp < 20 else "需改进"))
+        quality = quality_grade_for(best_rwp)
 
         refined_phase = Phase(
             name=phase.name,

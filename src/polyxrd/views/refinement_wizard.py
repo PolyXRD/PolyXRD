@@ -1420,6 +1420,13 @@ class RefinementWizard(QWidget):
         self._label_rb.setText(
             f"{getattr(result, 'Rp', 0.0) or getattr(result, 'Rb', 0.0):.3f} %"
         )
+        # v1.1.2: 运行期提示 (引擎回退 / 指标不可解读 / Kα2 等) 进执行日志
+        for _w in (getattr(result, "warnings", []) or []):
+            self._log(f"⚠ {_w}")
+        if not bool(getattr(result, "metrics_valid", True)):
+            _note = getattr(result, "metric_note", "")
+            if _note:
+                self._log(f"⚠ {_note}")
         self._label_quality.setText(result.quality_grade)
         self._label_cycles_done.setText(str(result.num_cycles))
         self._label_time.setText(f"{result.time_seconds:.1f} s")

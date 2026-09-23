@@ -179,6 +179,16 @@ class RefinementView(QWidget):
         result_layout = QFormLayout()
         self._form_result = result_layout
 
+        # v1.1.2: 结果区顶部提示条 (引擎回退 / Kα2 / 指标不可解读等运行期提示)
+        self._label_alert = QLabel("")
+        self._label_alert.setWordWrap(True)
+        self._label_alert.setStyleSheet(
+            "QLabel { color: #8a5300; background-color: #fff4d6; "
+            "border: 1px solid #e0b860; border-radius: 3px; padding: 4px 6px; }"
+        )
+        self._label_alert.setVisible(False)
+        result_layout.addRow(self._label_alert)
+
         self._label_rwp = QLabel("--")
         result_layout.addRow(tr("view.refinement.label_rwp"), self._label_rwp)
 
@@ -659,6 +669,19 @@ class RefinementView(QWidget):
         self._label_rb.setText(
             f"{getattr(result, 'Rp', 0.0) or getattr(result, 'Rb', 0.0):.3f} %"
         )
+        # v1.1.2: 运行期提示 (引擎回退 / 指标不可解读 / Kα2 等)
+        _notes = list(getattr(result, "warnings", []) or [])
+        if not _valid:
+            _note = getattr(result, "metric_note", "")
+            if _note:
+                _notes.append(_note)
+        if _notes:
+            self._label_alert.setText("⚠ " + " ｜ ".join(_notes))
+            self._label_alert.setVisible(True)
+            for _w in _notes:
+                self._append_log(f"⚠ {_w}")
+        else:
+            self._label_alert.setVisible(False)
         self._label_quality.setText(result.quality_grade)
         self._label_cycles.setText(str(result.num_cycles))
         self._label_time.setText(f"{getattr(result, 'time_seconds', 0.0):.1f} s")

@@ -15,7 +15,7 @@
     &nbsp;
     <img src="https://img.shields.io/badge/UI-PySide6%20(Qt6)-41cd52?style=flat-square" />
     &nbsp;
-    <img src="https://img.shields.io/badge/Tests-1010%20passed-brightgreen?style=flat-square" />
+    <img src="https://img.shields.io/badge/Tests-1016%20collected-brightgreen?style=flat-square" />
   </p>
 </div>
 
