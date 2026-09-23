@@ -158,6 +158,35 @@ def assign_peaks(
 
 # ── 谱合成内核 (与 RietveldRefiner._compute_spectrum_from_ref 共用) ──
 
+def _area_normalized_profile(
+    delta, fwhm, eta: float, kind: str,
+    fwhm_low=None, fwhm_high=None,
+):
+    """面积归一峰形 (v1.1.2)。
+
+    - 对称: ∫G = ∫L = ∫PV = 1, 与 FWHM / η 无关 (W11);
+    - 给 ``fwhm_low / fwhm_high`` 时按 ``delta`` 的符号取两侧宽度 (**split-PV**,
+      W17 低角不对称): 每一侧仍是"面积归一到 1"的曲线限制在半边, 因此**每半边
+      的积分恒为 0.5** → 总积分仍为 1, 峰面积不因不对称而改变。
+
+    ``delta`` 可以是任意形状 (全矩阵路径传 2D, 窗口化路径传 1D);
+    ``fwhm`` 与其两侧值需能广播到 ``delta`` 的形状。
+    """
+    if fwhm_low is None or fwhm_high is None:
+        width = fwhm
+    else:
+        width = np.where(delta < 0.0, fwhm_low, fwhm_high)
+    sigma = width / (2.0 * np.sqrt(2.0 * np.log(2.0)))
+    gamma = width / 2.0
+    if kind == "gaussian":
+        return np.exp(-0.5 * (delta / sigma) ** 2) / (sigma * np.sqrt(2.0 * np.pi))
+    if kind == "lorentzian":
+        return (gamma / np.pi) / (delta * delta + gamma * gamma)
+    gauss = np.exp(-0.5 * (delta / sigma) ** 2) / (sigma * np.sqrt(2.0 * np.pi))
+    lorentz = (gamma / np.pi) / (delta * delta + gamma * gamma)
+    return eta * gauss + (1.0 - eta) * lorentz
+
+
 def spectrum_from_refs(
     two_theta: np.ndarray,
     phase_peaks: list,
@@ -168,6 +197,7 @@ def spectrum_from_refs(
     peak_shape: str = "pseudo-voigt",
     caglioti=None,
     cutoff_fwhm: Optional[float] = 100.0,
+    asymmetry: float = 0.0,
 ) -> np.ndarray:
     """从每相的参考峰合成模拟谱 (峰距截断窗口化)。
 
@@ -218,6 +248,25 @@ def spectrum_from_refs(
     else:
         fw_p = np.full_like(peak_tt, fwhm)
 
+    # ── v1.1.2 (W17) 低角不对称 (split-PV, opt-in) ─────────────────────
+    # 低角峰受轴向发散影响, 低角侧比高角侧宽。取 Finger 式的 1/tanθ 权重:
+    #   fac(θ) = a · tan(10°) / max(tanθ, tan(10°))
+    #   → a 的语义 = "2θ≈20° 处的展宽比例"; 低角封顶于 a, 高角按 tan 衰减
+    #     (2θ=90° 处仅 0.176a)。首版用 a/max(tanθ,0.3), 45° 处仍有 0.3a →
+    #     高角也不对称, 与"低角效应"的物理不符 (实测 r90=1.92, 已修正)。
+    #   左侧宽度 = FWHM·(1+fac), 右侧 = FWHM·(1−fac)
+    # 每半边仍用"面积归一到 1"的曲线限制在半边 → 每半边积分恒为 0.5, **总面积不变**。
+    fw_lo_p = None
+    fw_hi_p = None
+    if asymmetry is not None and abs(float(asymmetry)) > 1e-12:
+        _a = float(np.clip(float(asymmetry), 0.0, 0.4))
+        _tan10 = float(np.tan(np.radians(10.0)))
+        _fac = np.clip(
+            _a * _tan10 / np.maximum(np.tan(np.radians(peak_tt / 2.0)), _tan10),
+            0.0, 0.4)
+        fw_lo_p = fw_p * (1.0 + _fac)
+        fw_hi_p = fw_p * (1.0 - _fac)
+
     sigma_all = fw_p / (2.0 * np.sqrt(2.0 * np.log(2.0)))
     gamma2_all = (fw_p / 2.0) ** 2
     # v1.1.2 (W11 面积归一): Rietveld 要求峰**积分强度** ∝ m·LP·|F|²·S, 与峰宽/η 无关。
@@ -254,18 +303,13 @@ def spectrum_from_refs(
             for s in range(0, n_i, chunk):
                 e = min(s + chunk, n_i)
                 delta = two_theta[:, None] - pts_p[None, s:e]
-                if is_gauss:
-                    prof = (np.exp(-0.5 * (delta / sigma_p[None, s:e]) ** 2)
-                            * inv_gauss_norm[sl][None, s:e])
-                elif is_lorentz:
-                    g2 = gamma2_p[None, s:e]
-                    prof = (g2 / (delta * delta + g2)) * inv_lorentz_norm[sl][None, s:e]
-                else:  # pseudo-voigt
-                    gauss = (np.exp(-0.5 * (delta / sigma_p[None, s:e]) ** 2)
-                             * inv_gauss_norm[sl][None, s:e])
-                    g2 = gamma2_p[None, s:e]
-                    lorentz = (g2 / (delta * delta + g2)) * inv_lorentz_norm[sl][None, s:e]
-                    prof = eta * gauss + one_minus_eta * lorentz
+                _kind = ("gaussian" if is_gauss
+                         else ("lorentzian" if is_lorentz else "pseudo-voigt"))
+                prof = _area_normalized_profile(
+                    delta, fw_p[sl][None, s:e], eta, _kind,
+                    None if fw_lo_p is None else fw_lo_p[sl][None, s:e],
+                    None if fw_hi_p is None else fw_hi_p[sl][None, s:e],
+                )
                 prof *= inten_p[None, s:e]
                 basis[:, i] += prof.sum(axis=1)
             offset += n_i
@@ -281,16 +325,13 @@ def spectrum_from_refs(
         if hi <= lo:
             continue
         delta = two_theta[lo:hi] - t0
-        if is_gauss:
-            prof = (np.exp(-0.5 * (delta / sigma_all[j]) ** 2)
-                    * inv_gauss_norm[j])
-        elif is_lorentz:
-            prof = (gamma2_all[j] / (delta * delta + gamma2_all[j])) * inv_lorentz_norm[j]
-        else:  # pseudo-voigt
-            gauss = (np.exp(-0.5 * (delta / sigma_all[j]) ** 2)
-                     * inv_gauss_norm[j])
-            lorentz = (gamma2_all[j] / (delta * delta + gamma2_all[j])) * inv_lorentz_norm[j]
-            prof = eta * gauss + one_minus_eta * lorentz
+        _kind = ("gaussian" if is_gauss
+                 else ("lorentzian" if is_lorentz else "pseudo-voigt"))
+        prof = _area_normalized_profile(
+            delta, fw_p[j], eta, _kind,
+            None if fw_lo_p is None else fw_lo_p[j],
+            None if fw_hi_p is None else fw_hi_p[j],
+        )
         basis[lo:hi, peak_phase[j]] += peak_int[j] * prof
     return scale * (basis @ np.asarray(weights, dtype=float))
 
