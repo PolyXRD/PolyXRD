@@ -1938,6 +1938,8 @@ class RietveldRefiner:
         wR_unweighted = float(self._calc_wR(intensity, simulated_full))
         # Rexp/GOF 只有在统计权下才可解读 (Rexp ∝ 1/sqrt(Σy))
         metrics_valid = stat_weights_mode != "none"
+        # v2.0.0 (W28): 拟合后诊断 (分段残差 + DW 统计量 + 可读建议)
+        _diag = self._fit_diagnostics(two_theta, intensity, simulated_full)
 
         # 质量等级 (v1.1.2: 统一走 models.refinement.quality_grade_for)
         quality = quality_grade_for(wR)
@@ -2056,8 +2058,14 @@ class RietveldRefiner:
                 "b_overall": ([float(x) for x in np.asarray(
                     _bovr_of(best_result_x)).ravel()]
                     if _bovr_of(best_result_x) is not None else []),
+                # v2.0.0 (W28): 拟合后诊断 (分段 R / DW / 建议)
+                "diagnostics": _diag,
             },
         )
+        # W28: 把最重要的诊断作为面向用户的提示 (最多 2 条, 避免刷屏)
+        for _d in (_diag.get("diagnoses", []) if isinstance(_diag, dict) else [])[:2]:
+            if _d not in result.warnings:
+                result.warnings.append(_d)
 
         _plog(
             "[result] Rwp={:.3f}% Rexp={:.3f}% Rb={:.3f}% GOF={:.3f} nfev={} quality={}".format(
@@ -2306,6 +2314,74 @@ class RietveldRefiner:
                 conv.append((p[0], 2.0 * _math.degrees(_math.asin(sin_half)), inten))
             out.append(conv)
         return out
+
+    @staticmethod
+    def _fit_diagnostics(
+        two_theta: np.ndarray, observed: np.ndarray, simulated: np.ndarray,
+        min_r_for_advice: float = 8.0,
+    ) -> dict:
+        """拟合后诊断 (v2.0.0 / W28) —— 让用户知道"模型缺了什么"。
+
+        只做**后处理**, 不改模型。给出:
+          - 分段轮廓 R (低角 <30° / 中角 30–60° / 高角 >60°): 暴露"哪个角度区间没拟合好";
+          - **Durbin-Watson 统计量** DW = Σ(r_i − r_{i-1})² / Σ r_i²:
+            残差若只剩白噪声 DW≈2; DW 明显 <2 (尤其在 1 附近或更低) 说明残差**逐点相关**
+            → 模型不完备(缺相/缺物理项), 而不是"差一点点";
+          - ``diagnoses``: 按上述量化指标给出的可读建议 (仅在整体 R 高于
+            ``min_r_for_advice`` 时才给, 免得好拟合上瞎提示)。
+
+        口径说明: 这里的分段 R 与 DW 一律用**未加权**残差 —— 它们的作用是"定位问题区域",
+        与用于精度评价的加权 Rwp 分工不同, 返回键名已标明。
+        """
+        try:
+            t = np.asarray(two_theta, dtype=float)
+            y = np.asarray(observed, dtype=float)
+            c = np.asarray(simulated, dtype=float)
+            if t.size < 8 or y.size != t.size or c.size != t.size:
+                return {}
+            r = y - c
+            denom = float(np.sum(r * r))
+            dw = float(np.sum(np.diff(r) ** 2) / denom) if denom > 0 else 2.0
+
+            def _r_of(mask) -> float:
+                yy = y[mask]
+                if yy.size == 0:
+                    return 0.0
+                s = float(np.sum(yy))
+                return (100.0 * float(np.sum(np.abs(r[mask]))) / s) if s > 0 else 0.0
+
+            r_low = _r_of(t < 30.0)
+            r_mid = _r_of((t >= 30.0) & (t <= 60.0))
+            r_high = _r_of(t > 60.0)
+            r_all = _r_of(np.ones_like(t, dtype=bool))
+
+            diags: list[str] = []
+            if r_all > float(min_r_for_advice):
+                if dw < 1.0:
+                    diags.append(
+                        f"残差逐点强相关 (DW={dw:.2f})：模型不完备, 检查是否缺相 / 缺物理项")
+                if r_high > 1.5 * max(r_low, 1e-9):
+                    diags.append(
+                        f"高角区残差偏大 ({r_high:.1f}% vs 低角 {r_low:.1f}%)："
+                        "检查整体温度因子 B / 峰宽模型 / 样品位移")
+                if r_low > 1.5 * max(r_high, 1e-9):
+                    diags.append(
+                        f"低角区残差偏大 ({r_low:.1f}% vs 高角 {r_high:.1f}%)："
+                        "检查低角不对称 / 背景估计 / 择优取向")
+                if not diags:
+                    diags.append(
+                        f"整体残差偏大 (R={r_all:.1f}%) 但无明显逐点相关 (DW={dw:.2f})："
+                        "可能接近噪声底或统计量不足")
+            return {
+                "R_low_unweighted": r_low,
+                "R_mid_unweighted": r_mid,
+                "R_high_unweighted": r_high,
+                "R_all_unweighted": r_all,
+                "durbin_watson": dw,
+                "diagnoses": diags,
+            }
+        except Exception:  # noqa: BLE001 - 诊断失败不该影响精修
+            return {}
 
     @staticmethod
     def _apply_overall_b(phase_peaks: list, b_per_phase, wavelength: float) -> list:
