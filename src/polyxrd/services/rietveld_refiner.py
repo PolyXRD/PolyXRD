@@ -47,6 +47,11 @@ class RietveldRefiner:
         self._config = get_config()
         # v0.15.1: CIF → |F|² 参考峰缓存 (key 见 _cif_reference_peaks)
         self._cif_peak_cache: dict = {}
+        # v2.0.0 (W23): 每相的"强度标尺"缓存 —— 未归一化的 Σ|F|²·m·LP 最大值 k
+        # 与 ZMV (= 晶胞内质量 × 晶胞体积), 供质量分数定量换算使用。
+        self._cif_scale_cache: dict = {}
+        # 相位 → (k, ZMV) 的便捷索引 (供 _refine_builtin 取用)
+        self._cif_scale_by_phase: dict = {}
 
     # ------------------------------------------------------------------
     # 过程日志工具 (v0.12.0)
@@ -975,6 +980,7 @@ class RietveldRefiner:
             return cached if cached != "fail" else None
 
         peaks: Optional[list] = None
+        _struct_used = None   # v2.0.0 (W23): 留出实际用到的 pymatgen 结构, 供强度标尺/ZMV
 
         def _pattern_to_rows(pattern):
             rows: list[tuple[tuple, float, float]] = []
@@ -1020,6 +1026,7 @@ class RietveldRefiner:
                     struct = Structure(pmg_lattice, species, coords)
                     pattern = calc.get_pattern(struct, two_theta_range=tth_range)
                     peaks = _pattern_to_rows(pattern)
+                    _struct_used = struct
                 except Exception:  # noqa: BLE001 - 直构失败 → CIF 全文回退
                     peaks = None
 
@@ -1035,10 +1042,31 @@ class RietveldRefiner:
                     struct = parser.parse_structures(primitive=False)[0]
                 pattern = calc.get_pattern(struct, two_theta_range=tth_range)
                 peaks = _pattern_to_rows(pattern)
+                _struct_used = struct
         except Exception:  # noqa: BLE001 - CIF 解析/模拟失败一律回退旧峰表
             peaks = None
 
         self._cif_peak_cache[cache_key] = peaks if peaks is not None else "fail"
+        # ── v2.0.0 (W23): 记录"强度标尺"与 ZMV ────────────────────────────
+        # 定量需要把"相对峰强"还原到物理标度:
+        #   k   = 未归一化 Σ|F(hkl)|²·m·LP 的最大值 (pymatgen scaled=False)
+        #   ZMV = 晶胞内质量(Z·M) × 晶胞体积 V   ← Rietveld 质量分数 W_p ∝ S_p·(ZMV)_p
+        # 参考峰表本身归一到 max=100, 所以物理标度因子 S_p = (拟合幅值)·k/100。
+        if peaks is not None and _struct_used is not None:
+            try:
+                raw = calc.get_pattern(_struct_used, two_theta_range=tth_range,
+                                       scaled=False)
+                _k = float(np.max(raw.y)) if len(raw.y) else 0.0
+                _zmv = (float(_struct_used.composition.weight)
+                        * float(_struct_used.volume))
+                self._cif_scale_cache[cache_key] = (_k, _zmv)
+                self._cif_scale_by_phase[
+                    (getattr(phase, "name", ""), getattr(phase, "formula", ""))
+                ] = (_k, _zmv)
+            except Exception:  # noqa: BLE001 - 取不到标尺就不做严格定量
+                self._cif_scale_cache[cache_key] = None
+        else:
+            self._cif_scale_cache[cache_key] = None
         return peaks
 
     def _refine_builtin(
@@ -1802,6 +1830,22 @@ class RietveldRefiner:
         # 归一化权重为百分比
         total_w = np.sum(opt_weights)
         weight_pcts = (opt_weights / total_w * 100.0) if total_w > 0 else opt_weights
+        # ── v2.0.0 (W23): 严格质量分数 W_p ∝ S_p·(ZMV)_p ──────────────────
+        # 前提: 该相的参考峰来自结构 (CIF/pymatgen), 因而拿得到强度标尺 k 与 ZMV。
+        # 任一相缺信息 → 退回旧的"相对强度归一", 并用 weight_basis 标明口径。
+        weight_basis = "relative"
+        try:
+            _amp_p = np.asarray(opt_weights, dtype=float) * float(opt_scale)
+            _info = [self._cif_scale_by_phase.get(
+                (getattr(p, "name", ""), getattr(p, "formula", ""))) for p in phases]
+            if _info and all(v is not None for v in _info):
+                _w_mass = self._mass_fractions(
+                    _amp_p, [v[0] for v in _info], [v[1] for v in _info])
+                if _w_mass is not None:
+                    weight_pcts = np.asarray(_w_mass, dtype=float)
+                    weight_basis = "mass"
+        except Exception as _e:  # noqa: BLE001 - 定量换算失败不该影响精修本身
+            _plog(f"[warn] 质量分数换算失败, 退回相对定量: {type(_e).__name__}: {_e}")
 
         # 最终模拟谱
         simulated_full = best_simulated + bg
@@ -1954,6 +1998,8 @@ class RietveldRefiner:
                 "cell_mode": cell_mode,   # v1.1.2 (W18): "isotropic" | "full"
                 "cell_mode_used": "full" if use_full_cell else "isotropic",
                 "cell_consistent": list(cell_consistent),
+                # v2.0.0 (W23): 定量口径 —— "mass"(严格, W∝S·ZMV) | "relative"(回落)
+                "weight_basis": weight_basis,
                 "cell_mode_effective": (
                     ["full"] * n_phases if use_full_cell
                     else ["isotropic"] * n_phases
@@ -2218,6 +2264,47 @@ class RietveldRefiner:
                 conv.append((p[0], 2.0 * _math.degrees(_math.asin(sin_half)), inten))
             out.append(conv)
         return out
+
+    @staticmethod
+    def _mass_fractions(amp, scale_k, zmv) -> Optional[list]:
+        """把"归一化图谱的拟合幅值"换算成**质量分数**（v2.0.0 / W23）。
+
+        Rietveld 质量分数 ∝ `S_p·(ZMV)_p`，其中
+          - `S_p` = 该相的物理标度因子
+          - `ZMV_p` = 晶胞内质量 (Z·M) × 晶胞体积 V
+
+        本引擎的参考峰表按"每相 max=100"归一化, 拟合出的幅值
+        `amp_p = weights_p × scale` 是**相对该归一化图谱**的, 所以需要还原:
+
+            S_p = amp_p · k_p / 100        (k_p = 未归一化 Σ|F|²·m·LP 的最大值)
+            W_p ∝ S_p · ZMV_p
+
+        Args:
+            amp: 各相拟合幅值
+            scale_k: 各相 k_p; 任一为 None/0 → 返回 None (无法严格定量)
+            zmv: 各相同上
+
+        Returns:
+            归一化到 100 的质量分数列表; 信息不足时返回 None (调用方退回相对定量)。
+        """
+        try:
+            amp = np.asarray(amp, dtype=float)
+            k = np.asarray(scale_k, dtype=float)
+            z = np.asarray(zmv, dtype=float)
+        except (TypeError, ValueError):
+            return None
+        if amp.size == 0 or k.size != amp.size or z.size != amp.size:
+            return None
+        if not np.all(np.isfinite(k)) or not np.all(np.isfinite(z)):
+            return None
+        if np.any(k <= 0) or np.any(z <= 0):
+            return None
+        s_phys = amp * k / 100.0          # 还原到物理标度
+        w = s_phys * z                    # W ∝ S·(ZMV)
+        tot = float(np.sum(w))
+        if not np.isfinite(tot) or tot <= 0:
+            return None
+        return [float(x * 100.0 / tot) for x in w]
 
     @staticmethod
     def _apply_displacement(
