@@ -67,17 +67,7 @@ REM 实测 (2026-09-08, 本机): System32 的 icuuc.dll (29KB) 是 Windows 官�
 REM Qt 6.11 经其解析全部符号, 可正常启动; 而 conda/_gsas2main 的 ICU 78 独立版
 REM 反而缺 Qt 所需符号 → WinError 127 "找不到指定的程序"。
 REM 故策略 = 确保 dist 里【没有】任何 ICU 副本, 让加载器落到 OS shim。
-"%PYTHON%" -c "
-import glob, os
-removed = 0
-for pat in [r'dist\PolyXRD\_internal\icu*.dll', r'dist\PolyXRD\_internal\PySide6\icu*.dll']:
-    for f in glob.glob(pat):
-        try:
-            os.remove(f); removed += 1
-        except OSError:
-            pass
-print(f'  ICU cleanup: removed {removed} files (依赖 OS icuuc shim)')
-"
+"%PYTHON%" scripts\_build_post.py icu
 
 if %errorlevel% neq 0 (
     echo [警告] ICU 复制阶段异常, 请检查 PySide6 Qt 启动依赖
@@ -86,19 +76,7 @@ if %errorlevel% neq 0 (
 REM 兜底: 确认安装包里确实没有数据库 (0.10.0 的核心约束)
 echo.
 echo [检查] 确认 dist 内不含数据库文件...
-"%PYTHON%" -c "
-import glob, os
-hits = []
-for pat in [r'dist\PolyXRD\**\*.sqlite', r'dist\PolyXRD\**\*.sqlite3',
-            r'dist\PolyXRD\**\*.db',    r'dist\PolyXRD\**\*.tar.xz']:
-    hits += glob.glob(pat, recursive=True)
-if hits:
-    print('  [警告] 发现被意外打入的数据库文件:')
-    for h in hits:
-        print('    ', h, round(os.path.getsize(h)/1e6, 1), 'MB')
-else:
-    print('  OK: 未发现数据库文件, 符合 0.10.0 外挂策略')
-"
+"%PYTHON%" scripts\_build_post.py no-db
 
 echo.
 echo [步骤 3/6] 创建 Inno Setup 安装程序...
@@ -135,20 +113,7 @@ echo.
 echo [步骤 4/6 前置] 写 VERSION.txt (必须先于 Setup/Portable 打包, 否则包内缺失)...
 echo.
 
-powershell -Command "$ver = @'
-PolyXRD v%APPVER% Release
-Build Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
-Version    : %APPVER%
-ICU: 依赖系统 icuuc shim (PySide6 6.11 不自带 ICU)
-Databases: 外挂, 且各库独立打包 (随包不含数据库)。按需只下一个:
-           PolyXRD-v%APPVER%-Databases-COD-inorg-index.zip  COD 无机物库 (主检索库, 推荐)
-           PolyXRD-v%APPVER%-Databases-COD-full-index.zip   COD 全库索引
-           PDF2-2004: ICDD 版权库, 不随 Release 分发, 由持授权用户自行准备。
-           解压后在菜单「数据库 ▸ 外挂数据库管理…」逐个导入 (可只挂其中一个)。
-           未导入时仅内置 118 种参考物相可用。
-Icon: 品牌化应用图标 (crystal-mark + XRD 配色, 多分辨率 ICO)
-'@; $ver | Out-File -FilePath 'dist\PolyXRD\VERSION.txt' -Encoding UTF8"
-copy /Y "dist\PolyXRD\VERSION.txt" "installer_output\VERSION_v%APPVER%.txt" >nul 2>&1
+"%PYTHON%" scripts\_build_post.py version %APPVER%
 
 echo.
 echo [步骤 4/6] 创建便携压缩包 (ZIP)...
