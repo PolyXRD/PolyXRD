@@ -2515,6 +2515,31 @@ DW 统计量能区分"残差是白噪声"还是"逐点相关（模型不完备�
   （值正确但标注不一致），一并改为 `Rp`。
 - **回归**：全量 **1101 通过 / 2 跳过 / 0 失败**；相关子集 88 项通过。
 
+#### 24. v2.0.0 打包与发布记录（2026-09-24）
+
+- **构建**：`build.bat` 全程通过（`BUILD_EXIT=0`，6 步全跑完；PyInstaller → 手工收集 `_internal`
+  → ICU 策略核对 → 无库断言 → Inno Setup → VERSION/Portable/库 ZIP/SHA256）。
+- **产物**（`installer_output/`，本机）：
+
+  | 文件 | 大小 | 说明 |
+  |---|---|---|
+  | `PolyXRD-Setup-v2.0.0.exe` | 248.2 MB | **已发布** |
+  | `PolyXRD-v2.0.0-Portable.zip` | 380.8 MB | 按要求**仅保留本地**，不上传 |
+  | 3 个数据库 ZIP（COD inorg / COD full / PDF2） | 134.1 / 205.9 / 58.9 MB | **不上传**（见下） |
+  | `SHA256-v2.0.0.txt` | 860 B | **已发布** |
+- **发布内容核验**：安装包内 `_internal/polyxrd/resources/database/xrd_reference_database.json`
+  = **库 0.5.2 / 106 相 / 4526 峰**（即修好的 hkl 与自洽峰表），确认修复真的进了安装包。
+- **GitHub Release v2.0.0**（id=395151975，`make_latest`，非 draft/pre，REST 复核 `/releases/latest`
+  返回 v2.0.0）：附件 **Setup + SHA256** 两项；
+  **政策自检通过**——无 PDF2、无 Portable、**无数据库包**。
+- **数据库包为何不发**：v2.0.0 对数据库只做了一处**向后兼容**改动（`cod_atomic_sites`
+  增加可空列 `u_iso`，首次连接用**幂等 `ALTER TABLE`** 自动补齐；未补列时读路径回退并填默认
+  `0.005 Å²`）。**实测**：452 MB 的 `cod_index.sqlite` 在本轮基准中被自动迁移（现 `u_iso=True`），
+  两个 `COD_inorganics*.sqlite` 仍为旧结构且读写正常 → **v1.1.1 的索引包可直接沿用，无需重下**。
+  该说明同时写进了 Release 正文与 `docs/后续计划与已知问题-v2.1.md`。
+- **待办（人工）**：安装包/Portable 的**双击启动验收**属本机人工步骤（沙盒无法可靠启动冻结 GUI）；
+  验收入口为 `~/.polyxrd/logs/startup-*.log` 出现 `MainWindow OK` + `shown`。
+
 ## 附录 A · 路线图模块（M01–M25）与版本对照
 
 | 模块 | 名称 | 落地版本 | 备注 |
