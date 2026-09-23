@@ -245,6 +245,8 @@ PolyXRD/
 ├── requirements.txt            # 运行依赖
 ├── app.manifest                # Windows 应用程序清单 (DPI)
 ├── Thx2OpenSource.md           # 开源致谢 (独立版)
+├── LICENSE                     # ★ 双许可条款 (英文: 学术免费 / 商业需单独授权)
+├── LICENSE-CN                  # ★ 双许可条款 (中文, 与 LICENSE 对应)
 ├── .gitignore                  # 本仓库忽略规则 (测试/数据库/构建产物)
 └── README.md                   # 本文件
 ```
@@ -540,7 +542,22 @@ ed33680c4b5f2c45e38b84fba24ce6c6159e94f5ba95d15910c49003f2db2709  PolyXRD-v1.0.1
 | 0.10.0 | `…-Databases-COD-inorg.zip`（v1, 仅 d-I 峰） | `…-Databases-COD-full.zip` | 用户自行准备（ICDD 授权，仓库不分发） |
 | 0.9.10 及以前 | 内嵌或 `PolyXRD_COD_Inorganics_v0.9.x.zip` | 内嵌或 `PolyXRD_COD_Full_v0.9.x.zip` | 不支持 |
 
-代码部分遵循 **MIT License**（除非子模块另行声明）。使用时请同时遵守上游 PySide6 (LGPL/GPL)、pymatgen、COD 的许可证条款。
+### 版权与许可 · Copyright & License
+
+Copyright (c) 2026 PolyXRD Team.
+
+This software is free for academic research and education.
+Commercial use is prohibited without a separate written license from the copyright holder.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
+
+版权所有 (c) 2026 PolyXRD Team。
+
+本软件可供学术研究与教学免费使用。
+未经版权持有人单独书面许可，禁止用于商业用途。
+软件按原样提供，不提供任何担保。
+
+完整条款见 [`LICENSE`](LICENSE)（英文）与 [`LICENSE-CN`](LICENSE-CN)（中文）；商业授权联系：sshztx@outlook.com。
+使用时请同时遵守上游 PySide6 (LGPL/GPL)、pymatgen、COD 等第三方许可证条款。
 
 ---
 
