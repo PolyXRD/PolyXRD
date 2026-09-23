@@ -1075,6 +1075,17 @@ class RietveldRefiner:
         max_nfev_per_start = int(kwargs.get(
             "max_nfev_per_start", min(max_cycles * 20, 400)
         ))
+        # v1.1.2 (W14): least_squares 的变量缩放开关 (默认关闭)。
+        # 参数确实跨 5 个数量级, 但**实测 x_scale="jac" 反而更差更慢**:
+        #   2-1 默认预算: 关 → wR=29.893% / 37.1s; 开 → wR=30.176% / 54.9s
+        #   (受限预算下 2-1 30.417%→30.938, 4-1 40.938%→41.108, 同样更差)
+        # 原因是 Jacobian 定标改变了信赖域几何, 把解引到略差的局部极小。
+        # 故默认保持关闭; 需要时显式传 x_scale="jac" 或正数数组启用。
+        _x_scale = kwargs.get("x_scale", None)
+        # scipy 不接受 x_scale=None (只接受 'jac' 或正数数组), 关闭时须整个省略该参数
+        _lsq_extra: dict = {}
+        if _x_scale is not None:
+            _lsq_extra["x_scale"] = _x_scale
 
         # ── 1. 背景估计 (v3: SNIP 窗宽增大, 避免削峰引入假残差) ──
         bg = self._estimate_background(intensity, bg_method, wide_window=True)
@@ -1427,6 +1438,7 @@ class RietveldRefiner:
                     max_nfev=max_nfev_per_start,
                     method="trf",
                     loss="linear",
+                    **_lsq_extra,
                 )
             except Exception as e:  # noqa: BLE001
                 _plog(
@@ -1462,6 +1474,7 @@ class RietveldRefiner:
             best_result = least_squares(
                 residual, candidates[0], bounds=(lower, upper),
                 max_nfev=max_nfev_per_start, method="trf",
+                **_lsq_extra,
             )
             _w, _fw, _et, _sc, _zs, _cag, _cs, _tex = _unpack(best_result.x)
             best_simulated = self._compute_spectrum_from_ref(
@@ -1588,7 +1601,12 @@ class RietveldRefiner:
         # 默认 bg_chebyshev_deg=0 = 关闭 → 行为完全等价旧版, 不影响既有测试.
         # 启用后: 只有在 _chebyshev_background_polish 真的改进了 wR (gate)
         # 时才采纳, 否则保持现状 — 双层保护 (内部缩放 + 外部 wR gate).
-        bg_cheb_deg = int(kwargs.get("bg_chebyshev_deg", 0))
+        # v1.1.2 (W13): Chebyshev 背景抛光默认开启 (deg=6)。
+        # 原为 opt-in (默认 0)。背景由 _estimate_background 一次性给出后即冻结,
+        # 是"Rwp 有地板"的首要原因之一 (合成自检: 5.041% vs 1.012%)。
+        # 该函数自带两道保护: 校正幅度 ≤30% 动态范围 + 仅在 after_wR 更优时采纳,
+        # 故默认开启不会让结果变差。显式传 bg_chebyshev_deg=0 可退回旧行为。
+        bg_cheb_deg = int(kwargs.get("bg_chebyshev_deg", 6))
         bg_cheb_applied = False
         if bg_cheb_deg > 0:
             try:
