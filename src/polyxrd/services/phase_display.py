@@ -220,6 +220,14 @@ def spectrum_from_refs(
 
     sigma_all = fw_p / (2.0 * np.sqrt(2.0 * np.log(2.0)))
     gamma2_all = (fw_p / 2.0) ** 2
+    # v1.1.2 (W11 面积归一): Rietveld 要求峰**积分强度** ∝ m·LP·|F|²·S, 与峰宽/η 无关。
+    # 旧实现的高斯/洛伦兹都是"峰高=1"的写法 → 积分面积 ∝ FWHM, 且 η 从 0→1 让面积
+    # 变化 ~47% (η 不再是混合比); Caglioti 一开, 峰宽参数就会被拟合到错误数值。
+    # 面积归一后: ∫G = ∫L = 1, ∫PV = η + (1-η) = 1。
+    #   G = exp(-Δ²/2σ²)/(σ√(2π));  L = (γ/π)/(Δ²+γ²),  γ = FWHM/2
+    #   ∫L = 1 要求 L = (1/π)·γ/(Δ²+γ²) = (1/(π·γ))·(γ²/(Δ²+γ²))
+    inv_gauss_norm = 1.0 / (sigma_all * np.sqrt(2.0 * np.pi))
+    inv_lorentz_norm = 1.0 / (np.pi * np.sqrt(gamma2_all))
     n_points = len(two_theta)
     basis = np.zeros((n_points, n_phases))
     is_gauss = peak_shape == "gaussian"
@@ -247,14 +255,16 @@ def spectrum_from_refs(
                 e = min(s + chunk, n_i)
                 delta = two_theta[:, None] - pts_p[None, s:e]
                 if is_gauss:
-                    prof = np.exp(-0.5 * (delta / sigma_p[None, s:e]) ** 2)
+                    prof = (np.exp(-0.5 * (delta / sigma_p[None, s:e]) ** 2)
+                            * inv_gauss_norm[sl][None, s:e])
                 elif is_lorentz:
                     g2 = gamma2_p[None, s:e]
-                    prof = g2 / (delta * delta + g2)
+                    prof = (g2 / (delta * delta + g2)) * inv_lorentz_norm[sl][None, s:e]
                 else:  # pseudo-voigt
-                    gauss = np.exp(-0.5 * (delta / sigma_p[None, s:e]) ** 2)
+                    gauss = (np.exp(-0.5 * (delta / sigma_p[None, s:e]) ** 2)
+                             * inv_gauss_norm[sl][None, s:e])
                     g2 = gamma2_p[None, s:e]
-                    lorentz = g2 / (delta * delta + g2)
+                    lorentz = (g2 / (delta * delta + g2)) * inv_lorentz_norm[sl][None, s:e]
                     prof = eta * gauss + one_minus_eta * lorentz
                 prof *= inten_p[None, s:e]
                 basis[:, i] += prof.sum(axis=1)
@@ -272,12 +282,14 @@ def spectrum_from_refs(
             continue
         delta = two_theta[lo:hi] - t0
         if is_gauss:
-            prof = np.exp(-0.5 * (delta / sigma_all[j]) ** 2)
+            prof = (np.exp(-0.5 * (delta / sigma_all[j]) ** 2)
+                    * inv_gauss_norm[j])
         elif is_lorentz:
-            prof = gamma2_all[j] / (delta * delta + gamma2_all[j])
+            prof = (gamma2_all[j] / (delta * delta + gamma2_all[j])) * inv_lorentz_norm[j]
         else:  # pseudo-voigt
-            gauss = np.exp(-0.5 * (delta / sigma_all[j]) ** 2)
-            lorentz = gamma2_all[j] / (delta * delta + gamma2_all[j])
+            gauss = (np.exp(-0.5 * (delta / sigma_all[j]) ** 2)
+                     * inv_gauss_norm[j])
+            lorentz = (gamma2_all[j] / (delta * delta + gamma2_all[j])) * inv_lorentz_norm[j]
             prof = eta * gauss + one_minus_eta * lorentz
         basis[lo:hi, peak_phase[j]] += peak_int[j] * prof
     return scale * (basis @ np.asarray(weights, dtype=float))
