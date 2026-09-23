@@ -186,7 +186,7 @@ class RefinementView(QWidget):
         result_layout.addRow("Rexp:", self._label_rexp)
 
         self._label_rb = QLabel("--")
-        result_layout.addRow("Rb:", self._label_rb)
+        result_layout.addRow("Rp:", self._label_rb)
 
         self._label_gof = QLabel("--")
         result_layout.addRow(tr("view.refinement.label_gof"), self._label_gof)
@@ -324,7 +324,7 @@ class RefinementView(QWidget):
     def retranslate(self) -> None:
         """按当前语言重设本页构造期写死的文案 (不碰精修结果/日志内容)。
 
-        页面里还有两行刻意不翻的标签: ``Rexp:`` 与 ``Rb:`` —— 它们是 IUCr
+        页面里还有两行刻意不翻的标签: ``Rexp:`` 与 ``Rp:`` —— 它们是 IUCr
         通用记号, 与轴标题上的 ``log`` / ``sqrt`` 同源。
         """
         # 分组标题
@@ -640,9 +640,25 @@ class RefinementView(QWidget):
 
         # 更新结果显示
         self._label_rwp.setText(f"{result.Rwp:.3f} %")
-        self._label_rexp.setText(f"{getattr(result, 'Rexp', 0.0):.3f} %")
-        self._label_rb.setText(f"{getattr(result, 'Rb', 0.0):.3f} %")
-        self._label_gof.setText(f"{result.GOF:.3f}")
+        # v1.1.2: Rexp/GOF 仅在统计权下可解读; 单位权时显示"不可解读"而非假数字
+        _valid = bool(getattr(result, "metrics_valid", True))
+        if _valid:
+            self._label_rexp.setText(f"{getattr(result, 'Rexp', 0.0):.3f} %")
+            self._label_gof.setText(f"{result.GOF:.3f}")
+        else:
+            self._label_rexp.setText("—")
+            self._label_gof.setText(
+                tr("view.refinement.metrics_invalid")
+            )
+            self._label_rexp.setToolTip(
+                getattr(result, "metric_note", "") or ""
+            )
+            self._label_gof.setToolTip(
+                getattr(result, "metric_note", "") or ""
+            )
+        self._label_rb.setText(
+            f"{getattr(result, 'Rp', 0.0) or getattr(result, 'Rb', 0.0):.3f} %"
+        )
         self._label_quality.setText(result.quality_grade)
         self._label_cycles.setText(str(result.num_cycles))
         self._label_time.setText(f"{getattr(result, 'time_seconds', 0.0):.1f} s")

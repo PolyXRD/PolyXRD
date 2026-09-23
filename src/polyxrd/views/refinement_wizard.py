@@ -525,7 +525,7 @@ class RefinementWizard(QWidget):
         result_layout.addRow("Rexp:", self._label_rexp)
 
         self._label_rb = QLabel("--")
-        result_layout.addRow("Rb:", self._label_rb)
+        result_layout.addRow("Rp:", self._label_rb)
 
         self._label_gof = QLabel("--")
         result_layout.addRow(tr("wizard.execute_page.label_gof"), self._label_gof)
@@ -1410,9 +1410,16 @@ class RefinementWizard(QWidget):
 
     def _display_result(self, result: RefinementResult) -> None:
         self._label_wr.setText(f"{result.Rwp:.3f} %")
-        self._label_rexp.setText(f"{getattr(result, 'Rexp', 0.0):.3f} %")
-        self._label_rb.setText(f"{getattr(result, 'Rb', 0.0):.3f} %")
-        self._label_gof.setText(f"{result.GOF:.3f}")
+        # v1.1.2: Rexp/GOF 仅在统计权下可解读
+        if bool(getattr(result, "metrics_valid", True)):
+            self._label_rexp.setText(f"{getattr(result, 'Rexp', 0.0):.3f} %")
+            self._label_gof.setText(f"{result.GOF:.3f}")
+        else:
+            self._label_rexp.setText("—")
+            self._label_gof.setText(tr("view.refinement.metrics_invalid"))
+        self._label_rb.setText(
+            f"{getattr(result, 'Rp', 0.0) or getattr(result, 'Rb', 0.0):.3f} %"
+        )
         self._label_quality.setText(result.quality_grade)
         self._label_cycles_done.setText(str(result.num_cycles))
         self._label_time.setText(f"{result.time_seconds:.1f} s")

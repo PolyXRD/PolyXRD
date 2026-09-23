@@ -367,25 +367,35 @@ class RietveldRefiner:
         quality = ("优秀" if wR < 5 else "良好" if wR < 10
                    else "可接受" if wR < 20 else "需改进")
 
-        # v0.11.0: 使用桥回传的计算谱 (无则保持旧行为 — 观测谱占位)
+        # v1.1.2: 指标口径修正 —— GSAS-II 桥只回传 wR (可能另有 GOF), **不回传 Rexp**。
+        # 本地既没有 GSAS-II 的权方案也没有它的参数计数, 硬算出来的 Rexp 是错的
+        # (旧实现即如此, 实测偏小 18~130 倍)。因此:
+        #   桥给了 GOF → 由 Rexp = wR/GOF 反推, 标记可解读;
+        #   桥没给     → Rexp/GOF 一律置 0 并标记"不可解读"。
+        # 轮廓 R (Rp) 是本地可算且口径明确的量, 照常给出。
+        metrics_valid = False
+        metric_note = ""
+        Rexp = 0.0
+        Rp = 0.0
         ycalc = out.get("ycalc")
         if isinstance(ycalc, list) and len(ycalc) == len(two_theta):
             sim = np.asarray(ycalc, dtype=float)
             sim_data = (data.two_theta, sim)
             resid = (data.two_theta, np.asarray(data.intensity) - sim)
-            # v0.15.2: 从回传计算谱补算 Rexp / Rb (Rwp 以 GSAS-II 回传值为准)
             _m = self._calc_profile_metrics(
                 np.asarray(data.intensity, dtype=float), sim,
-                weight=None, n_params=0,
+                n_params=0,
             )
-            Rexp = _m["Rexp"]
-            Rb = _m["Rb"]
-            if not GOF and Rexp > 0:
-                GOF = wR / Rexp
+            Rp = float(_m["Rp"])
+            if GOF and wR > 0:
+                Rexp = float(wR) / float(GOF)
+                metrics_valid = True
+            else:
+                metric_note = "GSAS-II 未回传 Rexp/GOF: 该两项不可解读"
         else:
             sim_data = (data.two_theta, data.intensity)  # 旧行为
             resid = (data.two_theta, np.zeros_like(data.two_theta))
-            Rexp, Rb = 0.0, 0.0
+            metric_note = "GSAS-II 未回传计算谱: Rexp/GOF 不可解读"
 
         return RefinementResult(
             phases=refined_phases,
@@ -394,7 +404,10 @@ class RietveldRefiner:
             residual_data=resid,
             wR=wR,
             Rexp=Rexp,
-            Rb=Rb,
+            Rb=Rp,
+            Rp=Rp,
+            metrics_valid=metrics_valid,
+            metric_note=metric_note,
             GOF=GOF,
             quality=quality,
             num_cycles=int(out.get("n_cycles", max_cycles)),
@@ -1004,20 +1017,29 @@ class RietveldRefiner:
                 )
             except Exception:
                 best_quick = None
-            if best_quick is not None and best_quick.wR <= wR_threshold:
+            # v1.1.2: 快检门限用**未加权 wR** 判定。
+            # 20% 这条线是在单位权口径下标定的 (v0.15.2 由 55% 下调而来);
+            # 统计权下加权 wR 天然更高 (弱峰/基线区权重更大), 直接比较会让
+            # 原本"形状已够好"的试样永远走不到早退 → 白白变慢。
+            # 因此门限保持未加权口径, 上报指标仍用加权口径 (两者都进 fit_params)。
+            _gate_wr = (
+                float(best_quick.fit_params.get("wR_unweighted", best_quick.wR))
+                if best_quick is not None else float("inf")
+            )
+            if best_quick is not None and _gate_wr <= wR_threshold:
                 best_quick.fit_params = {
                     **best_quick.fit_params,
                     "quick_path": True,
                     "wR_threshold": float(wR_threshold),
                 }
                 _plog(
-                    f"[quick] wR={best_quick.wR:.3f}% ≤ {float(wR_threshold):.1f}% "
+                    f"[quick] 未加权 wR={_gate_wr:.3f}% ≤ {float(wR_threshold):.1f}% "
                     "→ 达标, 跳过 Caglioti 精细模式"
                 )
                 return best_quick
             if best_quick is not None:
                 _plog(
-                    f"[quick] wR={best_quick.wR:.3f}% > {float(wR_threshold):.1f}% "
+                    f"[quick] 未加权 wR={_gate_wr:.3f}% > {float(wR_threshold):.1f}% "
                     "→ 启用 Caglioti 精细模式"
                 )
             else:
@@ -1058,7 +1080,12 @@ class RietveldRefiner:
         #   "poisson": σ² = max(y, 1)
         #   "poirier": σ² = max(y, 1) + bg   (推荐, 低强度区更稳)
         # w 归一到均值 1, 保持 residual 数值量级与旧版可比 (边界/初值不变).
-        stat_weights_mode = str(kwargs.get("stat_weights", "none")).lower()
+        # v1.1.2: 默认启用 Poisson 统计权 (w = 1/max(y,1))。
+        # 理由: Rexp/GOF 只有在"统计权"下才有物理意义 (Rexp ∝ 1/sqrt(Σy));
+        # 单位权下 Σw·y² = Σy² 会把 Rexp 压小一个数量级 (实测 130×)。
+        # 同时 Rietveld 标准做法本就是加权最小二乘 (目标函数 = 评价指标)。
+        # 仍可显式传 stat_weights="none" 退回旧行为 (Rwp 对权重尺度不变)。
+        stat_weights_mode = str(kwargs.get("stat_weights", "poisson")).lower()
         if stat_weights_mode not in ("none", "poisson", "poirier"):
             stat_weights_mode = "none"
         if stat_weights_mode == "poisson":
@@ -1574,12 +1601,16 @@ class RietveldRefiner:
         # v0.15.2: 通用 R 因子组 (Rwp / Rexp / Rb / GOF)
         # GOF 弃用旧的非标准量, 改为标准定义 GOF = Rwp / Rexp
         metrics = self._calc_profile_metrics(
-            intensity, simulated_full, weight=w_fit, n_params=n_params,
+            intensity, simulated_full, sigma2=_var, n_params=n_params,
         )
         wR = metrics["Rwp"]
         Rexp = metrics["Rexp"]
         Rb = metrics["Rb"]
         GOF = metrics["GOF"]
+        # v1.1.2: 未加权 wR —— 供快检门限与"新旧口径"对照使用
+        wR_unweighted = float(self._calc_wR(intensity, simulated_full))
+        # Rexp/GOF 只有在统计权下才可解读 (Rexp ∝ 1/sqrt(Σy))
+        metrics_valid = stat_weights_mode != "none"
 
         # 质量等级
         if wR < 5:
@@ -1617,6 +1648,15 @@ class RietveldRefiner:
             wR=wR,
             Rexp=Rexp,
             Rb=Rb,
+            Rp=float(metrics["Rp"]),
+            chi2=float(metrics["chi2"]),
+            chi2_red=float(metrics["chi2_red"]),
+            metrics_valid=bool(metrics_valid),
+            metric_note=(
+                "" if metrics_valid
+                else "未使用统计权重: Rexp/GOF 不可解读 "
+                     "(需 stat_weights=poisson/poirier)"
+            ),
             GOF=GOF,
             quality=quality,
             num_cycles=num_cycles,
@@ -1648,6 +1688,9 @@ class RietveldRefiner:
                 "bg_chebyshev_applied": bool(bg_cheb_applied),
                 # v0.11.0 R-A1: 统计权 (目标函数与 wR 自洽), 默认 "none"
                 "stat_weights": stat_weights_mode,
+                # v1.1.2: 加权/未加权 wR 双口径 (快检门限用未加权)
+                "wR_weighted": float(wR),
+                "wR_unweighted": float(wR_unweighted),
                 # v0.15.2 A 路线: 各向同性晶胞缩放 (每相一个自由度, 1.0 = 库值)
                 "refine_cell": bool(refine_cell),
                 "cell_scale": opt_cell_list,
@@ -2122,21 +2165,34 @@ class RietveldRefiner:
     def _calc_profile_metrics(
         observed: np.ndarray,
         simulated: np.ndarray,
-        weight: Optional[np.ndarray] = None,
+        sigma2: Optional[np.ndarray] = None,
         n_params: int = 0,
+        weight: Optional[np.ndarray] = None,
     ) -> dict:
-        """v0.15.2: 计算通用 R 因子组 (Rwp / Rexp / Rb / GOF)。
+        """计算通用 R 因子组 (Rwp / Rexp / Rp / chi2 / GOF)。
 
         - Rwp  = sqrt(Σ w (y_obs - y_calc)² / Σ w y_obs²) × 100  (即原 wR)
         - Rexp = sqrt((N - P) / Σ w y_obs²) × 100  (期望 R, N=数据点, P=参数数)
-        - Rb   = Σ|y_obs - y_calc| / Σ y_obs × 100  (轮廓 Bragg R, 不加权)
+        - Rp   = Σ|y_obs - y_calc| / Σ y_obs × 100  (轮廓 R, 不加权)
         - GOF  = Rwp / Rexp  (标准 "goodness of fit", 理想值 ≈ 1)
+        - chi2 = Σ w (y_obs - y_calc)²; chi2_red = chi2 / (N - P) = GOF²
+
+        权重口径 (v1.1.2 修正):
+          ``sigma2`` = **未归一化**的方差数组 σ², 内部取 w = 1/σ²。
+          计数统计下 σ² ≈ y (Poisson / Poirier), 此时 Σ w·y² ≈ Σ y —
+          这正是标准 Rexp 的分母。旧实现传的是"均一化为均值 1 的权重",
+          归一化把统计尺度乘掉了, 导致 Rexp 偏小一个数量级 (实测 130×)。
+
+        ``weight`` 为**遗留**参数 (已归一化的权重), 仅为兼容旧调用方保留;
+        新代码一律传 ``sigma2``。Rwp 对 w 的整体尺度不变, 故两者 Rwp 一致。
 
         输入为**含背景的全谱** (与 Rietveld 惯例一致); w 缺省为单位权。
         """
         observed = np.asarray(observed, dtype=float)
         simulated = np.asarray(simulated, dtype=float)
-        if weight is None:
+        if sigma2 is not None:
+            weight = 1.0 / np.maximum(np.asarray(sigma2, dtype=float), 1e-12)
+        elif weight is None:
             weight = np.ones_like(observed)
         else:
             weight = np.asarray(weight, dtype=float)
@@ -2149,13 +2205,23 @@ class RietveldRefiner:
             float(np.sqrt(n_free / denom) * 100)
             if denom > 0 else 100.0
         )
-        rb_denom = float(np.sum(observed))
-        rb = (
-            float(np.sum(np.abs(observed - simulated)) / rb_denom * 100)
-            if rb_denom > 0 else 100.0
+        rp_denom = float(np.sum(observed))
+        rp = (
+            float(np.sum(np.abs(observed - simulated)) / rp_denom * 100)
+            if rp_denom > 0 else 100.0
         )
         gof = float(rwp / rexp) if rexp > 0 else 0.0
-        return {"Rwp": rwp, "Rexp": rexp, "Rb": rb, "GOF": gof}
+        chi2 = float(np.sum(weight * (observed - simulated) ** 2))
+        return {
+            "Rwp": rwp,
+            "Rexp": rexp,
+            "Rp": rp,
+            # 兼容旧调用方: 历史字段名 Rb 实际是轮廓 R (非 Bragg R)
+            "Rb": rp,
+            "GOF": gof,
+            "chi2": chi2,
+            "chi2_red": chi2 / float(n_free),
+        }
 
     # ------------------------------------------------------------------
     # Le Bail 晶胞参数精修 (P4)
@@ -2346,7 +2412,7 @@ class RietveldRefiner:
 
         _m_lb = self._calc_profile_metrics(
             np.asarray(intensity, dtype=float), np.asarray(best_calc, dtype=float),
-            weight=None, n_params=1,
+            sigma2=np.maximum(np.asarray(intensity, dtype=float), 1.0), n_params=1,
         )
         return RefinementResult(
             phases=[refined_phase],
@@ -2355,7 +2421,11 @@ class RietveldRefiner:
             residual_data=(two_theta, intensity - best_calc),
             wR=best_rwp,
             Rexp=_m_lb["Rexp"],
-            Rb=_m_lb["Rb"],
+            Rb=_m_lb["Rp"],
+            Rp=_m_lb["Rp"],
+            chi2=_m_lb["chi2"],
+            chi2_red=_m_lb["chi2_red"],
+            metrics_valid=True,
             GOF=_m_lb["GOF"],
             quality=quality,
             num_cycles=n_scan,

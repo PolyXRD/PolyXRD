@@ -25,7 +25,11 @@ class RefinementResult:
         residual_data: 残差数据 (x, y)
         wR: 加权轮廓 R 因子 (与 Rwp 同一量, 保留字段名兼容旧代码/旧项目文件)
         Rexp: 期望 R 因子 (%) — Rexp = sqrt((N-P) / Σ w·y_obs²) × 100
-        Rb: 轮廓 Bragg R 因子 (%) — Rb = Σ|y_obs - y_calc| / Σ y_obs × 100 (不加权)
+        Rb: 旧字段名 — 实为**轮廓 R** (Rp), 保留以兼容旧项目文件
+        Rp: 轮廓 R 因子 (%) — Rp = Σ|y_obs - y_calc| / Σ y_obs × 100 (不加权)
+        chi2 / chi2_red: 加权残差平方和与其归一值 (= GOF²)
+        metrics_valid: Rexp/GOF/chi2 是否可解读 (需统计权重; 单位权下无物理意义)
+        metric_note: 指标口径提示 (界面直接展示)
         GOF: 优良度因子 (v0.15.2 起为标准定义 GOF = Rwp / Rexp)
         quality: 质量评级
         num_cycles: 精修循环次数
@@ -40,12 +44,22 @@ class RefinementResult:
     wR: float = 0.0
     Rexp: float = 0.0
     Rb: float = 0.0
+    Rp: float = 0.0
+    chi2: float = 0.0
+    chi2_red: float = 0.0
+    metrics_valid: bool = True
+    metric_note: str = ""
     GOF: float = 0.0
     quality: str = ""
     num_cycles: int = 0
     converged: bool = False
     time_seconds: float = 0.0
     fit_params: dict = field(default_factory=dict)
+
+    @property
+    def rp_value(self) -> float:
+        """轮廓 R: 优先新字段 Rp, 旧结果文件回退到历史字段 Rb。"""
+        return self.Rp if self.Rp else self.Rb
 
     @property
     def Rwp(self) -> float:
@@ -83,9 +97,15 @@ class RefinementResult:
         lines.append(tr("report.quality_section"))
         lines.append("-" * 40)
         lines.append(tr("report.rwp_line", value=f"{self.Rwp:.4f}"))
-        lines.append(tr("report.rexp_line", value=f"{self.Rexp:.4f}"))
-        lines.append(tr("report.rb_line", value=f"{self.Rb:.4f}"))
-        lines.append(tr("report.gof_line", value=f"{self.GOF:.4f}"))
+        if self.metrics_valid:
+            lines.append(tr("report.rexp_line", value=f"{self.Rexp:.4f}"))
+            lines.append(tr("report.rb_line", value=f"{self.rp_value:.4f}"))
+            lines.append(tr("report.gof_line", value=f"{self.GOF:.4f}"))
+        else:
+            lines.append(tr("report.metrics_invalid_line"))
+            lines.append(tr("report.rb_line", value=f"{self.rp_value:.4f}"))
+        if self.metric_note:
+            lines.append(tr("report.metric_note_line", value=self.metric_note))
         lines.append(tr("report.quality_line", value=self.quality_grade))
         lines.append("")
         lines.append("-" * 40)
@@ -130,6 +150,11 @@ class RefinementResult:
             "wR": self.wR,
             "Rexp": self.Rexp,
             "Rb": self.Rb,
+            "Rp": self.Rp,
+            "chi2": self.chi2,
+            "chi2_red": self.chi2_red,
+            "metrics_valid": self.metrics_valid,
+            "metric_note": self.metric_note,
             "GOF": self.GOF,
             "quality": self.quality,
             "quality_grade": self.quality_grade,
@@ -147,6 +172,11 @@ class RefinementResult:
             wR=data.get("wR", 0),
             Rexp=data.get("Rexp", 0),
             Rb=data.get("Rb", 0),
+            Rp=data.get("Rp", 0),
+            chi2=data.get("chi2", 0),
+            chi2_red=data.get("chi2_red", 0),
+            metrics_valid=data.get("metrics_valid", True),
+            metric_note=data.get("metric_note", ""),
             GOF=data.get("GOF", 0),
             quality=data.get("quality", ""),
             num_cycles=data.get("num_cycles", 0),

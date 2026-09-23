@@ -303,7 +303,7 @@ class BatchRefinementDialog(QDialog):
             tr("batch_refine.col_file"),
             "Rwp%",
             "Rexp%",
-            "Rb%",
+            "Rp%",
             "GOF",
             tr("batch_refine.col_engine"),
         ]
