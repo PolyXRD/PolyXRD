@@ -1166,6 +1166,12 @@ class RietveldRefiner:
         # 原因是 Jacobian 定标改变了信赖域几何, 把解引到略差的局部极小。
         # 故默认保持关闭; 需要时显式传 x_scale="jac" 或正数数组启用。
         _x_scale = kwargs.get("x_scale", None)
+        # v1.1.2 (W17): 低角不对称 (split-PV)。默认 0 = 关闭, 行为与旧版逐点一致;
+        # 用户可给 0.1~0.3 之间的经验值 (低角侧展宽), 目前不做参数拟合。
+        try:
+            _asym = float(kwargs.get("asymmetry", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            _asym = 0.0
         # scipy 不接受 x_scale=None (只接受 'jac' 或正数数组), 关闭时须整个省略该参数
         _lsq_extra: dict = {}
         if _x_scale is not None:
@@ -1603,7 +1609,7 @@ class RietveldRefiner:
             simulated = self._compute_spectrum_from_ref(
                 eff_two_theta, _transform_peaks_full(cs, tex, _disp),
                 weights, fwhm, eta, scale,
-                peak_shape, caglioti=cag
+                peak_shape, caglioti=cag, asymmetry=_asym
             )
             r = y_exp - simulated
             if sqrt_w_fit is not None:
@@ -1652,7 +1658,8 @@ class RietveldRefiner:
             eff = two_theta - opt_zs if abs(opt_zs) > 1e-9 else two_theta
             sim_i = self._compute_spectrum_from_ref(
                 eff, _transform_peaks_full(opt_cs, opt_tex, _disp_of(res_opt.x)),
-                opt_w, opt_fw, opt_et, opt_sc, peak_shape, caglioti=opt_cag
+                opt_w, opt_fw, opt_et, opt_sc, peak_shape, caglioti=opt_cag,
+                asymmetry=_asym
             )
             wr_i = _wr_of(sim_i)
 
@@ -1679,7 +1686,8 @@ class RietveldRefiner:
             _w, _fw, _et, _sc, _zs, _cag, _cs, _tex = _unpack(best_result.x)
             best_simulated = self._compute_spectrum_from_ref(
                 two_theta, _transform_peaks_full(_cs, _tex, _disp_of(best_result.x)),
-                _w, _fw, _et, _sc, peak_shape, caglioti=_cag
+                _w, _fw, _et, _sc, peak_shape, caglioti=_cag,
+                asymmetry=_asym
             )
         _plog(f"[multistart] best wR={best_wR:.3f}% → 进入局部抛光")
         # v1.1.2: 记录抛光前的最优 wR, 供收敛判定 (抛光仍能改进 = 未卡死)
@@ -1751,7 +1759,8 @@ class RietveldRefiner:
                                     sim_t = self._compute_spectrum_from_ref(
                                         eff_t,
                                         _transform_peaks_full(_ucs, _utex, _disp_of(x_t)),
-                                        _uw, _ufw, _uet, _usc, peak_shape, caglioti=_ucag
+                                        _uw, _ufw, _uet, _usc, peak_shape,
+                                        caglioti=_ucag, asymmetry=_asym
                                     )
                                     wr_t = _wr_of(sim_t)
                                     # 每 8 次评估汇报一次: 抛光约百余次评估, 采样过密
@@ -1957,6 +1966,8 @@ class RietveldRefiner:
                 "refine_displacement": bool(refine_displacement),
                 "displacement_mm": float(opt_disp),
                 "displacement_radius_mm": float(displacement_radius_mm),
+                # v1.1.2 (W17): 低角不对称强度 (0 = 关)
+                "asymmetry": float(_asym),
             },
         )
 
@@ -2112,6 +2123,7 @@ class RietveldRefiner:
         scale: float,
         peak_shape: str = "pseudo-voigt",
         caglioti: tuple = None,  # (U, V, W) FWHM² = U tan²θ + V tanθ + W；None 时退化为固定 FWHM
+        asymmetry: float = 0.0,  # v1.1.2 (W17): 低角不对称 (split-PV, 0=关)
     ) -> np.ndarray:
         """从参考峰计算模拟谱 (薄壳, 核心见 phase_display.spectrum_from_refs)
 
@@ -2123,6 +2135,7 @@ class RietveldRefiner:
         return spectrum_from_refs(
             np.asarray(two_theta, dtype=float), phase_peaks,
             weights, fwhm, eta, scale, peak_shape, caglioti,
+            asymmetry=float(asymmetry or 0.0),
         )
 
     @staticmethod
