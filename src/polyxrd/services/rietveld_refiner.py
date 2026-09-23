@@ -1377,6 +1377,17 @@ class RietveldRefiner:
         displacement_radius_mm = float(kwargs.get("displacement_radius_mm", 240.0))
         n_params += n_disp
 
+        # ── v2.0.0 (W22-a): 每相**整体温度因子 B** (overall B / B_ovr) ─────────
+        # 物理: |F|² 经 Debye-Waller 因子 exp(-2B·s²) 衰减, s = sinθ/λ。
+        # 因为它只对**每个峰**乘一个只依赖 2θ 的因子, 所以可以直接作用在参考峰表上,
+        # 不需要每次迭代重算结构因子 —— 这是"结构自由度"里代价最低、收益最直接的一项
+        # (真实 Rietveld 程序的标准自由度; 缺它会让高角强度系统性偏高)。
+        # 默认开启 (B 初值 0 = 无修正, 上界 15 Å² 防跑飞); 可用 refine_b_overall=False 关闭。
+        refine_b_overall = bool(kwargs.get("refine_b_overall", True))
+        n_bovr = n_phases if refine_b_overall else 0
+        _bovr_off = _disp_off + n_disp
+        n_params += n_bovr
+
         # ── 3. 智能权重估计 ──────────────────────────────────────
         # 对每个物相，找到其参考峰最接近实验最大峰处的实验强度比
         # 作为权重初值
@@ -1447,6 +1458,8 @@ class RietveldRefiner:
                 parts.append(np.ones(n_tex, dtype=float))   # 织构 r 初值 = 1 (无取向)
             if n_disp:
                 parts.append([0.0])   # v1.1.2 (W16): 样品位移初值 0 mm
+            if n_bovr:
+                parts.append(np.zeros(n_bovr, dtype=float))  # W22-a: 整体 B 初值 0
             return np.concatenate(parts)
 
         candidates = []
@@ -1532,6 +1545,10 @@ class RietveldRefiner:
             # 样品位移 s (mm): ±1.0 mm 覆盖常见制样偏差 (R=240mm 时 100° 处 ≈0.5°)
             lower_parts.append(np.array([-1.0]))
             upper_parts.append(np.array([1.0]))
+        if n_bovr:
+            # 整体温度因子 B (Å²): 0~15 覆盖绝大多数实验室数据; 0 = 无修正
+            lower_parts.append(np.full(n_bovr, 0.0))
+            upper_parts.append(np.full(n_bovr, 15.0))
         lower = np.concatenate(lower_parts)
         upper = np.concatenate(upper_parts)
 
@@ -1576,6 +1593,10 @@ class RietveldRefiner:
         if n_disp and not param_mask.get("displacement", True):
             # v1.1.2 (W16): 位移掩码关闭 → 冻结为 0 (无样品位移)
             _freeze(_disp_off, 0.0)
+        if n_bovr and not param_mask.get("b_overall", True):
+            # W22-a: 整体 B 掩码关闭 → 冻结为 0 (无温度因子修正)
+            for _j in range(n_bovr):
+                _freeze(_bovr_off + _j, 0.0)
         # mask["background"] 在 builtin 中仍为 no-op:
         #   background 由 _estimate_background 一次性预处理, 非 fit 维度。
 
@@ -1630,12 +1651,28 @@ class RietveldRefiner:
                     peaks, disp, displacement_radius_mm)
             return peaks
 
+        def _bovr_of(params) -> Optional[np.ndarray]:
+            """W22-a: 取每相整体温度因子 B (未启用返回 None)。"""
+            if not n_bovr:
+                return None
+            try:
+                return np.asarray(params[_bovr_off:_bovr_off + n_bovr], dtype=float)
+            except (IndexError, TypeError, ValueError):
+                return None
+
+        def _transform_all(cs, tex, disp: float, bovr):
+            """晶胞/织构/位移 (峰位) + 整体 B (峰强) 一并作用。"""
+            peaks = _transform_peaks_full(cs, tex, disp)
+            if bovr is not None and np.any(np.asarray(bovr, dtype=float) > 0.0):
+                peaks = self._apply_overall_b(peaks, bovr, wavelength)
+            return peaks
+
         def residual(params):
             weights, fwhm, eta, scale, zs, cag, cs, tex = _unpack(params)
             eff_two_theta = two_theta - zs if abs(zs) > 1e-9 else two_theta
             _disp = _disp_of(params)
             simulated = self._compute_spectrum_from_ref(
-                eff_two_theta, _transform_peaks_full(cs, tex, _disp),
+                eff_two_theta, _transform_all(cs, tex, _disp, _bovr_of(params)),
                 weights, fwhm, eta, scale,
                 peak_shape, caglioti=cag, asymmetry=_asym
             )
@@ -1685,7 +1722,7 @@ class RietveldRefiner:
             opt_w, opt_fw, opt_et, opt_sc, opt_zs, opt_cag, opt_cs, opt_tex = _unpack(res_opt.x)
             eff = two_theta - opt_zs if abs(opt_zs) > 1e-9 else two_theta
             sim_i = self._compute_spectrum_from_ref(
-                eff, _transform_peaks_full(opt_cs, opt_tex, _disp_of(res_opt.x)),
+                eff, _transform_all(opt_cs, opt_tex, _disp_of(res_opt.x), _bovr_of(res_opt.x)),
                 opt_w, opt_fw, opt_et, opt_sc, peak_shape, caglioti=opt_cag,
                 asymmetry=_asym
             )
@@ -1713,7 +1750,7 @@ class RietveldRefiner:
             )
             _w, _fw, _et, _sc, _zs, _cag, _cs, _tex = _unpack(best_result.x)
             best_simulated = self._compute_spectrum_from_ref(
-                two_theta, _transform_peaks_full(_cs, _tex, _disp_of(best_result.x)),
+                two_theta, _transform_all(_cs, _tex, _disp_of(best_result.x), _bovr_of(best_result.x)),
                 _w, _fw, _et, _sc, peak_shape, caglioti=_cag,
                 asymmetry=_asym
             )
@@ -1786,7 +1823,7 @@ class RietveldRefiner:
                                     eff_t = two_theta - _uzs if abs(_uzs) > 1e-9 else two_theta
                                     sim_t = self._compute_spectrum_from_ref(
                                         eff_t,
-                                        _transform_peaks_full(_ucs, _utex, _disp_of(x_t)),
+                                        _transform_all(_ucs, _utex, _disp_of(x_t), _bovr_of(x_t)),
                                         _uw, _ufw, _uet, _usc, peak_shape,
                                         caglioti=_ucag, asymmetry=_asym
                                     )
@@ -2014,6 +2051,11 @@ class RietveldRefiner:
                 "displacement_radius_mm": float(displacement_radius_mm),
                 # v1.1.2 (W17): 低角不对称强度 (0 = 关)
                 "asymmetry": float(_asym),
+                # v2.0.0 (W22-a): 每相整体温度因子 B (Å²); 0 = 无修正
+                "refine_b_overall": bool(refine_b_overall),
+                "b_overall": ([float(x) for x in np.asarray(
+                    _bovr_of(best_result_x)).ravel()]
+                    if _bovr_of(best_result_x) is not None else []),
             },
         )
 
@@ -2262,6 +2304,45 @@ class RietveldRefiner:
                 if sin_half >= 1.0:
                     continue
                 conv.append((p[0], 2.0 * _math.degrees(_math.asin(sin_half)), inten))
+            out.append(conv)
+        return out
+
+    @staticmethod
+    def _apply_overall_b(phase_peaks: list, b_per_phase, wavelength: float) -> list:
+        """整体温度因子 B 修正峰强 —— v2.0.0 (W22-a)。
+
+        物理: `|F|² → |F|²·exp(−2B·s²)`, `s = sinθ/λ`。
+        这是**逐峰乘性**因子 (只依赖该峰的 2θ), 因此无需重算结构因子 —— 相比精修
+        原子坐标要"每次迭代重算 |F|²", 这是结构自由度里代价最低的一项。
+        缺它会系统性高估高角强度 (B<0 与 B>0 分别对应高角偏强/偏弱)。
+
+        边界: `b_per_phase` 与相数等长; 某相 B≤0 或参数非法 → 该相原样保留;
+             波长缺失 → 整体原样返回。
+        """
+        import math as _math
+
+        lam = float(wavelength or 0.0)
+        if lam <= 0 or not phase_peaks:
+            return phase_peaks
+        try:
+            bl = list(np.asarray(b_per_phase, dtype=float).ravel())
+        except (TypeError, ValueError):
+            return phase_peaks
+        out: list = []
+        for i, peaks in enumerate(phase_peaks):
+            if i >= len(bl) or not np.isfinite(bl[i]) or bl[i] <= 0.0:
+                out.append(peaks)
+                continue
+            b = float(bl[i])
+            conv: list = []
+            for p in peaks:
+                try:
+                    tth = float(p[1]); inten = float(p[2])
+                except (TypeError, ValueError, IndexError):
+                    conv.append(p)
+                    continue
+                s = _math.sin(_math.radians(tth / 2.0)) / lam
+                conv.append((p[0], tth, inten * _math.exp(-2.0 * b * s * s)))
             out.append(conv)
         return out
 
