@@ -180,6 +180,22 @@ class RietveldRefiner:
                     result.warnings.append(_msg)
         except Exception:  # noqa: BLE001 - 提示失败不该影响精修结果
             pass
+        # v1.1.2 (W19-a): 检测 Kα2 双线是否未剥离 (最强峰高角侧系统性残差)
+        if kwargs.get("detect_ka2", True):
+            try:
+                _ka2 = self.detect_ka2(data)
+            except Exception:  # noqa: BLE001
+                _ka2 = None
+            if _ka2 is not None and _ka2.get("flagged"):
+                _msg = (
+                    f"检测到 Kα2 双线未剥离 (最强峰 {_ka2['center']:.2f}°, "
+                    f"Δ≈{_ka2['delta']:.3f}°, 高角侧残差 ≈{_ka2['ratio'] * 100:.0f}% 峰高): "
+                    "建议先剥离 Kα2 (数据处理 → Kα2 剥离) 或后续启用 Kα2 建模"
+                )
+                if _msg not in result.warnings:
+                    result.warnings.append(_msg)
+                result.fit_params["ka2_detected"] = True
+                result.fit_params["ka2_info"] = _ka2
         log(
             "[done] engine={} wR={:.3f}% GOF={:.3f} nfev={} t={:.1f}s".format(
                 result.fit_params.get("engine", engine),
@@ -194,6 +210,74 @@ class RietveldRefiner:
     # ------------------------------------------------------------------
     # 自动引擎选择 (v0.11.0 打磨)
     # ------------------------------------------------------------------
+
+    # ------------------------------------------------------------------
+    # v1.1.2 (W19-a): Kα2 双线检测
+    # ------------------------------------------------------------------
+
+    KA2_LAMBDA_RATIO = 1.544390 / 1.540560   # λ(Kα2)/λ(Kα1), Cu 靶
+
+    def detect_ka2(self, data: XRDData) -> Optional[dict]:
+        """检测最强峰是否为**未剥离**的 Kα1/Kα2 双线。
+
+        原理: Kα2 峰位 ≈ 2θ + 2·(λ2/λ1 − 1)·tanθ (Cu 下 36° 处 ≈ 0.093°,
+        与常见 FWHM 同量级), 强度 ≈ Kα1 的一半。
+
+        做法 (**形状无关的对称性判据**, 比"单峰拟合看残差"稳健得多 ——
+        单峰模型会靠加大 FWHM / 提高洛伦兹占比把双线吸收掉):
+          取最强峰中心 c (亚步长抛物线精修) 与解析间距 Δ, 比较
+              ratio = I(c + Δ) / I(c − Δ)      (扣背景后)
+          对称单峰 → ratio ≈ 1; 含 0.5 强度比 Kα2 → ratio ≈ 2 以上。
+          (低角轴向发散引起的固有不对称让 ratio < 1, 属安全方向。)
+
+        若需要更详细的形态信息, 返回字典里同时给出左右强度、峰高与 FWHM 估计。
+
+        Returns:
+            ``dict(center, delta, fwhm, eta, left_res, right_res, ratio, flagged)``,
+            无法判定时返回 None。检测失败绝不影响精修 (内部 try/except)。
+        """
+        try:
+            tt = np.asarray(data.two_theta, dtype=float)
+            y = np.asarray(data.intensity, dtype=float)
+            if tt.size < 50:
+                return None
+            bg = self._estimate_background(y, "median", wide_window=True)
+            ysub = np.clip(y - bg, 0.0, None)
+            i0 = int(np.argmax(ysub))
+            h0 = float(ysub[i0])
+            if h0 <= 0 or i0 <= 0 or i0 >= tt.size - 1:
+                return None
+            # 亚步长峰位 (三点抛物线)
+            y1, y2, y3 = float(ysub[i0 - 1]), h0, float(ysub[i0 + 1])
+            denom = (y1 - 2.0 * y2 + y3)
+            frac = 0.5 * (y1 - y3) / denom if abs(denom) > 1e-12 else 0.0
+            frac = float(np.clip(frac, -0.5, 0.5))
+            step = float(tt[i0 + 1] - tt[i0]) if tt.size > 1 else 0.01
+            c0 = float(tt[i0]) + frac * step
+            lam1 = float(getattr(data, "wavelength", 0.0) or 1.5406)
+            if lam1 <= 0:
+                lam1 = 1.5406
+            theta = np.radians(c0 / 2.0)
+            delta = float(2.0 * (self.KA2_LAMBDA_RATIO - 1.0)
+                          * np.tan(theta) * 180.0 / np.pi)
+            if not (0.0 < delta < 1.0):
+                return None
+            left = float(np.interp(c0 - delta, tt, ysub))
+            right = float(np.interp(c0 + delta, tt, ysub))
+            ratio = (right / left) if left > 1e-9 else float("inf")
+            # 半高宽估计 (对称假设, 仅作参考)
+            half = 0.5 * h0
+            above = np.where(ysub >= half)[0]
+            fwhm_est = float(tt[above[-1]] - tt[above[0]]) if above.size > 1 else 0.0
+            return {
+                "center": c0, "delta": delta, "peak_height": h0,
+                "fwhm": fwhm_est,
+                "left_res": left, "right_res": right, "ratio": ratio,
+                # 判据: 高角侧比低角侧高 35% 以上, 且高角侧强度有实际量级
+                "flagged": bool(ratio > 1.35 and right > 0.05 * h0),
+            }
+        except Exception:  # noqa: BLE001 - 检测失败不应影响精修
+            return None
 
     @staticmethod
     def _phases_have_structure(phases: list[Phase]) -> bool:
