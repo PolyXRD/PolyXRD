@@ -47,7 +47,9 @@ class RefinementResult:
         residual_data: 残差数据 (x, y)
         wR: 加权轮廓 R 因子 (与 Rwp 同一量, 保留字段名兼容旧代码/旧项目文件)
         Rexp: 期望 R 因子 (%) — Rexp = sqrt((N-P) / Σ w·y_obs²) × 100
-        Rb: 旧字段名 — 实为**轮廓 R** (Rp), 保留以兼容旧项目文件
+        Rb: **废弃槽位** —— 历史字段名。旧代码把"轮廓 R"误标为"Bragg R";
+            真实 Bragg R (按各 hkl 积分强度 Σ|I_obs-I_calc|/Σ I_obs) 尚未实现,
+            本字段现恒为 0。保留仅为兼容旧项目文件读取 (旧文件中它存的是轮廓 R)。
         Rp: 轮廓 R 因子 (%) — Rp = Σ|y_obs - y_calc| / Σ y_obs × 100 (不加权)
         chi2 / chi2_red: 加权残差平方和与其归一值 (= GOF²)
         metrics_valid: Rexp/GOF/chi2 是否可解读 (需统计权重; 单位权下无物理意义)

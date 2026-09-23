@@ -739,7 +739,7 @@ class MaudEngine:
             residual_data=residual,
             wR=wrp,  # wR ≡ Rwp (加权轮廓 R), 用作主要指标
             Rexp=rexp,  # MAUD par 有则带出, 无则 0
-            Rb=rb,
+            Rb=0.0,   # v2.0.0: 真实 Bragg R 未实现 (MAUD 回传的 rb 不入此槽位, 见 fit_params)
             Rp=rb,
             metrics_valid=bool(rexp > 0.0),
             GOF=gof,
