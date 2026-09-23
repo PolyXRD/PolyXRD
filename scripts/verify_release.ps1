@@ -69,7 +69,7 @@ if (-not (Test-Path -LiteralPath $portable)) {
                 $n = $_.Name
                 ($bannedNames -contains $n) -or
                 (($n -like '*.sqlite' -or $n -like '*.sqlite3' -or $n -like '*.db') -and
-                 $_.FullName -notlike "*$allowedSqlite")
+                 $_.FullName.Replace('\', '/') -notlike "*$allowedSqlite")
             }
             if ($bad) {
                 foreach ($b in $bad) { Fail ("包内不应存在的数据库: " + $b.FullName) }
