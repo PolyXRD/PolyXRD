@@ -285,7 +285,6 @@ PolyXRD/
 ├── pyproject.toml              # Python 项目配置 / 依赖版本
 ├── requirements.txt            # 运行依赖
 ├── app.manifest                # Windows 应用程序清单 (DPI)
-├── Thx2OpenSource.md           # 开源致谢 (独立版)
 ├── LICENSE                     # ★ 双许可条款 (英文: 学术免费 / 商业需单独授权)
 ├── LICENSE-CN                  # ★ 双许可条款 (中文, 与 LICENSE 对应)
 ├── .gitignore                  # 本仓库忽略规则 (测试/数据库/构建产物)
