@@ -3,7 +3,8 @@
 brand_assets/
 cod_cif_download/
 test_data/
-tests/
+# v2.1 P2-4: tests/ 整体排除已解除 —— 21,652 行测试代码入库, 保障回归资产
+# 不随单块磁盘丢失, 并支撑 CI 门禁。机器相关开发脚本仍排除 (见下)。
 
 # 用户指定不上传的测试代码 (scripts 下的 test_*.py)
 scripts/test_*.py
@@ -27,6 +28,18 @@ _*.py
 # 且 git status 不报错(被忽略)。必须显式放行包初始化文件。
 !__init__.py
 !**/__init__.py
+# v2.1 P2-4: tests/_cif_old_ref.py 被约 41 个用例导入(缺失时静默 skip),
+# 必须随测试套件入库; _baseline_* 为开发机指标快照, 不入库。
+!tests/_cif_old_ref.py
+tests/_baseline_metrics.py
+tests/_baseline_metrics.json
+
+# tests/ 机器相关开发脚本 (硬编码本机路径, 只留在开发机)
+tests/probe_*.py
+tests/smoke_*.py
+
+# pytest 根目录临时目录
+pytest-cache-files-*/
 
 # PyInstaller 运行日志
 pyinstaller-build.log
