@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from polyxrd.models.phase import Phase
-from polyxrd.utils.formula_parser import normalize_cod_formula
+from polyxrd.utils.formula_parser import normalize_cod_formula, parse_formula_detailed
 
 __all__ = [
     "normalize_cod_formula",
@@ -71,6 +71,9 @@ def _candidate_score(cand: dict, phase: Phase) -> float:
     score = 0.0
     sg_p = (getattr(phase, "space_group", "") or "").strip()
     sg_c = (cand.get("space_group") or "").strip()
+    # v2.1-C: 元素集宽松匹配命中的候选降权 (精确化学式命中优先)
+    if cand.get("_fallback"):
+        score += 0.25
     # 剥 setting 后缀 ("P m m n :2" ≈ "P m m n") 再比较
     if sg_p and sg_c and sg_p.split(":")[0].strip() == sg_c.split(":")[0].strip():
         score -= 2.0
@@ -258,6 +261,16 @@ class PhaseStructureResolver:
             cands = db.find_structure_candidates(norm, mineral_name=mineral)
         except Exception:
             cands = []
+        # v2.1-C: 元素集宽松回退 —— 固溶体/非整比相 (如 NCM 三元) 的系数
+        # 与库值差一档, 精确式匹配常落空; 按"元素集全部出现"把同系物
+        # 结构候选找回来 (候选带 _fallback 标记, 排序时降权)。
+        if not cands and norm:
+            try:
+                els = list(parse_formula_detailed(formula).keys())
+                cands = db.find_structure_candidates(
+                    "", mineral_name=mineral, elements=els)
+            except Exception:
+                cands = []
         cands.sort(key=lambda c: _candidate_score(c, phase))
 
         # v0.15.2: 多形体甄别 —— 候选结构模拟峰与库内 d-I 峰的位置失配度

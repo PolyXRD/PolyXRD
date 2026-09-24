@@ -1037,6 +1037,7 @@ translations = {
         "dw_correlated": "Strongly correlated residuals (DW={dw:.2f}): model is incomplete — check for missing phases / missing physical terms",
         "high_angle_residual": "High-angle residuals too large ({high:.1f}% vs low-angle {low:.1f}%): check overall B factor / peak-width model / sample displacement",
         "low_angle_residual": "Low-angle residuals too large ({low:.1f}% vs high-angle {high:.1f}%): check low-angle asymmetry / background estimate / preferred orientation",
-        "residual_large": "Overall residuals too large (R={r:.1f}%) without obvious point-to-point correlation (DW={dw:.2f}): possibly near the noise floor or insufficient statistics"
+        "residual_large": "Overall residuals too large (R={r:.1f}%) without obvious point-to-point correlation (DW={dw:.2f}): possibly near the noise floor or insufficient statistics",
+        "weight_basis_relative": "Quantification uses relative-intensity normalization (relative): no structure data matched for these phases ({phases}), so strict mass fractions W∝S·ZMV cannot be computed; re-match structures in the phase database and retry"
     }
 }
