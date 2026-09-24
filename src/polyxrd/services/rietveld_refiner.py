@@ -250,19 +250,18 @@ class RietveldRefiner:
             result.fit_params["engine_fallback_reason"] = f"{type(e).__name__}: {e}"
 
         result.time_seconds = time.time() - start_time
-        # v1.1.2: 引擎回退不再"只在日志里" —— 记录请求/实际引擎并写入 warnings,
-        # 由界面在结果区显示 (静默回退是用户最难察觉的坑)。
+        # v1.1.2: 引擎回退不再"只在日志里" —— 记录请求/实际引擎;
+        # v2.1-B: 不再往 warnings 塞中文文案, 改为结构化诊断 (UI 用 tr() 渲染)。
         try:
             _req = str(result.fit_params.get("engine_requested", engine))
             _used = str(result.fit_params.get("engine", engine))
             result.fit_params.setdefault("engine_requested", _req)
             if _used != _req:
-                _reason = result.fit_params.get("engine_fallback_reason", "")
-                _msg = f"请求引擎 {_req} → 实际使用 {_used}"
-                if _reason:
-                    _msg += f" (原因: {_reason})"
-                if _msg not in result.warnings:
-                    result.warnings.append(_msg)
+                _reason = str(result.fit_params.get("engine_fallback_reason", "") or "unknown")
+                result.diagnostics.append({
+                    "code": "diag.engine_fallback",
+                    "params": {"requested": _req, "used": _used, "reason": _reason},
+                })
         except Exception:  # noqa: BLE001 - 提示失败不该影响精修结果
             pass
         # v1.1.2 (W19-a): 检测 Kα2 双线是否未剥离 (最强峰高角侧系统性残差)
@@ -272,13 +271,15 @@ class RietveldRefiner:
             except Exception:  # noqa: BLE001
                 _ka2 = None
             if _ka2 is not None and _ka2.get("flagged"):
-                _msg = (
-                    f"检测到 Kα2 双线未剥离 (最强峰 {_ka2['center']:.2f}°, "
-                    f"Δ≈{_ka2['delta']:.3f}°, 高角侧残差 ≈{_ka2['ratio'] * 100:.0f}% 峰高): "
-                    "建议先剥离 Kα2 (数据处理 → Kα2 剥离) 或后续启用 Kα2 建模"
-                )
-                if _msg not in result.warnings:
-                    result.warnings.append(_msg)
+                # v2.1-B: 结构化诊断 (code + params), 文案由 UI 渲染
+                result.diagnostics.append({
+                    "code": "diag.ka2_detected",
+                    "params": {
+                        "center": float(_ka2.get("center", 0.0)),
+                        "delta": float(_ka2.get("delta", 0.0)),
+                        "ratio": float(_ka2.get("ratio", 0.0)) * 100.0,
+                    },
+                })
                 result.fit_params["ka2_detected"] = True
                 result.fit_params["ka2_info"] = _ka2
         log(
@@ -558,7 +559,10 @@ class RietveldRefiner:
         #   桥没给     → Rexp/GOF 一律置 0 并标记"不可解读"。
         # 轮廓 R (Rp) 是本地可算且口径明确的量, 照常给出。
         metrics_valid = False
+        # v2.1-B: metric_note 文案移出服务层 —— 不可解读原因改为结构化诊断码,
+        # 由 UI/report 层用 tr() 渲染 (metric_note 字段保留用于旧项目文件兼容)。
         metric_note = ""
+        _gsas_diag: list[dict] = []
         Rexp = 0.0
         Rp = 0.0
         ycalc = out.get("ycalc")
@@ -575,11 +579,11 @@ class RietveldRefiner:
                 Rexp = float(wR) / float(GOF)
                 metrics_valid = True
             else:
-                metric_note = "GSAS-II 未回传 Rexp/GOF: 该两项不可解读"
+                _gsas_diag.append({"code": "diag.metrics_no_rexp", "params": {}})
         else:
             sim_data = (data.two_theta, data.intensity)  # 旧行为
             resid = (data.two_theta, np.zeros_like(data.two_theta))
-            metric_note = "GSAS-II 未回传计算谱: Rexp/GOF 不可解读"
+            _gsas_diag.append({"code": "diag.metrics_no_ycalc", "params": {}})
 
         return RefinementResult(
             phases=refined_phases,
@@ -592,6 +596,7 @@ class RietveldRefiner:
             Rp=Rp,
             metrics_valid=metrics_valid,
             metric_note=metric_note,
+            diagnostics=_gsas_diag,
             GOF=GOF,
             quality=quality,
             num_cycles=int(out.get("n_cycles", max_cycles)),
@@ -1904,6 +1909,14 @@ class RietveldRefiner:
         #    取 24 个手工方向 + 9 个 Caglioti 调整方向，而不是 3^8 网格
         _tick(n_starts, n_starts + 1)   # 多起点跑完, 进入抛光阶段
         _polish_n = 0   # 抛光评估计数 (日志/进度共用; 提前初始化避免异常路径未定义)
+        # v2.1 (后续计划 #1 / 基准 7-1): 抛光评估预算按参考峰总数自适应。
+        # 每次抛光评估都要在全部数据点上叠加全部参考峰, 单次代价随峰数线性
+        # 增长 —— 7-1 (七相, ~3000 条参考峰) 在固定 675 次预算下 25 分钟跑不完。
+        # 预算 = clamp(675 × 3000 / N_peaks, 40, 675): 典型峰数下预算不变,
+        # 峰数更多则按比例缩减并保底 40 次, 使抛光阶段总耗时大致恒定。
+        _n_ref_total = sum(len(pp) for pp in phase_peaks)
+        _polish_budget = int(min(675, max(40, 675 * 3000 / max(_n_ref_total, 1))))
+        _polish_stop = False   # 预算耗尽 → 逐层跳出候选枚举
         try:
             cur_x = np.array(best_result.x, dtype=float)
             best_polish_x = cur_x.copy()
@@ -1928,10 +1941,20 @@ class RietveldRefiner:
 
             # 构建一个紧凑采样: 对 fw × sc 做 3×3，其余参数默认，eta × zs 采样时再叠 Caglioti
             for fw_m in fw_mult:
+                if _polish_stop:
+                    break
                 for sc_m in sc_mult:
+                    if _polish_stop:
+                        break
                     for w_m in w_mult:
+                        if _polish_stop:
+                            break
                         for et_m in et_mult:
+                            if _polish_stop:
+                                break
                             for zs_m in zs_mult:
+                                if _polish_stop:
+                                    break
                                 for (Um, Vm, Wm) in U_V_W_mult:
                                     w_grp = cur_x[:n_phases] * w_m
                                     fw_i = cur_x[n_phases] * fw_m
@@ -1961,6 +1984,10 @@ class RietveldRefiner:
                                             (abs(w_m - 1.0) < 1e-6 or abs(zs_m - 1.0) < 1e-6)):
                                         continue
                                     x_t = np.clip(x_t, lower + 1e-9, upper - 1e-9)
+                                    # 自适应预算: 评估前检查, 达标即收尾 (wR 不劣于多起点)
+                                    if _polish_n >= _polish_budget:
+                                        _polish_stop = True
+                                        break
                                     _uw, _ufw, _uet, _usc, _uzs, _ucag, _ucs, _utex = _unpack(x_t)
                                     eff_t = two_theta - _uzs if abs(_uzs) > 1e-9 else two_theta
                                     sim_t = self._compute_spectrum_from_ref(
@@ -1983,7 +2010,8 @@ class RietveldRefiner:
         except Exception as e:  # noqa: BLE001
             _plog(f"[warn] 局部抛光异常, 保留多起点结果: {type(e).__name__}: {e}")
             best_result_x = best_result.x
-        _plog(f"[polish] 评估 {_polish_n} 次 → wR={best_wR:.3f}%")
+        _plog(f"[polish] 评估 {_polish_n} 次 (自适应预算 {_polish_budget}, 参考峰 {_n_ref_total} 条)"
+              f" → wR={best_wR:.3f}%")
 
         # v0.15.2: 回收本轮最终参数向量 (供上层"快检 → 精细模式"热启动)
         _sink = kwargs.get("_x_sink")
@@ -2128,11 +2156,11 @@ class RietveldRefiner:
             chi2=float(metrics["chi2"]),
             chi2_red=float(metrics["chi2_red"]),
             metrics_valid=bool(metrics_valid),
-            metric_note=(
-                "" if metrics_valid
-                else "未使用统计权重: Rexp/GOF 不可解读 "
-                     "(需 stat_weights=poisson/poirier)"
-            ),
+            # v2.1-B: 文案移出服务层 —— 不可解读原因走结构化诊断码
+            # (diag.metrics_no_weights), metric_note 仅用于旧项目文件兼容。
+            metric_note="",
+            diagnostics=([] if metrics_valid
+                         else [{"code": "diag.metrics_no_weights", "params": {}}]),
             GOF=GOF,
             quality=quality,
             num_cycles=num_cycles,
@@ -2206,10 +2234,11 @@ class RietveldRefiner:
                 "seed_from_peaks": dict(_seed) if _seed else {},
             },
         )
-        # W28: 把最重要的诊断作为面向用户的提示 (最多 2 条, 避免刷屏)
+        # W28: 最重要的诊断进结构化诊断 (最多 2 条, 避免刷屏);
+        # v2.1-B: diagnoses 已是 {code, params} 结构, 文案由 UI 用 tr() 渲染。
         for _d in (_diag.get("diagnoses", []) if isinstance(_diag, dict) else [])[:2]:
-            if _d not in result.warnings:
-                result.warnings.append(_d)
+            if isinstance(_d, dict) and _d.get("code") and _d not in result.diagnostics:
+                result.diagnostics.append(_d)
 
         _plog(
             "[result] Rwp={:.3f}% Rexp={:.3f}% Rp={:.3f}% GOF={:.3f} nfev={} quality={}".format(
@@ -2559,7 +2588,8 @@ class RietveldRefiner:
           - **Durbin-Watson 统计量** DW = Σ(r_i − r_{i-1})² / Σ r_i²:
             残差若只剩白噪声 DW≈2; DW 明显 <2 (尤其在 1 附近或更低) 说明残差**逐点相关**
             → 模型不完备(缺相/缺物理项), 而不是"差一点点";
-          - ``diagnoses``: 按上述量化指标给出的可读建议 (仅在整体 R 高于
+          - ``diagnoses``: 按上述量化指标给出的**结构化**建议 (v2.1-B 起为
+            ``[{code, params}]``, 文案由 UI 用 tr() 渲染; 仅在整体 R 高于
             ``min_r_for_advice`` 时才给, 免得好拟合上瞎提示)。
 
         口径说明: 这里的分段 R 与 DW 一律用**未加权**残差 —— 它们的作用是"定位问题区域",
@@ -2587,23 +2617,28 @@ class RietveldRefiner:
             r_high = _r_of(t > 60.0)
             r_all = _r_of(np.ones_like(t, dtype=bool))
 
-            diags: list[str] = []
+            diags: list[dict] = []
             if r_all > float(min_r_for_advice):
                 if dw < 1.0:
-                    diags.append(
-                        f"残差逐点强相关 (DW={dw:.2f})：模型不完备, 检查是否缺相 / 缺物理项")
+                    diags.append({
+                        "code": "diag.dw_correlated",
+                        "params": {"dw": float(dw)},
+                    })
                 if r_high > 1.5 * max(r_low, 1e-9):
-                    diags.append(
-                        f"高角区残差偏大 ({r_high:.1f}% vs 低角 {r_low:.1f}%)："
-                        "检查整体温度因子 B / 峰宽模型 / 样品位移")
+                    diags.append({
+                        "code": "diag.high_angle_residual",
+                        "params": {"high": float(r_high), "low": float(r_low)},
+                    })
                 if r_low > 1.5 * max(r_high, 1e-9):
-                    diags.append(
-                        f"低角区残差偏大 ({r_low:.1f}% vs 高角 {r_high:.1f}%)："
-                        "检查低角不对称 / 背景估计 / 择优取向")
+                    diags.append({
+                        "code": "diag.low_angle_residual",
+                        "params": {"low": float(r_low), "high": float(r_high)},
+                    })
                 if not diags:
-                    diags.append(
-                        f"整体残差偏大 (R={r_all:.1f}%) 但无明显逐点相关 (DW={dw:.2f})："
-                        "可能接近噪声底或统计量不足")
+                    diags.append({
+                        "code": "diag.residual_large",
+                        "params": {"r": float(r_all), "dw": float(dw)},
+                    })
             return {
                 "R_low_unweighted": r_low,
                 "R_mid_unweighted": r_mid,

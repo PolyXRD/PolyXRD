@@ -41,6 +41,7 @@ from PySide6.QtWidgets import (
 )
 
 from polyxrd.i18n import tr
+from polyxrd.i18n.diag_texts import metric_note_text, render_diagnostics
 from polyxrd.services.refinement_templates import RefinementTemplateManager
 from polyxrd.viewmodels.main_vm import MainViewModel
 from polyxrd.views.widgets.busy_indicator import BusyIndicator, busy
@@ -660,19 +661,18 @@ class RefinementView(QWidget):
             self._label_gof.setText(
                 tr("view.refinement.metrics_invalid")
             )
-            self._label_rexp.setToolTip(
-                getattr(result, "metric_note", "") or ""
-            )
-            self._label_gof.setToolTip(
-                getattr(result, "metric_note", "") or ""
-            )
+            # v2.1-B: 指标口径提示从结构化诊断渲染 (随界面语言), 旧项目文件回退已存文本
+            _note = metric_note_text(result)
+            self._label_rexp.setToolTip(_note)
+            self._label_gof.setToolTip(_note)
         self._label_rb.setText(
             f"{getattr(result, 'Rp', 0.0) or getattr(result, 'Rb', 0.0):.3f} %"
         )
         # v1.1.2: 运行期提示 (引擎回退 / 指标不可解读 / Kα2 等)
-        _notes = list(getattr(result, "warnings", []) or [])
+        # v2.1-B: 服务层只产出结构化诊断, 此处用 tr() 渲染本地化文案
+        _notes = render_diagnostics(result)
         if not _valid:
-            _note = getattr(result, "metric_note", "")
+            _note = metric_note_text(result)
             if _note:
                 _notes.append(_note)
         if _notes:

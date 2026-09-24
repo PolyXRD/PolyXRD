@@ -249,6 +249,25 @@ class PhaseViewModel(QObject):
         self._matched_phases = []
         self._selected_phases = []
 
+    def restore_state(
+        self,
+        peaks: Optional[PeakList] = None,
+        results: Optional[list[PhaseMatchResult]] = None,
+        selected: Optional[list[Phase]] = None,
+    ) -> None:
+        """从项目文件恢复分析状态 (v2.1 P0-1)。
+
+        调用时机: 数据已恢复之后 (restore_data 触发的 reset_analysis 已执行完)。
+        发峰/物相/勾选三类信号让各视图按"有数据"路径重绘。
+        """
+        self._peaks = peaks
+        self._matched_phases = list(results or [])
+        self._selected_phases = list(selected or [])
+        if self._peaks is not None:
+            self.peaks_detected.emit(self._peaks)
+        self.phase_identified.emit(list(self._matched_phases))
+        self.selection_changed.emit(list(self._selected_phases))
+
     # ── M21: 多选集合管理 (Match! 式勾选叠加) ───────────────
     MAX_SELECTED = 8
 

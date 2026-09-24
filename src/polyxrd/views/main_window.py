@@ -927,6 +927,12 @@ class MainWindow(QMainWindow):
         self._set_action_icon(self._actions["save_as"], "save")
         file_menu.addAction(self._actions["save_as"])
 
+        # v2.1 P0-1: 打开项目 (.pxrd) —— 与保存/另存为配套
+        self._actions["load_project"] = QAction(tr("menu.file.load_project"), self)
+        self._actions["load_project"].triggered.connect(self._on_open_project)
+        self._set_action_icon(self._actions["load_project"], "open")
+        file_menu.addAction(self._actions["load_project"])
+
         self._actions["export_file"] = QAction(tr("menu.report.export"), self)
         self._actions["export_file"].triggered.connect(self._on_export)
         self._set_action_icon(self._actions["export_file"], "export")
@@ -1060,7 +1066,7 @@ class MainWindow(QMainWindow):
         self._language_group = QActionGroup(self)
         self._language_group.setExclusive(True)
 
-        for lang in Language:
+        for lang in Language.available_languages():  # v2.1 P2-5: 只列有翻译文件的语言
             display = Language.display_names().get(lang, lang.value)
             action = QAction(display, self)
             action.setCheckable(True)
@@ -1253,6 +1259,7 @@ class MainWindow(QMainWindow):
             "convert_format": "menu.file.convert",
             "save": "toolbar.save",
             "save_as": "menu.file.save_as",
+            "load_project": "menu.file.load_project",
             "export_file": "menu.report.export",
             "exit": "menu.file.exit",
             "bg": "toolbar.background",
@@ -1476,25 +1483,42 @@ class MainWindow(QMainWindow):
         event.acceptProposedAction()
 
     def _on_save(self) -> None:
-        QMessageBox.information(
-            self,
-            tr("dialog.info"),
-            tr("dialog.save_not_implemented"),
-        )
+        """保存项目 (v2.1 P0-1): 有当前项目文件则覆盖, 否则走另存为。"""
+        if self._vm.project_file:
+            try:
+                self._vm.save_project(self._vm.project_file)
+            except Exception as e:
+                QMessageBox.warning(self, tr("dialog.info"), str(e))
+        else:
+            self._on_save_as()
 
     def _on_save_as(self) -> None:
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             tr("dialog.save_as_title"),
             str(Path.home()),
-            tr("dialog.file_filter"),
+            tr("dialog.project_file_filter"),
         )
-        if file_path:
-            QMessageBox.information(
-                self,
-                tr("dialog.info"),
-                tr("dialog.save_not_implemented"),
-            )
+        if not file_path:
+            return
+        if not file_path.lower().endswith(".pxrd"):
+            file_path += ".pxrd"
+        try:
+            self._vm.save_project(file_path)
+        except Exception as e:
+            QMessageBox.warning(self, tr("dialog.info"), str(e))
+
+    def _on_open_project(self) -> None:
+        """打开项目 (v2.1 P0-1): 恢复数据/峰/物相勾选集/精修结果。"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            tr("menu.file.load_project"),
+            str(Path.home()),
+            tr("dialog.project_file_filter"),
+        )
+        if not file_path:
+            return
+        self._vm.open_project(file_path)
 
     def _on_export(self) -> None:
         export_dir = QFileDialog.getExistingDirectory(

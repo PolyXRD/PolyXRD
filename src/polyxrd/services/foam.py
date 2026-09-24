@@ -61,9 +61,11 @@ def compute_fom(
          强峰的代价远大于漏掉弱峰; 归一化不再用 Σ2θ (旧口径使高角度、多峰物相
          天然占优, 与"匹配好坏"无关)。
       3. **特异性项**: 未被任何参考峰解释的实验峰按比例惩罚, 抑制"只解释少数
-         几条峰却因偏差小排在前列"的伪匹配。
+         几条峰却因偏差小排在前列"的伪匹配。v2.1 起该比例按**强度加权**
+         (Σ未解释强度 / Σ总强度) 而非峰计数 —— 峰检测无幅度下限时噪声峰
+         数量多但强度低, 计数口径会把惩罚打满、丧失区分力 (v2.1 P1-3)。
 
-    ``score = (bad + 0.30·未解释比) · (1 - 0.20·强度余弦)``
+    ``score = (bad + 0.30·未解释强度比) · (1 - 0.20·强度余弦)``
     ``bad   = [Σ_命中 w·(|Δ|/tol) + Σ_漏检 w] / Σ_all w`` ∈ [0, 2]
 
     Args:
@@ -128,10 +130,24 @@ def compute_fom(
     matched = len(match_pairs)
     missed = len(refs) - matched
 
-    # ── 3. 特异性: 未被解释的实验峰 ───────────────────────────
+    # ── 3. 特异性: 未被解释的实验峰 (v2.1 P1-3: 强度加权) ─────
+    # 旧口径 = 未解释峰数/总峰数 —— 峰检测无幅度下限时, 噪声峰(数多但强度低)
+    # 会把该比项推到 ~0.88, 特异性惩罚被打满, FoM 区分力丧失。
+    # 改为强度加权: Σ(未解释峰强度)/Σ(全部观测峰强度) —— 噪声峰贡献的强度
+    # 占比天然很小, 而一条真正强而未被解释的峰仍能给出有力惩罚。
     n_obs = int(obs_tt.size)
     unexplained = n_obs - len(used_obs)
-    unexp_ratio = unexplained / n_obs if n_obs else 0.0
+    total_int = float(np.sum(obs_int)) if n_obs else 0.0
+    if n_obs == 0:
+        unexp_ratio = 0.0
+    elif total_int > 1e-12:
+        unexp_int = float(np.sum(
+            obs_int[j] for j in range(n_obs) if j not in used_obs
+        ))
+        unexp_ratio = unexp_int / total_int
+    else:
+        # 全零强度 (退化输入): 回退计数口径
+        unexp_ratio = unexplained / n_obs
 
     # ── 4. 强度一致性: 匹配对上的余弦相似度 (尺度无关, 比 min/max 稳) ──
     ic = 0.0

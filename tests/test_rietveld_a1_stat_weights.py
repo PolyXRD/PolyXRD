@@ -67,7 +67,9 @@ class TestStatWeightsDefaults:
                                      stat_weights="none")
         assert r.fit_params["stat_weights"] == "none"
         assert r.metrics_valid is False
-        assert r.metric_note
+        # v2.1-B: 不可解读原因走结构化诊断码 (文案由 UI 渲染)
+        codes = [d.get("code") for d in r.diagnostics]
+        assert "diag.metrics_no_weights" in codes, r.diagnostics
 
     def test_invalid_mode_falls_back_to_none(self):
         r = RietveldRefiner().refine(_heteroscedastic_si(), [_cubic_si_phase()],
