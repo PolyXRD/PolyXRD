@@ -19,7 +19,7 @@ from typing import Optional
 
 from PySide6.QtCore import Qt, QSize, QSettings, QTimer, QUrl
 from PySide6.QtGui import (QAction, QIcon, QKeySequence, QActionGroup, QDesktopServices,
-                            QDragEnterEvent, QDropEvent)
+                            QPixmap, QDragEnterEvent, QDropEvent)
 from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -54,7 +54,7 @@ from PySide6.QtWidgets import (
 
 from polyxrd.config import AppConfig
 from polyxrd.i18n import tr, I18nManager, Language
-from polyxrd.utils.resources import get_app_icon_path, get_logo_horizontal_path, get_icon_path
+from polyxrd.utils.resources import get_app_icon_path, get_icon_path
 from polyxrd.viewmodels.main_vm import MainViewModel
 from polyxrd.views.data_view import DataView
 from polyxrd.views.phase_view import PhaseView
@@ -1881,19 +1881,26 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _on_about(self) -> None:
-        logo_path = get_logo_horizontal_path()
+        # v2.1: 彩色应用图标取代原黑白横版 logo (原位: 大标题左侧);
+        # 左上角的默认窗口图标隐藏 (彩色 logo 已在标题行, 不重复显示)。
+        icon_path = get_app_icon_path()
         about_html = tr("dialog.about_text", version=self._config.app_version)
-        if logo_path:
+        if icon_path:
             about_html = (
-                f"<div style='text-align:center; margin-bottom:12px;'>"
-                f"<img src='{logo_path}' style='max-width:300px;'/></div>"
+                f"<div style='text-align:center; margin-bottom:8px;'>"
+                f"<img src='{icon_path}' width='60' height='60' "
+                f"style='vertical-align:middle;'/>"
+                f"<span style='font-size:26px; font-weight:bold; "
+                f"margin-left:12px; vertical-align:middle; color:#1b2f45;'>Poly"
+                f"<span style='color:#1a5276;'>XRD</span></span></div>"
                 f"{about_html}"
             )
-        QMessageBox.about(
-            self,
-            tr("dialog.about_title"),
-            about_html,
-        )
+        box = QMessageBox(self)
+        box.setWindowTitle(tr("dialog.about_title"))
+        box.setText(about_html)
+        box.setIconPixmap(QPixmap())   # 空 pixmap → 左上角不再显示窗口图标
+        box.setStandardButtons(QMessageBox.Ok)
+        box.exec()
 
     def _on_about_qt(self) -> None:
         QMessageBox.aboutQt(self, tr("menu.help.about_qt"))

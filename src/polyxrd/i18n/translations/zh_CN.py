@@ -218,7 +218,7 @@ translations = {
         "project_file_filter": "PolyXRD 项目文件 (*.pxrd);;所有文件 (*)",
         "export_dir_title": "选择导出目录",
         "about_title": "关于 PolyXRD",
-        "about_text": "<div style='text-align:center; min-width:360px;'><h2 style='margin:8px 0 4px 0; font-size:20px; color:#1a5276;'>PolyXRD</h2><p style='margin:0 0 12px 0; font-size:13px; color:#555;'>版本 v{version}</p><hr style='border:none; border-top:1px solid #ddd; margin:8px 0;'/><p style='margin:8px 0 4px 0; font-size:12px; color:#333;'>X射线衍射仪数据分析软件</p><p style='margin:4px 0; font-size:11px; color:#666;'>物相识别 · 峰拟合 · Rietveld精修 · 离线数据库</p><hr style='border:none; border-top:1px solid #ddd; margin:12px 0;'/><p style='margin:4px 0; font-size:11px; color:#555;'>联系方式：<a href='mailto:sshztx@outlook.com' style='color:#2980b9; text-decoration:none;'>sshztx@outlook.com</a></p><p style='margin:8px 0 4px 0; font-size:11px; color:#888;'>© 2026 版权所有</p></div>",
+        "about_text": "<div style='text-align:center; min-width:360px;'><p style='margin:0 0 12px 0; font-size:13px; color:#555;'>版本 v{version}</p><hr style='border:none; border-top:1px solid #ddd; margin:8px 0;'/><p style='margin:8px 0 4px 0; font-size:12px; color:#333;'>X射线衍射仪数据分析软件</p><p style='margin:4px 0; font-size:11px; color:#666;'>物相识别 · 峰拟合 · Rietveld精修 · 离线数据库</p><hr style='border:none; border-top:1px solid #ddd; margin:12px 0;'/><p style='margin:4px 0; font-size:11px; color:#555;'>联系方式：<a href='mailto:sshztx@outlook.com' style='color:#2980b9; text-decoration:none;'>sshztx@outlook.com</a></p><p style='margin:8px 0 4px 0; font-size:11px; color:#888;'>© 2026 版权所有</p></div>",
         "error": "错误",
         "warning": "警告",
         "info": "信息",
