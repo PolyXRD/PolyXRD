@@ -28,7 +28,8 @@ from polyxrd.mcp_server.session import get_session
 # ── Create MCP server instance ────────────────────────────────
 mcp = MCPServer(
     name="polyxrd",
-    version="0.9.0",
+    # v2.1 P3: 版本号与主程序对齐 (旧值 0.9.0 为文档漂移)
+    version="2.1.0",
     title="PolyXRD — XRD Analysis Suite",
     description="AI-friendly XRD analysis: load → preprocess → peaks → phases → Rietveld → export",
 )
@@ -690,11 +691,14 @@ def save_project(file_path: str) -> str:
         return json.dumps({"error": "No data loaded to save."})
 
     service = ProjectService()
+    # P0-1: 参数名与 ProjectService.save_project 真实签名对齐
+    # (旧代码传 file_path=/refinement_result=, 前者不存在、后者签名无此参数 → TypeError)
     service.save_project(
-        file_path=file_path,
+        path=file_path,
         data=session.current_data,
         peaks=session.peak_list,
         phases=[r.phase for r in session.phase_matches],
+        results=list(session.phase_matches) or None,
         refinement_result=session.refinement_result,
     )
     session.project_file = file_path
@@ -718,20 +722,27 @@ def load_project(file_path: str) -> str:
     service = ProjectService()
     project = service.load_project(file_path)
 
-    session.raw_data = project.data
-    session.peak_list = project.peaks
-    session.phase_matches = project.phase_matches or []
-    session.refinement_result = project.refinement_result
+    # P0-1: load_project 返回 **dict** (不是对象) —— 旧代码按属性访问 → AttributeError;
+    # 匹配结果键名是 "results" (不是 phase_matches), 精修结果键名是 "refinement_result"。
+    data = project.get("data")
+    peaks = project.get("peaks")
+    results = project.get("results") or []
+    refinement = project.get("refinement_result")
+
+    session.raw_data = data
+    session.peak_list = peaks
+    session.phase_matches = results
+    session.refinement_result = refinement
     session.project_file = file_path
     session.source_file = file_path
 
     result = {
         "status": "ok",
         "file_path": file_path,
-        "n_points": len(project.data) if project.data else 0,
-        "n_peaks": len(project.peaks) if project.peaks else 0,
-        "n_phases": len(project.phase_matches) if project.phase_matches else 0,
-        "has_refinement": project.refinement_result is not None,
+        "n_points": len(data.two_theta) if data is not None else 0,
+        "n_peaks": len(peaks) if peaks is not None else 0,
+        "n_phases": len(results),
+        "has_refinement": refinement is not None,
     }
     return json.dumps(result, ensure_ascii=False, default=str)
 

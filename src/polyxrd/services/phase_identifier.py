@@ -8,10 +8,13 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Optional
 
 import numpy as np
+
+_logger = logging.getLogger(__name__)
 
 from polyxrd.config import get_config
 from polyxrd.models.fom import confidence_from_score
@@ -120,12 +123,12 @@ class PhaseIdentifier:
                     data = json.load(f)
                 self._reference_data = data.get("phases", [])
                 self._phase_database = self._build_phases_from_db(self._reference_data)
-                print(f"[PhaseIdentifier] loaded {len(self._phase_database)} reference phases")
+                _logger.info("PhaseIdentifier: loaded %d reference phases", len(self._phase_database))
             except Exception as e:
-                print(f"[PhaseIdentifier] failed to load reference database: {e}")
+                _logger.warning("PhaseIdentifier: failed to load reference database: %s", e)
                 self._load_default_phases()
         else:
-            print("[PhaseIdentifier] reference database missing, using default phases")
+            _logger.warning("PhaseIdentifier: reference database missing, using default phases")
             self._load_default_phases()
 
     def _build_phases_from_db(self, ref_data: list[dict]) -> list[Phase]:
