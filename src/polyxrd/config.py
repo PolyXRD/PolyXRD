@@ -17,7 +17,7 @@ class AppConfig:
 
     # 应用信息
     app_name: str = "PolyXRD"
-    app_version: str = "2.0.1"
+    app_version: str = "2.1.0"
     app_org: str = "PolyXRD"
 
     # 窗口设置
@@ -57,12 +57,12 @@ class AppConfig:
     _PROJECT_ROOT: ClassVar[Path] = Path(__file__).resolve().parents[2]
     cif_db_path: Path = field(default_factory=lambda: AppConfig._PROJECT_ROOT / "cod_data" / "cif_db")
     cod_svn_path: Path = field(default_factory=lambda: AppConfig._PROJECT_ROOT / "cod_data" / "cod_svn")
-    cod_index_db_path: Path = field(default_factory=lambda: AppConfig._PROJECT_ROOT / "cod_data" / "cod_index.db")
+    cod_index_db_path: Path = field(default_factory=lambda: AppConfig._PROJECT_ROOT / "cod_data" / "cod_index.sqlite")
     # COD 无机物库: 从 COD 筛选的无机物子集 (71199 物相,含 d-I 峰)
     # 默认指向项目内路径;允许用户通过 UI 导入外部数据库后覆盖
     cod_db_path: Path = field(default_factory=lambda: AppConfig._PROJECT_ROOT / "cod_data" / "COD_inorganics.sqlite")
     # PDF2-2004 数据库: ICDD PDF-2 2004 版, 自用验证库
-    pdf2_raw_path: Path = field(default_factory=lambda: Path("E:/TEMP/XRD-PDF2-2004/pdf2 - 2004.dat"))
+    # (v2.1 P3: 原先硬编码开发机绝对路径的 pdf2_raw_path 字段已删除 —— 零调用点)
     pdf2_db_path: Path = field(default_factory=lambda: AppConfig._PROJECT_ROOT / "cod_data" / "PDF2_2004.sqlite")
     export_dir: Path = field(default_factory=lambda: Path.home() / "PolyXRD_exports")
     log_dir: Path = field(default_factory=lambda: Path.home() / ".polyxrd" / "logs")
@@ -129,9 +129,6 @@ class AppConfig:
     def get_cod_svn_path(self) -> Path:
         return self.cod_svn_path
 
-    def get_cod_index_db_path(self) -> Path:
-        return self.cod_index_db_path
-
     def set_cod_db_path(self, path: str | Path) -> None:
         """设置用户导入的 COD 数据库路径,并持久化。
 
@@ -188,10 +185,6 @@ class AppConfig:
         return str(p) if p else None
 
     # ── PDF2-2004 数据库路径 ────────────────────────────────
-
-    def get_pdf2_raw_path(self) -> Path:
-        """PDF2-2004 原始 .dat 文件路径。"""
-        return self.pdf2_raw_path
 
     def get_pdf2_db_path(self) -> Path:
         """获取当前 PDF2-2004 SQLite 索引路径。

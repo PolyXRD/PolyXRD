@@ -7,15 +7,15 @@
     峰检测 &nbsp;·&nbsp; 多物相定性检索 &nbsp;·&nbsp; Rietveld 结构精修 &nbsp;·&nbsp; Le Bail 晶胞精修 &nbsp;·&nbsp; 指标化 &nbsp;·&nbsp; 3D 结构可视化 &nbsp;·&nbsp; 三库外挂检索 (COD 无机物 / COD 全库 / PDF2-2004)
   </p>
   <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v1.0.1-blue?style=flat-square" /></a>
+    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v2.1.0-blue?style=flat-square" /></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
     &nbsp;
-    <img src="https://img.shields.io/badge/Python-3.10-yellow?style=flat-square" />
+    <img src="https://img.shields.io/badge/Python-3.10%2B-yellow?style=flat-square" />
     &nbsp;
     <img src="https://img.shields.io/badge/UI-PySide6%20(Qt6)-41cd52?style=flat-square" />
     &nbsp;
-    <img src="https://img.shields.io/badge/Tests-1016%20collected-brightgreen?style=flat-square" />
+    <img src="https://img.shields.io/badge/Tests-1100%2B%20collected-brightgreen?style=flat-square" />
   </p>
 </div>
 

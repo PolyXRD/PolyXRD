@@ -66,13 +66,7 @@ _HEX_M = [0, 1, 3, 4, 7, 9, 12, 13, 16, 19]  # h²+hk+k²
 _L2 = [0, 1, 4, 9, 16]                        # l²
 
 
-def _sum3_squares(n: int) -> bool:
-    for i in range(10):
-        for j in range(10):
-            for k in range(10):
-                if i * i + j * j + k * k == n:
-                    return True
-    return False
+# (v2.1 P3: 已删除未调用的 _sum3_squares —— _CUBIC_N2 预计算覆盖同逻辑)
 
 
 def _closest_valid(target: float, valid: list[int], tol: float):
