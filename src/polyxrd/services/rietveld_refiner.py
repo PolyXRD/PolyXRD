@@ -1386,6 +1386,11 @@ class RietveldRefiner:
         # 0.05°~0.15°, 残差被这一项锁住 → wR 下不来。挂在参数向量末尾, 是为了不动
         # 既有 n_phases+0..6 的索引算术 (降低回归风险)。
         refine_cell = bool(kwargs.get("refine_cell", True))
+        # v2.1-E: Kα2 建模 (opt-in, 默认关) —— 每条参考峰在 λ2 位置
+        # (解析 Δ2θ) 加一条强度 = ratio×I_ref 的伴峰, 与主峰共享
+        # 尺度/权重/峰宽参数。开启后模型完整, 高角侧系统残差消除。
+        model_ka2 = bool(kwargs.get("model_ka2", False))
+        ka2_i_ratio = float(kwargs.get("ka2_intensity_ratio", 0.5))
         # v1.1.2 (W18): cell_mode 决定晶胞自由度的参数化方式
         #   "isotropic" (默认) = 每相 1 个各向同性缩放因子 (旧行为, 不变)
         #   "full"             = 每相 6 个缩放因子 (a,b,c,α,β,γ 各自相对库值的比例),
@@ -1812,6 +1817,10 @@ class RietveldRefiner:
             peaks = _transform_peaks_full(cs, tex, disp)
             if bovr is not None and np.any(np.asarray(bovr, dtype=float) > 0.0):
                 peaks = self._apply_overall_b(peaks, bovr, wavelength)
+            if model_ka2:
+                # v2.1-E: Kα2 伴峰 (解析 Δ2θ, 强度比 ka2_i_ratio, 默认 0.5)
+                peaks = self._expand_ka2_satellites(
+                    peaks, wavelength, intensity_ratio=ka2_i_ratio)
             return peaks
 
         def residual(params):
@@ -2229,6 +2238,10 @@ class RietveldRefiner:
                 "wR_unweighted": float(wR_unweighted),
                 # v2.1-D: 真实 Bragg R (Σ|I_obs−I_calc|/Σ I_obs, 按反射)
                 "bragg_r": float(Rb),
+                # v2.1-E: Kα2 建模开关与强度比 (供结果区/诊断参考)
+                "model_ka2": bool(model_ka2),
+                "ka2_intensity_ratio": (
+                    float(ka2_i_ratio) if model_ka2 else None),
                 # v1.1.2: 收敛语义 (num_cycles 实为 nfev; 多起点与抛光分开记录)
                 "nfev": int(num_cycles),
                 "num_cycles_semantics": "nfev",
@@ -2685,6 +2698,48 @@ class RietveldRefiner:
             return {}
 
     @staticmethod
+    def _expand_ka2_satellites(
+        phase_peaks: list,
+        wavelength: float,
+        intensity_ratio: float = 0.5,
+        alpha2_ratio: float = 1.00249,
+    ) -> list:
+        """Kα2 伴峰扩展 (v2.1-E, opt-in)。
+
+        物理: Kα1/Kα2 双线 (Cu: λ1=1.54056 Å, λ2=1.54443 Å, 比值 1.00249;
+        强度比 I2/I1 ≈ 0.5)。每条参考峰 (2θ1, I1) 在
+            2θ2 = 2·arcsin((λ2/λ1)·sin(θ1))
+        处伴有一条强度 = intensity_ratio×I1 的 Kα2 峰, 与主峰共享
+        尺度/权重/峰宽参数 (不新增自由度)。
+
+        边界: 波长非法 → 原样返回; sinθ2 > 1 (伴峰不可测) → 丢弃该伴峰;
+             伴峰峰位不裁剪 (谱合成自行跳过越界峰)。
+        """
+        lam = float(wavelength or 0.0)
+        if lam <= 0 or not phase_peaks:
+            return phase_peaks
+        out: list = []
+        for peaks in phase_peaks:
+            new_peaks = []
+            for pk in peaks or []:
+                if len(pk) < 3:
+                    continue
+                new_peaks.append(pk)
+                try:
+                    tt1 = float(pk[1])
+                    iref = float(pk[2])
+                except (TypeError, ValueError):
+                    continue
+                s1 = np.sin(np.radians(tt1 / 2.0))
+                s2 = float(alpha2_ratio) * s1
+                if s2 >= 1.0:
+                    continue
+                tt2 = 2.0 * np.degrees(np.arcsin(s2))
+                new_peaks.append((pk[0], tt2, iref * float(intensity_ratio)))
+            out.append(new_peaks)
+        return out
+
+    @staticmethod
     def _bragg_r_from_fit(
         two_theta: np.ndarray,
         y_obs_net: np.ndarray,
@@ -2698,7 +2753,8 @@ class RietveldRefiner:
         min_iref: float = 5.0,
         n_extract_cycles: int = 3,
         window_fwhm_mult: float = 3.0,
-    ) -> Optional[float]:
+        return_intensities: bool = False,
+    ):
         """真实 Bragg R (v2.1-D) = Σ_hkl |I_obs,hkl − I_calc,hkl| / Σ I_obs,hkl × 100
 
         与轮廓 R (Rp/Rwp, 逐点比较) 不同, Bragg R 按**积分反射强度**对账:
@@ -2791,7 +2847,10 @@ class RietveldRefiner:
         denom = float(np.sum(i_obs))
         if denom <= 0:
             return None
-        return 100.0 * float(np.sum(np.abs(i_obs - i_calc))) / denom
+        bragg = 100.0 * float(np.sum(np.abs(i_obs - i_calc))) / denom
+        if return_intensities:
+            return bragg, i_obs, i_calc, pos
+        return bragg
 
     @staticmethod
     def _apply_overall_b(phase_peaks: list, b_per_phase, wavelength: float) -> list:
