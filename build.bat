@@ -4,16 +4,16 @@ REM -- UTF-8 everywhere (v2.0.0): build/dev also run in UTF-8 so that
 REM -- Chinese/Japanese never turns into mojibake on a non-CJK Windows.
 set PYTHONUTF8=1
 set PYTHONIOENCODING=utf-8
-title PolyXRD v2.0.0 打包构建器
+title PolyXRD v2.0.1 打包构建器
 echo ========================================
-echo   PolyXRD v2.0.0 打包为独立安装包
+echo   PolyXRD v2.0.1 打包为独立安装包
 echo   数据库外挂 (不随包分发)
 echo ========================================
 echo.
 
 cd /d "%~dp0"
 
-set APPVER=2.0.0
+set APPVER=2.0.1
 
 REM ── Python 定位 ──────────────────────────────────────
 if exist "venv\Scripts\python.exe" (
@@ -114,6 +114,9 @@ echo [步骤 4/6 前置] 写 VERSION.txt (必须先于 Setup/Portable 打包, �
 echo.
 
 "%PYTHON%" scripts\_build_post.py version %APPVER%
+
+REM 便携版附加文件(启动器/安全模式/使用说明) -- Setup 已先打包, 故只进便携包
+"%PYTHON%" scripts\_build_post.py portable-extras %APPVER%
 
 echo.
 echo [步骤 4/6] 创建便携压缩包 (ZIP)...

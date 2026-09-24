@@ -122,6 +122,93 @@ def _apply_safe_render_overrides(argv: list) -> list:
     return [a for a in argv if a != "--safe-render"]
 
 
+# ── 崩溃自愈 (v2.0.1) ────────────────────────────────────────
+#
+# 现场问题: 打包版**拷到别的机器**运行时, 偶发"启动图/主窗口一闪就退出"。
+# 已定位根因 (v1.0.2 取证): MainWindow.show() 内部的原生崩溃
+# (Qt6Widgets.dll 0xC0000005, 与特定 GPU 驱动 / Win11 24H2 挂钩) —— 这类
+# 崩溃发生在原生层, Python 的 excepthook / faulthandler 都拦不住进程消失。
+# `--safe-render` 能绕开, 但它只是**手动**开关, 普通用户不知道要用。
+#
+# 这里做成**跨启动自愈**: 每次启动先写"pending"(尚未确认健康); 主窗口 show()
+# 之后存活 N 秒才改写成"healthy"。下次启动若读到 pending 仍为真, 即上一次没跑到
+# 健康态 (极可能就是 show() 阶段原生崩溃) -> 本次自动套用保守渲染。于是
+# "第一次崩、第二次自动用软件 GL 起来", 用户无感、无需命令行。
+_RENDER_HEALTHY_DELAY_MS = 5000
+_RENDER_STATE_ENV = "POLYXRD_RENDER_STATE"  # 测试用: 指向临时状态文件
+
+
+def _render_state_path() -> Path:
+    override = os.environ.get(_RENDER_STATE_ENV)
+    if override:
+        return Path(override)
+    return _log_dir().parent / "render_state.json"
+
+
+def _read_render_pending() -> bool:
+    """读上一次启动是否未达健康态 (文件缺失/损坏一律当作"健康")."""
+    try:
+        import json
+
+        p = _render_state_path()
+        if not p.is_file():
+            return False
+        return bool(json.loads(p.read_text(encoding="utf-8")).get("pending"))
+    except Exception:  # noqa: BLE001 - 状态文件损坏不能拦住启动
+        return False
+
+
+def _write_render_state(pending: bool, *, safe_render: bool) -> None:
+    try:
+        import json
+
+        p = _render_state_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(
+            json.dumps(
+                {
+                    "pending": bool(pending),
+                    "safe_render": bool(safe_render),
+                    "ts": f"{datetime.now():%Y-%m-%d %H:%M:%S}",
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+    except Exception:  # noqa: BLE001 - 状态写失败不能拦住启动
+        pass
+
+
+def _auto_safe_render_if_needed() -> bool:
+    """上次启动未达健康态 -> 本次自动启用保守渲染。返回是否自动启用。
+
+    与 `--safe-render` 共用同一组环境变量 (setdefault: 不覆盖用户显式设置);
+    必须在 QApplication 创建之前调用。调用方负责在测试下抑制 (见 main())。
+    """
+    if not _read_render_pending():
+        return False
+    os.environ.setdefault("QT_OPENGL", "software")
+    os.environ.setdefault("QT_QPA_PLATFORM", "windows:darkmode=0")
+    os.environ.setdefault("QT_ENABLE_HIGHDPI_SCALING", "0")
+    _startup_log(
+        "auto safe-render: previous launch did not reach healthy state "
+        f"(QT_OPENGL={os.environ.get('QT_OPENGL')})"
+    )
+    return True
+
+
+def _reset_render_state() -> int:
+    """`--reset-render`: 清掉自愈状态, 回到正常渲染 (排障用)。"""
+    try:
+        p = _render_state_path()
+        if p.is_file():
+            p.unlink()
+        _startup_log("--- render state reset")
+    except Exception:  # noqa: BLE001
+        pass
+    return 0
+
+
 def _write_crash(exc_type, exc_value, exc_tb) -> Optional[Path]:
     """把异常写进 crash 日志并返回日志路径。"""
     try:
@@ -303,8 +390,19 @@ def main() -> int:
     _install_excepthooks()
     # 尽早开: 任何原生崩溃 (包括 window.show() 内部) 都要留下 Python 调用栈
     _enable_faulthandler()
-    # 保守渲染开关: 必须在 QApplication 创建之前生效
+    # 保守渲染: 手动开关 (--safe-render / POLYXRD_SAFE_RENDER) 与「上次崩溃自愈」
+    # 共用同一组环境变量, 都必须在 QApplication 创建之前生效。
+    manual_safe = ("--safe-render" in sys.argv[1:]) or (
+        os.environ.get("POLYXRD_SAFE_RENDER") == "1"
+    )
     sys.argv = _apply_safe_render_overrides(sys.argv)
+    # 测试下不读/写真实自愈状态, 保证用例行为可预测 (自愈逻辑由单测直接覆盖)
+    under_test = bool(os.environ.get("PYTEST_CURRENT_TEST"))
+    auto_safe = _auto_safe_render_if_needed() if not under_test else False
+    using_safe = manual_safe or auto_safe
+
+    if "--reset-render" in sys.argv[1:]:
+        return _reset_render_state()
 
     if "--diagnose" in sys.argv[1:]:
         return _run_diagnose()
@@ -337,6 +435,11 @@ def main() -> int:
             "existing instance reported but no window found "
             "-> starting anyway (fail-open)"
         )
+
+    # 标记"启动中, 尚未确认健康" —— 必须在过完单实例守卫之后再写: 否则
+    # "双击=切回已有窗口"的安静退出会留下 pending, 误导下一次启动进保守渲染。
+    if not under_test:
+        _write_render_state(True, safe_render=using_safe)
 
     app = QApplication(sys.argv)
     _startup_log("QApplication OK")
@@ -414,6 +517,15 @@ def main() -> int:
         QTimer.singleShot(100, lambda: (splash.close(), window.activateWindow()))
         # 兜底: 上面那条 lambda 若被任何原因吞掉, 800ms 后也一定收掉启动图
         QTimer.singleShot(800, splash.close)
+
+    # 自愈收尾: 主窗口已 show 且事件循环再跑若干秒仍活着 -> 判定"健康", 清掉
+    # pending; 下次启动即恢复正常渲染。若进程在此之前原生崩溃, pending 留存,
+    # 下次启动自动进保守渲染 (见 _auto_safe_render_if_needed)。
+    if not under_test:
+        QTimer.singleShot(
+            _RENDER_HEALTHY_DELAY_MS,
+            lambda: _write_render_state(False, safe_render=using_safe),
+        )
 
     # 窗口关掉后, 若 Qt 的收尾阶段卡住 (外部工具句柄 / 残留线程), 这里硬退。
     try:
