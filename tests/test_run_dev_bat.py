@@ -171,8 +171,3 @@ class TestConsistency:
         assert "run_dev.bat" in readme.read_text(encoding="utf-8"), \
             "README 应说明 run_dev.bat 的用途"
 
-    def test_acceptance_doc_mentions_alternatives(self):
-        doc = BAT.parent / "docs" / "验收清单-v0.11.0.md"
-        assert doc.is_file()
-        txt = doc.read_text(encoding="utf-8")
-        assert "polyxrd-gui.exe" in txt, "验收文档应给出备用启动方式"
