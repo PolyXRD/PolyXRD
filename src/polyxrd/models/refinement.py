@@ -48,9 +48,12 @@ class RefinementResult:
         residual_data: 残差数据 (x, y)
         wR: 加权轮廓 R 因子 (与 Rwp 同一量, 保留字段名兼容旧代码/旧项目文件)
         Rexp: 期望 R 因子 (%) — Rexp = sqrt((N-P) / Σ w·y_obs²) × 100
-        Rb: **废弃槽位** —— 历史字段名。旧代码把"轮廓 R"误标为"Bragg R";
-            真实 Bragg R (按各 hkl 积分强度 Σ|I_obs-I_calc|/Σ I_obs) 尚未实现,
-            本字段现恒为 0。保留仅为兼容旧项目文件读取 (旧文件中它存的是轮廓 R)。
+        Rb: 真实 **Bragg R** (%) (v2.1-D 起由 builtin 引擎实现:
+            Σ_hkl |I_obs,hkl − I_calc,hkl| / Σ I_obs,hkl, 按反射积分强度
+            对账, 见 RietveldRefiner._bragg_r_from_fit)。
+            历史说明: 旧代码把"轮廓 R"误标为本字段; v2.0.0 起轮廓 R 正名
+            为 Rp, 本字段一度恒 0; v2.1-D 起恢复其本义。旧项目文件中此处
+            存的是轮廓 R, 读取时无法区分 —— 如需严格口径请重跑精修。
         Rp: 轮廓 R 因子 (%) — Rp = Σ|y_obs - y_calc| / Σ y_obs × 100 (不加权)
         chi2 / chi2_red: 加权残差平方和与其归一值 (= GOF²)
         metrics_valid: Rexp/GOF/chi2 是否可解读 (需统计权重; 单位权下无物理意义)
@@ -127,6 +130,9 @@ class RefinementResult:
         else:
             lines.append(tr("report.metrics_invalid_line"))
             lines.append(tr("report.rb_line", value=f"{self.rp_value:.4f}"))
+        # v2.1-D: 真实 Bragg R (builtin 引擎产出; 0 = 未实现/旧结果)
+        if self.Rb > 0:
+            lines.append(tr("report.bragg_r_line", value=f"{self.Rb:.4f}"))
         # v2.1-B: 指标提示优先旧字段 (旧项目文件), 新结果由结构化诊断渲染
         _note = self.metric_note or metric_note_text(self)
         if _note:

@@ -2107,7 +2107,22 @@ class RietveldRefiner:
         )
         wR = metrics["Rwp"]
         Rexp = metrics["Rexp"]
-        Rb = 0.0   # 真实 Bragg R 未实现
+        # v2.1-D: 真实 Bragg R —— 按反射积分强度对账 (轮廓 R 已正名为 Rp)
+        Rb = 0.0
+        try:
+            _eff_tt = (two_theta - opt_zero_shift
+                       if abs(opt_zero_shift) > 1e-9 else two_theta)
+            _bragg = self._bragg_r_from_fit(
+                _eff_tt, intensity - bg,
+                _transform_all(opt_cell, opt_tex, opt_disp,
+                               _bovr_of(best_result_x)),
+                opt_weights, opt_scale, opt_fwhm, opt_eta,
+                peak_shape=peak_shape, caglioti=opt_cag,
+            )
+            if _bragg is not None:
+                Rb = float(_bragg)
+        except Exception as _e:  # noqa: BLE001 - 指标提取失败不影响精修
+            _plog(f"[warn] Bragg R 提取失败: {type(_e).__name__}: {_e}")
         GOF = metrics["GOF"]
         # v1.1.2: 未加权 wR —— 供快检门限与"新旧口径"对照使用
         wR_unweighted = float(self._calc_wR(intensity, simulated_full))
@@ -2212,6 +2227,8 @@ class RietveldRefiner:
                 # v1.1.2: 加权/未加权 wR 双口径 (快检门限用未加权)
                 "wR_weighted": float(wR),
                 "wR_unweighted": float(wR_unweighted),
+                # v2.1-D: 真实 Bragg R (Σ|I_obs−I_calc|/Σ I_obs, 按反射)
+                "bragg_r": float(Rb),
                 # v1.1.2: 收敛语义 (num_cycles 实为 nfev; 多起点与抛光分开记录)
                 "nfev": int(num_cycles),
                 "num_cycles_semantics": "nfev",
@@ -2666,6 +2683,115 @@ class RietveldRefiner:
             }
         except Exception:  # noqa: BLE001 - 诊断失败不该影响精修
             return {}
+
+    @staticmethod
+    def _bragg_r_from_fit(
+        two_theta: np.ndarray,
+        y_obs_net: np.ndarray,
+        phase_peaks: list,
+        weights: np.ndarray,
+        scale: float,
+        fwhm: float,
+        eta: float,
+        peak_shape: str = "pseudo-voigt",
+        caglioti=None,
+        min_iref: float = 5.0,
+        n_extract_cycles: int = 3,
+        window_fwhm_mult: float = 3.0,
+    ) -> Optional[float]:
+        """真实 Bragg R (v2.1-D) = Σ_hkl |I_obs,hkl − I_calc,hkl| / Σ I_obs,hkl × 100
+
+        与轮廓 R (Rp/Rwp, 逐点比较) 不同, Bragg R 按**积分反射强度**对账:
+          - I_calc,hkl = scale × weight_p × I_ref,hkl —— 与谱合成同款口径
+            (phase_display.spectrum_from_refs: 面积归一剖面 → 峰的积分强度
+             = 振幅 = scale×相权重×参考强度), 因此无需重算 |F|²·m·LP;
+          - I_obs,hkl 用 Le Bail 式坐标 LS 提取 (refine_le_bail 同款循环):
+            I_k ← Σ_win y·PV_k / Σ_win PV_k², 窗口 = 峰位 ± window_fwhm_mult×FWHM,
+            数轮迭代并扣除其它峰的当前贡献 (重叠反射公平分摊)。
+        仅取 I_ref ≥ min_iref 的反射; 无可用反射或 Σ I_obs ≤ 0 → None。
+        提取失败不影响精修本身 (调用方 try/except)。
+        """
+        t = np.asarray(two_theta, dtype=float)
+        y = np.asarray(y_obs_net, dtype=float)
+        if t.size < 8 or y.size != t.size:
+            return None
+
+        refl_pos: list[float] = []
+        refl_iref: list[float] = []
+        refl_w: list[float] = []
+        for i, peaks in enumerate(phase_peaks):
+            w_p = float(weights[i]) if i < len(weights) else 0.0
+            for pk in peaks or []:
+                if len(pk) < 3:
+                    continue
+                pos = float(pk[1])
+                iref = float(pk[2])
+                if iref < float(min_iref) or pos < t[0] or pos > t[-1]:
+                    continue
+                refl_pos.append(pos)
+                refl_iref.append(iref)
+                refl_w.append(w_p)
+        if not refl_pos:
+            return None
+        pos = np.asarray(refl_pos, dtype=float)
+        iref = np.asarray(refl_iref, dtype=float)
+        w_arr = np.asarray(refl_w, dtype=float)
+        i_calc = float(scale) * w_arr * iref
+
+        if caglioti is not None and any(caglioti):
+            U, V, W = caglioti
+            tan_p = np.tan(np.radians(pos / 2.0))
+            fw = np.sqrt(np.clip(U * tan_p * tan_p + V * tan_p + W, 1e-4, None))
+        else:
+            fw = np.full_like(pos, float(fwhm))
+        sigma = fw / (2.0 * np.sqrt(2.0 * np.log(2.0)))
+        gamma = fw / 2.0
+        _eta = float(np.clip(eta, 0.0, 1.0))
+        is_g = peak_shape == "gaussian"
+        is_l = peak_shape == "lorentzian"
+
+        step = float(np.median(np.diff(t)))
+        half = np.maximum(8, np.ceil(
+            window_fwhm_mult * fw / max(step, 1e-9))).astype(int)
+        c_idx = np.clip(np.searchsorted(t, pos), 0, t.size - 1)
+
+        def _pv(j: int, d: np.ndarray) -> np.ndarray:
+            s = sigma[j]
+            g2 = gamma[j] * gamma[j]
+            if is_g:
+                return np.exp(-0.5 * (d / s) ** 2) / (s * np.sqrt(2.0 * np.pi))
+            if is_l:
+                return (gamma[j] / np.pi) / (d * d + g2)
+            gg = np.exp(-0.5 * (d / s) ** 2) / (s * np.sqrt(2.0 * np.pi))
+            lz = (gamma[j] / np.pi) / (d * d + g2)
+            return _eta * gg + (1.0 - _eta) * lz
+
+        wins = []
+        for j in range(pos.size):
+            c = int(c_idx[j])
+            h = int(half[j])
+            lo, hi = max(0, c - h), min(t.size, c + h + 1)
+            wins.append((lo, hi, _pv(j, t[lo:hi] - pos[j])))
+
+        # Le Bail 式坐标 LS 提取 (扣除其它峰的当前贡献)
+        i_obs = np.clip(y[c_idx], 0.0, None)
+        for _ in range(max(1, int(n_extract_cycles))):
+            total = np.zeros_like(y)
+            for iw, (lo, hi, pv) in zip(i_obs, wins):
+                total[lo:hi] += iw * pv
+            new_i = np.empty_like(i_obs)
+            for j in range(pos.size):
+                lo, hi, pv = wins[j]
+                others = total[lo:hi] - i_obs[j] * pv
+                num = float(np.sum((y[lo:hi] - others) * pv))
+                den = float(np.sum(pv * pv))
+                new_i[j] = max(num / den, 0.0) if den > 1e-12 else 0.0
+            i_obs = new_i
+
+        denom = float(np.sum(i_obs))
+        if denom <= 0:
+            return None
+        return 100.0 * float(np.sum(np.abs(i_obs - i_calc))) / denom
 
     @staticmethod
     def _apply_overall_b(phase_peaks: list, b_per_phase, wavelength: float) -> list:
