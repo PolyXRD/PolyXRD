@@ -2604,6 +2604,77 @@ DW 统计量能区分"残差是白噪声"还是"逐点相关（模型不完备�
 - 上一轮代码评估指出的功能缺陷（项目保存/加载、元素表 118、峰检测幅度下限等）**本版未实施**；
   按用户指示本轮只做发行形态（便携版 + 安装包 + 手册），功能修复另排期。
 
+## \[2.1.0] — 2026-09-24 · 质量与诊断大版本（代码评估 P0–P3 全落地 + v2.1-A~E）
+
+> **定位**：综合 `docs/代码评估与改进计划.md`（P0–P3）与 `docs/后续计划与已知问题-v2.1.md`
+> （v2.1-A~F）两条线的完整迭代。版本号五处收口 2.1.0；测试套件入库 + GitHub Actions CI。
+
+### 代码评估修复（P0–P3）
+
+- **P0-1 项目保存/加载修复**（此前保存按钮是 "not implemented" 存根）：
+  `.pxrd` 项目文件（ZIP: project.json + data.npz）增加 `refinement_result` 序列化
+  （numpy 数组/标量 → list/float）；`MainViewModel` 新增 `save_project`/`open_project`；
+  `MainWindow` 接通保存/另存为/打开项目动作；MCP `save_project`/`load_project` 修复
+  （旧代码参数名错误 + 属性访问错误，实际不可用）。
+- **P1-2 元素周期表补齐 118 元素**：Hf 错位修正、镧系/锕系移至 9/10 行、
+  补 Po→Og 共 18 元素与中文名；修 `F601` 重复键。
+- **P1-3 FoM 特异性项改强度加权**：噪声峰不再饱和特异性（旧 count-ratio 口径
+  在噪声峰多时特异性恒差）。
+- **P1-4** `test_db_import` 假 skip 修复（25 过 0 skip）。
+- **P2-4 测试套件入库 + CI**：`.gitignore` 解除 tests/ 整体排除（保留 probe/smoke 排除）；
+  新增 `.github/workflows/test.yml`（windows-latest, py3.10/3.12, pytest 门禁）。
+- **P2-5 语言菜单对齐实有翻译**：`Language.available_languages()` 按翻译文件过滤。
+- **P3 清理收口**：删除死代码 `services/data_processor.py`（354 行重复实现）、
+  `indexing._sum3_squares`；`phase_identifier` print → logging；config 移除开发机硬编码
+  PDF2 路径；`cod_index.db`→`cod_index.sqlite` 命名修正；cod_data 清理 WAL/备份。
+
+### v2.1-A 抛光评估预算自适应（性能）
+
+- 局部抛光预算 `675 × 3000 / N_peaks`，钳位 `[40, 675]`：典型峰数不变，
+  大峰表（7-1 七相 ~3000 条）按比例缩减，抛光阶段总耗时大致恒定。
+
+### v2.1-B 服务层诊断结构化 + i18n 补齐
+
+- 服务层不再生成中文文案：`RefinementResult` 新增 `diagnostics: [{code, params}]`；
+  引擎回退 / Kα2 检测 / 指标不可解读 / W28 拟合诊断四处全部结构化
+  （`diag.engine_fallback` / `diag.ka2_detected` / `diag.metrics_no_weights`
+  / `diag.metrics_no_rexp` / `diag.metrics_no_ycalc` / `diag.dw_correlated`
+  / `diag.high_angle_residual` / `diag.low_angle_residual` / `diag.residual_large`）。
+- 新增 `polyxrd/i18n/diag_texts.py` 渲染助手；三语言翻译文件各补 `diag` 段；
+  结果区提示条 / 精修向导执行日志 / 报告摘要统一 `tr()` 渲染。
+- 诊断随模型与项目文件序列化往返；`metric_note` 字段保留用于旧项目文件兼容。
+
+### v2.1-C 结构回填检索增强 + 失败原因可见
+
+- `find_structure_candidates` 增**元素集宽松匹配**通道（GLOB token 匹配）：
+  固溶体/非整比相（NCM 三元）精确化学式落空时找回同系物结构候选；
+  真库实测 1-2 案例（Li/Ni/Co/Mn/O）命中 9 条候选（含 811 近精确配比 COD 1520789）。
+- 回填候选带 `_fallback` 标记排序降权；`weight_basis=relative` 时产出结构化诊断
+  `diag.weight_basis_relative`（缺结构相名入 params），UI 明示口径降级原因。
+
+### v2.1-D 真实 Bragg R 实现
+
+- 新增 `_bragg_r_from_fit`：`Bragg R = Σ|I_obs−I_calc| / Σ I_obs`（按反射积分强度）；
+  `I_calc = scale×权重×I_ref`（谱合成面积归一同口径），`I_obs` 用 Le Bail 式坐标
+  LS 提取（扣邻峰贡献）。builtin 精修写入 `Rb` 字段（历史误标正名后恢复本义）
+  与 `fit_params["bragg_r"]`；报告摘要增 Bragg R 行（三语言）。
+- 合成数据解析值对账 <5% 相对。
+
+### v2.1-E Kα2 建模（opt-in，默认关）
+
+- `_expand_ka2_satellites`：每条 Kα1 主峰在 `2θ2 = 2·arcsin((λ2/λ1)·sinθ1)`
+  伴一条强度比 0.5×I_ref 的 Kα2 峰（与主峰共享尺度/权重/峰宽，不新增自由度）。
+- `refine(..., model_ka2=True)` 开启；合成双线数据回收强度比 0.5±0.05，
+  wR 相比单峰模型显著下降。
+
+### 测试与文档
+
+- 新增回归测试：`test_project_roundtrip_v21` / `test_element_periodic_table_v21` /
+  `test_fom_intensity_weighted_v21` / `test_i18n_menu_v21` /
+  `test_diagnostics_structured_v21` / `test_structure_resolver_v21` /
+  `test_bragg_r_v21` / `test_ka2_model_v21` 等。
+- 全量 13 试样基准重跑：`docs/基准报告-精修-v2.1.0.md`。
+
 ## 附录 A · 路线图模块（M01–M25）与版本对照
 
 | 模块 | 名称 | 落地版本 | 备注 |
