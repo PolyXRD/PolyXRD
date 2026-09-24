@@ -1568,56 +1568,60 @@ class CODLocalDatabase:
                 except Exception as e:
                     log.debug("find_structure_candidates inorg query failed: %s", e)
 
-                # v2.1-C: 元素集宽松匹配 (精确式无命中时才做, 全表 GLOB 扫描)
-                if not out and elements:
-                    els = [str(e).strip() for e in elements
-                           if str(e).strip()][:8]
-                    if els:
-                        try:
-                            _hc = self._inorg_has_cif_expr()
-                            conds: list[str] = []
-                            eargs2: list[Any] = []
-                            for el in els:
-                                # token = 元素+可选系数(数字/点); 元素后必须跟
-                                # 系数/空格/串尾, 避免 "N" 误中 "Na" 这类前缀
-                                conds.append(
-                                    "(formula GLOB ? OR formula GLOB ? "
-                                    "OR formula GLOB ? OR formula GLOB ? "
-                                    "OR formula GLOB ? OR formula GLOB ?)"
-                                )
-                                eargs2.extend((
-                                    f"{el}[0-9.]*", f"{el}", f"{el} *",
-                                    f"* {el}[0-9.]*", f"* {el}", f"* {el} *",
-                                ))
-                            rows = conn.execute(
-                                "SELECT cod_id, formula, space_group, cell_a, "
-                                "cell_b, cell_c, cell_alpha, cell_beta, "
-                                "cell_gamma, "
-                                f"{_hc} AS has_cif "
-                                f"FROM phases WHERE ({' AND '.join(conds)}) "
-                                f"ORDER BY {_hc} DESC, cod_id LIMIT ?",
-                                (*eargs2, int(limit) * 2),
-                            ).fetchall()
-                            for r in rows:
-                                cid = int(r["cod_id"])
-                                if cid in out:
-                                    continue
-                                out[cid] = {
-                                    "cod_id": cid,
-                                    "formula": r["formula"] or "",
-                                    "space_group": r["space_group"] or "",
-                                    "a": r["cell_a"], "b": r["cell_b"],
-                                    "c": r["cell_c"],
-                                    "alpha": r["cell_alpha"],
-                                    "beta": r["cell_beta"],
-                                    "gamma": r["cell_gamma"],
-                                    "has_cif": bool(r["has_cif"]),
-                                    "mineral_name": "",
-                                    "_fallback": True,
-                                }
-                        except Exception as e:
-                            log.debug("find_structure_candidates element-set "
-                                      "query failed: %s", e)
+        # v2.1-C: 元素集宽松匹配 (精确式无命中时才做, 全表 GLOB 扫描)。
+        # 注意**不能**嵌在 `if formula_norm:` 里 —— resolver 的回退调用
+        # 传的就是空 formula_norm + elements, 嵌进去永远不执行。
+        if not out and elements:
+            els = [str(e).strip() for e in elements
+                   if str(e).strip()][:8]
+            if els:
+                conn = self._inorg_db()
+                if conn is not None:
+                    try:
+                        _hc = self._inorg_has_cif_expr()
+                        conds: list[str] = []
+                        eargs2: list[Any] = []
+                        for el in els:
+                            # token = 元素+可选系数(数字/点); 元素后必须跟
+                            # 系数/空格/串尾, 避免 "N" 误中 "Na" 这类前缀
+                            conds.append(
+                                "(formula GLOB ? OR formula GLOB ? "
+                                "OR formula GLOB ? OR formula GLOB ? "
+                                "OR formula GLOB ? OR formula GLOB ?)"
+                            )
+                            eargs2.extend((
+                                f"{el}[0-9.]*", f"{el}", f"{el} *",
+                                f"* {el}[0-9.]*", f"* {el}", f"* {el} *",
+                            ))
+                        rows = conn.execute(
+                            "SELECT cod_id, formula, space_group, cell_a, "
+                            "cell_b, cell_c, cell_alpha, cell_beta, "
+                            "cell_gamma, "
+                            f"{_hc} AS has_cif "
+                            f"FROM phases WHERE ({' AND '.join(conds)}) "
+                            f"ORDER BY {_hc} DESC, cod_id LIMIT ?",
+                            (*eargs2, int(limit) * 2),
+                        ).fetchall()
+                        for r in rows:
+                            cid = int(r["cod_id"])
+                            if cid in out:
+                                continue
+                            out[cid] = {
+                                "cod_id": cid,
+                                "formula": r["formula"] or "",
+                                "space_group": r["space_group"] or "",
+                                "a": r["cell_a"], "b": r["cell_b"],
+                                "c": r["cell_c"],
+                                "alpha": r["cell_alpha"],
+                                "beta": r["cell_beta"],
+                                "gamma": r["cell_gamma"],
+                                "has_cif": bool(r["has_cif"]),
+                                "mineral_name": "",
+                                "_fallback": True,
+                            }
+                    except Exception as e:
+                        log.debug("find_structure_candidates element-set "
+                                  "query failed: %s", e)
 
         # 通道 2: 全库索引 (formula_red 精确 + mineral_name 模糊)
         if len(out) < int(limit):
