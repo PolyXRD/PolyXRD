@@ -2041,10 +2041,15 @@ class RietveldRefiner:
         # 前提: 该相的参考峰来自结构 (CIF/pymatgen), 因而拿得到强度标尺 k 与 ZMV。
         # 任一相缺信息 → 退回旧的"相对强度归一", 并用 weight_basis 标明口径。
         weight_basis = "relative"
+        # v2.1-C: 记录哪些相缺结构标尺 (无 |F|²/ZMV) → 定量降级原因可见
+        _info = [self._cif_scale_by_phase.get(
+            (getattr(p, "name", ""), getattr(p, "formula", ""))) for p in phases]
+        _missing_structure = [
+            (getattr(p, "name", "") or "?")
+            for p, v in zip(phases, _info) if v is None
+        ]
         try:
             _amp_p = np.asarray(opt_weights, dtype=float) * float(opt_scale)
-            _info = [self._cif_scale_by_phase.get(
-                (getattr(p, "name", ""), getattr(p, "formula", ""))) for p in phases]
             if _info and all(v is not None for v in _info):
                 _w_mass = self._mass_fractions(
                     _amp_p, [v[0] for v in _info], [v[1] for v in _info])
@@ -2144,6 +2149,19 @@ class RietveldRefiner:
         converged = bool(np.isfinite(wR) and (_multistart_ok or _polish_improved))
         num_cycles = int(getattr(best_result, "nfev", 0))  # 语义 = nfev (见 fit_params)
 
+        # v2.1-C: 定量口径降级原因结构化 (UI 用 tr() 渲染, 用户可见)
+        _diag_entries: list[dict] = (
+            [] if metrics_valid
+            else [{"code": "diag.metrics_no_weights", "params": {}}]
+        )
+        if weight_basis == "relative":
+            _diag_entries.append({
+                "code": "diag.weight_basis_relative",
+                "params": {
+                    "phases": ", ".join(_missing_structure) if _missing_structure else "-",
+                },
+            })
+
         result = RefinementResult(
             phases=refined_phases,
             observed_data=(two_theta, intensity),
@@ -2159,8 +2177,7 @@ class RietveldRefiner:
             # v2.1-B: 文案移出服务层 —— 不可解读原因走结构化诊断码
             # (diag.metrics_no_weights), metric_note 仅用于旧项目文件兼容。
             metric_note="",
-            diagnostics=([] if metrics_valid
-                         else [{"code": "diag.metrics_no_weights", "params": {}}]),
+            diagnostics=_diag_entries,
             GOF=GOF,
             quality=quality,
             num_cycles=num_cycles,

@@ -1037,6 +1037,7 @@ translations = {
         "dw_correlated": "残差逐点强相关 (DW={dw:.2f}): 模型不完备, 检查是否缺相 / 缺物理项",
         "high_angle_residual": "高角区残差偏大 ({high:.1f}% vs 低角 {low:.1f}%): 检查整体温度因子 B / 峰宽模型 / 样品位移",
         "low_angle_residual": "低角区残差偏大 ({low:.1f}% vs 高角 {high:.1f}%): 检查低角不对称 / 背景估计 / 择优取向",
-        "residual_large": "整体残差偏大 (R={r:.1f}%) 但无明显逐点相关 (DW={dw:.2f}): 可能接近噪声底或统计量不足"
+        "residual_large": "整体残差偏大 (R={r:.1f}%) 但无明显逐点相关 (DW={dw:.2f}): 可能接近噪声底或统计量不足",
+        "weight_basis_relative": "定量口径为相对强度归一 (relative): 以下物相未匹配到结构数据 ({phases}), 无法计算严格质量分数 W∝S·ZMV; 建议在物相库重新匹配结构后重试"
     }
 }

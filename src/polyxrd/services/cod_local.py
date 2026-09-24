@@ -1505,14 +1505,19 @@ class CODLocalDatabase:
 
     def find_structure_candidates(self, formula_norm: str,
                                   mineral_name: str = "",
-                                  limit: int = 24) -> list[dict]:
-        """按规范化化学式 (可选矿物名) 找**带结构数据**的候选条目。
+                                  limit: int = 24,
+                                  elements: Optional[Sequence[str]] = None) -> list[dict]:
+        """按规范化化学式 (可选矿物名 / 元素集) 找**带结构数据**的候选条目。
 
         供 `phase_structure_resolver` 在精修前把无结构物相匹配到 CIF。
         两个通道, 结果按 cod_id 去重合并:
           1) 无机物库 phases 表 —— formula 是空格分隔 COD 格式, 首选通道
              (v0.14.0 起默认挂瘦身索引式: cif_gz 全空, has_cif 按"可获取"
              处理, CIF 由 cod/cif 目录或 REST 回退提供);
+             v2.1-C: 精确式无命中且给了 ``elements`` 时, 追加**元素集宽松
+             匹配** (每个元素以独立 token 出现即可, 系数任意) —— 固溶体/
+             非整比相 (如 NCM 三元) 的系数与库值差一档导致精确匹配落空,
+             宽松匹配能把同系物结构候选找回来;
           2) 全库索引 cod_entries —— formula_red 精确匹配 + mineral_name
              模糊匹配 (内置 118 物相只有矿物名, 走这条通道兜底)。
 
@@ -1520,10 +1525,13 @@ class CODLocalDatabase:
             formula_norm: 规范化化学式 ("Mg(OH)2" → "H2 Mg O2"), 可为空
             mineral_name: 矿物名 (仅全库索引支持), 可为空
             limit: 返回上限
+            elements: 元素符号列表 (元素集宽松匹配, 仅无机物库通道)
 
         Returns:
             [{"cod_id", "formula", "space_group", "a", "b", "c",
-              "alpha", "beta", "gamma", "has_cif", "mineral_name"}]
+              "alpha", "beta", "gamma", "has_cif", "mineral_name",
+              "_fallback"}]
+            ``_fallback=True`` 表示该条来自元素集宽松匹配 (排序时应降权)。
             库不可用返回 []。**只读**查询, 不抛异常。
         """
         out: dict[int, dict] = {}
@@ -1559,6 +1567,57 @@ class CODLocalDatabase:
                         }
                 except Exception as e:
                     log.debug("find_structure_candidates inorg query failed: %s", e)
+
+                # v2.1-C: 元素集宽松匹配 (精确式无命中时才做, 全表 GLOB 扫描)
+                if not out and elements:
+                    els = [str(e).strip() for e in elements
+                           if str(e).strip()][:8]
+                    if els:
+                        try:
+                            _hc = self._inorg_has_cif_expr()
+                            conds: list[str] = []
+                            eargs2: list[Any] = []
+                            for el in els:
+                                # token = 元素+可选系数(数字/点); 元素后必须跟
+                                # 系数/空格/串尾, 避免 "N" 误中 "Na" 这类前缀
+                                conds.append(
+                                    "(formula GLOB ? OR formula GLOB ? "
+                                    "OR formula GLOB ? OR formula GLOB ? "
+                                    "OR formula GLOB ? OR formula GLOB ?)"
+                                )
+                                eargs2.extend((
+                                    f"{el}[0-9.]*", f"{el}", f"{el} *",
+                                    f"* {el}[0-9.]*", f"* {el}", f"* {el} *",
+                                ))
+                            rows = conn.execute(
+                                "SELECT cod_id, formula, space_group, cell_a, "
+                                "cell_b, cell_c, cell_alpha, cell_beta, "
+                                "cell_gamma, "
+                                f"{_hc} AS has_cif "
+                                f"FROM phases WHERE ({' AND '.join(conds)}) "
+                                f"ORDER BY {_hc} DESC, cod_id LIMIT ?",
+                                (*eargs2, int(limit) * 2),
+                            ).fetchall()
+                            for r in rows:
+                                cid = int(r["cod_id"])
+                                if cid in out:
+                                    continue
+                                out[cid] = {
+                                    "cod_id": cid,
+                                    "formula": r["formula"] or "",
+                                    "space_group": r["space_group"] or "",
+                                    "a": r["cell_a"], "b": r["cell_b"],
+                                    "c": r["cell_c"],
+                                    "alpha": r["cell_alpha"],
+                                    "beta": r["cell_beta"],
+                                    "gamma": r["cell_gamma"],
+                                    "has_cif": bool(r["has_cif"]),
+                                    "mineral_name": "",
+                                    "_fallback": True,
+                                }
+                        except Exception as e:
+                            log.debug("find_structure_candidates element-set "
+                                      "query failed: %s", e)
 
         # 通道 2: 全库索引 (formula_red 精确 + mineral_name 模糊)
         if len(out) < int(limit):

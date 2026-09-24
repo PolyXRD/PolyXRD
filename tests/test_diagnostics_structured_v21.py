@@ -32,6 +32,7 @@ ALL_CODES = [
     ("diag.high_angle_residual", {"high": 21.3, "low": 4.1}),
     ("diag.low_angle_residual", {"low": 18.2, "high": 5.0}),
     ("diag.residual_large", {"r": 12.6, "dw": 1.31}),
+    ("diag.weight_basis_relative", {"phases": "LiNiO2, ZnO"}),
 ]
 
 
