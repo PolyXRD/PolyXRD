@@ -3,6 +3,8 @@
 > 覆盖范围：**v0.3.0（可追溯最早版本）→ v1.0.1（2026-09-22，已发布）+ v1.0.2（启动稳健性修复，已收口未发布）+ v1.1.1（国际化补全 / 全链路 UTF-8 / 素材改进）**
 > 合并日期：2026-09-21 ｜ 由 4 份历史变更记录（CHANGELOG01 / 02 / 03 与原 CHANGELOG）合并去重而成
 > 最后更新：2026-09-23（补 v1.0.1 正式发布记录 + Release 附件清单 + **v1.0.2 启动稳健性修复（版本号已定，EXE 暂不重建）** + v1.0.1 遗留的版本号收口补正与 `pyproject.toml` 元数据补齐 + **v1.1.1 英/日界面翻译全量补全 + 全链路 UTF-8 + 启动图/横幅素材改进** + **v1.1.1 运行期切语言「整页重翻译」补修：上一轮离屏冒烟为假阴性，改用隔离 QSettings 键 + 每组独立进程的探测器后残留归零**）
+> **2026-09-24 追加**：**v2.0.1**（便携版跨启动渲染自愈 + 便携包启动器/安全模式脚本 +
+> 安装向导中文化与安装日志 + 重写使用手册为单一 PDF；本版不含引擎/算法改动）。
 > 数据来源：git 提交历史 + GitHub Release 正文 + 项目工作记忆（逐日工作日志）+ 交接期源码包回溯
 > 联系：sshztx@outlook.com
 >
@@ -2539,6 +2541,68 @@ DW 统计量能区分"残差是白噪声"还是"逐点相关（模型不完备�
   该说明同时写进了 Release 正文与 `docs/后续计划与已知问题-v2.1.md`。
 - **待办（人工）**：安装包/Portable 的**双击启动验收**属本机人工步骤（沙盒无法可靠启动冻结 GUI）；
   验收入口为 `~/.polyxrd/logs/startup-*.log` 出现 `MainWindow OK` + `shown`。
+
+## \[2.0.1] — 2026-09-24 · 便携版启动自愈 + 安装包中文化 🚧
+
+> **定位**：本版**不含任何引擎/算法改动**，只做「发行形态稳健性 + 本地化」两件事，
+> 由用户实测 v2.0.0 便携版/安装包的启动与安装问题驱动。
+> （版本号收口五处：`__init__.py` / `config.py` / `pyproject.toml` / `build.bat` /
+> `scripts/PolyXRD-Setup.iss`；`build.bat` 仍走字节级替换保 UTF-8 + CRLF。）
+
+### 便携版启动稳健性（针对"窗口一闪就退出"）
+
+- **跨启动渲染自愈**（`src/polyxrd/main.py`）：主窗口显示前写入 `~/.polyxrd/render_state.json`
+  （pending 状态）；窗口存活 5 s 后改写为 healthy。下次启动若读到 pending，即判定上次启动
+  在显示瞬间发生原生崩溃（Python 层不可捕获），**自动切换软件渲染**（等价 `--safe-render`：
+  `QT_OPENGL=software` / `QT_QPA_PLATFORM=windows:darkmode=0` / `QT_ENABLE_HIGHDPI_SCALING=0`），
+  启动日志出现 `auto safe-render`。
+  - 缺失/损坏的 state 文件一律按"健康"处理（不误伤）。
+  - 测试进程（`PYTEST_CURRENT_TEST`）跳过读写，避免污染测试。
+  - 新增 `--reset-render` 清除自愈状态；`--safe-render` / `--diagnose` 行为不变。
+  - 测试：`tests/test_render_selfheal.py` 6 条（状态读写/触发/env 优先/重置/损坏文件）。
+- **便携包附加文件**（`scripts/_build_post.py` 新增 `portable-extras` 子命令，已接入
+  `build.bat` 步骤 4/6 前置）：
+  - `启动 PolyXRD.bat`（推荐入口：chcp 65001 + PYTHONUTF8，异常退出时保留窗口显示退出码）
+  - `安全模式启动.bat`（`POLYXRD_SAFE_RENDER=1` 强制软件渲染）
+  - `便携版使用说明.txt`（UTF-8 BOM）
+  - 生成器自检 .bat 内容为纯 ASCII（保 CRLF）；便携 zip 仍保持 `PolyXRD.exe` 位于根，
+    `verify_release.ps1` 的断言不受影响。
+
+### 安装包中文化与安装排障
+
+- **简体 / 繁體中文安装向导**：Inno Setup 官方发行包**不含**中文 .isl（仅 29 种语言），
+  故将官方 issrc 仓库的 `ChineseSimplified.isl` / `ChineseTraditional.isl` 随仓库提供于
+  `scripts/languages/`；`[Languages]` 中文置于最前（系统语言为中文时自动选中）。
+- **安装模式可选**：`PrivilegesRequiredOverridesAllowed=dialog` —— 用户把安装目录改到
+  需管理员权限的位置（如 `D:\Program Files\...`）时可切换"为所有用户安装"，避免
+  "权限不足无法写入目标目录"导致安装无法继续（默认仍为 `lowest`，装到用户目录无需提权）。
+- **自动安装日志**：`SetupLogging=yes` —— 安装异常时 `%TEMP%\Setup Log <日期> #NNN.txt`
+  可直接定位；目录下无当天日志 = 安装程序根本没跑起来（多为杀软/安全策略拦截）。
+- **向导文案本地化**：`[CustomMessages]` 四语言齐备（附加图标/桌面快捷方式/卸载/立即启动），
+  不再出现"向导是中文、任务是英文"的混排。
+- **清理**：删除永不被处理的 `quicklaunchicon` 任务（`OnlyBelowVersion: 0,6.1` 在现代
+  Windows 上恒不满足，Inno 每次编译都告警）。
+- **实测（本机静默安装 `PolyXRD-Setup-v2.0.0.exe /VERYSILENT /DIR=D:\PolyXRD_insttest`）**：
+  **exit 0、1.1 GB 全部落盘，耗时 4 min 40 s** —— 即"装到 D 盘装不下去"实为
+  **解压 1.1 GB / 1.2 万个小文件过慢**（逐文件落地 + 杀软扫描），并非 D 盘路径问题；
+  已在手册中明确提示耗时属正常、请勿中途关闭。安装包体积瘦身为后续事项
+  （`_internal` 1.1 GB 中 PySide6 占 641 MB，且混入 numpy/pandas/scipy 的 `tests/`）。
+
+### 使用手册
+
+- 重写 `docs/manual/PolyXRD使用手册.html` → **`PolyXRD使用手册-v2.0.1.pdf`**（仅 PDF 一种形态）：
+  新增便携版启动排错/自愈说明、安装中文化与耗时提示、v2.0.0 精修指标与峰位物理章节、
+  附录 A（本版变更要点）；**删除**旧版 `PolyXRD使用手册-v0.15.0.pdf`、
+  `PolyXRD快速入门-v0.15.0.pdf` 及两份 PPTX 与幻灯片源目录（快速入门版不再维护）。
+- 渲染器 `.workbuddy/tmp/render_pdf_gui.py` 修复三处离屏渲染问题：补建 `QGuiApplication`
+  （否则 `doc.print_()` 产出 0 字节 PDF）、`QT_QPA_FONTDIR` 指向 Windows 字体目录
+  （offscreen 平台不枚举系统字体，中文全成 tofu 方块）、显式浅色 Palette + Light 配色
+  （否则受系统深色模式影响整页黑底）。
+
+### 已知未处理
+
+- 上一轮代码评估指出的功能缺陷（项目保存/加载、元素表 118、峰检测幅度下限等）**本版未实施**；
+  按用户指示本轮只做发行形态（便携版 + 安装包 + 手册），功能修复另排期。
 
 ## 附录 A · 路线图模块（M01–M25）与版本对照
 
