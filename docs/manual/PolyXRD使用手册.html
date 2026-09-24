@@ -2,68 +2,85 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
+<meta name="color-scheme" content="light">
 <title>PolyXRD v2.0.1 软件使用手册</title>
 <style>
-body { font-family: "Microsoft YaHei"; font-size: 10pt; color: #222; line-height: 1.55; }
-h1 { font-size: 22pt; color: #1a4f8b; }
-h2 { font-size: 15pt; color: #1a4f8b; border-bottom: 2px solid #1a4f8b; padding-bottom: 3px; margin-top: 26px; }
-h3 { font-size: 12pt; color: #2a6db5; margin-top: 16px; }
-.cover-sub { font-size: 12pt; color: #555; }
-.tip { background: #eef5fd; border-left: 4px solid #2a6db5; padding: 6px 10px; margin: 8px 0; }
-.warn { background: #fdf3ee; border-left: 4px solid #d35400; padding: 6px 10px; margin: 8px 0; }
-.formula { background: #f5f5f5; padding: 6px 12px; margin: 6px 0; font-size: 11pt; }
-img.shot { width: 600px; }
-.caption { font-size: 9pt; color: #666; margin: 2px 0 12px 0; }
-table { border-collapse: collapse; font-size: 9.5pt; }
-th { background: #1a4f8b; color: #fff; padding: 4px 8px; border: 1px solid #999; }
-td { padding: 4px 8px; border: 1px solid #999; }
-.pagebreak { page-break-before: always; }
-code { background: #f0f0f0; font-family: Consolas; }
-.toc-line { margin: 2px 0; }
+:root { color-scheme: light; }
+@page { size: A4 portrait; margin: 16mm 15mm 18mm 15mm; }
+* { box-sizing: border-box; }
+html { background: #ffffff; }
+body { background: #ffffff; font-family: "Microsoft YaHei", "PingFang SC", sans-serif; font-size: 10pt; color: #222; line-height: 1.6; margin: 0; }
+h1 { font-size: 26pt; color: #1a4f8b; margin: 0 0 8px 0; }
+h2 { font-size: 16pt; color: #1a4f8b; border-bottom: 2.5px solid #1a4f8b; padding-bottom: 4px; margin: 0 0 14px 0; break-after: avoid; }
+h3 { font-size: 12.5pt; color: #2a6db5; margin: 18px 0 6px 0; break-after: avoid; }
+h4 { font-size: 11pt; color: #2a6db5; margin: 12px 0 4px 0; break-after: avoid; }
+p { margin: 6px 0; }
+.chapter { break-before: page; }
+figure { margin: 10px 0 12px 0; text-align: center; break-inside: avoid; }
+figure img { max-width: 100%; border: 1px solid #d0d7e2; border-radius: 3px; }
+figcaption { font-size: 9pt; color: #666; margin-top: 5px; }
+.tip { background: #eef5fd; border-left: 4px solid #2a6db5; padding: 7px 11px; margin: 9px 0; break-inside: avoid; }
+.warn { background: #fdf3ee; border-left: 4px solid #d35400; padding: 7px 11px; margin: 9px 0; break-inside: avoid; }
+.formula { background: #f5f6f8; border: 1px solid #e2e5ea; padding: 8px 12px; margin: 8px 0; font-size: 10.5pt; break-inside: avoid; }
+table { border-collapse: collapse; font-size: 9.5pt; width: 100%; margin: 8px 0; break-inside: avoid; }
+th { background: #1a4f8b; color: #fff; padding: 5px 8px; border: 1px solid #9aa7b8; text-align: left; }
+td { padding: 5px 8px; border: 1px solid #b9c2cf; vertical-align: top; }
+tr:nth-child(even) td { background: #f4f7fb; }
+code { background: #f0f2f5; font-family: Consolas, monospace; font-size: 9.5pt; padding: 0 3px; border-radius: 2px; }
+.toc-line { margin: 4px 0; font-size: 11pt; }
+.toc-line b { color: #1a4f8b; display: inline-block; width: 70px; }
+.cover { text-align: center; padding-top: 150px; break-after: page; }
+.cover .sub { font-size: 13pt; color: #555; margin-top: 6px; }
+.cover .badge { display: inline-block; margin-top: 26px; padding: 6px 22px; border: 1.5px solid #1a4f8b; border-radius: 18px; color: #1a4f8b; font-size: 11pt; }
+.cover .foot { margin-top: 120px; color: #999; font-size: 10pt; }
 </style>
 </head>
 <body>
 
-<div style="text-align:center; margin-top:80px;">
+<div class="cover">
 <h1>PolyXRD 软件使用手册</h1>
-<p class="cover-sub">X 射线衍射物相分析 · 结构精修 · 多引擎集成<br>版本 v2.0.1 &nbsp;|&nbsp; 2026 年 9 月</p>
-<p style="margin-top:50px; color:#888;">—— 内部配套文档 ——</p>
+<p class="sub">X 射线衍射物相分析 · 结构精修 · 多引擎集成</p>
+<p class="sub">版本 v2.0.1 ｜ 2026 年 9 月</p>
+<p class="badge">完整工作流：数据加载 → 预处理 → 峰检测 → 物相检索 → Rietveld 精修 → 报告</p>
+<p class="foot">—— 内部配套文档 ——</p>
 </div>
 
-<div class="pagebreak"></div>
+<div class="chapter">
 <h2>目录</h2>
-<p class="toc-line">第 1 章&nbsp;&nbsp;软件概述</p>
-<p class="toc-line">第 2 章&nbsp;&nbsp;安装与启动（含便携版启动排错）</p>
-<p class="toc-line">第 3 章&nbsp;&nbsp;主界面导览</p>
-<p class="toc-line">第 4 章&nbsp;&nbsp;数据加载与预处理</p>
-<p class="toc-line">第 5 章&nbsp;&nbsp;物相分析（峰检测 · 检索匹配 · CIF 导出）</p>
-<p class="toc-line">第 6 章&nbsp;&nbsp;结构精修（Rietveld · 五引擎 · 精修向导 · 外部程序）</p>
-<p class="toc-line">第 7 章&nbsp;&nbsp;报告与项目管理</p>
-<p class="toc-line">第 8 章&nbsp;&nbsp;基本原理</p>
-<p class="toc-line">第 9 章&nbsp;&nbsp;常见问题（FAQ）</p>
-<p class="toc-line">附录 A&nbsp;&nbsp;本版（v2.0.1）变更要点</p>
+<p class="toc-line"><b>第 1 章</b>软件概述</p>
+<p class="toc-line"><b>第 2 章</b>安装与启动（含便携版启动排错）</p>
+<p class="toc-line"><b>第 3 章</b>主界面导览</p>
+<p class="toc-line"><b>第 4 章</b>数据加载与预处理</p>
+<p class="toc-line"><b>第 5 章</b>物相分析（峰检测 · 检索匹配 · CIF 导出）</p>
+<p class="toc-line"><b>第 6 章</b>结构精修（Rietveld · 五引擎 · 双向导 · 外部程序）</p>
+<p class="toc-line"><b>第 7 章</b>报告与项目管理</p>
+<p class="toc-line"><b>第 8 章</b>基本原理</p>
+<p class="toc-line"><b>第 9 章</b>常见问题（FAQ）</p>
+<p class="toc-line"><b>附录 A</b>本版（v2.0.1）变更要点</p>
+</div>
 
-<div class="pagebreak"></div>
-<h2>第 1 章&nbsp;&nbsp;软件概述</h2>
+<div class="chapter">
+<h2>第 1 章　软件概述</h2>
 <h3>1.1 PolyXRD 是什么</h3>
 <p>PolyXRD 是一款 Windows 桌面 X 射线粉末衍射（XRD）数据分析软件，覆盖从原始谱图到物相鉴定、再到结构精修与报告输出的完整离线工作流：</p>
 <p><b>数据加载 → 谱图预处理 → 峰检测 → 物相检索匹配 → 勾选物相 → Rietveld 结构精修 → 结果报告</b></p>
 <p>软件支持五类精修引擎（auto / builtin / gsas2 / maud / powerxrd），并可与外部专业程序 FullProf、GSAS-II、MAUD 联动；内置常用矿物库，并可外挂 COD 无机物库、COD 全库与 ICDD PDF-2 2004。</p>
 <h3>1.2 主要功能</h3>
-<table width="100%" cellpadding="0" cellspacing="0">
-<tr><th width="24%">模块</th><th>功能</th></tr>
+<table>
+<tr><th style="width:24%">模块</th><th>功能</th></tr>
 <tr><td>数据处理</td><td>多格式加载（.xy/.xye/.txt/.csv/.dat/.mdi/.raw/.xrdml/.brml 等）、扣背景（SNIP/线性/多项式）、平滑（Savitzky-Golay）、Kα2 剥离、归一化、角度裁剪；<b>谱图格式转换</b>（8 种格式互转）</td></tr>
 <tr><td>物相分析</td><td>自动峰检测（含肩峰识别）、多库检索匹配（FoM 打分排序）、元素过滤、物相勾选、CIF 导出、COD 在线检索</td></tr>
 <tr><td>结构精修</td><td>快速精修 + 分步精修向导双路径；builtin/gsas2/maud/powerxrd/auto 五引擎；外部 FullProf 一键批处理精修</td></tr>
 <tr><td>报告 / 项目</td><td>Rietveld 报告预览与导出（json/pdf）、项目保存与恢复（含物相勾选集）</td></tr>
 </table>
 <div class="tip"><b>设计取向：</b>PolyXRD 的目标是用一条龙的离线工作流覆盖常规实验室分析需求；与 Match!、JADE、FullProf Suite、MAUD、GSAS-II 等专业软件可互相配合使用。</div>
+</div>
 
-<div class="pagebreak"></div>
-<h2>第 2 章&nbsp;&nbsp;安装与启动</h2>
+<div class="chapter">
+<h2>第 2 章　安装与启动</h2>
 <h3>2.1 三种发行形态</h3>
-<table width="100%">
-<tr><th>形态</th><th>适用人群</th><th>说明</th></tr>
+<table>
+<tr><th style="width:24%">形态</th><th style="width:24%">适用人群</th><th>说明</th></tr>
 <tr><td>安装包 Setup (.exe)</td><td>普通用户（推荐）</td><td>双击安装到本机，开始菜单生成快捷方式。v2.0.1 起安装向导<b>内置简体／繁體中文</b></td></tr>
 <tr><td>便携版 Portable (.zip)</td><td>免安装 / U 盘场景</td><td>解压即用，目录内含启动器与安全模式脚本</td></tr>
 <tr><td>单文件 exe</td><td>快速分发</td><td>拷贝到任意 Windows x64 机器直接运行</td></tr>
@@ -71,17 +88,17 @@ code { background: #f0f0f0; font-family: Consolas; }
 
 <h3>2.2 安装包（Setup）</h3>
 <p>双击 <code>PolyXRD-Setup-v2.0.1.exe</code> 启动安装向导。<b>v2.0.1 起向导提供简体中文 / 繁體中文 / English / 日本語 四种语言</b>，系统语言为中文时会自动选中中文。</p>
-<p>向导流程：选择语言 → 选择安装位置 → 选择附加任务（桌面图标）→ 安装 → 完成。</p>
+<p>向导流程：选择语言 → 选择安装位置（可选「为所有用户安装」）→ 选择附加任务（桌面图标）→ 安装 → 完成。</p>
 <div class="tip"><b>安装位置建议：</b>默认路径为当前用户目录（<code>%LOCALAPPDATA%\Programs\PolyXRD</code>），无需管理员权限。若你要装到 <code>D:\Program Files\...</code> 等受保护目录，请在向导中<b>选择「为所有用户安装」</b>（v2.0.1 起提供安装模式选择），否则可能因权限不足而无法写入目标目录。</div>
-<div class="tip"><b>关于安装耗时：</b>安装包约 246 MB，解压后约 1.1 GB、上万个文件。在「正在解压文件」阶段进度条推进较慢，<b>实测约 4～5 分钟</b>（机械硬盘更久），<b>属正常现象，请耐心等待、勿中途关闭</b>——这通常就是「以为安装卡住了」的原因。</div>
+<div class="tip"><b>关于安装耗时：</b>安装包约 250 MB，解压后约 1.1 GB、上万个文件。在「正在解压文件」阶段进度条推进较慢，<b>实测约 4～5 分钟</b>（机械硬盘更久），<b>属正常现象，请耐心等待、勿中途关闭</b>——这通常就是「以为安装卡住了」的原因。</div>
 <div class="warn"><b>安装异常时就这样查：</b>v2.0.1 起安装程序会<b>自动写日志</b>到 <code>%TEMP%\Setup Log &lt;日期&gt; #NNN.txt</code>。若安装失败，请把该日志末尾数十行提供给我们定位。若该目录下<b>根本没有</b>当天的日志，通常说明安装程序根本没跑起来（多为被杀毒软件 / 安全策略拦截）。</div>
 <p>卸载：开始菜单 →「卸载 PolyXRD」，或在「设置 → 应用」中卸载。</p>
 
-<h3 class="pagebreak">2.3 便携版（Portable）——启动稳健性</h3>
+<h3>2.3 便携版（Portable）——启动稳健性</h3>
 <div class="warn"><b>最重要的一条：必须先「完整解压」，再运行。</b>请不要在压缩包内直接双击 <code>PolyXRD.exe</code>——Windows 会把文件解到临时只读目录（路径含随机字符），Qt 的插件（platform/ 图像格式等）会加载失败，典型表现就是<b>「窗口一闪就退出」</b>。请右键压缩包 →「全部解压缩」，解到一个普通可写目录（如 <code>D:\PolyXRD</code>）后再运行。</div>
 <p>解压后的目录结构：</p>
-<table width="100%">
-<tr><th width="38%">文件 / 目录</th><th>作用</th></tr>
+<table>
+<tr><th style="width:38%">文件 / 目录</th><th>作用</th></tr>
 <tr><td><code>PolyXRD.exe</code></td><td>主程序</td></tr>
 <tr><td><code>启动 PolyXRD.bat</code></td><td><b>推荐入口</b>：先设置好 UTF-8 编码环境再启动主程序；异常退出时会保留窗口显示退出码便于排查</td></tr>
 <tr><td><code>安全模式启动.bat</code></td><td>强制软件渲染（软件 OpenGL）启动，用于规避显卡驱动导致的崩溃</td></tr>
@@ -89,7 +106,7 @@ code { background: #f0f0f0; font-family: Consolas; }
 <tr><td><code>_internal\</code></td><td>运行时依赖库（请勿删除或改名）</td></tr>
 </table>
 
-<h4 style="font-size:11pt;color:#2a6db5;margin-bottom:2px;">启动自愈机制（v2.0.1 新增）</h4>
+<h4>启动自愈机制（v2.0.1 新增）</h4>
 <p>部分 Windows 11 / 显卡驱动组合下，主窗口在<b>显示瞬间</b>会触发 Qt 原生崩溃（这类崩溃发生在窗口显示时，Python 层无法捕获，表现就是「一闪即退」）。v2.0.1 引入了<b>跨启动自愈</b>：</p>
 <p>① 程序启动时会先写下「本次启动尚不健康」的状态；若窗口成功存活数秒，则标记为「健康」。<br>
 ② 若上一次启动未能存活（仍是「不健康」状态），<b>本次启动会自动切换到软件渲染</b>（等价于安全模式），通常即可正常打开；日志里会出现 <code>auto safe-render</code> 字样。<br>
@@ -99,22 +116,24 @@ code { background: #f0f0f0; font-family: Consolas; }
 <div class="tip"><b>启动日志：</b>位于 <code>%USERPROFILE%\.polyxrd\logs\startup-&lt;日期&gt;.log</code>。正常启动应能看到 <code>MainWindow OK</code> 与 <code>shown ... visible=True</code>；若缺失，说明主窗口未成功显示，请把该日志提供给我们。</div>
 
 <h3>2.4 数据库挂载（重要）</h3>
-<p>主程序<b>不内置</b>大型衍射数据库。首次使用物相检索前，请通过工具栏 <b>「数据库管理」</b> 挂载至少一个衍射数据库：</p>
-<p>① 点击工具栏「数据库」图标打开数据库管理器；② 对每个库条目点击「挂载」选择对应的 <code>.sqlite</code> 文件；③ 状态灯变绿即挂载成功。</p>
-<p style="text-align:center;"><img class="shot" src="img/09_database_manager.png"></p>
-<p class="caption">图 2-1&nbsp;&nbsp;数据库管理器：可查看各库的物相数、体积与挂载状态</p>
+<p>主程序<b>不内置</b>大型衍射数据库——三个库各自独立打包、各自下载、各自挂载，只装其中一个也能正常使用，不必凑齐安装。首次使用物相检索前，请通过工具栏 <b>「数据库管理」</b> 挂载至少一个衍射数据库：</p>
+<p>① 点击工具栏「数据库」图标打开数据库管理器；② 对需要的库点「导入…」，选择对应的 <code>.sqlite</code> 文件（官方数据库包下载后解压即可得到）；③ 显示「已挂载」即成功，路径会被记住，下次启动自动加载。</p>
+<figure><img src="img/09_database_manager.png" style="width:96%"></figure>
+<figcaption>图 2-1　数据库管理器：每个库独立导入 / 挂载，显示物相数、体积与来源路径</figcaption>
 <div class="warn"><b>注意：</b>PDF2-2004 数据库为 ICDD 版权数据，请确认已获得正版授权后再挂载使用；该库不随软件分发。</div>
+<div class="tip"><b>未挂载任何库时：</b>仍可使用内置的 118 种常见矿物 / 物相进行检索与演示。</div>
 
 <h3>2.5 界面语言</h3>
 <p>界面默认中文，可在状态栏右下角切换语言（中文 / English / 日本語）。切换立即生效。</p>
+</div>
 
-<div class="pagebreak"></div>
-<h2>第 3 章&nbsp;&nbsp;主界面导览</h2>
-<p>主窗口为「顶部工具栏 + 四标签页 + 右侧停靠窗口」布局：</p>
-<p style="text-align:center;"><img class="shot" src="img/01_main_data_empty.png"></p>
-<p class="caption">图 3-1&nbsp;&nbsp;主窗口（数据页）：顶部工具栏、左侧参数面板、中央谱图区</p>
-<table width="100%">
-<tr><th width="26%">区域</th><th>内容</th></tr>
+<div class="chapter">
+<h2>第 3 章　主界面导览</h2>
+<p>主窗口为「顶部工具栏 + 四标签页 + 左侧参数面板 + 右侧停靠窗口」布局：</p>
+<figure><img src="img/01_main_data_empty.png"></figure>
+<figcaption>图 3-1　主窗口（数据页）：顶部工具栏、左侧参数面板、中央谱图区</figcaption>
+<table>
+<tr><th style="width:26%">区域</th><th>内容</th></tr>
 <tr><td>顶部工具栏</td><td>打开/保存、扣背景、剥 Kα2、峰检测、传统 Search/Match、Profile Fitting、Rietveld 精修、精修向导、COD 检索、导出、数据库管理等高频入口</td></tr>
 <tr><td>左侧「参数面板」</td><td>当前标签页的参数（波长、背景方法、峰检测阈值等）</td></tr>
 <tr><td>标签页 × 4</td><td>数据 / 物相分析 / 结构精修 / 报告</td></tr>
@@ -122,24 +141,25 @@ code { background: #f0f0f0; font-family: Consolas; }
 <tr><td>状态栏</td><td>精修状态、最佳匹配物相、语言与波长信息</td></tr>
 </table>
 <div class="tip"><b>交互提示：</b>谱图支持 <b>滚轮缩放</b>（以光标为中心）、<b>左键拖拽平移</b>；单击峰位可弹出信息；工具栏 <b>Home 键</b>一键复位到数据全览。</div>
+</div>
 
-<div class="pagebreak"></div>
-<h2>第 4 章&nbsp;&nbsp;数据加载与预处理</h2>
+<div class="chapter">
+<h2>第 4 章　数据加载与预处理</h2>
 <h3>4.1 加载数据</h3>
 <p>点击工具栏「打开」或菜单 <b>文件 → 打开数据</b>，选择谱图文件。支持的格式：</p>
-<table width="100%">
-<tr><th width="34%">格式</th><th>说明</th></tr>
+<table>
+<tr><th style="width:34%">格式</th><th>说明</th></tr>
 <tr><td>.xy / .xye / .txt / .csv / .dat</td><td>两列/三列文本（2θ-强度 或 2θ-强度-误差），自由分隔符，自动跳过 # / ! 注释行</td></tr>
 <tr><td>.mdi / .raw</td><td>MDI Jade / 常见仪器原始格式</td></tr>
 <tr><td>.xrdml / .brml / .xml</td><td>XML 标准格式 / Bruker 原始格式</td></tr>
 <tr><td>.json</td><td>结构化谱图数据</td></tr>
 </table>
-<p style="text-align:center;"><img class="shot" src="img/02_data_loaded.png"></p>
-<p class="caption">图 4-1&nbsp;&nbsp;加载数据后：谱图自动绘出，X 轴自适应收缩到数据范围</p>
+<figure><img src="img/02_data_loaded.png"></figure>
+<figcaption>图 4-1　加载数据后：谱图自动绘出，X 轴自适应收缩到数据范围</figcaption>
 <div class="tip">若加载后衍射峰位置整体偏移，请检查「波长」参数（默认 Cu Kα1 1.5406 Å）是否与实验条件一致；修改后重新加载。</div>
 <h3>4.2 预处理步骤（建议顺序）</h3>
-<table width="100%">
-<tr><th width="18%">步骤</th><th width="26%">入口</th><th>作用与原理</th></tr>
+<table>
+<tr><th style="width:16%">步骤</th><th style="width:26%">入口</th><th>作用与原理</th></tr>
 <tr><td>① 扣背景</td><td>工具栏「扣背景」/ 左侧面板选方法</td><td>去除空气散射、荧光、样品台散射等缓变背景。<b>SNIP 算法</b>对晶面密集、背景起伏复杂的谱最稳健；线性/多项式适合背景平缓的谱</td></tr>
 <tr><td>② 平滑</td><td>左侧面板「平滑方法」</td><td><b>Savitzky-Golay 卷积</b>在去噪的同时保留峰形（窗口宽度 11 点为常用起点；窗口过大会压低峰高）</td></tr>
 <tr><td>③ 剥 Kα2</td><td>工具栏「剥 Kα2」</td><td>Cu 靶 Kα1/Kα2 双线使每条衍射峰成对出现。<b>Rachinger 法</b>按强度比 Kα2/Kα1≈0.5 逐点剥除 Kα2 贡献</td></tr>
@@ -147,37 +167,44 @@ code { background: #f0f0f0; font-family: Consolas; }
 </table>
 <h3>4.3 保存、导出与格式转换</h3>
 <p>菜单 <b>文件 → 保存/导出</b> 可将处理后的谱保存为文本格式，供 FullProf、GSAS-II、MAUD 等外部程序直接读取。</p>
-<p>菜单 <b>文件 → 谱图格式转换</b> 可在 <code>xy / txt / dat / csv / mdi / raw / xrdml / json</code> 共 8 种格式之间互转，便于与其它软件交换数据。</p>
+<p>菜单 <b>文件 → 谱图格式转换</b> 打开格式转换对话框，可在 <code>xy / txt / dat / csv / mdi / raw / xrdml / json</code> 共 8 种格式之间互转，便于与其它软件交换数据：</p>
+<figure><img src="img/10_format_convert.png" style="width:82%"></figure>
+<figcaption>图 4-2　谱图格式转换：选择待转换文件与目标格式，批量或单个转换</figcaption>
+</div>
 
-<div class="pagebreak"></div>
-<h2>第 5 章&nbsp;&nbsp;物相分析</h2>
+<div class="chapter">
+<h2>第 5 章　物相分析</h2>
 <h3>5.1 峰检测</h3>
 <p>切到「物相分析」标签，点击工具栏「峰检测」（或左侧面板调阈值后自动运行）。默认以相对高度 5%、最小间距 0.5°、突出度 1% 自动找峰；勾选「高精度（容忍肩峰+亚像素）」可识别重叠肩峰并细化峰位。</p>
-<p style="text-align:center;"><img class="shot" src="img/03_phase_peaks.png"></p>
-<p class="caption">图 5-1&nbsp;&nbsp;峰检测：竖标记为检出峰位，右侧参数可实时调节灵敏度</p>
+<figure><img src="img/03_phase_peaks.png"></figure>
+<figcaption>图 5-1　峰检测：竖标记为检出峰位，右侧参数可实时调节灵敏度</figcaption>
 <div class="tip">峰检测是检索匹配的输入。<b>峰太多</b>（噪声被误检）→ 提高最小高度/突出度；<b>峰太少</b>（弱峰漏检）→ 降低阈值或提高灵敏度。</div>
 <h3>5.2 检索匹配（Search/Match）</h3>
 <p>点击「传统 Search/Match」或左侧「开始识别」。软件将检出峰位（d-I 列表）与数据库中的标准卡片比对，按<b>匹配度 FoM（Figure of Merit）</b>排序输出候选物相：</p>
 <div class="formula">FoM = w₁ · (峰位匹配率) + w₂ · (强度相关性) + w₃ · (强峰命中率)　—　逐峰在容差角（默认 ±0.15°）内配对打分</div>
-<p style="text-align:center;"><img class="shot" src="img/04_phase_identified.png"></p>
-<p class="caption">图 5-2&nbsp;&nbsp;识别结果：左侧候选列表含匹配度/化学式/卡片号，谱图叠加标准峰位（竖线）</p>
+<figure><img src="img/04_phase_identified.png"></figure>
+<figcaption>图 5-2　识别结果：右侧候选列表含匹配度 FoM / 化学式 / 空间群，状态栏给出最佳匹配</figcaption>
 <h3>5.3 数据库选择</h3>
-<table width="100%">
-<tr><th width="22%">数据源</th><th width="22%">规模</th><th>适用场景</th></tr>
+<table>
+<tr><th style="width:22%">数据源</th><th style="width:22%">规模</th><th>适用场景</th></tr>
 <tr><td>builtin 内置库</td><td>118 种常见矿物/物相</td><td>快速演示、教学、无数据库时</td></tr>
 <tr><td>cod_inorganics</td><td>71,199 无机物相</td><td><b>日常推荐</b>（瘦身索引式，d-I 预计算 + Hanawalt 预筛，速度最快）</td></tr>
 <tr><td>cod_full</td><td>113,223 条 CIF</td><td>需要覆盖全化合物空间</td></tr>
 <tr><td>merged</td><td>内置 + COD 全库</td><td>高召回检索</td></tr>
 <tr><td>pdf2</td><td>163,834 物相</td><td>有 ICDD 正版授权时（卡片号/空间群/晶胞最全）</td></tr>
 </table>
-<div class="tip"><b>元素过滤：</b>若已知样品含有的元素（如 EDS 结果），在左侧面板输入元素列表可大幅压缩候选空间、提升命中率。COD 在线检索（工具栏「COD 检索」）可在本地库无果时按元素 + 谱图联网查询。</div>
+<div class="tip"><b>元素过滤：</b>若已知样品含有的元素（如 EDS 结果），在左侧面板输入元素列表可大幅压缩候选空间、提升命中率。</div>
+<div class="tip"><b>COD 在线检索：</b>本地库无果时，点工具栏「COD 检索」按化学式 / 矿物名 / 空间群联网查询 COD 开放晶体库，结果可直接取用 CIF：</p></div>
+<figure><img src="img/11_cod_search.png" style="width:82%"></figure>
+<figcaption>图 5-3　COD 在线检索：按条件查询，结果含 COD 编号与 CIF 链接</figcaption>
 <h3>5.4 勾选物相与 CIF 导出</h3>
 <p>在候选列表<b>勾选</b>可信物相（可多选）。勾选集会实时同步到：</p>
 <p>① 主窗口右侧「物相列表」停靠窗（默认空、由勾选驱动，右键可<b>导出 CIF</b> / 查看详情）；② 精修页右栏「已选物相」列表（同样支持右键导出 CIF）；③ 项目文件（保存/恢复随项目走）。</p>
 <div class="tip">CIF 导出优先从本地 COD 目录读取全文，缺失时自动回退 COD 在线接口——导出的 CIF 可直接作为精修初始模型。</div>
+</div>
 
-<div class="pagebreak"></div>
-<h2>第 6 章&nbsp;&nbsp;结构精修</h2>
+<div class="chapter">
+<h2>第 6 章　结构精修</h2>
 <h3>6.1 Rietveld 精修原理（30 秒版）</h3>
 <p>Rietveld 法不用单个峰的积分强度，而是用结构模型<b>逐点计算整张衍射谱</b>并与实测谱做最小二乘拟合：</p>
 <div class="formula">y<sub>calc</sub>(2θ) = y<sub>bg</sub>(2θ) + Σ<sub>相</sub> S<sub>相</sub> · Σ<sub>hkl</sub> I<sub>hkl</sub> · φ(2θ − 2θ<sub>hkl</sub>)<br>
@@ -185,18 +212,18 @@ I<sub>hkl</sub> ∝ |F<sub>hkl</sub>|² · m<sub>hkl</sub> · LP(θ) · e<sup>�
 目标：min Σ w<sub>i</sub>(y<sub>obs,i</sub> − y<sub>calc,i</sub>)²,　w<sub>i</sub> = 1/σ²(y<sub>i</sub>).</div>
 <p>可精修的量包括：标度因子（→物相含量）、晶胞参数（→峰位）、峰形（Caglioti U/V/W、η）、零点偏移、背景多项式，以及原子坐标与占位。拟合质量用 R 因子衡量：</p>
 <div class="formula">R<sub>wp</sub> = √( Σ w<sub>i</sub>(y<sub>obs,i</sub> − y<sub>calc,i</sub>)² / Σ w<sub>i</sub>y²<sub>obs,i</sub> )　　GOF (S) = R<sub>wp</sub> / R<sub>exp</sub></div>
-<div class="tip"><b>合格参考：</b>常规实验室数据 R<sub>wp</sub>&lt;15%、GOF≈1~3 视为良好。<b>builtin 内置引擎为快速峰形拟合（非完整 Rietveld）</b>，请用 gsas2 / maud / fullprof 出定量结论。</div>
+<div class="tip"><b>合格参考：</b>常规实验室数据 R<sub>wp</sub>&lt;15%、GOF≈1~3 视为良好。<b>builtin 内置引擎为快速峰形拟合（非完整 Rietveld）</b>，其 R<sub>wp</sub> 明显偏高属预期，请用 gsas2 / maud / fullprof 出定量结论。</div>
 
 <h3>6.2 快速精修（精修页）</h3>
-<p style="text-align:center;"><img class="shot" src="img/05_refinement_page.png"></p>
-<p class="caption">图 6-1&nbsp;&nbsp;精修页：上=实验/模拟对比谱，下=残差条（X 轴联动），右侧为控制/结果/含量/已选物相/外部程序</p>
+<figure><img src="img/05_refinement_page.png"></figure>
+<figcaption>图 6-1　精修页：上=实验/模拟对比谱，下=残差条（X 轴联动），右侧为控制/结果/含量/已选物相/外部程序</figcaption>
 <p>操作顺序：① 确认「已选物相」列表非空（来自物相分析页勾选）；② 右栏「精修控制」选引擎/策略/循环数/峰形/背景；③ 点「开始精修」。完成后：</p>
-<p style="text-align:center;"><img class="shot" src="img/06_refinement_done.png"></p>
-<p class="caption">图 6-2&nbsp;&nbsp;精修完成：模拟谱叠加、残差图、Rwp/GOF、物相质量分数与晶胞参数；底部日志输出完整过程</p>
+<figure><img src="img/06_refinement_done.png"></figure>
+<figcaption>图 6-2　精修完成：模拟谱叠加、残差图、Rwp/GOF、物相质量分数与晶胞参数；底部日志输出完整过程（图为 builtin 快速拟合示例，Rwp 偏高属预期）</figcaption>
 
 <h3>6.3 精修引擎</h3>
-<table width="100%">
-<tr><th width="16%">引擎</th><th width="18%">性质</th><th>说明</th></tr>
+<table>
+<tr><th style="width:16%">引擎</th><th style="width:18%">性质</th><th>说明</th></tr>
 <tr><td>auto（推荐）</td><td>自动选择</td><td>按本机安装情况在 gsas2/maud/builtin 间自动择优</td></tr>
 <tr><td>builtin</td><td>内置快速拟合</td><td>零依赖、秒级完成；快速验证物相组合</td></tr>
 <tr><td>gsas2</td><td>GSAS-II 桥接</td><td>调用本机 GSAS-II 安装（scriptable 桥），出标准 Rietveld 结果与 wt%</td></tr>
@@ -205,15 +232,19 @@ I<sub>hkl</sub> ∝ |F<sub>hkl</sub>|² · m<sub>hkl</sub> · LP(θ) · e<sup>�
 </table>
 <div class="tip"><b>引擎回退可见：</b>当你请求的引擎不可用而实际回退到别的引擎时，结果区会给出提示条并写入执行日志，不会再「悄悄换引擎」。</div>
 
-<h3>6.4 精修向导（分步式）</h3>
-<p>工具栏「精修向导」打开分步对话框：<b>数据 → 物相 → 参数 → 预览 → 执行</b> 五步走，支持模板参数、CIF 导入与 COD 检索，适合新手或复杂多相体系。快速精修与分步向导是<b>两条独立路径</b>，结果互不覆盖。</p>
-<p style="text-align:center;"><img class="shot" src="img/08_refine_wizard.png"></p>
-<p class="caption">图 6-3&nbsp;&nbsp;精修向导：按步骤完成参数配置，最后一步执行精修并回读结果</p>
+<h3>6.4 精修向导（两条独立路径）</h3>
+<p>工具栏与菜单提供<b>两种向导入口</b>，与精修页快速精修互为独立路径、结果互不覆盖：</p>
+<p>① <b>快速向导（单页）</b>：一个对话框内配好引擎 / 策略 / 循环数 / 波长 / 2θ 范围，点「确定」即按当前物相勾选集启动精修——适合常规单相、少量多相样品；</p>
+<figure><img src="img/08_refine_wizard.png" style="width:70%"></figure>
+<figcaption>图 6-3　快速精修向导（单页）：引擎状态实时显示，配置后一键启动</figcaption>
+<p>② <b>分步精修向导（五步）</b>：<b>选择数据 → 选择物相 → 配置参数 → 预览 → 执行</b>，比快速版多了模板参数管理、CIF 导入与 COD 检索——适合新手或复杂多相体系：</p>
+<figure><img src="img/08b_refine_wizard_steps.png" style="width:88%"></figure>
+<figcaption>图 6-4　分步精修向导（第 1/5 步）：自动带入已加载数据与 2θ 范围，逐步完成配置</figcaption>
 
 <h3>6.5 精修质量指标与评分（v2.0.0 重要更正）</h3>
 <p>v2.0.0 起，评价指标本身做了<b>根因级修正</b>——历史版本的 R<sub>exp</sub> / GOF 因权重口径配置错误而<b>没有物理意义</b>（例如某些试样 R<sub>exp</sub> 偏小上百倍、GOF 高达数百）。修正后：</p>
-<table width="100%">
-<tr><th width="26%">指标</th><th>含义</th></tr>
+<table>
+<tr><th style="width:26%">指标</th><th>含义</th></tr>
 <tr><td>wR（加权 R<sub>wp</sub>）</td><td>加权轮廓 R，默认使用 Poisson 统计权重</td></tr>
 <tr><td>R<sub>exp</sub></td><td>期望 R，权重正确后才可解读（标准定义 w = 1/σ²）</td></tr>
 <tr><td>GOF (S)</td><td>R<sub>wp</sub>/R<sub>exp</sub>，理想值接近 1</td></tr>
@@ -224,8 +255,8 @@ I<sub>hkl</sub> ∝ |F<sub>hkl</sub>|² · m<sub>hkl</sub> · LP(θ) · e<sup>�
 <p>若指标不可解读（例如所用引擎不回传必要方差信息），界面会明确显示「不可解读」，而不会给出一个看似漂亮的数字。</p>
 
 <h3>6.6 峰形、背景与峰位物理（v2.0.0 改进）</h3>
-<table width="100%">
-<tr><th width="26%">项</th><th>说明</th></tr>
+<table>
+<tr><th style="width:26%">项</th><th>说明</th></tr>
 <tr><td>峰形面积归一</td><td>峰形函数改为面积归一（∫PV = 1）。此前为「峰高归一」，会让积分强度随峰宽变化、η 不再是混合比；修正后峰宽参数才具备可解释性</td></tr>
 <tr><td>背景进入拟合</td><td>背景不再「开头估一次即冻结」，默认对背景做 Chebyshev 多项式抛光（6 阶），仅在更优时采纳</td></tr>
 <tr><td>样品位移</td><td>可精修样品位移（Δ2θ = −2s·cosθ），修正由样品偏心引起的峰位系统偏移</td></tr>
@@ -236,25 +267,27 @@ I<sub>hkl</sub> ∝ |F<sub>hkl</sub>|² · m<sub>hkl</sub> · LP(θ) · e<sup>�
 
 <h3>6.7 外部精修程序</h3>
 <p>精修页右栏底部为三行外部程序面板（状态灯 / 路径 / 浏览 / 检测 / 启动）：</p>
-<table width="100%">
-<tr><th width="20%">程序</th><th width="24%">启动方式</th><th>说明</th></tr>
+<table>
+<tr><th style="width:20%">程序</th><th style="width:24%">启动方式</th><th>说明</th></tr>
 <tr><td>FullProf</td><td><b>批处理精修</b>（一键）</td><td>自动生成 .dat/.pcr → 调用 fp2k 精修 → 自动回读 Rwp/Rexp/Rp/GoF 与各相 R_Bragg/晶胞/含量到日志区；内置标度自动校准与保守模式兜底</td></tr>
 <tr><td>GSAS-II</td><td>拉起 GUI</td><td>导出 .xy 与物相 CIF 到工作目录后启动 GSAS-II 主界面，由用户在 GUI 内建工程精修</td></tr>
 <tr><td>MAUD</td><td>拉起 GUI</td><td>导出 .xye 与 CIF 后启动 MAUD 图形界面</td></tr>
 </table>
 <div class="warn"><b>注意：</b>外部程序工作目录固定为 <code>~/.polyxrd/external_runs/&lt;时间戳&gt;/</code>（全 ASCII，规避权限与编码问题）；路径未配置时点「检测」可自动探测本机安装。用户配置保存在 <code>~/.polyxrd/external_tools.json</code>。</div>
+</div>
 
-<div class="pagebreak"></div>
-<h2>第 7 章&nbsp;&nbsp;报告与项目管理</h2>
+<div class="chapter">
+<h2>第 7 章　报告与项目管理</h2>
 <h3>7.1 Rietveld 报告</h3>
 <p>「报告」标签实时生成精修报告预览：精修质量指标（wR/GOF/质量等级）、物相列表（化学式/质量分数/晶胞/晶胞体积/物相总含量）。可导出 <b>json</b>（机器可读）或 PDF。</p>
-<p style="text-align:center;"><img class="shot" src="img/07_report_page.png"></p>
-<p class="caption">图 7-1&nbsp;&nbsp;报告页：预览 + 一键导出</p>
+<figure><img src="img/07_report_page.png"></figure>
+<figcaption>图 7-1　报告页：报告预览 + 导出格式选择 + 一键导出</figcaption>
 <h3>7.2 项目保存/恢复</h3>
 <p>菜单 <b>文件 → 保存项目 / 打开项目</b>。项目文件记录：数据文件路径、处理参数、峰列表、物相勾选集、精修结果。换机或重开软件后可完整还原工作现场。</p>
+</div>
 
-<div class="pagebreak"></div>
-<h2>第 8 章&nbsp;&nbsp;基本原理</h2>
+<div class="chapter">
+<h2>第 8 章　基本原理</h2>
 <h3>8.1 Bragg 定律与衍射位置</h3>
 <div class="formula">2d·sinθ = n·λ</div>
 <p>晶面间距 d 的晶面族在入射角 θ 处产生相长干涉。测得一系列 2θ 峰位、已知波长 λ，即可反推各晶面的 d 值序列——这是物相「指纹」比对的物理基础。</p>
@@ -265,23 +298,24 @@ I<sub>hkl</sub> ∝ |F<sub>hkl</sub>|² · m<sub>hkl</sub> · LP(θ) · e<sup>�
 <h3>8.4 背景与峰形</h3>
 <p><b>SNIP 背景算法</b>：对谱反复做「LLS 求 minimum → clipping」的尺度递归，把快变峰「削」掉只留慢变背景，适合荧光/陡变背景。<b>峰形</b>用 pseudo-Voigt（Gaussian 与 Lorentzian 线性组合，混合系数 η）描述，并做面积归一；峰宽随角度的变化用 Caglioti 公式 FWHM² = U·tan²θ + V·tanθ + W。</p>
 <h3>8.5 数据库一览</h3>
-<table width="100%">
-<tr><th width="20%">库</th><th width="22%">来源</th><th>内容特点</th></tr>
+<table>
+<tr><th style="width:20%">库</th><th style="width:22%">来源</th><th>内容特点</th></tr>
 <tr><td>内置矿物库</td><td>软件自带</td><td>118 种常见物相，零配置</td></tr>
 <tr><td>COD 无机物库</td><td>COD 开放晶体库</td><td>71,199 相，d-I 预计算 + 原子位点表（可作精修初始模型）</td></tr>
 <tr><td>COD 全库索引</td><td>COD 开放晶体库</td><td>113,223 条 CIF 索引，CIF 按需读取（本地 cod/cif 目录 → 在线接口）</td></tr>
 <tr><td>合并检索</td><td>以上组合</td><td>一次检索同时命中多库</td></tr>
 <tr><td>PDF2-2004</td><td>ICDD（需正版授权）</td><td>163,834 相，卡片信息最全；本地挂载，不随软件分发</td></tr>
 </table>
+</div>
 
-<div class="pagebreak"></div>
-<h2>第 9 章&nbsp;&nbsp;常见问题（FAQ）</h2>
+<div class="chapter">
+<h2>第 9 章　常见问题（FAQ）</h2>
 <p><b>Q1：便携版双击后窗口一闪就退出？</b><br>
 按顺序排查：① <b>是否完整解压后运行</b>（切勿在压缩包内直接运行——最常见原因）；② 改用目录内的 <code>启动 PolyXRD.bat</code> 启动；③ 若仍异常，改用 <code>安全模式启动.bat</code>（强制软件渲染）；④ v2.0.1 的跨启动自愈通常会在第二次启动时自动切到软件渲染并恢复正常；⑤ 查看 <code>%USERPROFILE%\.polyxrd\logs\startup-&lt;日期&gt;.log</code> 确认是否有 <code>MainWindow OK</code> / <code>shown</code>。</p>
 <p><b>Q2：安装包中文界面 / 安装无法继续？</b><br>
 v2.0.1 起安装向导内置简体、繁體中文。若安装被「无法写入目标目录」卡住：请在向导中选择「为所有用户安装」（需要管理员权限），或改回默认安装位置。安装过程会自动写日志到 <code>%TEMP%\Setup Log &lt;日期&gt; #NNN.txt</code>，请提供该日志以便定位；若该目录下没有当天日志，通常是安装程序被杀软 / 安全策略拦截。</p>
 <p><b>Q3：物相检索没有结果 / 结果很差？</b><br>
-按顺序检查：① 是否已挂载数据库（数据库管理器状态灯）；② 峰检测是否合理（过多/过少都会毁掉匹配）；③ 是否应开启元素过滤；④ 波长是否正确；⑤ 尝试换数据库（builtin → cod_inorganics → merged）。</p>
+按顺序检查：① 是否已挂载数据库（数据库管理器状态）；② 峰检测是否合理（过多/过少都会毁掉匹配）；③ 是否应开启元素过滤；④ 波长是否正确；⑤ 尝试换数据库（builtin → cod_inorganics → merged）。</p>
 <p><b>Q4：builtin 精修 wR 很高？</b><br>
 builtin 是内置快速峰形拟合引擎，不计算结构因子，用于快速验证物相组合。定量结论请改用 gsas2 / maud / auto，或使用外部 FullProf 批处理精修。</p>
 <p><b>Q5：wR 比上一版「变大」了？</b><br>
@@ -296,17 +330,19 @@ v2.0.0 起默认启用 Poisson 统计权重，加权 wR 与旧版单位权口径
 <code>C:\Users\&lt;用户名&gt;\.polyxrd\external_runs\&lt;程序_时间戳&gt;\</code>，内含 .dat/.pcr（FullProf 输入）、.sum/.out（结果）、导出的 .xy/.xye 与 CIF。</p>
 <p><b>Q10：窗口布局乱了（工具栏挤在一边）？</b><br>
 窗口状态损坏时旧布局会被自动作废重建；也可删除 <code>~/.polyxrd</code> 下的布局配置重置。</p>
+</div>
 
-<div class="pagebreak"></div>
-<h2>附录 A&nbsp;&nbsp;本版（v2.0.1）变更要点</h2>
-<table width="100%">
-<tr><th width="26%">类别</th><th>内容</th></tr>
+<div class="chapter">
+<h2>附录 A　本版（v2.0.1）变更要点</h2>
+<table>
+<tr><th style="width:26%">类别</th><th>内容</th></tr>
 <tr><td>便携版启动稳健性</td><td>新增 <code>启动 PolyXRD.bat</code> / <code>安全模式启动.bat</code> / <code>便携版使用说明.txt</code>；新增<b>跨启动渲染自愈</b>（上次启动未存活 → 本次自动切软件渲染）；新增 <code>--reset-render</code> 开关</td></tr>
 <tr><td>安装向导</td><td>新增<b>简体中文 / 繁體中文</b>安装语言（此前仅 English / 日本語）；新增安装模式选择（可为需要管理员权限的目录启用「为所有用户安装」）；安装过程<b>自动写日志</b>便于排错</td></tr>
 <tr><td>本手册</td><td>依据 v2.0.0 / v2.0.1 的特性重写；合并原「快速入门」内容，仅保留单一 PDF 手册</td></tr>
 </table>
 <div class="tip"><b>上一版（v2.0.0）的主要改进</b>（详见 CHANGELOG）：精修评价指标根因修正（R<sub>exp</sub>/GOF 恢复物理意义）、默认 Poisson 统计权重、峰形面积归一、背景进入拟合、样品位移 / 低角不对称 / 全晶胞参数、Kα2 双线检测、参考库 hkl 与峰表修复、质量分级统一。</div>
+</div>
 
-<p style="margin-top:30px; color:#888; text-align:center;">— 手册结束 · PolyXRD v2.0.1 —</p>
+<p style="margin-top:30px; color:#999; text-align:center;">— 手册结束 · PolyXRD v2.0.1 —</p>
 </body>
 </html>
