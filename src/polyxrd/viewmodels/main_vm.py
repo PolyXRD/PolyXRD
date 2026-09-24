@@ -52,6 +52,8 @@ class MainViewModel(QObject):
         # 精修前置 CIF 自动匹配 (v0.12): 已选物相缺结构时按 COD 编号/
         # 规范化化学式/矿物名查库补齐。实例级缓存 —— 同一物相二次精修不重查。
         self._cif_resolver = PhaseStructureResolver()
+        # 当前项目文件路径 (v2.1 P0-1: 保存项目 / 另存为 / 打开项目)
+        self._project_file: Optional[str] = None
 
         # 连接子ViewModel的信号
         self._data_vm.data_loaded.connect(self._on_data_loaded)
@@ -100,6 +102,73 @@ class MainViewModel(QObject):
         "匹配分最高的前几个", 否则用户会莫名其妙被拦住说"请先选择物相"。
         """
         return self._phase_vm.matched_phases
+
+    @property
+    def project_file(self):
+        """当前项目文件路径 (保存过/打开过则非 None)。"""
+        return self._project_file
+
+    # ------------------------------------------------------------------
+    # 公共方法 - 项目保存/打开 (v2.1 P0-1)
+    # ------------------------------------------------------------------
+
+    def save_project(self, path: str | Path) -> None:
+        """把当前会话 (数据/峰/物相/勾选集/精修结果) 存为 .pxrd 项目文件。"""
+        from polyxrd.services.project_service import ProjectService
+
+        data = self.current_data
+        if data is None:
+            self.error_occurred.emit(tr("error.no_data"))
+            return
+
+        results = self.matched_phases or []
+        svc = ProjectService()
+        svc.save_project(
+            str(path),
+            data=data,
+            peaks=self.peaks,
+            phases=[r.phase for r in results] or None,
+            results=results or None,
+            selected_phases=self.selected_phases or None,
+            refinement_result=self.refinement_result,
+        )
+        self._project_file = str(path)
+        self.status_changed.emit(tr("status.project_saved", path=str(path)))
+
+    def open_project(self, path: str | Path) -> None:
+        """打开 .pxrd 项目文件, 恢复数据与全部分析状态。
+
+        恢复顺序很关键: 先恢复数据 (data_loaded 会触发 _on_data_loaded 的
+        旧状态清空), 再恢复峰/物相/勾选集, 最后登记精修结果。
+        """
+        from polyxrd.services.project_service import ProjectService
+
+        try:
+            project = ProjectService().load_project(str(path))
+        except Exception as e:
+            self.error_occurred.emit(tr("status.project_load_failed", error=e))
+            return
+
+        self._project_file = str(path)
+        data = project.get("data")
+        if data is not None:
+            # 先恢复数据 (触发状态清空), 再恢复分析状态
+            self._data_vm.restore_data(data)
+            self._phase_vm.restore_state(
+                peaks=project.get("peaks"),
+                results=project.get("results") or [],
+                selected=project.get("selected_phases") or [],
+            )
+            refinement = project.get("refinement_result")
+            if refinement is not None:
+                self.adopt_refinement_result(refinement)
+            self.status_changed.emit(
+                tr("status.project_loaded", name=Path(path).name)
+            )
+        else:
+            self.error_occurred.emit(
+                tr("status.project_load_failed", error="project has no data")
+            )
 
     # ------------------------------------------------------------------
     # 公共方法 - 数据

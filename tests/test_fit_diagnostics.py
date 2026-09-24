@@ -1,15 +1,17 @@
-"""拟合后诊断 (实施手册 v3 / M7-W28)
-===================================
+"""拟合后诊断 (实施手册 v3 / M7-W28; v2.1-B 结构化改造)
+====================================================
 不改模型, 只回答"模型缺了什么":
   - 分段轮廓 R (低角/中角/高角) → 定位问题区域;
   - Durbin-Watson → 残差是白噪声 (≈2) 还是逐点相关 (<<2, 说明模型不完备);
-  - diagnoses → 可读建议 (仅在整体 R 高于阈值时给)。
+  - diagnoses → 结构化建议 [{code, params}] (v2.1-B 起, 文案由 UI tr() 渲染;
+    仅在整体 R 高于阈值时给)。
 """
 from __future__ import annotations
 
 import numpy as np
 import pytest
 
+from polyxrd.i18n.diag_texts import render_entry
 from polyxrd.models.phase import LatticeParams, Phase
 from polyxrd.models.xrd_data import XRDData
 from polyxrd.services.rietveld_refiner import RietveldRefiner
@@ -37,7 +39,7 @@ class TestDiagnosticsMath:
         c = y - 60.0          # 恒定偏差: 残差完全相关
         d = RietveldRefiner._fit_diagnostics(tt, y, c)
         assert d["durbin_watson"] < 0.5, d["durbin_watson"]
-        assert any("模型不完备" in s for s in d["diagnoses"]), d["diagnoses"]
+        assert any(e["code"] == "diag.dw_correlated" for e in d["diagnoses"]), d["diagnoses"]
 
     def test_high_angle_bias_diagnosis(self):
         """只在高角有偏差 → 给出"高角区残差偏大"建议 (并指向 B/峰宽/位移)"""
@@ -47,7 +49,7 @@ class TestDiagnosticsMath:
         c[tt > 60.0] -= 30.0
         d = RietveldRefiner._fit_diagnostics(tt, y, c)
         assert d["R_high_unweighted"] > d["R_low_unweighted"]
-        assert any("高角区残差偏大" in s for s in d["diagnoses"]), d["diagnoses"]
+        assert any(e["code"] == "diag.high_angle_residual" for e in d["diagnoses"]), d["diagnoses"]
 
     def test_low_angle_bias_diagnosis(self):
         tt = np.linspace(10.0, 90.0, 800)
@@ -56,7 +58,7 @@ class TestDiagnosticsMath:
         # 偏差要足够大: 低角段 −60 → 整体 R 才会超过 8% 的建议阈值
         c[tt < 30.0] -= 60.0
         d = RietveldRefiner._fit_diagnostics(tt, y, c)
-        assert any("低角区残差偏大" in s for s in d["diagnoses"]), d["diagnoses"]
+        assert any(e["code"] == "diag.low_angle_residual" for e in d["diagnoses"]), d["diagnoses"]
 
     def test_good_fit_gives_no_advice_even_with_small_dw_deviation(self):
         """整体 R 低于阈值时不给建议 (避免好拟合上瞎提示)"""
@@ -93,7 +95,11 @@ class TestRefinerWiring:
         assert "durbin_watson" in diag
         assert diag["durbin_watson"] < 1.5, diag
         assert diag["diagnoses"], diag
-        assert any(s in w for w in r.warnings for s in diag["diagnoses"][:1])
+        # v2.1-B: 诊断进 result.diagnostics (结构化), 且能渲染为本地化文案
+        codes = [d.get("code") for d in r.diagnostics]
+        assert any(e["code"] in codes for e in diag["diagnoses"][:1]), (diag, codes)
+        rendered = [render_entry(d) for d in r.diagnostics]
+        assert rendered, rendered
 
 
 if __name__ == "__main__":  # pragma: no cover

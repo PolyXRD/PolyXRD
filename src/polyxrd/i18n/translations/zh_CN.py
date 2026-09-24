@@ -215,6 +215,7 @@ translations = {
         "open_file_title": "打开XRD数据文件",
         "confirm_clear_data": "确定要清除当前数据吗？\n将同时清除已检测的峰、物相与精修结果。",
         "save_as_title": "另存为",
+        "project_file_filter": "PolyXRD 项目文件 (*.pxrd);;所有文件 (*)",
         "export_dir_title": "选择导出目录",
         "about_title": "关于 PolyXRD",
         "about_text": "<div style='text-align:center; min-width:360px;'><h2 style='margin:8px 0 4px 0; font-size:20px; color:#1a5276;'>PolyXRD</h2><p style='margin:0 0 12px 0; font-size:13px; color:#555;'>版本 v{version}</p><hr style='border:none; border-top:1px solid #ddd; margin:8px 0;'/><p style='margin:8px 0 4px 0; font-size:12px; color:#333;'>X射线衍射仪数据分析软件</p><p style='margin:4px 0; font-size:11px; color:#666;'>物相识别 · 峰拟合 · Rietveld精修 · 离线数据库</p><hr style='border:none; border-top:1px solid #ddd; margin:12px 0;'/><p style='margin:4px 0; font-size:11px; color:#555;'>联系方式：<a href='mailto:sshztx@outlook.com' style='color:#2980b9; text-decoration:none;'>sshztx@outlook.com</a></p><p style='margin:8px 0 4px 0; font-size:11px; color:#888;'>© 2026 版权所有</p></div>",
@@ -1026,5 +1027,16 @@ translations = {
             "synchrotron": "同步辐射数据",
             "cu_target": "常规Cu靶数据"
         }
+    },
+    "diag": {
+        "engine_fallback": "请求引擎 {requested} → 实际使用 {used} (原因: {reason})",
+        "ka2_detected": "检测到 Kα2 双线未剥离 (最强峰 {center:.2f}°, Δ≈{delta:.3f}°, 高角侧残差 ≈{ratio:.0f}% 峰高): 建议先剥离 Kα2 (数据处理 → Kα2 剥离) 或后续启用 Kα2 建模",
+        "metrics_no_weights": "未使用统计权重: Rexp/GOF 不可解读 (需 stat_weights=poisson/poirier)",
+        "metrics_no_rexp": "GSAS-II 未回传 Rexp/GOF: 该两项不可解读",
+        "metrics_no_ycalc": "GSAS-II 未回传计算谱: Rexp/GOF 不可解读",
+        "dw_correlated": "残差逐点强相关 (DW={dw:.2f}): 模型不完备, 检查是否缺相 / 缺物理项",
+        "high_angle_residual": "高角区残差偏大 ({high:.1f}% vs 低角 {low:.1f}%): 检查整体温度因子 B / 峰宽模型 / 样品位移",
+        "low_angle_residual": "低角区残差偏大 ({low:.1f}% vs 高角 {high:.1f}%): 检查低角不对称 / 背景估计 / 择优取向",
+        "residual_large": "整体残差偏大 (R={r:.1f}%) 但无明显逐点相关 (DW={dw:.2f}): 可能接近噪声底或统计量不足"
     }
 }

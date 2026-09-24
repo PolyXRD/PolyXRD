@@ -44,6 +44,21 @@ class Language(str, Enum):
             cls.RU_RU: "Русский",
         }
 
+    @classmethod
+    def available_languages(cls) -> list["Language"]:
+        """只返回**存在翻译文件**的语言 (v2.1 P2-5)。
+
+        旧行为: 语言菜单遍历全部 9 个枚举, 其中 6 种没有翻译文件
+        (zh_TW/de/fr/es/ko/ru), 选中后界面回退中文但菜单仍勾选该语言 ——
+        "宣称可用实际不可用"。现按 translations/ 目录实际内容过滤;
+        将来补一个 translations/xx_XX.py 即自动出现在菜单, 无需改调用点。
+        """
+        import pathlib
+        import polyxrd.i18n.translations as _pkg
+
+        pkg_dir = pathlib.Path(_pkg.__file__).parent
+        return [lang for lang in cls if (pkg_dir / f"{lang.value}.py").exists()]
+
 
 class I18nManager(QObject):
     """国际化管理器（单例模式）

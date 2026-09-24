@@ -215,6 +215,7 @@ translations = {
         "open_file_title": "Open XRD Data File",
         "confirm_clear_data": "Clear the current data?\nThis also clears detected peaks, phases and refinement results.",
         "save_as_title": "Save As",
+        "project_file_filter": "PolyXRD project files (*.pxrd);;All files (*)",
         "export_dir_title": "Select Export Directory",
         "about_title": "About PolyXRD",
         "about_text": "<div style='text-align:center; min-width:360px;'><h2 style='margin:8px 0 4px 0; font-size:20px; color:#1a5276;'>PolyXRD</h2><p style='margin:0 0 12px 0; font-size:13px; color:#555;'>Version v{version}</p><hr style='border:none; border-top:1px solid #ddd; margin:8px 0;'/><p style='margin:8px 0 4px 0; font-size:12px; color:#333;'>X-Ray Diffraction Data Analysis Software</p><p style='margin:4px 0; font-size:11px; color:#666;'>Phase Identification &middot; Peak Fitting &middot; Rietveld Refinement &middot; Offline Database</p><hr style='border:none; border-top:1px solid #ddd; margin:12px 0;'/><p style='margin:4px 0; font-size:11px; color:#555;'>Contact: <a href='mailto:sshztx@outlook.com' style='color:#2980b9; text-decoration:none;'>sshztx@outlook.com</a></p><p style='margin:8px 0 4px 0; font-size:11px; color:#888;'>© 2026 All Rights Reserved</p></div>",
@@ -1026,5 +1027,16 @@ translations = {
             "synchrotron": "Synchrotron data",
             "cu_target": "Conventional Cu-target data"
         }
+    },
+    "diag": {
+        "engine_fallback": "Requested engine {requested} → actually used {used} (reason: {reason})",
+        "ka2_detected": "Kα2 doublet detected but not stripped (strongest peak {center:.2f}°, Δ≈{delta:.3f}°, high-angle residual ≈{ratio:.0f}% of peak height): strip Kα2 first (Data processing → Kα2 stripping) or enable Kα2 modeling later",
+        "metrics_no_weights": "Statistical weights not used: Rexp/GOF are not interpretable (requires stat_weights=poisson/poirier)",
+        "metrics_no_rexp": "GSAS-II did not return Rexp/GOF: these two values are not interpretable",
+        "metrics_no_ycalc": "GSAS-II did not return a calculated pattern: Rexp/GOF are not interpretable",
+        "dw_correlated": "Strongly correlated residuals (DW={dw:.2f}): model is incomplete — check for missing phases / missing physical terms",
+        "high_angle_residual": "High-angle residuals too large ({high:.1f}% vs low-angle {low:.1f}%): check overall B factor / peak-width model / sample displacement",
+        "low_angle_residual": "Low-angle residuals too large ({low:.1f}% vs high-angle {high:.1f}%): check low-angle asymmetry / background estimate / preferred orientation",
+        "residual_large": "Overall residuals too large (R={r:.1f}%) without obvious point-to-point correlation (DW={dw:.2f}): possibly near the noise floor or insufficient statistics"
     }
 }

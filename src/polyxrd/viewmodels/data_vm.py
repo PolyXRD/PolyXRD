@@ -74,6 +74,20 @@ class DataViewModel(QObject):
         except Exception as e:
             self.error.emit(str(e))
 
+    def restore_data(self, data: XRDData) -> None:
+        """从项目文件恢复数据 (v2.1 P0-1)。
+
+        与 load_file 的区别: 不经 DataLoader 解析文件, 直接装配 XRDData 对象;
+        file_path 置 None (数据来自项目归档而非独立谱图文件)。
+        注意: data_loaded 会触发 main_vm 的"清空旧分析状态"逻辑,
+        因此调用方必须**先**恢复数据、**再**恢复峰/物相/精修。
+        """
+        self._raw_data = data
+        self._processed_data = data.copy()
+        self._file_path = None
+        self.data_loaded.emit(data)
+        self.data_updated.emit(data)
+
     def save_file(self, file_path: str | Path, format: str = "xy") -> None:
         """保存数据"""
         data = self.current_data

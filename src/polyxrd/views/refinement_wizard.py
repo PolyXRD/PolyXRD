@@ -51,6 +51,7 @@ from PySide6.QtWidgets import (
 )
 
 from polyxrd.i18n import tr
+from polyxrd.i18n.diag_texts import metric_note_text, render_diagnostics
 from polyxrd.models.phase import Phase
 from polyxrd.models.refinement import RefinementResult
 from polyxrd.models.xrd_data import XRDData
@@ -1421,10 +1422,11 @@ class RefinementWizard(QWidget):
             f"{getattr(result, 'Rp', 0.0) or getattr(result, 'Rb', 0.0):.3f} %"
         )
         # v1.1.2: 运行期提示 (引擎回退 / 指标不可解读 / Kα2 等) 进执行日志
-        for _w in (getattr(result, "warnings", []) or []):
+        # v2.1-B: 服务层只产出结构化诊断, 此处用 tr() 渲染本地化文案
+        for _w in render_diagnostics(result):
             self._log(f"⚠ {_w}")
         if not bool(getattr(result, "metrics_valid", True)):
-            _note = getattr(result, "metric_note", "")
+            _note = metric_note_text(result)
             if _note:
                 self._log(f"⚠ {_note}")
         self._label_quality.setText(result.quality_grade)

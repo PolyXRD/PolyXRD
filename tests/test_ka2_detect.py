@@ -52,7 +52,8 @@ class TestKa2Detector:
         assert info["delta"] == pytest.approx(0.093, abs=0.01)
 
     def test_warning_reaches_refinement_result(self):
-        """双线数据跑一次精修 → warnings 里出现 Kα2 提示, fit_params 带 ka2_detected"""
+        """双线数据跑一次精修 → result.diagnostics 出现 Kα2 结构化诊断,
+        fit_params 带 ka2_detected (v2.1-B: 文案不再进 warnings)"""
         phase = Phase(name="ZnO", formula="ZnO",
                       lattice=LatticeParams(a=3.25, b=3.25, c=5.207,
                                             alpha=90, beta=90, gamma=120),
@@ -62,8 +63,14 @@ class TestKa2Detector:
         data.wavelength = LAM1
         r = RietveldRefiner().refine(data, [phase], engine="builtin",
                                      max_cycles=4, wR_threshold=None)
-        assert any("Kα2" in w for w in r.warnings), r.warnings
+        codes = [d.get("code") for d in r.diagnostics]
+        assert "diag.ka2_detected" in codes, r.diagnostics
         assert r.fit_params.get("ka2_detected") is True
+        # Kα2 诊断条目带量化参数 (中心角/分离角/残差比)
+        _ka2_entry = next(d for d in r.diagnostics if d["code"] == "diag.ka2_detected")
+        assert _ka2_entry["params"]["center"] > 0
+        assert _ka2_entry["params"]["delta"] > 0
+        assert _ka2_entry["params"]["ratio"] > 0
 
     def test_detector_can_be_disabled(self):
         phase = Phase(name="ZnO", formula="ZnO",
@@ -76,7 +83,8 @@ class TestKa2Detector:
         r = RietveldRefiner().refine(data, [phase], engine="builtin",
                                      max_cycles=4, wR_threshold=None,
                                      detect_ka2=False)
-        assert not any("Kα2" in w for w in r.warnings), r.warnings
+        codes = [d.get("code") for d in r.diagnostics]
+        assert "diag.ka2_detected" not in codes, r.diagnostics
 
 
 if __name__ == "__main__":  # pragma: no cover

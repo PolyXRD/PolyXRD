@@ -215,6 +215,7 @@ translations = {
         "open_file_title": "XRDデータファイルを開く",
         "confirm_clear_data": "現在のデータをクリアしますか？\n検出済みのピーク・物相同定・リートベルト結果も消去されます。",
         "save_as_title": "名前を付けて保存",
+        "project_file_filter": "PolyXRD プロジェクトファイル (*.pxrd);;すべてのファイル (*)",
         "export_dir_title": "エクスポートディレクトリを選択",
         "about_title": "PolyXRDについて",
         "about_text": "<div style='text-align:center; min-width:360px;'><h2 style='margin:8px 0 4px 0; font-size:20px; color:#1a5276;'>PolyXRD</h2><p style='margin:0 0 12px 0; font-size:13px; color:#555;'>バージョン v{version}</p><hr style='border:none; border-top:1px solid #ddd; margin:8px 0;'/><p style='margin:8px 0 4px 0; font-size:12px; color:#333;'>X線回折データ解析ソフトウェア</p><p style='margin:4px 0; font-size:11px; color:#666;'>相同定 &middot; ピークフィッティング &middot; Rietveld精密化 &middot; オフラインデータベース</p><hr style='border:none; border-top:1px solid #ddd; margin:12px 0;'/><p style='margin:4px 0; font-size:11px; color:#555;'>お問い合わせ：<a href='mailto:sshztx@outlook.com' style='color:#2980b9; text-decoration:none;'>sshztx@outlook.com</a></p><p style='margin:8px 0 4px 0; font-size:11px; color:#888;'>© 2026 All Rights Reserved</p></div>",
@@ -1026,5 +1027,16 @@ translations = {
             "synchrotron": "放射光データ",
             "cu_target": "通常Cuターゲットデータ"
         }
+    },
+    "diag": {
+        "engine_fallback": "要求エンジン {requested} → 実際に使用 {used} (理由: {reason})",
+        "ka2_detected": "Kα2 二重線が未除去と検出 (最強ピーク {center:.2f}°, Δ≈{delta:.3f}°, 高角側の残差 ≈{ratio:.0f}% ピーク高): 先に Kα2 を除去 (データ処理 → Kα2 除去) するか、後続の Kα2 モデリングを有効にしてください",
+        "metrics_no_weights": "統計重み未使用: Rexp/GOF は解釈不可 (stat_weights=poisson/poirier が必要)",
+        "metrics_no_rexp": "GSAS-II が Rexp/GOF を返しませんでした: この 2 項目は解釈不可",
+        "metrics_no_ycalc": "GSAS-II が計算パターンを返しませんでした: Rexp/GOF は解釈不可",
+        "dw_correlated": "残差が強く逐点相関 (DW={dw:.2f}): モデル不完全 — 欠落相 / 物理項の不足を確認してください",
+        "high_angle_residual": "高角域の残差が過大 ({high:.1f}% vs 低角 {low:.1f}%): 全体 B 因子 / ピーク幅モデル / 試料変位を確認してください",
+        "low_angle_residual": "低角域の残差が過大 ({low:.1f}% vs 高角 {high:.1f}%): 低角非対称性 / 背景推定 / 配向選択を確認してください",
+        "residual_large": "全体残差が過大 (R={r:.1f}%) だが明確な逐点相関なし (DW={dw:.2f}): ノイズフロア近傍または統計量不足の可能性"
     }
 }

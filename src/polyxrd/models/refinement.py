@@ -11,6 +11,7 @@ from typing import Optional
 import numpy as np
 
 from polyxrd.i18n import tr
+from polyxrd.i18n.diag_texts import metric_note_text
 from polyxrd.models.phase import Phase
 
 
@@ -81,6 +82,10 @@ class RefinementResult:
     fit_params: dict = field(default_factory=dict)
     # v1.1.2: 面向用户的提示 (引擎回退 / 检测到 Kα2 / 指标不可解读等)
     warnings: list[str] = field(default_factory=list)
+    # v2.1-B: 结构化诊断 [{code, params}] —— 服务层只产出代码与参数,
+    # 文案由 UI/报告层用 tr() 渲染 (服务层不得依赖界面语言)。
+    # 旧版 Chinese 文案仍走 warnings 字段读取兼容旧项目文件。
+    diagnostics: list[dict] = field(default_factory=list)
 
     @property
     def rp_value(self) -> float:
@@ -122,8 +127,10 @@ class RefinementResult:
         else:
             lines.append(tr("report.metrics_invalid_line"))
             lines.append(tr("report.rb_line", value=f"{self.rp_value:.4f}"))
-        if self.metric_note:
-            lines.append(tr("report.metric_note_line", value=self.metric_note))
+        # v2.1-B: 指标提示优先旧字段 (旧项目文件), 新结果由结构化诊断渲染
+        _note = self.metric_note or metric_note_text(self)
+        if _note:
+            lines.append(tr("report.metric_note_line", value=_note))
         lines.append(tr("report.quality_line", value=self.quality_grade))
         lines.append("")
         lines.append("-" * 40)
@@ -181,6 +188,7 @@ class RefinementResult:
             "time_seconds": self.time_seconds,
             "fit_params": self.fit_params,
             "warnings": list(self.warnings),
+            "diagnostics": [dict(d) for d in self.diagnostics if isinstance(d, dict)],
         }
 
     @classmethod
@@ -203,4 +211,8 @@ class RefinementResult:
             time_seconds=data.get("time_seconds", 0),
             fit_params=data.get("fit_params", {}),
             warnings=list(data.get("warnings", []) or []),
+            diagnostics=[
+                dict(d) for d in (data.get("diagnostics", []) or [])
+                if isinstance(d, dict) and d.get("code")
+            ],
         )
