@@ -1,7 +1,0 @@
-<Slide style={{ width: 1280, height: 720, backgroundColor: '#0B3C6E', backgroundImage: 'linear-gradient(135deg, #0B3C6E 0%, #1A5FA0 100%)', fontFamily: "'Source Han Sans SC','Microsoft YaHei',sans-serif", position: 'relative' }}>
-  <Box style={{ position: 'absolute', left: 0, top: 250, width: 1280, flexDirection: 'column', alignItems: 'center' }}>
-    <Text style={{ fontSize: 140, fontWeight: 'bold', color: 'rgba(255,255,255,0.18)' }}>02</Text>
-    <Text style={{ fontSize: 64, fontWeight: 'bold', color: '#FFFFFF', marginTop: -40 }}>结构精修与产出</Text>
-    <Text style={{ fontSize: 22, color: 'rgba(255,255,255,0.8)', marginTop: 24 }}>从定性到定量：四引擎 Rietveld 精修与报告导出</Text>
-  </Box>
-</Slide>

@@ -1,7 +1,0 @@
-<Slide style={{ width: 1280, height: 720, backgroundColor: '#0B3C6E', backgroundImage: 'linear-gradient(135deg, #0B3C6E 0%, #1A5FA0 100%)', fontFamily: "'Source Han Sans SC','Microsoft YaHei',sans-serif", position: 'relative' }}>
-  <Box style={{ position: 'absolute', left: 0, top: 240, width: 1280, flexDirection: 'column', alignItems: 'center' }}>
-    <Text style={{ fontSize: 48, fontWeight: 'bold', color: '#FFFFFF' }}>装载数据，找到物相，精修到位</Text>
-    <Text style={{ fontSize: 24, color: 'rgba(255,255,255,0.85)', marginTop: 28 }}>五分钟完成你的第一份 XRD 分析报告</Text>
-    <Text style={{ fontSize: 18, color: 'rgba(255,255,255,0.6)', marginTop: 48 }}>详细操作与原理请查阅《PolyXRD 使用手册 v0.15.0》 · PolyXRD 项目组</Text>
-  </Box>
-</Slide>

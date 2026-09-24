@@ -1,7 +1,0 @@
-<Slide style={{ width: 1280, height: 720, backgroundColor: '#0B3C6E', backgroundImage: 'linear-gradient(135deg, #0B3C6E 0%, #1A5FA0 100%)', fontFamily: "'Source Han Sans SC','Microsoft YaHei',sans-serif", position: 'relative' }}>
-  <Box style={{ position: 'absolute', left: 0, top: 250, width: 1280, flexDirection: 'column', alignItems: 'center' }}>
-    <Text style={{ fontSize: 48, fontWeight: 'bold', color: '#FFFFFF' }}>你的第一份分析报告已经到手</Text>
-    <Text style={{ fontSize: 22, color: 'rgba(255,255,255,0.85)', marginTop: 28 }}>多步精修向导、外置引擎与原理详解，见《PolyXRD 使用手册 v0.15.0》</Text>
-    <Text style={{ fontSize: 18, color: 'rgba(255,255,255,0.6)', marginTop: 44 }}>PolyXRD 项目组 · 2026 年 9 月</Text>
-  </Box>
-</Slide>
