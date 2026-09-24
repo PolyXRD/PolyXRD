@@ -1006,6 +1006,7 @@ translations = {
         "rexp_line": "  Rexp (期望R):    {value} %",
         "rb_line": "  Rp (轮廓R):      {value} %",
         "gof_line": "  GOF (=Rwp/Rexp): {value}",
+        "bragg_r_line": "  Bragg R:        {value} % (按反射积分强度)",
         "metrics_invalid_line": "  Rexp / GOF:      不可解读 (未使用统计权重)",
         "metric_note_line": "  指标提示:       {value}",
         "quality_line": "  质量评级:       {value}",

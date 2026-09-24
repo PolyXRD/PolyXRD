@@ -1006,6 +1006,7 @@ translations = {
         "rexp_line": "  Rexp (expected R):        {value} %",
         "rb_line": "  Rp (profile R):           {value} %",
         "gof_line": "  GOF (=Rwp/Rexp):          {value}",
+        "bragg_r_line": "  Bragg R:        {value} % (per-reflection integrated intensities)",
         "metrics_invalid_line": "  Rexp / GOF:               not interpretable (no statistical weights)",
         "metric_note_line": "  Metric note:              {value}",
         "quality_line": "  Quality grade:            {value}",
