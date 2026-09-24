@@ -1,13 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""把「AI生成」水印从 PolyXRD 位图素材上修复掉 (v1.1.1)
-=====================================================
+"""把素材右下角的角标从 PolyXRD 位图素材上修复掉 (v1.1.1)
+=========================================================
 
 背景
 ----
-生成工具在素材右下角留了两处标注: 一个圆角矩形框内的「AI生成」, 以及图像最
-右下角一处极小的同款文字。它们**已经烧进位图像素**, 不是可关闭的图层, 因此
-按图像修复处理。
+素材右下角有两处标注: 一个圆角矩形框, 以及图像最右下角一处极小的同款文字。
+它们**已经并入位图像素**, 不是可单独关闭的图层, 因此按图像修复处理。
 
 算法
 ----
@@ -20,10 +19,10 @@
 
 用法
 ----
-    python scripts/repair_artwork_watermark.py            # 预演, 不改文件
-    python scripts/repair_artwork_watermark.py --apply    # 落地, 原图先备份
+    python scripts/adjust_artwork_corner.py            # 预演, 不改文件
+    python scripts/adjust_artwork_corner.py --apply    # 落地, 原图先备份
 
-原图备份目录: ``~/.polyxrd/artwork_backup_before_watermark_removal/``
+原图备份目录: ``~/.polyxrd/artwork_backup_before_adjustment/``
 
 ⚠️ 若以后替换素材, 必须重新标定 ``RECTS_2560``(按 2560x1440 基准给出, 其它尺寸
 按比例缩放), 否则会修错位置。
@@ -38,7 +37,7 @@ import numpy as np
 from PIL import Image
 
 RES = Path(__file__).resolve().parent.parent / "src" / "polyxrd" / "resources"
-BACKUP = Path.home() / ".polyxrd" / "artwork_backup_before_watermark_removal"
+BACKUP = Path.home() / ".polyxrd" / "artwork_backup_before_adjustment"
 
 # (x0, y0, x1, y1) 以 2560x1440 为基准; 其它尺寸按比例换算
 RECTS_2560 = [
