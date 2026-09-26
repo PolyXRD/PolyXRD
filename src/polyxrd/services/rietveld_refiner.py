@@ -1823,6 +1823,36 @@ class RietveldRefiner:
                     peaks, wavelength, intensity_ratio=ka2_i_ratio)
             return peaks
 
+        # ── S16/S17 (v2.2): 剖析驱动的性能档位 (全部默认关 = 精确档逐位不变) ──
+        # 剖析结论见 docs/基准报告-精修性能剖析-v2.2.md:
+        #   谱合成占墙钟 95.6-98.3% (窗口化路径, 真实计算非调用开销);
+        #   第二起点 7-2 cost 78× 全损 (33% 墙钟)、7-1 收敛到与起点 1 逐位
+        #   相同 (47% 墙钟); 抛光 7-1 675 次零改进 (10% 墙钟)。
+        # perf_profile="fast" (S17 快速档) 一次性启用三项, 显式 kwargs 可覆盖:
+        #   cutoff_fwhm 100→25 (截断窗 4× 收窄, 单次合成 ~4× 提速);
+        #   start_prune_factor=25 (灾难起点 cost > 25× 最优 → 中途剪枝);
+        #   polish_early_stop=250 (抛光连续 250 次无改进即停)。
+        _cutoff = float(kwargs.get("cutoff_fwhm") or 100.0)
+        _start_prune_factor = float(kwargs.get("start_prune_factor") or 0.0)
+        _polish_early_stop = int(kwargs.get("polish_early_stop") or 0)
+        _perf_profile = str(kwargs.get("perf_profile") or "").lower()
+        if _perf_profile == "fast":
+            if kwargs.get("cutoff_fwhm") is None:
+                _cutoff = 25.0
+            if not _start_prune_factor:
+                _start_prune_factor = 25.0
+            if not _polish_early_stop:
+                _polish_early_stop = 250
+        _plog(f"[perf] profile={_perf_profile or 'precise'} cutoff_fwhm={_cutoff:g} "
+              f"start_prune={_start_prune_factor or 'off'} "
+              f"polish_early_stop={_polish_early_stop or 'off'}")
+
+        class _StartPrunedError(Exception):
+            """S16: 灾难起点中途剪枝信号 (cost 远超当前最优)。"""
+
+        _eval_counter = {"n": 0}
+        _prune_cost_cap = {"v": None, "dup": None}   # 剪枝上限 / 同解带下限
+
         def residual(params):
             weights, fwhm, eta, scale, zs, cag, cs, tex = _unpack(params)
             eff_two_theta = two_theta - zs if abs(zs) > 1e-9 else two_theta
@@ -1830,11 +1860,31 @@ class RietveldRefiner:
             simulated = self._compute_spectrum_from_ref(
                 eff_two_theta, _transform_all(cs, tex, _disp, _bovr_of(params)),
                 weights, fwhm, eta, scale,
-                peak_shape, caglioti=cag, asymmetry=_asym
+                peak_shape, caglioti=cag, asymmetry=_asym,
+                cutoff_fwhm=_cutoff,
             )
             r = y_exp - simulated
             if sqrt_w_fit is not None:
                 r = r * sqrt_w_fit  # R-A1: 目标函数带统计权
+            # S16-2: 起点中途剪枝 (实测 7-2: 观测峰种子起点 cost 78×,
+            # 1727 s 全损; 7-1: 与起点 1 收敛到逐位相同, 843 s 全损)。
+            #   a) 灾难剪枝: cost > 因子×当前最优 (默认 25×) → 无价值;
+            #   b) 快速档起点筛选: 已给足 3 轮迭代 (3×n_params 次评估)
+            #      仍未显著优于当前最优 (cost < 0.98×) → 即使继续跑完
+            #      也难有 >0.3pp 的 wR 改善, 提前终止。
+            # 两者都只在存在已完成起点时启用, 且默认关 (精确档不变)。
+            _eval_counter["n"] += 1
+            cap = _prune_cost_cap["v"]
+            if cap is not None and _eval_counter["n"] > 2 * n_params:
+                c = 0.5 * float(r @ r)
+                if c > cap:
+                    raise _StartPrunedError(
+                        f"cost {c:.4g} > {cap:.4g}")
+                dup = _prune_cost_cap["dup"]
+                if (dup is not None and _eval_counter["n"] > 3 * n_params
+                        and c >= dup):
+                    raise _StartPrunedError(
+                        f"cost {c:.4g} 未显著优于当前最优 (< 0.98x)")
             return r
 
         def _wr_of(sim_core: np.ndarray) -> float:
@@ -1847,6 +1897,7 @@ class RietveldRefiner:
         best_result = None
         best_wR = float("inf")
         best_simulated = None
+        best_cost_final = None   # S16-2: 已完成起点的最优 cost (剪枝基准)
         _plog(
             f"[init] n_phases={n_phases} n_params={n_params} n_starts={n_starts} "
             f"max_nfev/start={max_nfev_per_start} peak_shape={peak_shape} "
@@ -1859,6 +1910,16 @@ class RietveldRefiner:
             x0_clipped = np.clip(x0_i, lower + 1e-8, upper - 1e-8)
             _tick(_start_i, n_starts + 1)
             _t0 = time.time()
+            # S16-2: 灾难起点剪枝 —— 只有存在前一起点最优 cost 时才启用
+            _prune_cost_cap["v"] = (
+                _start_prune_factor * best_cost_final
+                if _start_prune_factor > 0 and best_cost_final is not None
+                else None)
+            _prune_cost_cap["dup"] = (
+                0.98 * best_cost_final
+                if _start_prune_factor > 0 and best_cost_final is not None
+                else None)
+            _eval_counter["n"] = 0
             try:
                 res_opt = least_squares(
                     residual, x0_clipped, bounds=(lower, upper),
@@ -1867,6 +1928,12 @@ class RietveldRefiner:
                     loss="linear",
                     **_lsq_extra,
                 )
+            except _StartPrunedError as e:
+                _plog(
+                    f"[start {_start_i + 1}/{n_starts}] 中途剪枝 "
+                    f"(cost {e} vs 上限, 已评估 {_eval_counter['n']} 次)"
+                )
+                continue
             except Exception as e:  # noqa: BLE001
                 _plog(
                     f"[start {_start_i + 1}/{n_starts}] 求解失败: "
@@ -1880,7 +1947,7 @@ class RietveldRefiner:
             sim_i = self._compute_spectrum_from_ref(
                 eff, _transform_all(opt_cs, opt_tex, _disp_of(res_opt.x), _bovr_of(res_opt.x)),
                 opt_w, opt_fw, opt_et, opt_sc, peak_shape, caglioti=opt_cag,
-                asymmetry=_asym
+                asymmetry=_asym, cutoff_fwhm=_cutoff
             )
             wr_i = _wr_of(sim_i)
 
@@ -1889,6 +1956,9 @@ class RietveldRefiner:
                 best_wR = wr_i
                 best_result = res_opt
                 best_simulated = sim_i
+            _c = float(getattr(res_opt, "cost", 0.0))
+            best_cost_final = _c if best_cost_final is None \
+                else min(best_cost_final, _c)
             _plog(
                 f"[start {_start_i + 1}/{n_starts}] wR={wr_i:7.3f}% "
                 f"nfev={int(getattr(res_opt, 'nfev', 0)):4d} "
@@ -1908,7 +1978,7 @@ class RietveldRefiner:
             best_simulated = self._compute_spectrum_from_ref(
                 two_theta, _transform_all(_cs, _tex, _disp_of(best_result.x), _bovr_of(best_result.x)),
                 _w, _fw, _et, _sc, peak_shape, caglioti=_cag,
-                asymmetry=_asym
+                asymmetry=_asym, cutoff_fwhm=_cutoff
             )
         _plog(f"[multistart] best wR={best_wR:.3f}% → 进入局部抛光")
         # v1.1.2: 记录抛光前的最优 wR, 供收敛判定 (抛光仍能改进 = 未卡死)
@@ -1918,6 +1988,7 @@ class RietveldRefiner:
         #    取 24 个手工方向 + 9 个 Caglioti 调整方向，而不是 3^8 网格
         _tick(n_starts, n_starts + 1)   # 多起点跑完, 进入抛光阶段
         _polish_n = 0   # 抛光评估计数 (日志/进度共用; 提前初始化避免异常路径未定义)
+        _polish_ni = 0  # S16-3: 连续无改进评估计数
         # v2.1 (后续计划 #1 / 基准 7-1): 抛光评估预算按参考峰总数自适应。
         # 每次抛光评估都要在全部数据点上叠加全部参考峰, 单次代价随峰数线性
         # 增长 —— 7-1 (七相, ~3000 条参考峰) 在固定 675 次预算下 25 分钟跑不完。
@@ -2003,7 +2074,8 @@ class RietveldRefiner:
                                         eff_t,
                                         _transform_all(_ucs, _utex, _disp_of(x_t), _bovr_of(x_t)),
                                         _uw, _ufw, _uet, _usc, peak_shape,
-                                        caglioti=_ucag, asymmetry=_asym
+                                        caglioti=_ucag, asymmetry=_asym,
+                                        cutoff_fwhm=_cutoff
                                     )
                                     wr_t = _wr_of(sim_t)
                                     # 每 8 次评估汇报一次: 抛光约百余次评估, 采样过密
@@ -2015,6 +2087,15 @@ class RietveldRefiner:
                                         best_wR = wr_t
                                         best_polish_x = x_t
                                         best_simulated = sim_t
+                                        _polish_ni = 0
+                                    else:
+                                        # S16-3: 无改进早退 —— 连续 N 次评估无改进即停
+                                        # (7-1 实测: 675 次预算全烧完仍零改进)
+                                        _polish_ni += 1
+                                        if (_polish_early_stop > 0
+                                                and _polish_ni >= _polish_early_stop):
+                                            _polish_stop = True
+                                            break
             best_result_x = best_polish_x
         except Exception as e:  # noqa: BLE001
             _plog(f"[warn] 局部抛光异常, 保留多起点结果: {type(e).__name__}: {e}")
@@ -2279,6 +2360,11 @@ class RietveldRefiner:
                 "diagnostics": _diag,
                 # v2.0.0 (W25): 观测峰种子化起点 (反推出的值; 空 = 用了默认起点)
                 "seed_from_peaks": dict(_seed) if _seed else {},
+                # S16/S17 (v2.2): 性能档位与参数 (审计/报告用)
+                "perf_profile": _perf_profile or "precise",
+                "cutoff_fwhm": float(_cutoff),
+                "start_prune_factor": float(_start_prune_factor),
+                "polish_early_stop": int(_polish_early_stop),
             },
         )
         # W28: 最重要的诊断进结构化诊断 (最多 2 条, 避免刷屏);
@@ -2440,6 +2526,7 @@ class RietveldRefiner:
         peak_shape: str = "pseudo-voigt",
         caglioti: tuple = None,  # (U, V, W) FWHM² = U tan²θ + V tanθ + W；None 时退化为固定 FWHM
         asymmetry: float = 0.0,  # v1.1.2 (W17): 低角不对称 (split-PV, 0=关)
+        cutoff_fwhm: float = 100.0,  # S16 (v2.2): 峰距截断半窗 (FWHM 倍数)
     ) -> np.ndarray:
         """从参考峰计算模拟谱 (薄壳, 核心见 phase_display.spectrum_from_refs)
 
@@ -2452,6 +2539,7 @@ class RietveldRefiner:
             np.asarray(two_theta, dtype=float), phase_peaks,
             weights, fwhm, eta, scale, peak_shape, caglioti,
             asymmetry=float(asymmetry or 0.0),
+            cutoff_fwhm=cutoff_fwhm,
         )
 
     @staticmethod
