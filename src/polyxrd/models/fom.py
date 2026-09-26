@@ -23,6 +23,10 @@ class FoMResult:
         delta_2theta: 本次使用的匹配窗口 (度)
         unexplained_obs: 未被任何参考峰解释的实验峰条数 (特异性)
         total_obs: 实验峰总条数
+        scale: v2.2 S10 强度尺度因子 s* = Σ(w·I_obs·I_ref)/Σ(w·I_ref²)
+               (互斥匹配对上的最优最小二乘解; 0 = 未计算)
+        scale_rel: s*·I_ref,max / I_obs,max ∈ [0,1] —— 该相最强线经 s* 缩放后
+               占最强实测峰的比例 (0 = 未计算); "只配上噪声"的伪匹配该值极小
     """
     score: float = 999.0
     matched: int = 0
@@ -33,6 +37,8 @@ class FoMResult:
     delta_2theta: float = 0.15
     unexplained_obs: int = 0
     total_obs: int = 0
+    scale: float = 0.0
+    scale_rel: float = 0.0
 
     @property
     def total(self) -> int:
@@ -60,6 +66,8 @@ class FoMResult:
             "delta_2theta": self.delta_2theta,
             "unexplained_obs": self.unexplained_obs,
             "total_obs": self.total_obs,
+            "scale": self.scale,
+            "scale_rel": self.scale_rel,
         }
 
     @classmethod
@@ -74,6 +82,8 @@ class FoMResult:
             delta_2theta=data.get("delta_2theta", 0.15),
             unexplained_obs=data.get("unexplained_obs", 0),
             total_obs=data.get("total_obs", 0),
+            scale=data.get("scale", 0.0),
+            scale_rel=data.get("scale_rel", 0.0),
         )
 
 
