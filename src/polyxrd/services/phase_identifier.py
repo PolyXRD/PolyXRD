@@ -14,6 +14,29 @@ from typing import Optional
 
 import numpy as np
 
+# S03: 组合目标的质量项权重。目标 = 覆盖 − λ·ΣFoM;
+# λ = _COMBO_FOM_WEIGHT × 平均观测权重 (强度归一后 mean(w) ∈ (0,1]),
+# 量纲上使 FoM 合计只可能在覆盖差 <~5% 时翻盘 (保留覆盖优先)。
+_COMBO_FOM_WEIGHT = 0.05
+
+
+def _combo_fom_weight(obs_int) -> float:
+    """S03: λ = _COMBO_FOM_WEIGHT × 平均观测权重。
+
+    w_j = obs_int[j]/max(obs_int) (与覆盖向量同口径); 强度缺失/全 0 → 1。
+    scores 缺失时 B&B 内部自然退化为纯覆盖 (fom_weight×0)。
+    """
+    try:
+        arr = np.asarray([float(v) for v in obs_int], dtype=float)
+    except (TypeError, ValueError):
+        return _COMBO_FOM_WEIGHT
+    if arr.size == 0:
+        return _COMBO_FOM_WEIGHT
+    mx = float(arr.max())
+    if not (mx > 1e-12):
+        return _COMBO_FOM_WEIGHT
+    return _COMBO_FOM_WEIGHT * float(arr.mean() / mx)
+
 _logger = logging.getLogger(__name__)
 
 from polyxrd.config import get_config
@@ -351,6 +374,7 @@ class PhaseIdentifier:
 
         每条参考峰只要在容差内命中任意实测峰即置位该实测峰对应的位；
         同一实测峰被多条参考峰命中只算一次。
+        (v2.2 起仅供 `_dedupe_results` 使用; 组合目标改用 `_phase_cover_vector`。)
         """
         msk = 0
         for _, tt, _ in phase.get_reference_peaks():
@@ -360,12 +384,55 @@ class PhaseIdentifier:
         return msk
 
     @staticmethod
+    def _phase_cover_vector(phase, obs_tt, obs_int, tolerance: float) -> "np.ndarray":
+        """S02: 物相对实测峰的"强度 × 命中质量"覆盖向量。
+
+        cover_j = max_k[(1 - |Δ_jk| / tol)] · w_j   (参考峰 k 在容差内命中实测峰 j)
+        w_j = obs_int[j] / max(obs_int)             (缺强度/全 0 时取 1)
+
+        与 `_phase_hit_mask` 的布尔口径相比:
+          - 强度低的实测峰 (噪声峰) 贡献小 → 密集弱线相不再靠"命中数量"取胜;
+          - 贴近实测峰位的参考峰贡献大 → 命中质量参与竞争。
+
+        边界: obs_int 全 0/缺失 → 等权 (w_j=1) 且质量项取 1 (接近旧布尔口径)。
+        """
+        ref_peaks = [(float(tt), float(i)) for _, tt, i in phase.get_reference_peaks()
+                     if i is not None]
+        n = len(obs_tt)
+        vec = np.zeros(n, dtype=float)
+        if n == 0:
+            return vec
+        oi = np.asarray(obs_int, dtype=float) if len(obs_int) == n \
+            else np.ones(n, dtype=float)
+        max_int = float(oi.max()) if oi.size else 0.0
+        degenerate = not (max_int > 1e-12)
+        weights = np.ones(n, dtype=float) if degenerate else oi / max_int
+        for j, o in enumerate(obs_tt):
+            best_q = 0.0
+            for rt, _ in ref_peaks:
+                d = abs(rt - o)
+                if d <= tolerance:
+                    q = 1.0 - (d / tolerance) if not degenerate else 1.0
+                    if q > best_q:
+                        best_q = q
+            if best_q > 0.0:
+                vec[j] = best_q * float(weights[j])
+        return vec
+
+    @staticmethod
     def _branch_and_bound_select(masks, metal_flags, n_obs,
-                                 size_targets=None, scores=None) -> list:
-        """分支定界: 选择使"联合覆盖实测峰数"最大的物相子集。
+                                 size_targets=None, scores=None,
+                                 cover_vectors=None,
+                                 fom_weight: float = 0.0) -> list:
+        """分支定界: 选择使"联合覆盖"最大的物相子集。
 
         目标函数 (对给定规模 k):
-          max  联合覆盖峰数 = |∪ masks_i|          (每峰等权)
+          cover_vectors 给定 (S02 口径):
+              cov = Σ_j max_{i∈S} cover_i[j]   (强度 × 命中质量的联合覆盖)
+          cover_vectors=None (兼容旧调用):
+              cov = |∪ masks_i|                (每峰等权, 布尔)
+          S03: obj = cov − fom_weight · Σ_{i∈S} FoM_i
+              (fom_weight=0 时退回纯覆盖; 覆盖优先, 仅覆盖接近时质量翻盘)
           平手 取 Σscore 最小 (score 为 FOM, 越低越好), 再取输入序在前者
 
         约束:
@@ -375,6 +442,7 @@ class PhaseIdentifier:
 
         n ≤ 14 时精确枚举 (可视为最坏 C(14,7)=3432 的组合, 微秒级);
         n > 14 时用逐点边际增益最大的贪心构造 + 覆盖平手退避。
+        两条路径在 cover_vectors 给定时**同口径** (逐点 max)。
         """
         import itertools
         n = len(masks)
@@ -387,20 +455,32 @@ class PhaseIdentifier:
         else:
             sizes = list(range(1, n + 1))
 
-        best_cov_k = {k: -1 for k in sizes}
+        best_cov_k = {k: -1.0 for k in sizes}
         best_combo_k = {k: None for k in sizes}
+        use_cover = cover_vectors is not None
+
+        def _cov_of(combo) -> float:
+            if not use_cover:
+                cov = 0
+                for i in combo:
+                    cov |= masks[i]
+                return float(bin(cov).count("1"))
+            if not combo:
+                return 0.0
+            joint = np.max(np.vstack([cover_vectors[i] for i in combo]), axis=0)
+            return float(joint.sum())
 
         def _consider(k, combo):
-            cov = 0
-            for i in combo:
-                cov |= masks[i]
-            cov = bin(cov).count("1")
-            if cov > best_cov_k[k] or (
-                cov == best_cov_k[k] and best_combo_k[k] is not None and scores
+            cov = _cov_of(combo)
+            obj = cov
+            if fom_weight and scores:
+                obj = cov - fom_weight * sum(scores[i] for i in combo)
+            if obj > best_cov_k[k] + 1e-12 or (
+                abs(obj - best_cov_k[k]) <= 1e-12 and best_combo_k[k] is not None and scores
                 and sum(scores[i] for i in combo)
                 < sum(scores[i] for i in best_combo_k[k])
             ):
-                best_cov_k[k] = cov
+                best_cov_k[k] = obj
                 best_combo_k[k] = tuple(combo)
 
         def _metal_ok(combo):
@@ -419,21 +499,29 @@ class PhaseIdentifier:
             for k in sizes:
                 combo = []
                 covered = 0
+                joint = np.zeros(n_obs, dtype=float) if use_cover else None
                 for _step in range(k):
-                    best_i, best_gain = None, -1
+                    best_i, best_gain = None, -1.0
                     for i in range(n):
                         if i in combo:
                             continue
                         if sum(1 for j in combo if metal_flags[j]) \
                                 + (1 if metal_flags[i] else 0) > max_pm:
                             continue
-                        gain = bin(masks[i] & ~covered).count("1")
+                        if use_cover:
+                            gain = float(np.maximum(joint, cover_vectors[i]).sum()
+                                         - joint.sum())
+                        else:
+                            gain = bin(masks[i] & ~covered).count("1")
                         if gain > best_gain:
                             best_gain, best_i = gain, i
                     if best_i is None:
                         break
                     combo.append(best_i)
-                    covered |= masks[best_i]
+                    if use_cover:
+                        joint = np.maximum(joint, cover_vectors[best_i])
+                    else:
+                        covered |= masks[best_i]
                 if combo:
                     _consider(k, combo)
 
@@ -486,6 +574,7 @@ class PhaseIdentifier:
         min_coverage: float = 0.5,
         peaks=None,
         tolerance: float = 0.2,
+        pool_top_n: Optional[int] = None,
     ) -> list:
         """从物相识别结果中生成精修组合 (分支定界全局搜索)
 
@@ -533,11 +622,23 @@ class PhaseIdentifier:
         if not obs:
             return self._legacy_refinement_combination(kept, expected_count)
         obs_tt = [o[0] for o in obs]
+        obs_int = [o[1] for o in obs]
 
-        # 3. 候选 → 命中掩码; 低覆盖率纯金属与"解释不了任何实测峰"者剔除
+        # 3. 候选 → 命中掩码 / 覆盖向量; 低覆盖率纯金属与
+        #    "解释不了任何实测峰"者剔除
+        #    S04: 池先按 FoM 升序截断至 pool_top_n —— 排名靠后的密集相
+        #    不允许靠覆盖数量挤入 (expected_count 有效取 max(8, 2n), 否则 12);
+        #    只影响进入 B&B 的候选, 不影响返回 UI 的完整候选列表。
+        if pool_top_n is None:
+            pool_top_n = (max(8, 2 * expected_count)
+                          if expected_count and expected_count > 0 else 12)
+        pool_src = kept[:max(int(pool_top_n), 1)]
+        dropped = kept[max(int(pool_top_n), 1):]
+
         pool: list = []
         masks: list[int] = []
-        for m in kept:
+        cover_vectors: list = []
+        for m in pool_src:
             if _is_pure_metal(m.phase) and m.coverage < 0.55:
                 continue
             msk = self._phase_hit_mask(m.phase, obs_tt, tolerance)
@@ -545,10 +646,12 @@ class PhaseIdentifier:
                 continue
             pool.append(m)
             masks.append(msk)
+            cover_vectors.append(
+                self._phase_cover_vector(m.phase, obs_tt, obs_int, tolerance))
         if not pool:
             return []
 
-        # 4. B&B 全局选择
+        # 4. B&B 全局选择 (S02: 目标 = 强度 × 命中质量的联合覆盖)
         metal_flags = [_is_pure_metal(m.phase) for m in pool]
         if expected_count and expected_count > 0:
             size_targets = [min(expected_count, len(pool))]
@@ -562,6 +665,8 @@ class PhaseIdentifier:
 
         selected = self._branch_and_bound_select(
             masks, metal_flags, len(obs_tt), size_targets, scores,
+            cover_vectors=cover_vectors,
+            fom_weight=_combo_fom_weight(obs_int),
         )
         chosen = [pool[i].phase for i in selected]
         if not chosen:
