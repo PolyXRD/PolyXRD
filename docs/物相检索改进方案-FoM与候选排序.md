@@ -6,6 +6,15 @@
 > 现状基线：`services/foam.py::compute_fom`（v0.9.11 互斥加权版 + v2.1 强度加权特异性）、
 > `services/phase_identifier.py::cod_rank_score`（0.9·exp(−FoM/0.8) + 0.1·Hanawalt）。
 
+> ⚠️ **执行前请先读** `docs/物相检索与组合选择改进实施手册-v1-分步可执行.md`（2026-09-26 实测复核）。
+> 该手册对本方案做了两处**优先级修正**：
+> ① **组合选择（`build_refinement_combination`）必须先行** —— 实测 FoM 已把真值排到第 1–4 名，
+>    但自动组合仍会丢掉它们（2-1 组合成 Fluorapatite+Feldspar、4-1 丢掉 Zincite/Corundum）；
+>    只改 FoM，用户可见结果不变。
+> ② **本文阶段 1 第 1 项（参考峰按扫描范围截断）收益被实测削弱** —— 5-1 的方石英 71 条参考峰里
+>    70 条本就在范围内（FoM 1.051→1.051，零改善）。真正的杠杆是**强度可观测性**，
+>    应与 Match! 的 **I scale factor** 耦合实现（手册 S09/S10）。
+
 ---
 
 ## 0. 现状 vs Match! 差距对照
