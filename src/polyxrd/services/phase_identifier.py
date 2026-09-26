@@ -723,6 +723,10 @@ class PhaseIdentifier:
         element_filter: Optional[dict] = None,
         top_n: int = 5,
         tolerance: float = 0.15,
+        fom_obs_range=None,
+        fom_scale=None,
+        fom_scale_penalty: float = 0.0,
+        fom_min_visible_frac: float = 0.0,
     ) -> list[PhaseMatchResult]:
         """执行物相识别（支持三态元素过滤）
 
@@ -751,7 +755,11 @@ class PhaseIdentifier:
                 continue
 
             match_result = self._match_phase_fom(
-                phase, peaks, tolerance
+                phase, peaks, tolerance,
+                obs_range=fom_obs_range,
+                scale=fom_scale,
+                scale_penalty=fom_scale_penalty,
+                min_visible_frac=fom_min_visible_frac,
             )
             results.append(match_result)
 
@@ -829,6 +837,10 @@ class PhaseIdentifier:
         phase: Phase,
         peaks: PeakList,
         tolerance: float,
+        obs_range=None,
+        scale=None,
+        scale_penalty: float = 0.0,
+        min_visible_frac: float = 0.0,
     ) -> PhaseMatchResult:
         """基于匹配因子 (FoM) 匹配单个物相。
 
@@ -860,6 +872,10 @@ class PhaseIdentifier:
             [p.intensity for p in peaks],
             reference_peaks,
             tol=tolerance,
+            obs_range=obs_range,
+            scale=scale,
+            scale_penalty=scale_penalty,
+            min_visible_frac=min_visible_frac,
         )
         score = float(fom.score)
         if _is_pure_metal(phase):

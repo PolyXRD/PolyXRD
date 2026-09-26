@@ -50,6 +50,10 @@ def compute_fom(
     ref_peaks: Iterable,
     tol: float = 0.15,
     use_intensity: bool = True,
+    obs_range=None,
+    min_visible_frac: float = 0.0,
+    scale=None,
+    scale_penalty: float = 0.0,
 ) -> FoMResult:
     """物相参考峰 vs 实验峰的匹配因子 (0.9.11 加权互斥版)。
 
@@ -66,7 +70,22 @@ def compute_fom(
          数量多但强度低, 计数口径会把惩罚打满、丧失区分力 (v2.1 P1-3)。
 
     ``score = (bad + 0.30·未解释强度比) · (1 - 0.20·强度余弦)``
-    ``bad   = [Σ_命中 w·(|Δ|/tol) + Σ_漏检 w] / Σ_all w`` ∈ [0, 2]
+
+    v2.2 S09/S10 追加 (全部默认关闭, 默认参数下行为与 v2.1 完全一致):
+
+      4. **S09 参考峰可观测性**: 只有"可观测"的参考峰进 Σw 分母并参与漏检
+         计数 —— 扫描范围外 / 缩放后低于检出限的参考峰不再被冤枉为漏检。
+           - ``obs_range``: 实验 2θ 扫描范围 (lo, hi); 范围外参考峰不计;
+           - ``scale``: 强度尺度因子。``"auto"`` = 用本函数在互斥匹配对上
+             算出的 s* (S10); 传正数 = 外部指定; ``None`` = 不启用;
+             启用后 ``I_exp = s*·I_ref < 1%·max(I_obs)`` 的参考峰不计漏检
+           - ``min_visible_frac``: scale 未启用时的保守口径
+             (I_ref/Imax ≥ 该值才计入漏检), 默认 0.0 = 不启用
+      5. **S10 强度尺度因子**: 在互斥匹配对上求
+         ``s* = Σ(w·I_obs·I_ref)/Σ(w·I_ref²)``, 记入 FoMResult.scale;
+         ``scale_rel = clip(s*·I_ref,max / I_obs,max, 0, 1)``;
+         ``scale_penalty > 0`` 时按 ``×(1 + scale_penalty·(1-scale_rel))``
+         连续降权 —— "只配上噪声"的伪匹配 s* 极小, 得分变差、排名下降。
 
     Args:
         obs_two_theta: 实验峰 2θ (可迭代)
@@ -74,8 +93,12 @@ def compute_fom(
         ref_peaks: 参考峰 [(hkl|None, 2θ, I), ...]
         tol: 峰位匹配窗口 (度)
         use_intensity: 是否计入强度一致性
+        obs_range: 实验 2θ 扫描范围 (lo, hi) 或 None
+        min_visible_frac: 保守可观测阈值 (I_ref/Imax), 默认 0.0
+        scale: 强度尺度因子 (正数 / "auto" / None)
+        scale_penalty: 尺度因子降权强度 ∈ [0, 1), 默认 0.0 (关)
     Returns:
-        FoMResult (score 越小越好)
+        FoMResult (score 越小越好; scale/scale_rel 记录 s* 与相对强度)
     """
     refs = [(float(tt), float(i)) for _, tt, i in ref_peaks if i is not None]
     if not refs:
@@ -113,22 +136,79 @@ def compute_fom(
         used_obs.add(j)
         match_pairs.append((ri, j, d))
 
-    # ── 2. 强峰加权位置项 + 加权漏峰项 ────────────────────────
+    # ── 2. 强峰加权位置项 + 加权漏峰项 (S09: 按"可观测参考峰"口径) ──
     i_max = max((i for _, i in refs), default=0.0)
     if i_max > 0:
         weights = [_FOM_W_MIN + (1.0 - _FOM_W_MIN) * (i / i_max) for _, i in refs]
     else:
         weights = [1.0] * len(refs)
-    w_sum = float(sum(weights)) or 1.0
+
+    # ── S10: 互斥匹配对上的最优强度尺度因子 s* ────────────────
+    # 只用强线 (I_ref/Imax ≥ 0.2) 的匹配对拟合 —— 弱线参考峰容易被贪心
+    # 配到无关强实测峰, 会把最小二乘拉爆 (实测 5-1 方石英 s*=400 失真)。
+    # 无强线匹配对时回退全部匹配对。
+    s_star = 0.0
+    if match_pairs:
+        strong_ri = set()
+        if i_max > 0:
+            strong_ri = {k for k, (_tt, it) in enumerate(refs)
+                         if it / i_max >= 0.2}
+        fit_pairs = [(ri, j) for ri, j, _d in match_pairs
+                     if (ri in strong_ri or not strong_ri)]
+        if not fit_pairs:
+            fit_pairs = [(ri, j) for ri, j, _d in match_pairs]
+        num = 0.0
+        den = 0.0
+        for ri, j in fit_pairs:
+            w = weights[ri]
+            r_i = refs[ri][1]
+            o_i = float(obs_int[j])
+            num += w * o_i * r_i
+            den += w * r_i * r_i
+        if den > 1e-12:
+            s_star = max(num / den, 0.0)
+
+    # ── S09: 可观测性过滤 (默认全可见 = 与 v2.1 行为一致) ─────
+    visible = [True] * len(refs)
+    if obs_range is not None:
+        lo, hi = float(obs_range[0]), float(obs_range[1])
+        visible = [v and (lo <= tt <= hi) for (tt, _i), v in zip(refs, visible)]
+    eff_scale = None
+    if scale == "auto":
+        eff_scale = s_star if s_star > 0 else None
+    elif isinstance(scale, (int, float)) and float(scale) > 0:
+        eff_scale = float(scale)
+    max_obs_int = float(obs_int.max()) if obs_int.size else 0.0
+    if eff_scale is not None and max_obs_int > 1e-12:
+        thr = 0.01 * max_obs_int
+        visible = [v and (eff_scale * it >= thr)
+                   for (_tt, it), v in zip(refs, visible)]
+    elif min_visible_frac > 0 and i_max > 0:
+        visible = [v and (it / i_max >= min_visible_frac)
+                   for (_tt, it), v in zip(refs, visible)]
+    vis = [k for k, v in enumerate(visible) if v]
+    vis_set = set(vis)
+    w_sum = float(sum(weights[k] for k in vis))
+    if w_sum <= 1e-12:
+        # 没有任何可观测参考峰: 该相在本谱上不可判读
+        return FoMResult(score=999.0, matched=0,
+                         missed=len(vis) if vis else len(refs),
+                         position_penalty=2.0, intensity_score=0.0,
+                         method="fom", delta_2theta=float(tol),
+                         unexplained_obs=int(obs_tt.size),
+                         total_obs=int(obs_tt.size),
+                         scale=float(s_star), scale_rel=0.0)
 
     sum_dev = 0.0
-    for ri, _, d in match_pairs:
-        sum_dev += weights[ri] * (d / tol)
-    matched_w = float(sum(weights[ri] for ri, _, _ in match_pairs))
+    matched_w = 0.0
+    matched = 0
+    for ri, _j, d in match_pairs:
+        if ri in vis_set:
+            sum_dev += weights[ri] * (d / tol)
+            matched_w += weights[ri]
+            matched += 1
     bad = (sum_dev + (w_sum - matched_w)) / w_sum
-
-    matched = len(match_pairs)
-    missed = len(refs) - matched
+    missed = len(vis) - matched
 
     # ── 3. 特异性: 未被解释的实验峰 (v2.1 P1-3: 强度加权) ─────
     # 旧口径 = 未解释峰数/总峰数 —— 峰检测无幅度下限时, 噪声峰(数多但强度低)
@@ -164,6 +244,15 @@ def compute_fom(
     if use_intensity:
         score *= (1.0 - _FOM_INTENSITY_WEIGHT * ic)
 
+    # ── S10: 尺度因子连续降权 (默认 0 = 关) ───────────────────
+    # scale_rel 低 = 该相所需强度尺度远小于谱中最强实测峰
+    # (微量相 / 配噪声), 应使其得分变差 (排后) 而非变好。
+    scale_rel = 0.0
+    if s_star > 0 and i_max > 0 and max_obs_int > 1e-12:
+        scale_rel = min(max(s_star * i_max / max_obs_int, 0.0), 1.0)
+        if scale_penalty > 0:
+            score *= (1.0 + scale_penalty * (1.0 - scale_rel))
+
     return FoMResult(
         score=float(max(score, 1e-4)),
         matched=matched,
@@ -174,6 +263,8 @@ def compute_fom(
         delta_2theta=float(tol),
         unexplained_obs=int(unexplained),
         total_obs=n_obs,
+        scale=float(s_star),
+        scale_rel=float(scale_rel),
     )
 
 
