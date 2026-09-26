@@ -1,4 +1,4 @@
-"""v2.2 S09/S10 回归测试: FoM 可观测性 + 强度尺度因子
+"""v2.2 S09/S10/S11 回归测试: FoM 可观测性 + 强度尺度因子 + 陡降核
 =====================================================
 - 默认参数与 v2.1 行为完全一致 (默认关)
 - s* 强线拟合对弱线离群对稳健
@@ -6,9 +6,12 @@
 - 全部参考峰不可观测 → 不可判读 (999)
 - scale_penalty 连续降权语义 (实测对微量相有害, 默认 0 = 关; 仅作展示/
   S14 标定备选 —— 端到端实证见 docs/基准报告-物相检索-v1.md 附录)
+- S11 高斯陡降核: 位置偏差项由线性改 1-exp(-0.5·(2Δ/tol)²)
+  (测试口径更新理由: 核函数变更后按新语义精确断言, 见手册 §S11)
 """
 from __future__ import annotations
 
+import math
 import sys
 from pathlib import Path
 
@@ -133,3 +136,81 @@ class TestScalePenalty:
         assert pen.score > base.score
         assert pen.score == pytest.approx(
             base.score * (1 + 0.5 * (1 - 0.05)))
+
+
+class TestSteepKernelS11:
+    """S11 位置偏差高斯陡降核。
+
+    单峰用例 matched=1 → intensity_score=0 (ic 需 matched>=2),
+    score 即核函数值, 可精确断言。核: 1-exp(-0.5·(2Δ/tol)²)。
+    """
+
+    def test_half_window_kernel_value(self):
+        """半窗偏差 (x=1): 核值 1-exp(-0.5)=0.3935 (线性核为 0.5)。"""
+        refs = _refs([(10.0, 100.0)])
+        r = compute_fom([10.1], [100.0], refs, tol=0.2)
+        assert r.score == pytest.approx(1.0 - math.exp(-0.5), rel=1e-3)
+
+    def test_edge_vs_half_discrimination_above_2x(self):
+        """边缘 (x=2, 核值 0.865) vs 半窗 (0.393) 区分度 2.2× > 线性核的 2×。"""
+        refs = _refs([(10.0, 100.0)])
+        r_half = compute_fom([10.1], [100.0], refs, tol=0.2)
+        r_edge = compute_fom([10.2], [100.0], refs, tol=0.2)
+        assert r_edge.score / r_half.score > 2.0
+
+    def test_near_zero_deviation_steep_drop(self):
+        """近零偏差 (x=0.2): 核值 0.0198, 远小于线性核的 0.1 —— 陡降。"""
+        refs = _refs([(10.0, 100.0)])
+        r = compute_fom([10.02], [100.0], refs, tol=0.2)
+        assert r.score == pytest.approx(1.0 - math.exp(-0.02), rel=1e-3)
+        assert r.score < 0.1  # 线性核同偏差为 0.1
+
+    def test_zero_bias_still_best(self):
+        """零偏差位置项为 0 (分数取下限 1e-4), 任何偏差都更大。"""
+        refs = _refs([(10.0, 100.0)])
+        r0 = compute_fom([10.0], [100.0], refs, tol=0.2)
+        r1 = compute_fom([10.05], [100.0], refs, tol=0.2)
+        assert r0.score == pytest.approx(1e-4)
+        assert r1.score > r0.score
+
+
+class TestStrongMissS12:
+    """S12 漏检分档: 强线 (I/Imax>=0.5) 被漏权重 x2, 弱线维持。"""
+
+    def test_strong_miss_penalty_doubled(self):
+        """强线被漏: 漏检项 2w 而非 w。
+
+        refs: 强线 100@10 (w=1.0) + 弱线 10@20 (w=0.37), w_sum=1.37;
+        实测只有 20 处弱峰 → strong miss, bad = 2.0/1.37 = 1.4599。
+        """
+        refs = _refs([(10.0, 100.0), (20.0, 10.0)])
+        r = compute_fom([20.0], [10.0], refs, tol=0.2)
+        assert r.missed == 1
+        assert r.score == pytest.approx(2.0 / 1.37, rel=1e-3)
+
+    def test_weak_miss_penalty_unchanged(self):
+        """弱线被漏 (强线命中): 漏检项维持 w, 与旧口径一致。
+
+        refs 同上; 实测只有 10 处强峰 → weak miss, bad = 0.37/1.37。
+        """
+        refs = _refs([(10.0, 100.0), (20.0, 10.0)])
+        r = compute_fom([10.0], [100.0], refs, tol=0.2)
+        assert r.missed == 1
+        assert r.score == pytest.approx(0.37 / 1.37, rel=1e-3)
+
+    def test_strong_matcher_ranks_above_weak_sniffer(self):
+        """强线擦边命中 > 弱线全蹭到但强线缺席 (伪匹配被打下去)。"""
+        refs = _refs([(10.0, 100.0), (20.0, 10.0)])
+        # 相 A: 强线擦边命中 (x=2, 核值 0.865), 弱线漏 (w=0.37)
+        ra = compute_fom([10.2], [100.0], refs, tol=0.2)
+        # 相 B: 弱线精确命中, 强线缺席 (S12: 漏检 2.0)
+        rb = compute_fom([20.0], [10.0], refs, tol=0.2)
+        assert ra.score < rb.score
+
+    def test_observability_filter_runs_before_split(self):
+        """S09×S12 顺序: 被可观测性过滤掉的强线不进漏检分母 (不再 x2)。"""
+        refs = _refs([(10.0, 100.0), (20.0, 10.0)])
+        # 强线 10.0 在扫描范围外 → 只剩弱线口径: bad = 0/0.37 = 0
+        r = compute_fom([20.0], [10.0], refs, tol=0.2,
+                        obs_range=(15.0, 30.0))
+        assert r.score == pytest.approx(0.0, abs=1e-3)

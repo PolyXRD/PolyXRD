@@ -17,7 +17,8 @@ class FoMResult:
         score: 综合评分 (越小越好, >0)
         matched: 命中参考峰条数 (一一对应互斥匹配, 一个实验峰只算一次)
         missed: 未命中参考峰条数
-        position_penalty: 位置项 bad = 加权平均位置偏差 + 加权漏峰比 (0~2)
+        position_penalty: 位置项 bad = 加权平均位置偏差 + 加权漏峰比
+            (典型 0~2; v2.2 S12 强线漏检权重 x2 后极端情况可略超 2)
         intensity_score: 匹配对上的强度余弦一致性 0~1 (1=完全一致; 0=无强度信息)
         method: "fom" (峰表法) 或 "profile" (峰型匹配)
         delta_2theta: 本次使用的匹配窗口 (度)

@@ -12,6 +12,7 @@ FoM 匹配纯函数 + 搜索-匹配编排 (M10, Sprint 1)
 """
 from __future__ import annotations
 
+import math
 from typing import Iterable, Optional
 
 import numpy as np
@@ -70,6 +71,14 @@ def compute_fom(
          数量多但强度低, 计数口径会把惩罚打满、丧失区分力 (v2.1 P1-3)。
 
     ``score = (bad + 0.30·未解释强度比) · (1 - 0.20·强度余弦)``
+
+    v2.2 S11 位置偏差改陡降核: 命中对的偏差项由线性 ``w·(|Δ|/tol)`` 改为
+    高斯核 ``w·(1 − exp(−0.5·(2Δ/tol)²))`` —— 零偏差→0、tol 边缘→≈1,
+    "几乎对准"与"擦边"的区分度显著提升。
+
+    v2.2 S12 漏检分档: 可观测参考峰中 I/Imax ≥ 0.5 的**强线**被漏时,
+    漏检项权重 ×2 (弱线维持) —— 专打"弱线全蹭到、强线全缺席"的伪匹配;
+    与 S09 叠加时顺序为"先可观测性过滤、再拆强弱档"。
 
     v2.2 S09/S10 追加 (全部默认关闭, 默认参数下行为与 v2.1 完全一致):
 
@@ -199,15 +208,32 @@ def compute_fom(
                          total_obs=int(obs_tt.size),
                          scale=float(s_star), scale_rel=0.0)
 
+    # ── S12: 漏检分档 (在 S09 可观测性过滤之后) ────────────────
+    # 强线 (I/Imax ≥ 0.5) 被漏的代价 ×2, 弱线维持 —— 伪匹配常表现为
+    # "弱线全蹭到、强线全缺席", 单一权重的漏峰项对此区分不足。
+    _STRONG_MISS_FRAC = 0.5
+    _STRONG_MISS_MULT = 2.0
+    vis_matched = {ri for ri, _j, _d in match_pairs if ri in vis_set}
     sum_dev = 0.0
+    missed_w = 0.0
     matched_w = 0.0
     matched = 0
     for ri, _j, d in match_pairs:
         if ri in vis_set:
-            sum_dev += weights[ri] * (d / tol)
+            # S11 陡降核: 零偏差→0, tol 边缘→≈1。线性核 |Δ|/tol 对小偏差
+            # 惩罚太钝 (半窗偏差只罚 0.5), 高斯核让"几乎对准"与"擦边"
+            # 的区分度大幅提升 (0.5·(2Δ/tol)², exp 截断防过罚)。
+            x = 2.0 * d / tol
+            sum_dev += weights[ri] * (1.0 - math.exp(-0.5 * x * x))
             matched_w += weights[ri]
             matched += 1
-    bad = (sum_dev + (w_sum - matched_w)) / w_sum
+    for k in vis:
+        if k not in vis_matched:
+            w_k = weights[k]
+            if i_max > 0 and refs[k][1] / i_max >= _STRONG_MISS_FRAC:
+                w_k *= _STRONG_MISS_MULT
+            missed_w += w_k
+    bad = (sum_dev + missed_w) / w_sum
     missed = len(vis) - matched
 
     # ── 3. 特异性: 未被解释的实验峰 (v2.1 P1-3: 强度加权) ─────
