@@ -319,10 +319,31 @@ class PhaseIdentifier:
             out.append((float(tt), float(getattr(p, "intensity", 1.0) or 1.0)))
         return out
 
-    def _dedupe_results(self, results, peaks=None, tolerance: float = 0.2) -> list:
-        """结构感知 + 数据感知的同公式条目去重。
+    @staticmethod
+    def _formula_key(formula: str) -> str:
+        """S05: 归一化成分分组键 (复用 parse_formula_detailed, 不另写解析)。
 
-        同 (formula, elements) 的多条候选, 有两种成因:
+        先把水合物的常见分隔写法 (·/./:/* + nH2O) 规范成解析器可正确
+        处理的 (H2O)n 形式, 再交给 parse_formula_detailed 做成分归一;
+        解析失败 → 回退小写去空格原文 (宁宽松勿漏判)。
+        仅用于去重分组, 不改写 phase.formula (展示/导出不受影响)。
+        """
+        import re as _re
+        from polyxrd.utils.formula_parser import parse_formula_detailed
+        s = formula or ""
+        s = _re.sub(r"[·•.:*\s]+(\d*)\s*(H2O)\b", r"(\2)\1", s, flags=_re.I)
+        try:
+            comp = parse_formula_detailed(s)
+        except Exception:
+            comp = None
+        if not comp:
+            return (formula or "").replace(" ", "").lower()
+        return " ".join(f"{el}{float(v):g}" for el, v in sorted(comp.items()))
+
+    def _dedupe_results(self, results, peaks=None, tolerance: float = 0.2) -> list:
+        """结构感知 + 数据感知的同成分条目去重。
+
+        同 (归一化成分, elements) 的多条候选, 有两种成因:
           a) 同一结构的重复条目 (如 Fluorite/CaF2 两版本、Brucite 重复)
              → 只留 FOM 最优 (最先出现) 一条
           b) 结构不同的真正多型 (α-Quartz vs Cristobalite vs Tridymite 均
@@ -341,13 +362,16 @@ class PhaseIdentifier:
                 obs_tt = None
 
         kept: list = []
+        kept_keys: list = []
         for r in results:
             formula = r.phase.formula or ""
-            group = [s for s in kept
-                     if s.phase.formula == formula
+            key = self._formula_key(formula)
+            group = [s for s, sk in zip(kept, kept_keys)
+                     if sk == key
                      and s.phase.elements == r.phase.elements]
             if not group:
                 kept.append(r)
+                kept_keys.append(key)
                 continue
             # 同一结构重复条目 → 剔除
             if any(self._phases_structurally_same(s.phase, r.phase)
@@ -356,6 +380,7 @@ class PhaseIdentifier:
             # 无实测峰信息 → 保守保留多型
             if obs_tt is None:
                 kept.append(r)
+                kept_keys.append(key)
                 continue
             # 数据感知: 必须解释到已保留成员解释不到的实测峰
             r_msk = self._phase_hit_mask(r.phase, obs_tt, tolerance)
@@ -366,6 +391,7 @@ class PhaseIdentifier:
                 group_msk |= self._phase_hit_mask(s.phase, obs_tt, tolerance)
             if r_msk & ~group_msk:
                 kept.append(r)
+                kept_keys.append(key)
         return kept
 
     @staticmethod
@@ -575,6 +601,7 @@ class PhaseIdentifier:
         peaks=None,
         tolerance: float = 0.2,
         pool_top_n: Optional[int] = None,
+        log_cb=None,
     ) -> list:
         """从物相识别结果中生成精修组合 (分支定界全局搜索)
 
@@ -634,6 +661,11 @@ class PhaseIdentifier:
                           if expected_count and expected_count > 0 else 12)
         pool_src = kept[:max(int(pool_top_n), 1)]
         dropped = kept[max(int(pool_top_n), 1):]
+        if log_cb and dropped:
+            names = ", ".join(
+                f"{m.phase.name}(rank {i + len(pool_src) + 1})"
+                for i, m in enumerate(dropped))
+            log_cb(f"[combo] 被池裁剪丢弃 (pool_top_n={pool_top_n}): [{names}]")
 
         pool: list = []
         masks: list[int] = []
@@ -669,6 +701,17 @@ class PhaseIdentifier:
             fom_weight=_combo_fom_weight(obs_int),
         )
         chosen = [pool[i].phase for i in selected]
+        if log_cb:
+            parts = []
+            joint = np.zeros(len(obs_tt))
+            for i in selected:
+                cv = float(cover_vectors[i].sum()) if i < len(cover_vectors) else 0.0
+                parts.append(f"{pool[i].phase.name}(cover={cv:.2f}, FoM={pool[i].score:.3f})")
+                if i < len(cover_vectors):
+                    joint = np.maximum(joint, cover_vectors[i])
+            log_cb("[combo] pool=%d(top_n=%s) 结果=[%s] 联合覆盖=%.2f/%d"
+                   % (len(pool), pool_top_n, "; ".join(parts),
+                      float(joint.sum()), len(obs_tt)))
         if not chosen:
             return self._legacy_refinement_combination(kept, expected_count)
         return chosen
