@@ -17,7 +17,23 @@ import numpy as np
 # S03: 组合目标的质量项权重。目标 = 覆盖 − λ·ΣFoM;
 # λ = _COMBO_FOM_WEIGHT × 平均观测权重 (强度归一后 mean(w) ∈ (0,1]),
 # 量纲上使 FoM 合计只可能在覆盖差 <~5% 时翻盘 (保留覆盖优先)。
+# S14 网格标定 (0.05→1.0 × 6 档): 相级命中对 λ 完全不敏感
+# (覆盖项主导, FoM 项在 13 试样上从未翻盘) → 维持 0.05 不变。
 _COMBO_FOM_WEIGHT = 0.05
+
+# S14: 覆盖尺度一致性锐化指数。c = (min/max)^p; p=1 为线性 min/max,
+# p=2 对"弱线配强峰"的失配惩罚更狠 (400+ 线密集相在强度维也稠密,
+# 线性 ratio 压不塌其覆盖毯)。
+# S14 网格标定 (13 试样, held-out 5-1/7-1/7-2, 见组合基准报告附录):
+#   p=2/α=1 → cal 21/31 (+4) 但 held 9/18 (−2), 违反 held-out 不降约束 → 否决;
+#   p=1/α=1 → cal 19/31 (+2), held 10/18 (−1, 全部来自 7-1 Anatase 被
+#   同构 rutile 型 PbO2 以微弱覆盖优势顶替), 总 28→29。取 p=1。
+_COVER_CONSIST_POW = 1.0
+
+# S14: 一致性强度插值 α ∈ [0,1]: c_eff = (1-α) + α·c^p。
+# α=0 → 无一致性项 (S11+S12 原状, 28/49); α=1 → 全强度 (29/49)。
+# λ (_COMBO_FOM_WEIGHT) 在 0.05→1.0 六档上完全不敏感 → 维持 0.05。
+_COVER_CONSIST_ALPHA = 1.0
 
 
 def _combo_fom_weight(obs_int) -> float:
@@ -411,38 +427,82 @@ class PhaseIdentifier:
 
     @staticmethod
     def _phase_cover_vector(phase, obs_tt, obs_int, tolerance: float) -> "np.ndarray":
-        """S02: 物相对实测峰的"强度 × 命中质量"覆盖向量。
+        """S02+S14: 物相对实测峰的"强度 × 命中质量 × 尺度一致性"覆盖向量。
 
-        cover_j = max_k[(1 - |Δ_jk| / tol)] · w_j   (参考峰 k 在容差内命中实测峰 j)
-        w_j = obs_int[j] / max(obs_int)             (缺强度/全 0 时取 1)
+        cover_j = max_k[q_jk · c_jk] · w_j
+          q_jk = 1 - |Δ_jk| / tol                      (参考峰 k 命中质量)
+          c_jk = (1-α) + α·[min(a_j, s*·b_k) / max(a_j, s*·b_k)]^p   (S14 尺度一致性)
+          a_j = obs_int[j] / max(obs_int)              (观测强度归一)
+          b_k = I_ref_k / I_ref_max                    (参考强度归一)
+          s* = Σ(w_j·a_j·b_k) / Σ(w_j·b_k²)            (命中对上的最小二乘尺度)
+        w_j = obs_int[j] / max(obs_int)                (缺强度/全 0 时取 1)
 
-        与 `_phase_hit_mask` 的布尔口径相比:
-          - 强度低的实测峰 (噪声峰) 贡献小 → 密集弱线相不再靠"命中数量"取胜;
-          - 贴近实测峰位的参考峰贡献大 → 命中质量参与竞争。
+        S14 尺度一致性的作用: 密集弱线相即使峰位全沾上, 但强度对不上
+        (弱线配到强观测峰) 时单峰贡献被压低 —— "覆盖毯"塌缩 (13 试样基准
+        5-2/5-2b 回退的根因, 见 docs/基准报告-物相组合-v1.md 附录)。
+        s* 只由互斥最优命中对估计, 强线主导 (w_j 大), 噪声弱峰不拉偏。
 
-        边界: obs_int 全 0/缺失 → 等权 (w_j=1) 且质量项取 1 (接近旧布尔口径)。
+        边界: obs_int 全 0/缺失 → 等权 (w_j=1) 且 q=c=1 (退回旧布尔口径)。
         """
         ref_peaks = [(float(tt), float(i)) for _, tt, i in phase.get_reference_peaks()
                      if i is not None]
         n = len(obs_tt)
         vec = np.zeros(n, dtype=float)
-        if n == 0:
+        if n == 0 or not ref_peaks:
             return vec
         oi = np.asarray(obs_int, dtype=float) if len(obs_int) == n \
             else np.ones(n, dtype=float)
         max_int = float(oi.max()) if oi.size else 0.0
         degenerate = not (max_int > 1e-12)
-        weights = np.ones(n, dtype=float) if degenerate else oi / max_int
-        for j, o in enumerate(obs_tt):
-            best_q = 0.0
+        if degenerate:
+            # 旧布尔口径: 等权 + 命中即 1
+            obs = np.asarray([float(t) for t in obs_tt], dtype=float)
             for rt, _ in ref_peaks:
-                d = abs(rt - o)
-                if d <= tolerance:
-                    q = 1.0 - (d / tolerance) if not degenerate else 1.0
-                    if q > best_q:
-                        best_q = q
-            if best_q > 0.0:
-                vec[j] = best_q * float(weights[j])
+                vec = np.maximum(vec, (np.abs(obs - rt) <= tolerance).astype(float))
+            return vec
+
+        weights = oi / max_int
+        a = weights.copy()
+        ref_i = np.asarray([i for _, i in ref_peaks], dtype=float)
+        ref_max = float(ref_i.max())
+        b = ref_i / ref_max if ref_max > 1e-12 else np.ones_like(ref_i)
+        obs = np.asarray([float(t) for t in obs_tt], dtype=float)
+
+        # 每个实测峰的互斥最优命中 (与 S02 相同: q 最大者)
+        best_q = np.zeros(n, dtype=float)
+        best_k = np.full(n, -1, dtype=int)
+        for k, (rt, _) in enumerate(ref_peaks):
+            d = np.abs(obs - rt)
+            q = np.where(d <= tolerance, 1.0 - d / tolerance, 0.0)
+            upd = q > best_q
+            best_q[upd] = q[upd]
+            best_k[upd] = k
+
+        matched = best_q > 0
+        if not matched.any():
+            return vec
+        # s*: 命中对上的最小二乘强度尺度 (强观测峰权重大)
+        bb = b[best_k[matched]]
+        den = float(np.sum(weights[matched] * bb * bb))
+        if den > 1e-12:
+            s_star = float(np.sum(weights[matched] * a[matched] * bb)) / den
+        else:
+            s_star = 1.0
+        if not (s_star > 1e-12):
+            s_star = 1.0
+
+        idx = np.nonzero(matched)[0]
+        pow_p = _COVER_CONSIST_POW
+        alpha = _COVER_CONSIST_ALPHA
+        for j in idx:
+            sb = s_star * b[best_k[j]]
+            hi = max(float(a[j]), float(sb))
+            consist = (min(float(a[j]), float(sb)) / hi) if hi > 1e-12 else 1.0
+            if pow_p != 1.0:
+                consist = consist ** pow_p
+            if alpha != 1.0:
+                consist = (1.0 - alpha) + alpha * consist
+            vec[j] = best_q[j] * consist * float(weights[j])
         return vec
 
     @staticmethod
