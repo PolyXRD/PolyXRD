@@ -46,6 +46,8 @@ class PeakMatchTable(QWidget):
         self._table.setHorizontalHeaderLabels(self.COLUMNS)
         self._table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self._table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        # S13 标记峰搜索: 允许多选行 → "仅对标记峰再匹配"
+        self._table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self._table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self._table.setMinimumHeight(120)
         self._table.cellClicked.connect(self._on_cell_clicked)
@@ -96,6 +98,16 @@ class PeakMatchTable(QWidget):
     def _on_cell_clicked(self, row, _col) -> None:
         if row < len(self._assignments):
             self.peak_row_clicked.emit(float(self._assignments[row].two_theta))
+
+    def get_selected_two_thetas(self) -> list[float]:
+        """选中行的 2θ 列表 (v2.2 S13 标记峰搜索的标记来源)。
+
+        Returns:
+            按 2θ 升序的标记 2θ 列表 (无选中 → 空表)
+        """
+        rows = sorted(set(i.row() for i in self._table.selectedItems()))
+        return [float(self._assignments[r].two_theta)
+                for r in rows if r < len(self._assignments)]
 
     def clear_table(self) -> None:
         self._table.setRowCount(0)

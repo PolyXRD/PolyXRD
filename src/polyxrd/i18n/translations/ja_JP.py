@@ -783,6 +783,8 @@ translations = {
             "detail_volume": "      V={v:.2f} Å³",
             "detail_refpeaks": "参考ピーク: {n} 本",
             "act_export_cif": "CIF ファイルを書き出し…",
+            "act_rematch_marked": "マークしたピークのみ再マッチ…",
+            "act_rematch_marked_tip": "下のピーク帰属表で選択したピークのみを使って再検索します (微量相・残差相の追跡用)。行を選択すると有効になります。",
             "dlg_export_cif_title": "CIF ファイルの書き出し",
             "dlg_export_cif_filter": "CIF ファイル (*.cif)",
             "msg_export_cif": "CIF 書き出し",

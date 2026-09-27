@@ -413,11 +413,42 @@ def _passes_options(phase: Phase, opts: SearchOptions) -> bool:
     )
 
 
+def marked_peak_indices(
+    obs_two_theta,
+    marked_peaks,
+    mark_tol: float = 0.30,
+) -> list[int]:
+    """标记峰 → 实测峰下标 (v2.2 S13, 纯函数)。
+
+    对每个标记 2θ 取最近的实测峰 (|Δ| ≤ mark_tol, 互不重复);
+    窗口内没有实测峰的标记被忽略。
+
+    Args:
+        obs_two_theta: 实测峰 2θ 序列
+        marked_peaks: 用户标记的 2θ 序列 (如峰归属表选中的行)
+        mark_tol: 标记 ↔ 实测峰的归属窗口 (°)
+    Returns:
+        升序的实测峰下标列表 (可能为空)
+    """
+    obs = _as_float_array(obs_two_theta)
+    if obs.size == 0 or not marked_peaks:
+        return []
+    kept: set[int] = set()
+    for m in marked_peaks:
+        mf = float(m)
+        j = int(np.argmin(np.abs(obs - mf)))
+        if abs(float(obs[j]) - mf) <= mark_tol:
+            kept.add(j)
+    return sorted(kept)
+
+
 def search_match(
     obs_two_theta,
     obs_intensity,
     phases: Iterable[Phase],
     options: Optional[SearchOptions] = None,
+    marked_peaks: Optional[Iterable[float]] = None,
+    marked_tol: float = 0.30,
 ) -> list[PhaseMatchResult]:
     """搜索-匹配编排: 约束 → (三强预检) → FoM → 排序/截断。
 
@@ -426,12 +457,23 @@ def search_match(
         obs_intensity: 实验峰强度
         phases: 候选物相列表
         options: SearchOptions (None → 宽松默认)
+        marked_peaks: 标记峰 2θ 序列 (v2.2 S13)。None → 使用全部实验峰
+            (默认行为不变); 传入时只保留与标记位最近 (≤ marked_tol) 的
+            实验峰参与打分, 用于残差相/微量相追查。
+        marked_tol: 标记 ↔ 实验峰的归属窗口 (°), 仅 marked_peaks 生效时使用
     Returns:
         按 FoM 升序 (越好越前) 的 PhaseMatchResult 列表
     """
     opts = options or SearchOptions()
     obs_tt = list(obs_two_theta)
     obs_i = list(obs_intensity)
+
+    if marked_peaks is not None:
+        keep = marked_peak_indices(obs_tt, marked_peaks, mark_tol=marked_tol)
+        if not keep:
+            return []
+        obs_tt = [obs_tt[k] for k in keep]
+        obs_i = [obs_i[k] for k in keep]
 
     results: list[PhaseMatchResult] = []
     for phase in phases:

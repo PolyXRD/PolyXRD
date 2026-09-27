@@ -783,6 +783,8 @@ translations = {
             "detail_volume": "      V={v:.2f} Å³",
             "detail_refpeaks": "Reference peaks: {n}",
             "act_export_cif": "Export CIF File…",
+            "act_rematch_marked": "Re-match Marked Peaks Only…",
+            "act_rematch_marked_tip": "Re-run Search/Match using only the peaks selected in the peak assignment table below (for trace/residual phase hunting). Select rows first to enable.",
             "dlg_export_cif_title": "Export CIF File",
             "dlg_export_cif_filter": "CIF Files (*.cif)",
             "msg_export_cif": "Export CIF",
