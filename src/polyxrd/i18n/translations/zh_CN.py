@@ -783,6 +783,8 @@ translations = {
             "detail_volume": "      V={v:.2f} Å³",
             "detail_refpeaks": "参考峰: {n} 条",
             "act_export_cif": "导出 CIF 文件…",
+            "act_rematch_marked": "仅对标记峰再匹配…",
+            "act_rematch_marked_tip": "只使用峰归属表中选中的峰重新检索 (用于微量相/残差相追查)。在下方峰归属表选行后可用。",
             "dlg_export_cif_title": "导出 CIF 文件",
             "dlg_export_cif_filter": "CIF 文件 (*.cif)",
             "msg_export_cif": "导出 CIF",

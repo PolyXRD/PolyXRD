@@ -166,6 +166,7 @@ class PhaseViewModel(QObject):
         top_n: int = 5,
         tolerance: float = 0.15,
         db_source: str = "builtin",
+        marked_peaks: Optional[list[float]] = None,
     ) -> None:
         """物相识别 (支持多数据库源)
 
@@ -176,15 +177,30 @@ class PhaseViewModel(QObject):
                 - "cod_full": COD 全库 (113,223 条 CIF, 本地索引)
                 - "merged": 内置库 + COD 全库合并检索
                 - "pdf2": ICDD PDF-2 2004 库 (163,834 物相, 带空间群/晶胞)
+            marked_peaks: 标记峰 2θ 序列 (v2.2 S13)。None → 全部实测峰;
+                传入时仅保留与标记位最近 (≤0.30°) 的实测峰参与检索,
+                用于残差相/微量相追查 (候选列表右键"仅对标记峰再匹配")。
         """
         if self._peaks is None or len(self._peaks) == 0:
             self.error.emit(tr("error.no_peaks"))
             return
+        use_peaks = self._peaks
+        if marked_peaks is not None:
+            from polyxrd.services.foam import marked_peak_indices
+
+            all_peaks = list(self._peaks.peaks)
+            keep = marked_peak_indices(
+                [p.two_theta for p in all_peaks], marked_peaks)
+            if not keep:
+                self.error.emit(tr("error.no_peaks"))
+                return
+            use_peaks = PeakList(peaks=[all_peaks[k] for k in keep],
+                                 source=self._peaks.source)
         try:
             if db_source == "pdf2":
                 results = self._identifier.identify_with_pdf2(
                     data,
-                    peaks=self._peaks,
+                    peaks=use_peaks,
                     element_filter=element_filter,
                     top_n=top_n,
                     tolerance=tolerance,
@@ -192,7 +208,7 @@ class PhaseViewModel(QObject):
             elif db_source == "cod_inorganics":
                 results = self._identifier.identify_with_cod_inorganics(
                     data,
-                    peaks=self._peaks,
+                    peaks=use_peaks,
                     element_filter=element_filter,
                     top_n=top_n,
                     tolerance=tolerance,
@@ -202,7 +218,7 @@ class PhaseViewModel(QObject):
                     self._identifier.enable_cod_local()
                 results = self._identifier.identify_with_cod_local(
                     data,
-                    peaks=self._peaks,
+                    peaks=use_peaks,
                     elements=elements,
                     top_n=top_n,
                     tolerance=tolerance,
@@ -211,7 +227,7 @@ class PhaseViewModel(QObject):
             elif element_filter:
                 results = self._identifier.identify_with_element_filter(
                     data,
-                    peaks=self._peaks,
+                    peaks=use_peaks,
                     element_filter=element_filter,
                     top_n=top_n,
                     tolerance=tolerance,
@@ -219,7 +235,7 @@ class PhaseViewModel(QObject):
             else:
                 results = self._identifier.identify(
                     data,
-                    peaks=self._peaks,
+                    peaks=use_peaks,
                     elements=elements,
                     top_n=top_n,
                     tolerance=tolerance,

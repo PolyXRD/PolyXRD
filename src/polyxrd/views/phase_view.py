@@ -510,6 +510,21 @@ class PhaseView(QWidget):
                 db_source=self._current_db_source(),
             )
 
+    def _on_rematch_marked(self, marked: list[float]) -> None:
+        """仅对标记峰再匹配 (v2.2 S13): 以峰归属表选中行作为观测峰重新检索。"""
+        if not marked:
+            return
+        with busy(self, tr("busy.identify")) as acquired:
+            if not acquired:
+                return
+            self._current_method = "fom"
+            self._vm.identify_phases(
+                element_filter=self._filter_dict if self._filter_dict else None,
+                top_n=10,
+                db_source=self._current_db_source(),
+                marked_peaks=list(marked),
+            )
+
     def _on_quick_identify(self) -> None:
         """快速识别（无元素过滤）"""
         with busy(self, tr("busy.identify")) as acquired:
@@ -646,7 +661,15 @@ class PhaseView(QWidget):
             return
         menu = QMenu(self)
         act_export = menu.addAction(tr("vw.phase_view.act_export_cif"))
+        # v2.2 S13: 标记峰 = 下方峰归属表中选中的行 (可多选)
+        marked = self._match_table.get_selected_two_thetas()
+        act_marked = menu.addAction(tr("vw.phase_view.act_rematch_marked"))
+        act_marked.setEnabled(bool(marked))
+        act_marked.setToolTip(tr("vw.phase_view.act_rematch_marked_tip"))
         chosen = menu.exec(self._candidate_list.viewport().mapToGlobal(pos))
+        if chosen is act_marked:
+            self._on_rematch_marked(marked)
+            return
         if chosen is not act_export:
             return
         from polyxrd.services.phase_cif_export import (

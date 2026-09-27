@@ -295,12 +295,14 @@ class MainViewModel(QObject):
         element_filter: Optional[dict] = None,
         top_n: int = 5,
         db_source: str = "builtin",
+        marked_peaks: Optional[list[float]] = None,
     ) -> None:
         """传统物相识别 (需要先寻峰)
 
         Args:
             db_source: 数据库源 ("builtin" / "cod_inorganics" /
                 "cod_full" / "merged")
+            marked_peaks: 标记峰 2θ 序列 (v2.2 S13, None → 全部实测峰)
         """
         data = self.current_data
         if data is None:
@@ -310,7 +312,7 @@ class MainViewModel(QObject):
         self.status_changed.emit(tr("status.identifying_phases"))
         self._phase_vm.identify_phases(
             data, elements=elements, element_filter=element_filter,
-            top_n=top_n, db_source=db_source,
+            top_n=top_n, db_source=db_source, marked_peaks=marked_peaks,
         )
 
     def identify_phases_profile_fitting(
