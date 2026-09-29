@@ -2724,6 +2724,9 @@ DW 统计量能区分"残差是白噪声"还是"逐点相关（模型不完备�
 
 - 新机迁移完成：venv 基于 `D:/Project/XRD/python310` 全新重建，pymatgen 锁 `==2025.10.7`；
   路径常量 36 文件 E:/TEMP→D:/Project/XRD 幂等替换；cod/cif 兜底 522,619 个 CIF 就位。
+- **版本号单源化**：`config.py` 的 `app_version` 与 `mcp_server/server.py` 的 `version`
+  改由包 `__init__.__version__` 取值——修复"五处收口漏 config 导致冻结版启动日志
+  卡在 start v2.1.0"的双源漂移（发布前冒烟实测发现）。
 
 ## 附录 A · 路线图模块（M01–M25）与版本对照
 
