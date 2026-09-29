@@ -1,5 +1,5 @@
 {
- "version": "0.5.2",
+ "version": "0.5.3",
  "wavelength": 1.5406,
  "phases": [
   {
@@ -2200,12 +2200,12 @@
   {
    "key": "SiO2_cristobalite",
    "name": "Cristobalite",
-   "space_group": "P2_12_12_1",
+   "space_group": "P4_12_12",
    "formula": "SiO2",
    "lattice": {
-    "a": 7.22,
-    "b": 7.09,
-    "c": 7.3,
+    "a": 4.9717,
+    "b": 4.9717,
+    "c": 6.9223,
     "alpha": 90.0,
     "beta": 90.0,
     "gamma": 90.0
@@ -2214,74 +2214,47 @@
     {
      "hkl": [
       1,
-      1,
-      0
-     ],
-     "two_theta": 17.517,
-     "intensity": 0.78
-    },
-    {
-     "hkl": [
-      1,
-      1,
+      0,
       1
      ],
-     "two_theta": 21.353,
+     "two_theta": 21.994,
      "intensity": 100.0
     },
     {
      "hkl": [
       1,
-      0,
-      2
-     ],
-     "two_theta": 27.357,
-     "intensity": 1.55
-    },
-    {
-     "hkl": [
-      0,
-      1,
-      2
-     ],
-     "two_theta": 27.462,
-     "intensity": 1.49
-    },
-    {
-     "hkl": [
-      2,
-      0,
-      1
-     ],
-     "two_theta": 27.542,
-     "intensity": 0.93
-    },
-    {
-     "hkl": [
-      2,
       1,
       0
      ],
-     "two_theta": 27.708,
-     "intensity": 1.02
-    },
-    {
-     "hkl": [
-      0,
-      2,
-      1
-     ],
-     "two_theta": 27.957,
-     "intensity": 0.55
+     "two_theta": 25.314,
+     "intensity": 0.71
     },
     {
      "hkl": [
       1,
+      1,
+      1
+     ],
+     "two_theta": 28.452,
+     "intensity": 9.24
+    },
+    {
+     "hkl": [
+      1,
+      0,
+      2
+     ],
+     "two_theta": 31.469,
+     "intensity": 11.72
+    },
+    {
+     "hkl": [
       2,
+      0,
       0
      ],
-     "two_theta": 28.018,
-     "intensity": 2.03
+     "two_theta": 36.103,
+     "intensity": 15.06
     },
     {
      "hkl": [
@@ -2289,8 +2262,8 @@
       1,
       2
      ],
-     "two_theta": 30.169,
-     "intensity": 0.8
+     "two_theta": 36.398,
+     "intensity": 4.15
     },
     {
      "hkl": [
@@ -2298,35 +2271,35 @@
       1,
       1
      ],
-     "two_theta": 30.338,
-     "intensity": 2.9
+     "two_theta": 42.678,
+     "intensity": 2.85
+    },
+    {
+     "hkl": [
+      2,
+      0,
+      2
+     ],
+     "two_theta": 44.855,
+     "intensity": 2.92
     },
     {
      "hkl": [
       1,
-      2,
-      1
+      1,
+      3
      ],
-     "two_theta": 30.623,
-     "intensity": 1.45
+     "two_theta": 47.071,
+     "intensity": 6.0
     },
     {
      "hkl": [
       2,
-      0,
+      1,
       2
      ],
-     "two_theta": 34.929,
-     "intensity": 5.87
-    },
-    {
-     "hkl": [
-      0,
-      2,
-      2
-     ],
-     "two_theta": 35.265,
-     "intensity": 6.85
+     "two_theta": 48.633,
+     "intensity": 6.25
     },
     {
      "hkl": [
@@ -2334,525 +2307,291 @@
       2,
       0
      ],
-     "two_theta": 35.461,
-     "intensity": 5.07
+     "two_theta": 51.982,
+     "intensity": 0.5
     },
     {
      "hkl": [
-      2,
-      1,
-      2
+      0,
+      0,
+      4
      ],
-     "two_theta": 37.226,
-     "intensity": 0.44
-    },
-    {
-     "hkl": [
-      1,
-      2,
-      2
-     ],
-     "two_theta": 37.465,
-     "intensity": 0.46
+     "two_theta": 52.861,
+     "intensity": 0.94
     },
     {
      "hkl": [
       2,
-      2,
-      1
-     ],
-     "two_theta": 37.605,
-     "intensity": 0.79
-    },
-    {
-     "hkl": [
-      1,
-      1,
+      0,
       3
      ],
-     "two_theta": 41.131,
-     "intensity": 0.45
+     "two_theta": 54.192,
+     "intensity": 3.12
     },
     {
      "hkl": [
       1,
-      3,
-      1
+      0,
+      4
      ],
-     "two_theta": 42.056,
-     "intensity": 0.4
-    },
-    {
-     "hkl": [
-      2,
-      2,
-      2
-     ],
-     "two_theta": 43.495,
-     "intensity": 5.17
+     "two_theta": 56.238,
+     "intensity": 0.63
     },
     {
      "hkl": [
       3,
       0,
-      2
+      1
      ],
-     "two_theta": 45.087,
-     "intensity": 1.11
+     "two_theta": 57.103,
+     "intensity": 5.09
+    },
+    {
+     "hkl": [
+      2,
+      1,
+      3
+     ],
+     "two_theta": 57.517,
+     "intensity": 1.3
     },
     {
      "hkl": [
       3,
-      2,
+      1,
       0
      ],
-     "two_theta": 45.518,
-     "intensity": 0.51
-    },
-    {
-     "hkl": [
-      2,
-      3,
-      0
-     ],
-     "two_theta": 45.856,
-     "intensity": 0.46
-    },
-    {
-     "hkl": [
-      2,
-      1,
-      3
-     ],
-     "two_theta": 46.772,
-     "intensity": 1.35
-    },
-    {
-     "hkl": [
-      3,
-      1,
-      2
-     ],
-     "two_theta": 46.966,
-     "intensity": 0.82
-    },
-    {
-     "hkl": [
-      1,
-      2,
-      3
-     ],
-     "two_theta": 46.97,
-     "intensity": 1.13
-    },
-    {
-     "hkl": [
-      3,
-      2,
-      1
-     ],
-     "two_theta": 47.28,
-     "intensity": 0.78
-    },
-    {
-     "hkl": [
-      1,
-      3,
-      2
-     ],
-     "two_theta": 47.492,
-     "intensity": 0.73
-    },
-    {
-     "hkl": [
-      2,
-      3,
-      1
-     ],
-     "two_theta": 47.608,
-     "intensity": 1.52
-    },
-    {
-     "hkl": [
-      3,
-      2,
-      2
-     ],
-     "two_theta": 52.294,
-     "intensity": 0.97
-    },
-    {
-     "hkl": [
-      2,
-      3,
-      2
-     ],
-     "two_theta": 52.599,
-     "intensity": 0.41
-    },
-    {
-     "hkl": [
-      3,
-      1,
-      3
-     ],
-     "two_theta": 55.174,
-     "intensity": 2.91
-    },
-    {
-     "hkl": [
-      1,
-      3,
-      3
-     ],
-     "two_theta": 55.643,
-     "intensity": 3.4
-    },
-    {
-     "hkl": [
-      3,
-      3,
-      1
-     ],
-     "two_theta": 55.919,
-     "intensity": 2.56
-    },
-    {
-     "hkl": [
-      2,
-      1,
-      4
-     ],
-     "two_theta": 58.06,
-     "intensity": 0.6
-    },
-    {
-     "hkl": [
-      4,
-      2,
-      1
-     ],
-     "two_theta": 58.731,
-     "intensity": 0.78
-    },
-    {
-     "hkl": [
-      1,
-      4,
-      2
-     ],
-     "two_theta": 59.307,
-     "intensity": 1.02
-    },
-    {
-     "hkl": [
-      2,
-      2,
-      4
-     ],
-     "two_theta": 62.729,
-     "intensity": 2.3
-    },
-    {
-     "hkl": [
-      4,
-      2,
-      2
-     ],
-     "two_theta": 63.112,
-     "intensity": 2.09
-    },
-    {
-     "hkl": [
-      2,
-      4,
-      2
-     ],
-     "two_theta": 63.76,
-     "intensity": 1.99
-    },
-    {
-     "hkl": [
-      3,
-      0,
-      4
-     ],
-     "two_theta": 63.972,
-     "intensity": 0.61
-    },
-    {
-     "hkl": [
-      0,
-      3,
-      4
-     ],
-     "two_theta": 64.455,
-     "intensity": 0.46
-    },
-    {
-     "hkl": [
-      4,
-      1,
-      3
-     ],
-     "two_theta": 65.687,
-     "intensity": 0.92
-    },
-    {
-     "hkl": [
-      5,
-      1,
-      1
-     ],
-     "two_theta": 67.357,
-     "intensity": 0.55
-    },
-    {
-     "hkl": [
-      3,
-      3,
-      3
-     ],
-     "two_theta": 67.529,
-     "intensity": 0.92
-    },
-    {
-     "hkl": [
-      1,
-      5,
-      1
-     ],
-     "two_theta": 68.607,
-     "intensity": 0.4
-    },
-    {
-     "hkl": [
-      3,
-      2,
-      4
-     ],
-     "two_theta": 69.856,
-     "intensity": 0.44
-    },
-    {
-     "hkl": [
-      2,
-      1,
-      5
-     ],
-     "two_theta": 70.816,
-     "intensity": 0.46
-    },
-    {
-     "hkl": [
-      5,
-      2,
-      1
-     ],
-     "two_theta": 71.69,
-     "intensity": 0.44
-    },
-    {
-     "hkl": [
-      4,
-      0,
-      4
-     ],
-     "two_theta": 73.773,
-     "intensity": 0.9
-    },
-    {
-     "hkl": [
-      0,
-      4,
-      4
-     ],
-     "two_theta": 74.576,
-     "intensity": 0.79
-    },
-    {
-     "hkl": [
-      4,
-      4,
-      0
-     ],
-     "two_theta": 75.047,
-     "intensity": 1.0
-    },
-    {
-     "hkl": [
-      4,
-      1,
-      4
-     ],
-     "two_theta": 75.177,
-     "intensity": 0.51
-    },
-    {
-     "hkl": [
-      1,
-      4,
-      4
-     ],
-     "two_theta": 75.924,
-     "intensity": 0.84
-    },
-    {
-     "hkl": [
-      3,
-      0,
-      5
-     ],
-     "two_theta": 76.209,
-     "intensity": 0.66
-    },
-    {
-     "hkl": [
-      4,
-      4,
-      1
-     ],
-     "two_theta": 76.364,
-     "intensity": 0.42
-    },
-    {
-     "hkl": [
-      0,
-      3,
-      5
-     ],
-     "two_theta": 76.656,
-     "intensity": 0.46
-    },
-    {
-     "hkl": [
-      5,
-      3,
-      0
-     ],
-     "two_theta": 77.385,
-     "intensity": 0.59
-    },
-    {
-     "hkl": [
-      3,
-      1,
-      5
-     ],
-     "two_theta": 77.598,
-     "intensity": 0.96
-    },
-    {
-     "hkl": [
-      0,
-      5,
-      3
-     ],
-     "two_theta": 77.914,
-     "intensity": 1.01
-    },
-    {
-     "hkl": [
-      1,
-      3,
-      5
-     ],
-     "two_theta": 77.993,
-     "intensity": 0.52
-    },
-    {
-     "hkl": [
-      5,
-      1,
-      3
-     ],
-     "two_theta": 78.063,
-     "intensity": 0.79
-    },
-    {
-     "hkl": [
-      5,
-      3,
-      1
-     ],
-     "two_theta": 78.69,
-     "intensity": 1.07
-    },
-    {
-     "hkl": [
-      1,
-      5,
-      3
-     ],
-     "two_theta": 79.245,
+     "two_theta": 58.675,
      "intensity": 0.53
     },
     {
      "hkl": [
       3,
-      5,
+      1,
       1
      ],
-     "two_theta": 79.476,
-     "intensity": 0.88
+     "two_theta": 60.322,
+     "intensity": 3.2
     },
     {
      "hkl": [
-      2,
       3,
-      5
-     ],
-     "two_theta": 81.967,
-     "intensity": 0.51
-    },
-    {
-     "hkl": [
-      6,
       0,
       2
      ],
-     "two_theta": 84.758,
-     "intensity": 0.45
+     "two_theta": 62.041,
+     "intensity": 3.74
     },
     {
      "hkl": [
-      6,
-      2,
-      0
-     ],
-     "two_theta": 85.066,
-     "intensity": 0.49
-    },
-    {
-     "hkl": [
-      1,
-      2,
-      6
-     ],
-     "two_theta": 85.347,
-     "intensity": 0.85
-    },
-    {
-     "hkl": [
-      6,
+      3,
       1,
       2
      ],
-     "two_theta": 86.115,
-     "intensity": 0.61
+     "two_theta": 65.113,
+     "intensity": 2.81
     },
     {
      "hkl": [
       2,
-      6,
+      0,
+      4
+     ],
+     "two_theta": 65.688,
+     "intensity": 1.76
+    },
+    {
+     "hkl": [
+      2,
+      2,
+      3
+     ],
+     "two_theta": 66.857,
+     "intensity": 1.88
+    },
+    {
+     "hkl": [
+      2,
+      1,
+      4
+     ],
+     "two_theta": 68.673,
+     "intensity": 3.21
+    },
+    {
+     "hkl": [
+      3,
+      2,
       1
      ],
-     "two_theta": 87.892,
+     "two_theta": 69.446,
+     "intensity": 1.35
+    },
+    {
+     "hkl": [
+      3,
+      0,
+      3
+     ],
+     "two_theta": 69.818,
+     "intensity": 0.76
+    },
+    {
+     "hkl": [
+      1,
+      0,
+      5
+     ],
+     "two_theta": 70.558,
+     "intensity": 2.58
+    },
+    {
+     "hkl": [
+      3,
+      1,
+      3
+     ],
+     "two_theta": 72.722,
+     "intensity": 3.25
+    },
+    {
+     "hkl": [
+      3,
+      2,
+      2
+     ],
+     "two_theta": 73.931,
+     "intensity": 3.17
+    },
+    {
+     "hkl": [
+      2,
+      2,
+      4
+     ],
+     "two_theta": 77.311,
+     "intensity": 1.01
+    },
+    {
+     "hkl": [
+      4,
+      0,
+      1
+     ],
+     "two_theta": 78.05,
+     "intensity": 1.65
+    },
+    {
+     "hkl": [
+      4,
+      1,
+      0
+     ],
+     "two_theta": 79.408,
+     "intensity": 2.11
+    },
+    {
+     "hkl": [
+      4,
+      1,
+      1
+     ],
+     "two_theta": 80.848,
      "intensity": 0.48
+    },
+    {
+     "hkl": [
+      3,
+      2,
+      3
+     ],
+     "two_theta": 81.201,
+     "intensity": 2.05
+    },
+    {
+     "hkl": [
+      2,
+      1,
+      5
+     ],
+     "two_theta": 81.906,
+     "intensity": 2.24
+    },
+    {
+     "hkl": [
+      3,
+      3,
+      0
+     ],
+     "two_theta": 82.195,
+     "intensity": 0.47
+    },
+    {
+     "hkl": [
+      4,
+      0,
+      2
+     ],
+     "two_theta": 82.371,
+     "intensity": 0.58
+    },
+    {
+     "hkl": [
+      3,
+      1,
+      4
+     ],
+     "two_theta": 82.898,
+     "intensity": 1.41
+    },
+    {
+     "hkl": [
+      3,
+      3,
+      1
+     ],
+     "two_theta": 83.625,
+     "intensity": 0.71
+    },
+    {
+     "hkl": [
+      3,
+      3,
+      2
+     ],
+     "two_theta": 87.894,
+     "intensity": 0.94
+    },
+    {
+     "hkl": [
+      4,
+      2,
+      1
+     ],
+     "two_theta": 89.14,
+     "intensity": 1.69
+    },
+    {
+     "hkl": [
+      1,
+      1,
+      6
+     ],
+     "two_theta": 89.289,
+     "intensity": 2.64
+    },
+    {
+     "hkl": [
+      4,
+      0,
+      3
+     ],
+     "two_theta": 89.488,
+     "intensity": 0.65
     }
    ],
-   "peaks_source": "COD 9017505 (SiO2, 24 位点, 晶胞一致)",
-   "peaks_version": "0.5.2-hkl-consistent"
+   "peaks_source": "COD 9001578 (SiO2, 12 位点, 晶胞接管: β正交 → α四方, 修 21.35°→21.99°)",
+   "peaks_version": "0.5.3-alpha-cristobalite-fix"
   },
   {
    "key": "SiO2_tridymite",
@@ -23566,3623 +23305,213 @@
    "key": "NCM811",
    "name": "NCM 811",
    "formula": "LiNi0.8Co0.1Mn0.1O2",
-   "space_group": "P2_1/c",
+   "space_group": "R-3m",
    "lattice": {
-    "a": 12.8286,
-    "b": 14.9103,
-    "c": 38.095,
+    "a": 2.8645,
+    "b": 2.8645,
+    "c": 14.161,
     "alpha": 90.0,
-    "beta": 96.779,
-    "gamma": 90.0
+    "beta": 90.0,
+    "gamma": 120.0
    },
    "peaks": [
     {
      "hkl": [
-      1,
       0,
-      -4
-     ],
-     "two_theta": 10.965,
-     "intensity": 34.44
-    },
-    {
-     "hkl": [
-      1,
-      1,
-      -3
-     ],
-     "two_theta": 10.999,
-     "intensity": 21.9
-    },
-    {
-     "hkl": [
       0,
-      1,
-      4
-     ],
-     "two_theta": 11.07,
-     "intensity": 3.87
-    },
-    {
-     "hkl": [
       0,
-      2,
-      0
-     ],
-     "two_theta": 11.861,
-     "intensity": 5.57
-    },
-    {
-     "hkl": [
-      1,
-      1,
       3
      ],
-     "two_theta": 12.002,
-     "intensity": 13.87
-    },
-    {
-     "hkl": [
-      0,
-      2,
-      1
-     ],
-     "two_theta": 12.09,
-     "intensity": 56.48
-    },
-    {
-     "hkl": [
-      1,
-      0,
-      4
-     ],
-     "two_theta": 12.287,
-     "intensity": 15.26
-    },
-    {
-     "hkl": [
-      1,
-      1,
-      -4
-     ],
-     "two_theta": 12.471,
-     "intensity": 32.48
-    },
-    {
-     "hkl": [
-      0,
-      2,
-      2
-     ],
-     "two_theta": 12.753,
-     "intensity": 1.94
-    },
-    {
-     "hkl": [
-      0,
-      1,
-      5
-     ],
-     "two_theta": 13.112,
-     "intensity": 17.63
-    },
-    {
-     "hkl": [
-      1,
-      1,
-      4
-     ],
-     "two_theta": 13.65,
-     "intensity": 75.2
-    },
-    {
-     "hkl": [
-      1,
-      2,
-      0
-     ],
-     "two_theta": 13.752,
-     "intensity": 4.31
-    },
-    {
-     "hkl": [
-      0,
-      2,
-      3
-     ],
-     "two_theta": 13.788,
-     "intensity": 27.66
-    },
-    {
-     "hkl": [
-      1,
-      2,
-      -1
-     ],
-     "two_theta": 13.811,
-     "intensity": 82.84
-    },
-    {
-     "hkl": [
-      2,
-      0,
-      0
-     ],
-     "two_theta": 13.892,
-     "intensity": 60.53
-    },
-    {
-     "hkl": [
-      0,
-      0,
-      6
-     ],
-     "two_theta": 14.036,
-     "intensity": 2.0
-    },
-    {
-     "hkl": [
-      1,
-      2,
-      1
-     ],
-     "two_theta": 14.088,
-     "intensity": 12.33
-    },
-    {
-     "hkl": [
-      2,
-      0,
-      -2
-     ],
-     "two_theta": 14.127,
-     "intensity": 34.47
-    },
-    {
-     "hkl": [
-      1,
-      1,
-      -5
-     ],
-     "two_theta": 14.182,
-     "intensity": 11.05
-    },
-    {
-     "hkl": [
-      1,
-      2,
-      2
-     ],
-     "two_theta": 14.793,
-     "intensity": 2.72
-    },
-    {
-     "hkl": [
-      1,
-      0,
-      -6
-     ],
-     "two_theta": 14.912,
-     "intensity": 16.51
-    },
-    {
-     "hkl": [
-      2,
-      1,
-      -1
-     ],
-     "two_theta": 15.04,
-     "intensity": 28.3
-    },
-    {
-     "hkl": [
-      1,
-      2,
-      -3
-     ],
-     "two_theta": 15.068,
-     "intensity": 2.43
-    },
-    {
-     "hkl": [
-      2,
-      1,
-      0
-     ],
-     "two_theta": 15.114,
-     "intensity": 1.8
-    },
-    {
-     "hkl": [
-      2,
-      0,
-      2
-     ],
-     "two_theta": 15.18,
-     "intensity": 26.1
-    },
-    {
-     "hkl": [
-      0,
-      1,
-      6
-     ],
-     "two_theta": 15.246,
-     "intensity": 1.95
-    },
-    {
-     "hkl": [
-      1,
-      1,
-      5
-     ],
-     "two_theta": 15.483,
-     "intensity": 9.82
-    },
-    {
-     "hkl": [
-      2,
-      1,
-      1
-     ],
-     "two_theta": 15.545,
-     "intensity": 8.6
-    },
-    {
-     "hkl": [
-      2,
-      0,
-      -4
-     ],
-     "two_theta": 15.818,
-     "intensity": 1.14
-    },
-    {
-     "hkl": [
-      1,
-      2,
-      3
-     ],
-     "two_theta": 15.819,
-     "intensity": 5.43
-    },
-    {
-     "hkl": [
-      1,
-      1,
-      -6
-     ],
-     "two_theta": 16.058,
-     "intensity": 10.53
-    },
-    {
-     "hkl": [
-      1,
-      2,
-      -4
-     ],
-     "two_theta": 16.18,
-     "intensity": 9.73
-    },
-    {
-     "hkl": [
-      0,
-      2,
-      5
-     ],
-     "two_theta": 16.681,
-     "intensity": 1.65
-    },
-    {
-     "hkl": [
-      2,
-      1,
-      -4
-     ],
-     "two_theta": 16.904,
-     "intensity": 14.25
-    },
-    {
-     "hkl": [
-      2,
-      1,
-      3
-     ],
-     "two_theta": 17.358,
-     "intensity": 3.11
-    },
-    {
-     "hkl": [
-      0,
-      1,
-      7
-     ],
-     "two_theta": 17.441,
-     "intensity": 12.81
-    },
-    {
-     "hkl": [
-      1,
-      1,
-      6
-     ],
-     "two_theta": 17.445,
-     "intensity": 3.73
-    },
-    {
-     "hkl": [
-      1,
-      2,
-      -5
-     ],
-     "two_theta": 17.539,
-     "intensity": 4.75
-    },
-    {
-     "hkl": [
-      1,
-      1,
-      -7
-     ],
-     "two_theta": 18.051,
-     "intensity": 1.93
-    },
-    {
-     "hkl": [
-      2,
-      1,
-      -5
-     ],
-     "two_theta": 18.104,
-     "intensity": 8.25
-    },
-    {
-     "hkl": [
-      2,
-      2,
-      -1
-     ],
-     "two_theta": 18.244,
-     "intensity": 34.5
-    },
-    {
-     "hkl": [
-      2,
-      2,
-      0
-     ],
-     "two_theta": 18.305,
-     "intensity": 1.76
-    },
-    {
-     "hkl": [
-      0,
-      2,
-      6
-     ],
-     "two_theta": 18.415,
-     "intensity": 1.51
-    },
-    {
-     "hkl": [
-      0,
-      3,
-      2
-     ],
-     "two_theta": 18.443,
+     "two_theta": 18.784,
      "intensity": 100.0
     },
     {
      "hkl": [
-      2,
-      2,
-      -2
-     ],
-     "two_theta": 18.485,
-     "intensity": 1.93
-    },
-    {
-     "hkl": [
-      2,
+      1,
       0,
-      -6
-     ],
-     "two_theta": 18.582,
-     "intensity": 1.28
-    },
-    {
-     "hkl": [
-      2,
-      2,
+      -1,
       1
      ],
-     "two_theta": 18.665,
-     "intensity": 39.29
+     "two_theta": 36.751,
+     "intensity": 40.63
     },
     {
      "hkl": [
       0,
       0,
-      8
-     ],
-     "two_theta": 18.751,
-     "intensity": 7.42
-    },
-    {
-     "hkl": [
-      1,
-      2,
-      -6
-     ],
-     "two_theta": 19.096,
-     "intensity": 37.65
-    },
-    {
-     "hkl": [
-      1,
-      3,
-      0
-     ],
-     "two_theta": 19.153,
-     "intensity": 2.95
-    },
-    {
-     "hkl": [
       0,
-      3,
-      3
-     ],
-     "two_theta": 19.179,
-     "intensity": 16.32
-    },
-    {
-     "hkl": [
-      1,
-      3,
-      -1
-     ],
-     "two_theta": 19.196,
-     "intensity": 3.65
-    },
-    {
-     "hkl": [
-      1,
-      0,
-      -8
-     ],
-     "two_theta": 19.22,
-     "intensity": 5.25
-    },
-    {
-     "hkl": [
-      2,
-      2,
-      2
-     ],
-     "two_theta": 19.308,
-     "intensity": 2.42
-    },
-    {
-     "hkl": [
-      1,
-      1,
-      7
-     ],
-     "two_theta": 19.5,
-     "intensity": 30.49
-    },
-    {
-     "hkl": [
-      2,
-      1,
-      -6
-     ],
-     "two_theta": 19.519,
-     "intensity": 31.14
-    },
-    {
-     "hkl": [
-      2,
-      2,
-      -4
-     ],
-     "two_theta": 19.817,
-     "intensity": 9.4
-    },
-    {
-     "hkl": [
-      1,
-      3,
-      2
-     ],
-     "two_theta": 19.921,
-     "intensity": 1.47
-    },
-    {
-     "hkl": [
-      2,
-      1,
-      5
-     ],
-     "two_theta": 20.138,
-     "intensity": 2.06
-    },
-    {
-     "hkl": [
-      2,
-      2,
-      3
-     ],
-     "two_theta": 20.208,
-     "intensity": 17.52
-    },
-    {
-     "hkl": [
-      0,
-      2,
-      7
-     ],
-     "two_theta": 20.28,
-     "intensity": 4.88
-    },
-    {
-     "hkl": [
-      1,
-      0,
-      8
-     ],
-     "two_theta": 20.778,
-     "intensity": 12.02
-    },
-    {
-     "hkl": [
-      1,
-      2,
-      -7
-     ],
-     "two_theta": 20.809,
-     "intensity": 1.48
-    },
-    {
-     "hkl": [
-      2,
-      2,
-      -5
-     ],
-     "two_theta": 20.856,
-     "intensity": 13.18
-    },
-    {
-     "hkl": [
-      3,
-      0,
-      0
-     ],
-     "two_theta": 20.903,
-     "intensity": 52.23
-    },
-    {
-     "hkl": [
-      1,
-      3,
-      -4
-     ],
-     "two_theta": 20.981,
-     "intensity": 10.46
-    },
-    {
-     "hkl": [
-      2,
-      1,
-      -7
-     ],
-     "two_theta": 21.106,
-     "intensity": 22.63
-    },
-    {
-     "hkl": [
-      0,
-      3,
-      5
-     ],
-     "two_theta": 21.373,
-     "intensity": 5.9
-    },
-    {
-     "hkl": [
-      3,
-      1,
-      -1
-     ],
-     "two_theta": 21.602,
-     "intensity": 4.06
-    },
-    {
-     "hkl": [
-      1,
-      1,
-      8
-     ],
-     "two_theta": 21.624,
-     "intensity": 10.95
-    },
-    {
-     "hkl": [
-      1,
-      3,
-      4
-     ],
-     "two_theta": 21.713,
-     "intensity": 7.45
-    },
-    {
-     "hkl": [
-      3,
-      1,
-      0
-     ],
-     "two_theta": 21.744,
-     "intensity": 21.8
-    },
-    {
-     "hkl": [
-      3,
-      0,
-      2
-     ],
-     "two_theta": 21.97,
-     "intensity": 2.51
-    },
-    {
-     "hkl": [
-      1,
-      2,
-      7
-     ],
-     "two_theta": 22.085,
-     "intensity": 72.25
-    },
-    {
-     "hkl": [
-      3,
-      1,
-      1
-     ],
-     "two_theta": 22.139,
-     "intensity": 2.43
-    },
-    {
-     "hkl": [
-      0,
-      2,
-      8
-     ],
-     "two_theta": 22.245,
-     "intensity": 8.17
-    },
-    {
-     "hkl": [
-      1,
-      1,
-      -9
-     ],
-     "two_theta": 22.27,
-     "intensity": 2.37
-    },
-    {
-     "hkl": [
-      2,
-      2,
-      5
-     ],
-     "two_theta": 22.654,
-     "intensity": 17.39
-    },
-    {
-     "hkl": [
-      0,
-      3,
       6
      ],
-     "two_theta": 22.764,
-     "intensity": 8.9
+     "two_theta": 38.098,
+     "intensity": 5.86
     },
     {
      "hkl": [
-      3,
       1,
+      0,
+      -1,
       2
      ],
-     "two_theta": 22.774,
-     "intensity": 5.93
+     "two_theta": 38.419,
+     "intensity": 15.71
     },
     {
      "hkl": [
-      2,
       1,
-      -8
+      0,
+      -1,
+      4
      ],
-     "two_theta": 22.833,
-     "intensity": 2.73
+     "two_theta": 44.563,
+     "intensity": 78.36
     },
     {
      "hkl": [
       1,
-      3,
+      0,
+      -1,
       5
      ],
-     "two_theta": 22.926,
-     "intensity": 4.3
-    },
-    {
-     "hkl": [
-      2,
-      3,
-      1
-     ],
-     "two_theta": 22.969,
-     "intensity": 3.45
-    },
-    {
-     "hkl": [
-      1,
-      3,
-      -6
-     ],
-     "two_theta": 23.324,
-     "intensity": 5.34
+     "two_theta": 48.76,
+     "intensity": 13.24
     },
     {
      "hkl": [
       0,
       0,
-      10
-     ],
-     "two_theta": 23.498,
-     "intensity": 6.47
-    },
-    {
-     "hkl": [
-      2,
-      3,
-      2
-     ],
-     "two_theta": 23.499,
-     "intensity": 1.99
-    },
-    {
-     "hkl": [
-      2,
-      2,
-      -7
-     ],
-     "two_theta": 23.523,
-     "intensity": 49.2
-    },
-    {
-     "hkl": [
-      3,
-      1,
-      -5
-     ],
-     "two_theta": 23.532,
-     "intensity": 13.22
-    },
-    {
-     "hkl": [
-      3,
-      1,
-      3
-     ],
-     "two_theta": 23.63,
-     "intensity": 3.57
-    },
-    {
-     "hkl": [
-      1,
-      1,
+      0,
       9
      ],
-     "two_theta": 23.802,
-     "intensity": 1.84
-    },
-    {
-     "hkl": [
-      3,
-      0,
-      -6
-     ],
-     "two_theta": 23.823,
-     "intensity": 5.0
-    },
-    {
-     "hkl": [
-      0,
-      4,
-      0
-     ],
-     "two_theta": 23.852,
-     "intensity": 39.94
-    },
-    {
-     "hkl": [
-      0,
-      4,
-      1
-     ],
-     "two_theta": 23.969,
-     "intensity": 2.35
-    },
-    {
-     "hkl": [
-      3,
-      2,
-      -1
-     ],
-     "two_theta": 23.972,
-     "intensity": 6.33
-    },
-    {
-     "hkl": [
-      1,
-      2,
-      8
-     ],
-     "two_theta": 23.991,
-     "intensity": 3.63
-    },
-    {
-     "hkl": [
-      0,
-      1,
-      10
-     ],
-     "two_theta": 24.254,
-     "intensity": 4.04
-    },
-    {
-     "hkl": [
-      0,
-      2,
-      9
-     ],
-     "two_theta": 24.29,
-     "intensity": 4.18
-    },
-    {
-     "hkl": [
-      1,
-      3,
-      6
-     ],
-     "two_theta": 24.314,
-     "intensity": 1.9
-    },
-    {
-     "hkl": [
-      3,
-      2,
-      1
-     ],
-     "two_theta": 24.459,
-     "intensity": 9.92
-    },
-    {
-     "hkl": [
-      1,
-      1,
-      -10
-     ],
-     "two_theta": 24.462,
-     "intensity": 1.88
-    },
-    {
-     "hkl": [
-      3,
-      1,
-      4
-     ],
-     "two_theta": 24.687,
-     "intensity": 3.27
-    },
-    {
-     "hkl": [
-      2,
-      3,
-      -5
-     ],
-     "two_theta": 24.799,
-     "intensity": 5.76
-    },
-    {
-     "hkl": [
-      1,
-      4,
-      0
-     ],
-     "two_theta": 24.868,
-     "intensity": 4.62
-    },
-    {
-     "hkl": [
-      3,
-      2,
-      -4
-     ],
-     "two_theta": 24.968,
-     "intensity": 1.67
-    },
-    {
-     "hkl": [
-      1,
-      4,
-      -2
-     ],
-     "two_theta": 25.16,
-     "intensity": 2.24
-    },
-    {
-     "hkl": [
-      1,
-      0,
-      10
-     ],
-     "two_theta": 25.319,
-     "intensity": 2.01
-    },
-    {
-     "hkl": [
-      1,
-      4,
-      2
-     ],
-     "two_theta": 25.471,
-     "intensity": 4.2
-    },
-    {
-     "hkl": [
-      1,
-      4,
-      -3
-     ],
-     "two_theta": 25.636,
-     "intensity": 3.13
-    },
-    {
-     "hkl": [
-      0,
-      4,
-      4
-     ],
-     "two_theta": 25.667,
-     "intensity": 1.33
-    },
-    {
-     "hkl": [
-      3,
-      1,
-      -7
-     ],
-     "two_theta": 25.787,
-     "intensity": 1.35
-    },
-    {
-     "hkl": [
-      3,
-      2,
-      3
-     ],
-     "two_theta": 25.824,
-     "intensity": 4.3
-    },
-    {
-     "hkl": [
-      2,
-      3,
-      -6
-     ],
-     "two_theta": 25.864,
-     "intensity": 1.69
-    },
-    {
-     "hkl": [
-      2,
-      0,
-      -10
-     ],
-     "two_theta": 25.915,
-     "intensity": 1.43
-    },
-    {
-     "hkl": [
-      0,
-      3,
-      8
-     ],
-     "two_theta": 25.988,
-     "intensity": 2.77
-    },
-    {
-     "hkl": [
-      3,
-      0,
-      -8
-     ],
-     "two_theta": 26.483,
-     "intensity": 8.42
-    },
-    {
-     "hkl": [
-      0,
-      1,
-      11
-     ],
-     "two_theta": 26.579,
-     "intensity": 1.47
-    },
-    {
-     "hkl": [
-      1,
-      2,
-      -10
-     ],
-     "two_theta": 26.592,
-     "intensity": 2.98
-    },
-    {
-     "hkl": [
-      2,
-      1,
-      -10
-     ],
-     "two_theta": 26.606,
-     "intensity": 6.31
-    },
-    {
-     "hkl": [
-      3,
-      0,
-      6
-     ],
-     "two_theta": 26.637,
-     "intensity": 2.19
-    },
-    {
-     "hkl": [
-      0,
-      4,
-      5
-     ],
-     "two_theta": 26.638,
-     "intensity": 3.72
-    },
-    {
-     "hkl": [
-      3,
-      2,
-      -6
-     ],
-     "two_theta": 26.691,
+     "two_theta": 58.624,
      "intensity": 1.9
     },
     {
      "hkl": [
       1,
-      4,
-      4
-     ],
-     "two_theta": 26.914,
-     "intensity": 2.25
-    },
-    {
-     "hkl": [
-      3,
-      1,
-      6
-     ],
-     "two_theta": 27.311,
-     "intensity": 3.11
-    },
-    {
-     "hkl": [
-      2,
-      1,
-      9
-     ],
-     "two_theta": 27.405,
-     "intensity": 2.34
-    },
-    {
-     "hkl": [
-      3,
-      3,
-      -1
-     ],
-     "two_theta": 27.494,
-     "intensity": 1.28
-    },
-    {
-     "hkl": [
-      2,
-      3,
-      6
-     ],
-     "two_theta": 27.641,
-     "intensity": 2.21
-    },
-    {
-     "hkl": [
-      2,
-      4,
-      -2
-     ],
-     "two_theta": 27.828,
-     "intensity": 1.11
-    },
-    {
-     "hkl": [
-      1,
-      4,
-      5
-     ],
-     "two_theta": 27.915,
-     "intensity": 3.64
-    },
-    {
-     "hkl": [
-      3,
-      3,
-      1
-     ],
-     "two_theta": 27.924,
-     "intensity": 5.41
-    },
-    {
-     "hkl": [
-      3,
-      2,
-      5
-     ],
-     "two_theta": 27.947,
-     "intensity": 5.27
-    },
-    {
-     "hkl": [
-      1,
-      4,
-      -6
-     ],
-     "two_theta": 28.247,
-     "intensity": 19.03
-    },
-    {
-     "hkl": [
-      1,
-      1,
-      11
-     ],
-     "two_theta": 28.284,
-     "intensity": 3.07
-    },
-    {
-     "hkl": [
       0,
-      0,
-      12
-     ],
-     "two_theta": 28.287,
-     "intensity": 5.25
-    },
-    {
-     "hkl": [
-      3,
-      3,
-      -4
-     ],
-     "two_theta": 28.376,
-     "intensity": 2.37
-    },
-    {
-     "hkl": [
-      4,
-      1,
-      -1
-     ],
-     "two_theta": 28.46,
-     "intensity": 5.82
-    },
-    {
-     "hkl": [
-      4,
-      0,
-      -4
-     ],
-     "two_theta": 28.475,
-     "intensity": 1.91
-    },
-    {
-     "hkl": [
-      2,
-      3,
-      -8
-     ],
-     "two_theta": 28.486,
-     "intensity": 11.04
-    },
-    {
-     "hkl": [
-      2,
-      1,
-      -11
-     ],
-     "two_theta": 28.615,
-     "intensity": 2.88
-    },
-    {
-     "hkl": [
-      1,
-      2,
-      -11
-     ],
-     "two_theta": 28.671,
-     "intensity": 4.94
-    },
-    {
-     "hkl": [
-      3,
-      1,
-      -9
-     ],
-     "two_theta": 28.673,
-     "intensity": 3.06
-    },
-    {
-     "hkl": [
-      3,
-      3,
-      -5
-     ],
-     "two_theta": 29.058,
-     "intensity": 8.02
-    },
-    {
-     "hkl": [
-      2,
-      3,
+      -1,
       7
      ],
-     "two_theta": 29.081,
-     "intensity": 6.05
-    },
-    {
-     "hkl": [
-      3,
-      2,
-      -8
-     ],
-     "two_theta": 29.107,
-     "intensity": 10.05
-    },
-    {
-     "hkl": [
-      4,
-      1,
-      -4
-     ],
-     "two_theta": 29.11,
-     "intensity": 3.19
-    },
-    {
-     "hkl": [
-      2,
-      4,
-      -5
-     ],
-     "two_theta": 29.492,
-     "intensity": 1.28
-    },
-    {
-     "hkl": [
-      4,
-      1,
-      -5
-     ],
-     "two_theta": 29.709,
-     "intensity": 3.83
+     "two_theta": 58.856,
+     "intensity": 14.33
     },
     {
      "hkl": [
       1,
-      3,
-      -10
-     ],
-     "two_theta": 29.827,
-     "intensity": 4.15
-    },
-    {
-     "hkl": [
-      2,
-      4,
-      4
-     ],
-     "two_theta": 29.84,
-     "intensity": 1.96
-    },
-    {
-     "hkl": [
-      3,
       0,
+      -1,
       8
      ],
-     "two_theta": 29.87,
-     "intensity": 1.69
-    },
-    {
-     "hkl": [
-      4,
-      0,
-      -6
-     ],
-     "two_theta": 29.877,
-     "intensity": 2.67
-    },
-    {
-     "hkl": [
-      3,
-      3,
-      -6
-     ],
-     "two_theta": 29.917,
-     "intensity": 1.2
-    },
-    {
-     "hkl": [
-      1,
-      0,
-      12
-     ],
-     "two_theta": 29.969,
-     "intensity": 4.25
+     "two_theta": 64.633,
+     "intensity": 20.88
     },
     {
      "hkl": [
       2,
-      3,
-      -9
+      -1,
+      -1,
+      0
      ],
-     "two_theta": 30.003,
-     "intensity": 1.56
-    },
-    {
-     "hkl": [
-      1,
-      2,
-      11
-     ],
-     "two_theta": 30.163,
-     "intensity": 4.61
-    },
-    {
-     "hkl": [
-      0,
-      5,
-      2
-     ],
-     "two_theta": 30.318,
-     "intensity": 9.27
-    },
-    {
-     "hkl": [
-      4,
-      2,
-      -1
-     ],
-     "two_theta": 30.329,
-     "intensity": 1.56
-    },
-    {
-     "hkl": [
-      1,
-      4,
-      7
-     ],
-     "two_theta": 30.393,
-     "intensity": 1.91
+     "two_theta": 65.071,
+     "intensity": 21.61
     },
     {
      "hkl": [
       2,
-      4,
-      -6
-     ],
-     "two_theta": 30.406,
-     "intensity": 2.75
-    },
-    {
-     "hkl": [
-      2,
-      2,
-      -11
-     ],
-     "two_theta": 30.476,
-     "intensity": 2.06
-    },
-    {
-     "hkl": [
-      0,
-      4,
-      8
-     ],
-     "two_theta": 30.513,
-     "intensity": 4.22
-    },
-    {
-     "hkl": [
-      3,
-      2,
-      -9
-     ],
-     "two_theta": 30.531,
-     "intensity": 6.05
-    },
-    {
-     "hkl": [
-      4,
-      2,
-      -3
-     ],
-     "two_theta": 30.553,
-     "intensity": 4.1
-    },
-    {
-     "hkl": [
-      2,
-      3,
-      8
-     ],
-     "two_theta": 30.646,
-     "intensity": 1.51
-    },
-    {
-     "hkl": [
-      0,
-      5,
+      -1,
+      -1,
       3
      ],
-     "two_theta": 30.786,
-     "intensity": 2.81
+     "two_theta": 68.394,
+     "intensity": 14.28
     },
     {
      "hkl": [
       2,
-      4,
-      5
-     ],
-     "two_theta": 30.818,
-     "intensity": 3.09
-    },
-    {
-     "hkl": [
-      4,
-      2,
+      0,
+      -2,
       1
      ],
-     "two_theta": 30.853,
-     "intensity": 4.26
+     "two_theta": 77.13,
+     "intensity": 4.01
     },
     {
      "hkl": [
       1,
-      5,
-      1
-     ],
-     "two_theta": 30.927,
-     "intensity": 1.8
-    },
-    {
-     "hkl": [
-      3,
-      3,
-      5
-     ],
-     "two_theta": 31.053,
-     "intensity": 5.06
-    },
-    {
-     "hkl": [
-      1,
-      3,
+      0,
+      -1,
       10
      ],
-     "two_theta": 31.14,
-     "intensity": 1.79
-    },
-    {
-     "hkl": [
-      4,
-      1,
-      -7
-     ],
-     "two_theta": 31.428,
-     "intensity": 7.56
+     "two_theta": 77.562,
+     "intensity": 3.01
     },
     {
      "hkl": [
       2,
-      3,
-      -10
-     ],
-     "two_theta": 31.635,
-     "intensity": 3.15
-    },
-    {
-     "hkl": [
-      1,
-      3,
-      -11
-     ],
-     "two_theta": 31.713,
-     "intensity": 2.63
-    },
-    {
-     "hkl": [
-      1,
-      5,
-      3
-     ],
-     "two_theta": 31.785,
-     "intensity": 5.45
-    },
-    {
-     "hkl": [
-      1,
-      4,
-      8
-     ],
-     "two_theta": 31.837,
-     "intensity": 1.92
-    },
-    {
-     "hkl": [
-      2,
-      4,
+      -1,
+      -1,
       6
      ],
-     "two_theta": 31.95,
-     "intensity": 1.17
+     "two_theta": 77.969,
+     "intensity": 5.33
     },
     {
      "hkl": [
-      1,
-      5,
-      -4
-     ],
-     "two_theta": 31.973,
-     "intensity": 8.27
-    },
-    {
-     "hkl": [
-      3,
-      1,
-      -11
-     ],
-     "two_theta": 32.039,
-     "intensity": 2.38
-    },
-    {
-     "hkl": [
-      4,
       2,
-      3
+      0,
+      -2,
+      2
      ],
-     "two_theta": 32.091,
-     "intensity": 1.97
-    },
-    {
-     "hkl": [
-      3,
-      1,
-      9
-     ],
-     "two_theta": 32.223,
-     "intensity": 2.32
+     "two_theta": 78.172,
+     "intensity": 2.5
     },
     {
      "hkl": [
       0,
-      5,
-      5
-     ],
-     "two_theta": 32.24,
-     "intensity": 3.33
-    },
-    {
-     "hkl": [
-      4,
-      2,
-      -6
-     ],
-     "two_theta": 32.249,
-     "intensity": 7.11
-    },
-    {
-     "hkl": [
-      1,
-      4,
-      -9
-     ],
-     "two_theta": 32.292,
-     "intensity": 1.23
-    },
-    {
-     "hkl": [
-      1,
-      5,
-      4
-     ],
-     "two_theta": 32.473,
-     "intensity": 1.56
-    },
-    {
-     "hkl": [
-      2,
-      4,
-      -8
-     ],
-     "two_theta": 32.694,
-     "intensity": 10.29
-    },
-    {
-     "hkl": [
-      2,
-      1,
-      -13
-     ],
-     "two_theta": 32.82,
-     "intensity": 2.15
-    },
-    {
-     "hkl": [
-      4,
       0,
-      6
+      0,
+      12
      ],
-     "two_theta": 32.946,
-     "intensity": 2.74
-    },
-    {
-     "hkl": [
-      4,
-      2,
-      4
-     ],
-     "two_theta": 32.958,
-     "intensity": 1.14
-    },
-    {
-     "hkl": [
-      1,
-      2,
-      -13
-     ],
-     "two_theta": 32.992,
-     "intensity": 1.76
-    },
-    {
-     "hkl": [
-      2,
-      5,
-      -1
-     ],
-     "two_theta": 33.109,
+     "two_theta": 81.499,
      "intensity": 3.04
     },
     {
      "hkl": [
       2,
-      5,
-      0
-     ],
-     "two_theta": 33.144,
-     "intensity": 1.91
-    },
-    {
-     "hkl": [
-      4,
-      2,
-      -7
-     ],
-     "two_theta": 33.145,
-     "intensity": 3.64
-    },
-    {
-     "hkl": [
       0,
-      5,
-      6
-     ],
-     "two_theta": 33.207,
-     "intensity": 4.72
-    },
-    {
-     "hkl": [
-      4,
-      3,
-      -1
-     ],
-     "two_theta": 33.233,
-     "intensity": 1.57
-    },
-    {
-     "hkl": [
-      4,
-      1,
-      6
-     ],
-     "two_theta": 33.504,
-     "intensity": 2.42
-    },
-    {
-     "hkl": [
-      3,
-      0,
-      10
-     ],
-     "two_theta": 33.507,
-     "intensity": 2.38
-    },
-    {
-     "hkl": [
-      3,
-      3,
-      7
-     ],
-     "two_theta": 33.561,
-     "intensity": 1.28
-    },
-    {
-     "hkl": [
-      1,
-      3,
-      -12
-     ],
-     "two_theta": 33.674,
-     "intensity": 7.67
-    },
-    {
-     "hkl": [
-      4,
-      3,
-      -4
-     ],
-     "two_theta": 33.8,
-     "intensity": 1.27
-    },
-    {
-     "hkl": [
-      3,
-      1,
-      -12
-     ],
-     "two_theta": 33.864,
-     "intensity": 5.16
-    },
-    {
-     "hkl": [
-      4,
-      2,
-      5
-     ],
-     "two_theta": 33.975,
-     "intensity": 1.25
-    },
-    {
-     "hkl": [
-      2,
-      5,
-      -4
-     ],
-     "two_theta": 34.036,
-     "intensity": 1.27
-    },
-    {
-     "hkl": [
-      3,
-      1,
-      10
-     ],
-     "two_theta": 34.057,
-     "intensity": 4.4
-    },
-    {
-     "hkl": [
-      0,
-      5,
-      7
-     ],
-     "two_theta": 34.319,
-     "intensity": 2.01
-    },
-    {
-     "hkl": [
-      4,
-      0,
-      -10
-     ],
-     "two_theta": 34.581,
-     "intensity": 1.64
-    },
-    {
-     "hkl": [
-      1,
-      5,
-      -7
-     ],
-     "two_theta": 34.647,
-     "intensity": 1.55
-    },
-    {
-     "hkl": [
-      3,
-      3,
-      -10
-     ],
-     "two_theta": 34.85,
-     "intensity": 2.91
-    },
-    {
-     "hkl": [
-      2,
-      5,
+      -2,
       4
      ],
-     "two_theta": 34.977,
-     "intensity": 1.66
+     "two_theta": 82.301,
+     "intensity": 9.89
     },
     {
      "hkl": [
       1,
-      4,
-      10
-     ],
-     "two_theta": 35.061,
-     "intensity": 6.29
-    },
-    {
-     "hkl": [
-      4,
-      1,
-      -10
-     ],
-     "two_theta": 35.117,
-     "intensity": 2.07
-    },
-    {
-     "hkl": [
-      5,
       0,
-      -4
-     ],
-     "two_theta": 35.359,
-     "intensity": 5.04
-    },
-    {
-     "hkl": [
-      1,
-      4,
-      -11
-     ],
-     "two_theta": 35.577,
-     "intensity": 1.17
-    },
-    {
-     "hkl": [
-      0,
-      3,
-      13
-     ],
-     "two_theta": 35.727,
-     "intensity": 3.02
-    },
-    {
-     "hkl": [
-      4,
-      0,
-      8
-     ],
-     "two_theta": 35.775,
-     "intensity": 2.09
-    },
-    {
-     "hkl": [
-      1,
-      5,
-      -8
-     ],
-     "two_theta": 35.824,
-     "intensity": 4.04
-    },
-    {
-     "hkl": [
-      2,
-      5,
-      5
-     ],
-     "two_theta": 35.83,
-     "intensity": 1.16
-    },
-    {
-     "hkl": [
-      3,
-      4,
-      -8
-     ],
-     "two_theta": 35.938,
-     "intensity": 1.9
-    },
-    {
-     "hkl": [
-      1,
-      1,
-      -15
-     ],
-     "two_theta": 35.955,
-     "intensity": 1.76
-    },
-    {
-     "hkl": [
-      0,
-      1,
-      15
-     ],
-     "two_theta": 36.092,
-     "intensity": 3.51
-    },
-    {
-     "hkl": [
-      0,
-      6,
-      1
-     ],
-     "two_theta": 36.196,
-     "intensity": 1.25
-    },
-    {
-     "hkl": [
-      4,
-      1,
-      8
-     ],
-     "two_theta": 36.295,
-     "intensity": 1.37
-    },
-    {
-     "hkl": [
-      4,
-      2,
-      7
-     ],
-     "two_theta": 36.416,
-     "intensity": 7.92
-    },
-    {
-     "hkl": [
-      2,
-      2,
-      -14
-     ],
-     "two_theta": 36.57,
-     "intensity": 3.56
-    },
-    {
-     "hkl": [
-      4,
-      1,
-      -11
-     ],
-     "two_theta": 36.593,
-     "intensity": 2.73
-    },
-    {
-     "hkl": [
-      4,
-      3,
-      5
-     ],
-     "two_theta": 36.622,
-     "intensity": 4.14
-    },
-    {
-     "hkl": [
-      0,
-      6,
-      3
-     ],
-     "two_theta": 36.835,
-     "intensity": 2.83
-    },
-    {
-     "hkl": [
-      5,
-      1,
-      -6
-     ],
-     "two_theta": 36.924,
-     "intensity": 3.29
-    },
-    {
-     "hkl": [
-      0,
-      5,
-      9
-     ],
-     "two_theta": 36.929,
-     "intensity": 1.45
-    },
-    {
-     "hkl": [
-      1,
-      5,
-      -9
-     ],
-     "two_theta": 37.127,
-     "intensity": 2.11
-    },
-    {
-     "hkl": [
-      4,
-      4,
-      -3
-     ],
-     "two_theta": 37.146,
-     "intensity": 1.08
-    },
-    {
-     "hkl": [
-      1,
-      3,
-      13
-     ],
-     "two_theta": 37.161,
-     "intensity": 1.47
-    },
-    {
-     "hkl": [
-      1,
-      6,
-      2
-     ],
-     "two_theta": 37.246,
-     "intensity": 1.74
-    },
-    {
-     "hkl": [
-      5,
-      1,
-      3
-     ],
-     "two_theta": 37.283,
-     "intensity": 1.48
-    },
-    {
-     "hkl": [
-      0,
-      6,
-      4
-     ],
-     "two_theta": 37.386,
-     "intensity": 1.87
-    },
-    {
-     "hkl": [
-      2,
-      2,
-      13
-     ],
-     "two_theta": 37.427,
-     "intensity": 2.56
-    },
-    {
-     "hkl": [
-      3,
-      0,
-      12
-     ],
-     "two_theta": 37.454,
-     "intensity": 2.16
-    },
-    {
-     "hkl": [
-      4,
-      4,
-      -4
-     ],
-     "two_theta": 37.475,
-     "intensity": 1.94
-    },
-    {
-     "hkl": [
-      1,
-      1,
-      15
-     ],
-     "two_theta": 37.624,
-     "intensity": 5.36
-    },
-    {
-     "hkl": [
-      2,
-      0,
-      14
-     ],
-     "two_theta": 37.634,
-     "intensity": 5.85
-    },
-    {
-     "hkl": [
-      4,
-      3,
-      6
-     ],
-     "two_theta": 37.707,
-     "intensity": 1.29
-    },
-    {
-     "hkl": [
-      4,
-      4,
-      2
-     ],
-     "two_theta": 37.85,
-     "intensity": 3.38
-    },
-    {
-     "hkl": [
-      4,
-      1,
-      9
-     ],
-     "two_theta": 37.856,
-     "intensity": 4.36
-    },
-    {
-     "hkl": [
-      3,
-      5,
-      -5
-     ],
-     "two_theta": 37.934,
-     "intensity": 5.48
-    },
-    {
-     "hkl": [
-      4,
-      3,
-      -9
-     ],
-     "two_theta": 37.935,
-     "intensity": 2.15
-    },
-    {
-     "hkl": [
-      0,
-      0,
-      16
-     ],
-     "two_theta": 38.029,
-     "intensity": 1.33
-    },
-    {
-     "hkl": [
-      5,
-      0,
-      -8
-     ],
-     "two_theta": 38.061,
-     "intensity": 2.97
-    },
-    {
-     "hkl": [
-      4,
-      1,
-      -12
-     ],
-     "two_theta": 38.173,
-     "intensity": 1.45
-    },
-    {
-     "hkl": [
-      1,
-      6,
-      -5
-     ],
-     "two_theta": 38.492,
-     "intensity": 3.64
-    },
-    {
-     "hkl": [
-      2,
-      5,
-      -9
-     ],
-     "two_theta": 38.685,
-     "intensity": 3.44
-    },
-    {
-     "hkl": [
-      3,
-      5,
-      4
-     ],
-     "two_theta": 38.695,
-     "intensity": 1.47
-    },
-    {
-     "hkl": [
-      2,
-      6,
-      -2
-     ],
-     "two_theta": 38.96,
-     "intensity": 1.74
-    },
-    {
-     "hkl": [
-      2,
-      5,
-      8
-     ],
-     "two_theta": 39.202,
-     "intensity": 1.7
-    },
-    {
-     "hkl": [
-      0,
-      4,
-      13
-     ],
-     "two_theta": 39.246,
-     "intensity": 2.1
-    },
-    {
-     "hkl": [
-      4,
-      2,
-      9
-     ],
-     "two_theta": 39.327,
-     "intensity": 2.01
-    },
-    {
-     "hkl": [
-      3,
-      5,
-      -7
-     ],
-     "two_theta": 39.438,
-     "intensity": 3.13
-    },
-    {
-     "hkl": [
-      2,
-      1,
-      -16
-     ],
-     "two_theta": 39.492,
-     "intensity": 1.16
-    },
-    {
-     "hkl": [
-      5,
-      3,
-      -1
-     ],
-     "two_theta": 39.537,
-     "intensity": 1.24
-    },
-    {
-     "hkl": [
-      5,
-      2,
-      4
-     ],
-     "two_theta": 39.562,
-     "intensity": 1.61
-    },
-    {
-     "hkl": [
-      5,
-      1,
-      -9
-     ],
-     "two_theta": 39.571,
-     "intensity": 2.03
-    },
-    {
-     "hkl": [
-      4,
-      1,
-      -13
-     ],
-     "two_theta": 39.849,
-     "intensity": 2.65
-    },
-    {
-     "hkl": [
-      3,
-      4,
-      -11
-     ],
-     "two_theta": 39.86,
-     "intensity": 2.55
-    },
-    {
-     "hkl": [
-      0,
-      6,
-      7
-     ],
-     "two_theta": 39.897,
-     "intensity": 1.26
-    },
-    {
-     "hkl": [
-      1,
-      3,
-      -15
-     ],
-     "two_theta": 39.935,
-     "intensity": 1.27
-    },
-    {
-     "hkl": [
-      0,
-      2,
-      16
-     ],
-     "two_theta": 39.973,
-     "intensity": 3.4
-    },
-    {
-     "hkl": [
-      0,
-      5,
+      -1,
       11
      ],
-     "two_theta": 39.986,
-     "intensity": 1.15
+     "two_theta": 84.773,
+     "intensity": 5.2
     },
     {
      "hkl": [
       2,
-      5,
-      -10
-     ],
-     "two_theta": 40.004,
-     "intensity": 1.35
-    },
-    {
-     "hkl": [
-      3,
-      4,
-      9
-     ],
-     "two_theta": 40.012,
-     "intensity": 1.6
-    },
-    {
-     "hkl": [
-      5,
-      3,
-      1
-     ],
-     "two_theta": 40.057,
-     "intensity": 1.5
-    },
-    {
-     "hkl": [
       0,
-      3,
-      15
-     ],
-     "two_theta": 40.06,
-     "intensity": 2.06
-    },
-    {
-     "hkl": [
-      5,
-      1,
-      6
-     ],
-     "two_theta": 40.133,
-     "intensity": 1.21
-    },
-    {
-     "hkl": [
-      1,
-      6,
-      -7
-     ],
-     "two_theta": 40.186,
-     "intensity": 2.03
-    },
-    {
-     "hkl": [
-      2,
-      6,
-      -5
-     ],
-     "two_theta": 40.212,
-     "intensity": 1.32
-    },
-    {
-     "hkl": [
-      2,
-      1,
-      15
-     ],
-     "two_theta": 40.414,
-     "intensity": 2.18
-    },
-    {
-     "hkl": [
-      5,
-      2,
+      -2,
       5
      ],
-     "two_theta": 40.486,
-     "intensity": 2.52
-    },
-    {
-     "hkl": [
-      2,
-      4,
-      -13
-     ],
-     "two_theta": 40.509,
-     "intensity": 3.33
-    },
-    {
-     "hkl": [
-      4,
-      3,
-      -11
-     ],
-     "two_theta": 40.519,
-     "intensity": 2.76
-    },
-    {
-     "hkl": [
-      1,
-      6,
-      7
-     ],
-     "two_theta": 40.903,
-     "intensity": 1.51
-    },
-    {
-     "hkl": [
-      3,
-      2,
-      -15
-     ],
-     "two_theta": 41.201,
-     "intensity": 2.36
-    },
-    {
-     "hkl": [
-      3,
-      2,
-      13
-     ],
-     "two_theta": 41.409,
-     "intensity": 4.67
-    },
-    {
-     "hkl": [
-      3,
-      0,
-      -16
-     ],
-     "two_theta": 41.428,
-     "intensity": 1.55
-    },
-    {
-     "hkl": [
-      3,
-      4,
-      10
-     ],
-     "two_theta": 41.547,
-     "intensity": 1.32
-    },
-    {
-     "hkl": [
-      3,
-      0,
-      14
-     ],
-     "two_theta": 41.649,
-     "intensity": 2.23
-    },
-    {
-     "hkl": [
-      2,
-      6,
-      -7
-     ],
-     "two_theta": 41.748,
-     "intensity": 2.85
-    },
-    {
-     "hkl": [
-      5,
-      3,
-      4
-     ],
-     "two_theta": 41.906,
-     "intensity": 2.96
-    },
-    {
-     "hkl": [
-      2,
-      3,
-      14
-     ],
-     "two_theta": 41.936,
-     "intensity": 1.62
-    },
-    {
-     "hkl": [
-      3,
-      6,
-      -1
-     ],
-     "two_theta": 42.018,
-     "intensity": 3.34
-    },
-    {
-     "hkl": [
-      3,
-      6,
-      -2
-     ],
-     "two_theta": 42.082,
-     "intensity": 1.81
-    },
-    {
-     "hkl": [
-      6,
-      0,
-      -2
-     ],
-     "two_theta": 42.235,
-     "intensity": 1.72
-    },
-    {
-     "hkl": [
-      1,
-      6,
-      -9
-     ],
-     "two_theta": 42.389,
-     "intensity": 2.8
-    },
-    {
-     "hkl": [
-      1,
-      1,
-      17
-     ],
-     "two_theta": 42.456,
-     "intensity": 2.73
-    },
-    {
-     "hkl": [
-      4,
-      2,
-      11
-     ],
-     "two_theta": 42.632,
-     "intensity": 3.71
-    },
-    {
-     "hkl": [
-      4,
-      0,
-      12
-     ],
-     "two_theta": 42.636,
-     "intensity": 3.51
-    },
-    {
-     "hkl": [
-      4,
-      5,
-      3
-     ],
-     "two_theta": 42.684,
-     "intensity": 2.39
-    },
-    {
-     "hkl": [
-      5,
-      4,
-      -1
-     ],
-     "two_theta": 42.79,
-     "intensity": 1.92
-    },
-    {
-     "hkl": [
-      5,
-      0,
-      -12
-     ],
-     "two_theta": 42.892,
-     "intensity": 2.3
-    },
-    {
-     "hkl": [
-      6,
-      1,
-      0
-     ],
-     "two_theta": 42.996,
-     "intensity": 2.64
-    },
-    {
-     "hkl": [
-      1,
-      7,
-      0
-     ],
-     "two_theta": 43.019,
-     "intensity": 7.17
-    },
-    {
-     "hkl": [
-      4,
-      1,
-      12
-     ],
-     "two_theta": 43.086,
-     "intensity": 3.08
-    },
-    {
-     "hkl": [
-      3,
-      2,
-      -16
-     ],
-     "two_theta": 43.244,
-     "intensity": 1.4
-    },
-    {
-     "hkl": [
-      5,
-      3,
-      -9
-     ],
-     "two_theta": 43.27,
-     "intensity": 3.97
-    },
-    {
-     "hkl": [
-      6,
-      1,
-      1
-     ],
-     "two_theta": 43.358,
-     "intensity": 1.96
-    },
-    {
-     "hkl": [
-      4,
-      5,
-      4
-     ],
-     "two_theta": 43.367,
-     "intensity": 1.26
-    },
-    {
-     "hkl": [
-      0,
-      5,
-      13
-     ],
-     "two_theta": 43.415,
-     "intensity": 1.53
-    },
-    {
-     "hkl": [
-      4,
-      1,
-      -15
-     ],
-     "two_theta": 43.452,
-     "intensity": 1.86
-    },
-    {
-     "hkl": [
-      3,
-      3,
-      -15
-     ],
-     "two_theta": 43.472,
-     "intensity": 1.11
-    },
-    {
-     "hkl": [
-      4,
-      5,
-      -7
-     ],
-     "two_theta": 43.515,
-     "intensity": 2.2
-    },
-    {
-     "hkl": [
-      3,
-      3,
-      13
-     ],
-     "two_theta": 43.671,
-     "intensity": 2.45
-    },
-    {
-     "hkl": [
-      3,
-      6,
-      4
-     ],
-     "two_theta": 43.799,
-     "intensity": 1.26
-    },
-    {
-     "hkl": [
-      2,
-      3,
-      15
-     ],
-     "two_theta": 44.055,
-     "intensity": 4.72
-    },
-    {
-     "hkl": [
-      0,
-      7,
-      5
-     ],
-     "two_theta": 44.135,
-     "intensity": 1.1
-    },
-    {
-     "hkl": [
-      2,
-      1,
-      -18
-     ],
-     "two_theta": 44.139,
-     "intensity": 1.32
-    },
-    {
-     "hkl": [
-      6,
-      1,
-      -7
-     ],
-     "two_theta": 44.342,
-     "intensity": 2.02
-    },
-    {
-     "hkl": [
-      4,
-      5,
-      -8
-     ],
-     "two_theta": 44.351,
-     "intensity": 2.11
-    },
-    {
-     "hkl": [
-      1,
-      3,
-      -17
-     ],
-     "two_theta": 44.368,
-     "intensity": 2.37
-    },
-    {
-     "hkl": [
-      1,
-      0,
-      18
-     ],
-     "two_theta": 44.477,
-     "intensity": 1.37
-    },
-    {
-     "hkl": [
-      1,
-      6,
-      10
-     ],
-     "two_theta": 44.62,
-     "intensity": 1.75
-    },
-    {
-     "hkl": [
-      6,
-      0,
-      -8
-     ],
-     "two_theta": 44.637,
-     "intensity": 1.43
-    },
-    {
-     "hkl": [
-      5,
-      1,
-      -13
-     ],
-     "two_theta": 44.807,
-     "intensity": 2.77
-    },
-    {
-     "hkl": [
-      2,
-      7,
-      0
-     ],
-     "two_theta": 44.831,
-     "intensity": 1.82
-    },
-    {
-     "hkl": [
-      5,
-      4,
-      4
-     ],
-     "two_theta": 45.019,
-     "intensity": 2.07
-    },
-    {
-     "hkl": [
-      2,
-      1,
-      17
-     ],
-     "two_theta": 45.091,
-     "intensity": 2.85
-    },
-    {
-     "hkl": [
-      4,
-      5,
-      6
-     ],
-     "two_theta": 45.111,
-     "intensity": 1.98
-    },
-    {
-     "hkl": [
-      5,
-      0,
-      10
-     ],
-     "two_theta": 45.156,
-     "intensity": 1.98
-    },
-    {
-     "hkl": [
-      2,
-      7,
-      2
-     ],
-     "two_theta": 45.288,
-     "intensity": 1.14
-    },
-    {
-     "hkl": [
-      4,
-      1,
-      -16
-     ],
-     "two_theta": 45.367,
-     "intensity": 1.46
-    },
-    {
-     "hkl": [
-      2,
-      6,
-      9
-     ],
-     "two_theta": 45.497,
-     "intensity": 1.2
-    },
-    {
-     "hkl": [
-      6,
-      2,
-      3
-     ],
-     "two_theta": 45.777,
-     "intensity": 1.23
-    },
-    {
-     "hkl": [
-      1,
-      7,
-      -7
-     ],
-     "two_theta": 46.008,
-     "intensity": 2.4
-    },
-    {
-     "hkl": [
-      2,
-      7,
-      -5
-     ],
-     "two_theta": 46.031,
-     "intensity": 3.19
-    },
-    {
-     "hkl": [
-      2,
-      6,
-      -11
-     ],
-     "two_theta": 46.289,
-     "intensity": 2.23
-    },
-    {
-     "hkl": [
-      3,
-      6,
-      -9
-     ],
-     "two_theta": 46.327,
-     "intensity": 3.67
-    },
-    {
-     "hkl": [
-      4,
-      0,
-      14
-     ],
-     "two_theta": 46.536,
-     "intensity": 2.23
-    },
-    {
-     "hkl": [
-      4,
-      4,
-      -13
-     ],
-     "two_theta": 46.554,
-     "intensity": 2.8
-    },
-    {
-     "hkl": [
-      0,
-      3,
-      18
-     ],
-     "two_theta": 46.9,
-     "intensity": 1.11
-    },
-    {
-     "hkl": [
-      2,
-      5,
-      13
-     ],
-     "two_theta": 46.997,
-     "intensity": 1.34
-    },
-    {
-     "hkl": [
-      0,
-      5,
-      15
-     ],
-     "two_theta": 47.16,
-     "intensity": 1.41
-    },
-    {
-     "hkl": [
-      5,
-      1,
-      11
-     ],
-     "two_theta": 47.194,
-     "intensity": 1.53
-    },
-    {
-     "hkl": [
-      4,
-      1,
-      -17
-     ],
-     "two_theta": 47.349,
-     "intensity": 1.87
-    },
-    {
-     "hkl": [
-      6,
-      2,
-      5
-     ],
-     "two_theta": 47.374,
-     "intensity": 1.14
-    },
-    {
-     "hkl": [
-      5,
-      3,
-      9
-     ],
-     "two_theta": 47.483,
-     "intensity": 1.94
-    },
-    {
-     "hkl": [
-      4,
-      5,
-      -11
-     ],
-     "two_theta": 47.563,
-     "intensity": 1.92
-    },
-    {
-     "hkl": [
-      3,
-      7,
-      -2
-     ],
-     "two_theta": 47.717,
-     "intensity": 1.33
-    },
-    {
-     "hkl": [
-      2,
-      2,
-      -19
-     ],
-     "two_theta": 47.77,
-     "intensity": 1.52
-    },
-    {
-     "hkl": [
-      4,
-      4,
-      11
-     ],
-     "two_theta": 47.805,
-     "intensity": 1.52
-    },
-    {
-     "hkl": [
-      5,
-      5,
-      -6
-     ],
-     "two_theta": 47.831,
-     "intensity": 1.84
-    },
-    {
-     "hkl": [
-      4,
-      4,
-      -14
-     ],
-     "two_theta": 48.118,
-     "intensity": 1.9
-    },
-    {
-     "hkl": [
-      0,
-      8,
-      0
-     ],
-     "two_theta": 48.824,
-     "intensity": 1.36
-    },
-    {
-     "hkl": [
-      1,
-      4,
-      17
-     ],
-     "two_theta": 48.873,
-     "intensity": 2.52
-    },
-    {
-     "hkl": [
-      0,
-      7,
-      10
-     ],
-     "two_theta": 49.042,
-     "intensity": 1.1
-    },
-    {
-     "hkl": [
-      5,
-      2,
-      -15
-     ],
-     "two_theta": 49.244,
-     "intensity": 1.25
-    },
-    {
-     "hkl": [
-      3,
-      7,
-      4
-     ],
-     "two_theta": 49.279,
-     "intensity": 2.14
-    },
-    {
-     "hkl": [
-      4,
-      4,
-      -15
-     ],
-     "two_theta": 49.768,
-     "intensity": 1.11
-    },
-    {
-     "hkl": [
-      7,
-      0,
-      -4
-     ],
-     "two_theta": 49.858,
-     "intensity": 1.98
-    },
-    {
-     "hkl": [
-      1,
-      8,
-      3
-     ],
-     "two_theta": 50.07,
-     "intensity": 1.3
-    },
-    {
-     "hkl": [
-      0,
-      8,
-      5
-     ],
-     "two_theta": 50.384,
-     "intensity": 1.69
-    },
-    {
-     "hkl": [
-      6,
-      1,
-      9
-     ],
-     "two_theta": 50.741,
-     "intensity": 1.81
-    },
-    {
-     "hkl": [
-      5,
-      6,
-      -3
-     ],
-     "two_theta": 51.225,
-     "intensity": 2.22
-    },
-    {
-     "hkl": [
-      7,
-      2,
-      -3
-     ],
-     "two_theta": 51.313,
-     "intensity": 1.1
-    },
-    {
-     "hkl": [
-      1,
-      8,
-      -6
-     ],
-     "two_theta": 51.341,
-     "intensity": 1.33
-    },
-    {
-     "hkl": [
-      3,
-      6,
-      -13
-     ],
-     "two_theta": 51.352,
-     "intensity": 1.57
-    },
-    {
-     "hkl": [
-      6,
-      4,
-      4
-     ],
-     "two_theta": 51.383,
-     "intensity": 1.75
-    },
-    {
-     "hkl": [
-      4,
-      5,
-      11
-     ],
-     "two_theta": 51.419,
-     "intensity": 1.43
-    },
-    {
-     "hkl": [
-      2,
-      6,
-      13
-     ],
-     "two_theta": 51.441,
-     "intensity": 1.53
-    },
-    {
-     "hkl": [
-      5,
-      6,
-      1
-     ],
-     "two_theta": 51.591,
-     "intensity": 1.56
-    },
-    {
-     "hkl": [
-      4,
-      7,
-      -3
-     ],
-     "two_theta": 51.615,
-     "intensity": 1.1
-    },
-    {
-     "hkl": [
-      2,
-      8,
-      -4
-     ],
-     "two_theta": 51.647,
-     "intensity": 2.09
-    },
-    {
-     "hkl": [
-      7,
-      2,
-      0
-     ],
-     "two_theta": 51.661,
-     "intensity": 1.58
-    },
-    {
-     "hkl": [
-      1,
-      7,
-      -12
-     ],
-     "two_theta": 51.78,
-     "intensity": 2.15
-    },
-    {
-     "hkl": [
-      0,
-      2,
-      21
-     ],
-     "two_theta": 52.198,
-     "intensity": 1.27
-    },
-    {
-     "hkl": [
-      4,
-      7,
-      -5
-     ],
-     "two_theta": 52.242,
-     "intensity": 1.73
-    },
-    {
-     "hkl": [
-      7,
-      0,
-      -10
-     ],
-     "two_theta": 53.17,
-     "intensity": 1.22
-    },
-    {
-     "hkl": [
-      6,
-      1,
-      -15
-     ],
-     "two_theta": 53.335,
-     "intensity": 1.28
-    },
-    {
-     "hkl": [
-      5,
-      1,
-      -18
-     ],
-     "two_theta": 53.454,
-     "intensity": 1.09
-    },
-    {
-     "hkl": [
-      5,
-      6,
-      -8
-     ],
-     "two_theta": 53.474,
-     "intensity": 1.59
-    },
-    {
-     "hkl": [
-      3,
-      7,
-      -11
-     ],
-     "two_theta": 53.739,
-     "intensity": 2.32
-    },
-    {
-     "hkl": [
-      7,
-      2,
-      -9
-     ],
-     "two_theta": 53.859,
-     "intensity": 1.21
-    },
-    {
-     "hkl": [
-      3,
-      6,
-      -15
-     ],
-     "two_theta": 54.438,
-     "intensity": 1.87
-    },
-    {
-     "hkl": [
-      3,
-      2,
-      19
-     ],
-     "two_theta": 54.527,
-     "intensity": 1.2
-    },
-    {
-     "hkl": [
-      5,
-      3,
-      -17
-     ],
-     "two_theta": 54.628,
-     "intensity": 1.67
-    },
-    {
-     "hkl": [
-      7,
-      3,
-      3
-     ],
-     "two_theta": 54.973,
-     "intensity": 1.26
-    },
-    {
-     "hkl": [
-      5,
-      4,
-      -16
-     ],
-     "two_theta": 55.529,
-     "intensity": 1.92
-    },
-    {
-     "hkl": [
-      4,
-      6,
-      11
-     ],
-     "two_theta": 55.604,
-     "intensity": 1.13
-    },
-    {
-     "hkl": [
-      3,
-      5,
-      16
-     ],
-     "two_theta": 55.908,
-     "intensity": 1.62
-    },
-    {
-     "hkl": [
-      5,
-      4,
-      13
-     ],
-     "two_theta": 56.37,
-     "intensity": 1.13
-    },
-    {
-     "hkl": [
-      3,
-      8,
-      -8
-     ],
-     "two_theta": 56.397,
-     "intensity": 3.61
-    },
-    {
-     "hkl": [
-      7,
-      1,
-      8
-     ],
-     "two_theta": 56.585,
-     "intensity": 1.15
-    },
-    {
-     "hkl": [
-      7,
-      1,
-      -13
-     ],
-     "two_theta": 56.696,
-     "intensity": 1.44
-    },
-    {
-     "hkl": [
-      5,
-      3,
-      15
-     ],
-     "two_theta": 57.388,
-     "intensity": 2.41
-    },
-    {
-     "hkl": [
-      4,
-      0,
-      -22
-     ],
-     "two_theta": 57.807,
-     "intensity": 1.21
-    },
-    {
-     "hkl": [
-      8,
-      1,
-      -4
-     ],
-     "two_theta": 57.861,
-     "intensity": 1.24
-    },
-    {
-     "hkl": [
-      2,
-      0,
-      -24
-     ],
-     "two_theta": 58.602,
-     "intensity": 1.39
-    },
-    {
-     "hkl": [
-      6,
-      1,
-      14
-     ],
-     "two_theta": 58.666,
-     "intensity": 1.29
-    },
-    {
-     "hkl": [
-      2,
-      6,
-      17
-     ],
-     "two_theta": 58.725,
-     "intensity": 1.68
-    },
-    {
-     "hkl": [
-      8,
-      1,
-      -8
-     ],
-     "two_theta": 59.285,
-     "intensity": 1.77
-    },
-    {
-     "hkl": [
-      1,
-      8,
-      -14
-     ],
-     "two_theta": 60.221,
-     "intensity": 1.16
-    },
-    {
-     "hkl": [
-      1,
-      6,
-      19
-     ],
-     "two_theta": 60.653,
-     "intensity": 1.87
-    },
-    {
-     "hkl": [
-      7,
-      4,
-      -12
-     ],
-     "two_theta": 60.943,
-     "intensity": 1.2
-    },
-    {
-     "hkl": [
-      5,
-      6,
-      -15
-     ],
-     "two_theta": 61.182,
-     "intensity": 1.24
-    },
-    {
-     "hkl": [
-      7,
-      6,
-      -1
-     ],
-     "two_theta": 63.08,
-     "intensity": 1.54
-    },
-    {
-     "hkl": [
-      1,
-      5,
-      22
-     ],
-     "two_theta": 63.572,
-     "intensity": 1.66
-    },
-    {
-     "hkl": [
-      3,
-      6,
-      21
-     ],
-     "two_theta": 70.143,
-     "intensity": 1.12
+     "two_theta": 85.371,
+     "intensity": 2.47
     }
    ],
    "note": "镍钴锰三元正极",
    "cif_source": "1514993.cif",
    "cod_phase": "1-2_NCM_811",
    "wavelength": 1.5406,
-   "peaks_source": " [截断 5420→400]",
-   "peaks_version": "0.5.2-hkl-consistent"
+   "peaks_source": "COD 1520789 (Li3.09Mn0.3Co0.3Ni2.31O6, 12 位点, 晶胞接管: P2_1/c 坏超胞 → R-3m 层状, 修 18.44°→18.78°)",
+   "peaks_version": "0.5.3-ncm811-fix"
   },
   {
    "key": "CaMg(CO3)2",
@@ -32082,11 +28411,11 @@
    "key": "Boehmite",
    "name": "Boehmite",
    "formula": "AlO(OH)",
-   "space_group": "I4_1/amd",
+   "space_group": "Cmcm",
    "lattice": {
-    "a": 5.652,
-    "b": 5.652,
-    "c": 7.871,
+    "a": 2.8686,
+    "b": 12.265,
+    "c": 3.715,
     "alpha": 90.0,
     "beta": 90.0,
     "gamma": 90.0
@@ -32094,254 +28423,272 @@
    "peaks": [
     {
      "hkl": [
-      1,
       0,
-      1
-     ],
-     "two_theta": 19.318,
-     "intensity": 10.92
-    },
-    {
-     "hkl": [
-      2,
-      0,
-      0
-     ],
-     "two_theta": 31.635,
-     "intensity": 13.64
-    },
-    {
-     "hkl": [
-      1,
-      1,
-      2
-     ],
-     "two_theta": 31.888,
-     "intensity": 26.46
-    },
-    {
-     "hkl": [
-      2,
-      1,
-      1
-     ],
-     "two_theta": 37.335,
-     "intensity": 29.04
-    },
-    {
-     "hkl": [
-      1,
-      0,
-      3
-     ],
-     "two_theta": 37.772,
-     "intensity": 16.76
-    },
-    {
-     "hkl": [
-      2,
-      0,
-      2
-     ],
-     "two_theta": 39.215,
-     "intensity": 6.28
-    },
-    {
-     "hkl": [
-      2,
       2,
       0
      ],
-     "two_theta": 45.347,
-     "intensity": 88.38
-    },
-    {
-     "hkl": [
-      0,
-      0,
-      4
-     ],
-     "two_theta": 46.091,
-     "intensity": 41.93
-    },
-    {
-     "hkl": [
-      3,
-      0,
-      1
-     ],
-     "two_theta": 49.721,
-     "intensity": 2.69
-    },
-    {
-     "hkl": [
-      2,
-      1,
-      3
-     ],
-     "two_theta": 50.07,
-     "intensity": 4.01
-    },
-    {
-     "hkl": [
-      3,
-      1,
-      2
-     ],
-     "two_theta": 56.503,
-     "intensity": 9.71
-    },
-    {
-     "hkl": [
-      2,
-      0,
-      4
-     ],
-     "two_theta": 56.981,
-     "intensity": 4.7
-    },
-    {
-     "hkl": [
-      3,
-      2,
-      1
-     ],
-     "two_theta": 60.138,
-     "intensity": 11.33
-    },
-    {
-     "hkl": [
-      3,
-      0,
-      3
-     ],
-     "two_theta": 60.445,
-     "intensity": 2.36
-    },
-    {
-     "hkl": [
-      1,
-      0,
-      5
-     ],
-     "two_theta": 61.055,
-     "intensity": 4.78
-    },
-    {
-     "hkl": [
-      4,
-      0,
-      0
-     ],
-     "two_theta": 66.07,
-     "intensity": 51.37
-    },
-    {
-     "hkl": [
-      2,
-      2,
-      4
-     ],
-     "two_theta": 66.651,
+     "two_theta": 14.432,
      "intensity": 100.0
     },
     {
      "hkl": [
-      4,
-      1,
+      0,
+      2,
       1
      ],
-     "two_theta": 69.555,
-     "intensity": 0.67
+     "two_theta": 28.06,
+     "intensity": 51.27
     },
     {
      "hkl": [
-      3,
-      2,
-      3
-     ],
-     "two_theta": 69.839,
-     "intensity": 0.44
-    },
-    {
-     "hkl": [
-      2,
-      1,
-      5
-     ],
-     "two_theta": 70.405,
-     "intensity": 0.9
-    },
-    {
-     "hkl": [
+      0,
       4,
-      2,
       0
      ],
-     "two_theta": 75.107,
-     "intensity": 2.02
+     "two_theta": 29.099,
+     "intensity": 3.4
     },
     {
      "hkl": [
+      1,
       3,
+      0
+     ],
+     "two_theta": 38.299,
+     "intensity": 44.42
+    },
+    {
+     "hkl": [
+      0,
+      6,
+      0
+     ],
+     "two_theta": 44.275,
+     "intensity": 1.69
+    },
+    {
+     "hkl": [
+      1,
+      3,
+      1
+     ],
+     "two_theta": 45.669,
+     "intensity": 4.5
+    },
+    {
+     "hkl": [
+      1,
+      5,
+      0
+     ],
+     "two_theta": 48.81,
+     "intensity": 34.49
+    },
+    {
+     "hkl": [
+      0,
+      0,
+      2
+     ],
+     "two_theta": 49.0,
+     "intensity": 23.14
+    },
+    {
+     "hkl": [
+      0,
+      2,
+      2
+     ],
+     "two_theta": 51.355,
+     "intensity": 5.79
+    },
+    {
+     "hkl": [
+      1,
+      5,
+      1
+     ],
+     "two_theta": 55.07,
+     "intensity": 12.22
+    },
+    {
+     "hkl": [
+      0,
+      4,
+      2
+     ],
+     "two_theta": 58.006,
+     "intensity": 0.78
+    },
+    {
+     "hkl": [
+      0,
+      8,
+      0
+     ],
+     "two_theta": 60.323,
+     "intensity": 5.81
+    },
+    {
+     "hkl": [
+      1,
       3,
       2
      ],
-     "two_theta": 75.244,
-     "intensity": 2.05
+     "two_theta": 63.843,
+     "intensity": 16.86
     },
     {
      "hkl": [
-      1,
-      1,
-      6
-     ],
-     "two_theta": 76.343,
-     "intensity": 1.97
-    },
-    {
-     "hkl": [
-      4,
-      1,
-      3
-     ],
-     "two_theta": 78.693,
-     "intensity": 3.73
-    },
-    {
-     "hkl": [
-      3,
+      2,
       0,
-      5
+      0
      ],
-     "two_theta": 79.235,
-     "intensity": 1.41
+     "two_theta": 64.967,
+     "intensity": 8.51
     },
     {
      "hkl": [
-      4,
       0,
-      4
-     ],
-     "two_theta": 84.311,
-     "intensity": 19.36
-    },
-    {
-     "hkl": [
-      4,
-      3,
+      8,
       1
      ],
-     "two_theta": 87.012,
-     "intensity": 0.95
+     "two_theta": 65.85,
+     "intensity": 0.58
+    },
+    {
+     "hkl": [
+      2,
+      2,
+      0
+     ],
+     "two_theta": 66.947,
+     "intensity": 2.44
+    },
+    {
+     "hkl": [
+      1,
+      7,
+      1
+     ],
+     "two_theta": 67.465,
+     "intensity": 8.41
+    },
+    {
+     "hkl": [
+      0,
+      6,
+      2
+     ],
+     "two_theta": 68.158,
+     "intensity": 1.26
+    },
+    {
+     "hkl": [
+      1,
+      5,
+      2
+     ],
+     "two_theta": 71.662,
+     "intensity": 17.39
+    },
+    {
+     "hkl": [
+      2,
+      2,
+      1
+     ],
+     "two_theta": 72.206,
+     "intensity": 5.66
+    },
+    {
+     "hkl": [
+      1,
+      9,
+      0
+     ],
+     "two_theta": 77.48,
+     "intensity": 1.32
+    },
+    {
+     "hkl": [
+      0,
+      10,
+      0
+     ],
+     "two_theta": 77.812,
+     "intensity": 0.94
+    },
+    {
+     "hkl": [
+      0,
+      2,
+      3
+     ],
+     "two_theta": 78.781,
+     "intensity": 2.18
+    },
+    {
+     "hkl": [
+      0,
+      8,
+      2
+     ],
+     "two_theta": 81.306,
+     "intensity": 4.35
+    },
+    {
+     "hkl": [
+      2,
+      6,
+      0
+     ],
+     "two_theta": 82.002,
+     "intensity": 0.82
+    },
+    {
+     "hkl": [
+      0,
+      10,
+      1
+     ],
+     "two_theta": 82.812,
+     "intensity": 4.2
+    },
+    {
+     "hkl": [
+      2,
+      0,
+      2
+     ],
+     "two_theta": 85.458,
+     "intensity": 7.0
+    },
+    {
+     "hkl": [
+      2,
+      2,
+      2
+     ],
+     "two_theta": 87.27,
+     "intensity": 2.24
+    },
+    {
+     "hkl": [
+      1,
+      3,
+      3
+     ],
+     "two_theta": 89.375,
+     "intensity": 0.48
     }
    ],
    "note": "一水软铝石",
    "cif_source": "1533936.cif",
    "cod_phase": "7-1_Boehmite",
    "wavelength": 1.5406,
-   "peaks_source": "COD 1533936 (Al10.64O16, 36 位点, 晶胞一致)",
-   "peaks_version": "0.5.2-hkl-consistent"
+   "peaks_source": "COD 9012250 (AlO2, 12 位点, 晶胞接管)",
+   "peaks_version": "0.5.3-round2-fix"
   },
   {
    "key": "Goethite",
@@ -36642,24 +32989,24 @@
    "key": "Albite",
    "name": "Albite",
    "formula": "NaAlSi3O8",
-   "space_group": "Pnnm",
+   "space_group": "P-1",
    "lattice": {
-    "a": 8.24,
-    "b": 8.68,
-    "c": 4.84,
-    "alpha": 90.0,
-    "beta": 90.0,
-    "gamma": 90.0
+    "a": 8.153,
+    "b": 12.8694,
+    "c": 7.107,
+    "alpha": 93.521,
+    "beta": 116.458,
+    "gamma": 90.257
    },
    "peaks": [
     {
      "hkl": [
       1,
-      1,
+      -1,
       0
      ],
-     "two_theta": 14.812,
-     "intensity": 0.19
+     "two_theta": 13.736,
+     "intensity": 9.81
     },
     {
      "hkl": [
@@ -36667,44 +33014,53 @@
       2,
       0
      ],
-     "two_theta": 20.447,
-     "intensity": 9.05
+     "two_theta": 13.786,
+     "intensity": 10.47
     },
     {
      "hkl": [
       0,
-      1,
-      1
-     ],
-     "two_theta": 20.999,
-     "intensity": 24.36
-    },
-    {
-     "hkl": [
-      1,
       0,
       1
      ],
-     "two_theta": 21.273,
-     "intensity": 24.04
+     "two_theta": 13.943,
+     "intensity": 5.06
     },
     {
      "hkl": [
-      2,
-      0,
+      1,
+      1,
       0
      ],
-     "two_theta": 21.552,
-     "intensity": 80.32
+     "two_theta": 14.166,
+     "intensity": 0.93
     },
     {
      "hkl": [
       1,
       1,
-      1
+      -1
      ],
-     "two_theta": 23.636,
-     "intensity": 44.18
+     "two_theta": 15.183,
+     "intensity": 5.63
+    },
+    {
+     "hkl": [
+      1,
+      -1,
+      -1
+     ],
+     "two_theta": 15.683,
+     "intensity": 6.86
+    },
+    {
+     "hkl": [
+      0,
+      2,
+      -1
+     ],
+     "two_theta": 18.94,
+     "intensity": 3.07
     },
     {
      "hkl": [
@@ -36712,863 +33068,863 @@
       2,
       1
      ],
-     "two_theta": 27.584,
+     "two_theta": 20.347,
+     "intensity": 1.17
+    },
+    {
+     "hkl": [
+      2,
+      0,
+      -1
+     ],
+     "two_theta": 22.009,
+     "intensity": 99.18
+    },
+    {
+     "hkl": [
+      1,
+      -1,
+      1
+     ],
+     "two_theta": 22.912,
+     "intensity": 21.72
+    },
+    {
+     "hkl": [
+      1,
+      -3,
+      0
+     ],
+     "two_theta": 23.71,
+     "intensity": 46.68
+    },
+    {
+     "hkl": [
+      1,
+      1,
+      1
+     ],
+     "two_theta": 23.771,
+     "intensity": 31.19
+    },
+    {
+     "hkl": [
+      1,
+      3,
+      0
+     ],
+     "two_theta": 24.471,
+     "intensity": 32.11
+    },
+    {
+     "hkl": [
+      1,
+      3,
+      -1
+     ],
+     "two_theta": 24.522,
+     "intensity": 11.3
+    },
+    {
+     "hkl": [
+      1,
+      1,
+      -2
+     ],
+     "two_theta": 25.622,
+     "intensity": 12.08
+    },
+    {
+     "hkl": [
+      2,
+      2,
+      -1
+     ],
+     "two_theta": 25.995,
+     "intensity": 3.46
+    },
+    {
+     "hkl": [
+      1,
+      -1,
+      -2
+     ],
+     "two_theta": 26.463,
+     "intensity": 18.53
+    },
+    {
+     "hkl": [
+      2,
+      -2,
+      0
+     ],
+     "two_theta": 27.675,
+     "intensity": 43.8
+    },
+    {
+     "hkl": [
+      0,
+      4,
+      0
+     ],
+     "two_theta": 27.776,
+     "intensity": 60.78
+    },
+    {
+     "hkl": [
+      2,
+      0,
+      -2
+     ],
+     "two_theta": 27.805,
+     "intensity": 83.24
+    },
+    {
+     "hkl": [
+      0,
+      0,
+      2
+     ],
+     "two_theta": 28.097,
      "intensity": 100.0
     },
     {
      "hkl": [
-      1,
-      2,
-      1
-     ],
-     "two_theta": 29.674,
-     "intensity": 6.51
-    },
-    {
-     "hkl": [
       2,
       2,
       0
      ],
-     "two_theta": 29.879,
-     "intensity": 8.22
+     "two_theta": 28.554,
+     "intensity": 36.16
     },
     {
      "hkl": [
-      2,
       1,
+      -3,
       1
      ],
-     "two_theta": 30.268,
-     "intensity": 27.3
-    },
-    {
-     "hkl": [
-      1,
-      3,
-      0
-     ],
-     "two_theta": 32.779,
-     "intensity": 10.58
-    },
-    {
-     "hkl": [
-      3,
-      1,
-      0
-     ],
-     "two_theta": 34.214,
-     "intensity": 0.09
-    },
-    {
-     "hkl": [
-      2,
-      2,
-      1
-     ],
-     "two_theta": 35.272,
-     "intensity": 31.25
-    },
-    {
-     "hkl": [
-      0,
-      3,
-      1
-     ],
-     "two_theta": 36.14,
-     "intensity": 1.77
-    },
-    {
-     "hkl": [
-      0,
-      0,
-      2
-     ],
-     "two_theta": 37.121,
-     "intensity": 0.11
-    },
-    {
-     "hkl": [
-      3,
-      0,
-      1
-     ],
-     "two_theta": 37.624,
-     "intensity": 17.09
-    },
-    {
-     "hkl": [
-      1,
-      3,
-      1
-     ],
-     "two_theta": 37.805,
-     "intensity": 14.18
-    },
-    {
-     "hkl": [
-      0,
-      1,
-      2
-     ],
-     "two_theta": 38.592,
-     "intensity": 4.72
-    },
-    {
-     "hkl": [
-      3,
-      1,
-      1
-     ],
-     "two_theta": 39.078,
-     "intensity": 0.05
-    },
-    {
-     "hkl": [
-      1,
-      1,
-      2
-     ],
-     "two_theta": 40.17,
-     "intensity": 2.02
+     "two_theta": 29.608,
+     "intensity": 20.44
     },
     {
      "hkl": [
       0,
       4,
-      0
+      -1
      ],
-     "two_theta": 41.584,
-     "intensity": 10.45
-    },
-    {
-     "hkl": [
-      2,
-      3,
-      1
-     ],
-     "two_theta": 42.467,
-     "intensity": 1.04
+     "two_theta": 30.281,
+     "intensity": 27.35
     },
     {
      "hkl": [
       0,
       2,
-      2
+      -2
      ],
-     "two_theta": 42.747,
-     "intensity": 0.13
-    },
-    {
-     "hkl": [
-      3,
-      2,
-      1
-     ],
-     "two_theta": 43.195,
-     "intensity": 20.94
-    },
-    {
-     "hkl": [
-      2,
-      0,
-      2
-     ],
-     "two_theta": 43.327,
-     "intensity": 12.68
-    },
-    {
-     "hkl": [
-      4,
-      0,
-      0
-     ],
-     "two_theta": 43.917,
-     "intensity": 10.74
-    },
-    {
-     "hkl": [
-      1,
-      2,
-      2
-     ],
-     "two_theta": 44.202,
-     "intensity": 3.87
-    },
-    {
-     "hkl": [
-      2,
-      1,
-      2
-     ],
-     "two_theta": 44.627,
-     "intensity": 3.17
-    },
-    {
-     "hkl": [
-      3,
-      3,
-      0
-     ],
-     "two_theta": 45.498,
-     "intensity": 0.5
-    },
-    {
-     "hkl": [
-      0,
-      4,
-      1
-     ],
-     "two_theta": 45.787,
-     "intensity": 18.99
-    },
-    {
-     "hkl": [
-      1,
-      4,
-      1
-     ],
-     "two_theta": 47.168,
-     "intensity": 2.19
-    },
-    {
-     "hkl": [
-      2,
-      4,
-      0
-     ],
-     "two_theta": 47.307,
-     "intensity": 0.45
+     "two_theta": 30.503,
+     "intensity": 16.1
     },
     {
      "hkl": [
       2,
       2,
-      2
+      -2
      ],
-     "two_theta": 48.36,
-     "intensity": 1.59
-    },
-    {
-     "hkl": [
-      4,
-      2,
-      0
-     ],
-     "two_theta": 48.902,
-     "intensity": 0.31
-    },
-    {
-     "hkl": [
-      0,
-      3,
-      2
-     ],
-     "two_theta": 49.035,
-     "intensity": 4.58
-    },
-    {
-     "hkl": [
-      4,
-      1,
-      1
-     ],
-     "two_theta": 49.161,
-     "intensity": 1.19
-    },
-    {
-     "hkl": [
-      3,
-      3,
-      1
-     ],
-     "two_theta": 49.437,
-     "intensity": 0.19
+     "two_theta": 30.642,
+     "intensity": 9.86
     },
     {
      "hkl": [
       1,
       3,
-      2
-     ],
-     "two_theta": 50.348,
-     "intensity": 4.29
-    },
-    {
-     "hkl": [
-      2,
-      4,
       1
      ],
-     "two_theta": 51.141,
-     "intensity": 1.79
-    },
-    {
-     "hkl": [
-      3,
-      1,
-      2
-     ],
-     "two_theta": 51.369,
-     "intensity": 4.07
-    },
-    {
-     "hkl": [
-      4,
-      2,
-      1
-     ],
-     "two_theta": 52.65,
-     "intensity": 2.88
-    },
-    {
-     "hkl": [
-      1,
-      5,
-      0
-     ],
-     "two_theta": 53.932,
-     "intensity": 0.44
+     "two_theta": 31.612,
+     "intensity": 22.69
     },
     {
      "hkl": [
       2,
-      3,
-      2
+      -2,
+      -2
      ],
-     "two_theta": 54.148,
+     "two_theta": 31.67,
      "intensity": 1.01
     },
     {
      "hkl": [
+      1,
       3,
-      2,
-      2
+      -2
      ],
-     "two_theta": 54.756,
-     "intensity": 28.06
+     "two_theta": 31.733,
+     "intensity": 8.98
     },
     {
      "hkl": [
-      0,
-      5,
+      1,
+      -3,
+      -2
+     ],
+     "two_theta": 33.782,
+     "intensity": 10.54
+    },
+    {
+     "hkl": [
+      2,
+      -2,
       1
      ],
-     "two_theta": 56.25,
-     "intensity": 0.08
+     "two_theta": 35.466,
+     "intensity": 2.11
     },
     {
      "hkl": [
-      5,
+      3,
       1,
+      -2
+     ],
+     "two_theta": 35.606,
+     "intensity": 5.02
+    },
+    {
+     "hkl": [
+      2,
+      4,
+      -1
+     ],
+     "two_theta": 35.617,
+     "intensity": 29.62
+    },
+    {
+     "hkl": [
+      1,
+      -1,
+      2
+     ],
+     "two_theta": 35.72,
+     "intensity": 4.02
+    },
+    {
+     "hkl": [
+      2,
+      -4,
+      -1
+     ],
+     "two_theta": 35.819,
+     "intensity": 16.87
+    },
+    {
+     "hkl": [
+      3,
+      -1,
+      -2
+     ],
+     "two_theta": 35.884,
+     "intensity": 1.36
+    },
+    {
+     "hkl": [
+      2,
+      -4,
       0
      ],
-     "two_theta": 56.818,
-     "intensity": 0.15
-    },
-    {
-     "hkl": [
-      0,
-      4,
-      2
-     ],
-     "two_theta": 56.952,
-     "intensity": 4.46
-    },
-    {
-     "hkl": [
-      3,
-      4,
-      1
-     ],
-     "two_theta": 57.315,
-     "intensity": 7.13
+     "two_theta": 36.603,
+     "intensity": 2.54
     },
     {
      "hkl": [
       1,
-      5,
-      1
+      -5,
+      0
      ],
-     "two_theta": 57.447,
-     "intensity": 1.29
-    },
-    {
-     "hkl": [
-      0,
-      1,
-      3
-     ],
-     "two_theta": 58.108,
-     "intensity": 0.21
-    },
-    {
-     "hkl": [
-      4,
-      3,
-      1
-     ],
-     "two_theta": 58.134,
-     "intensity": 0.02
-    },
-    {
-     "hkl": [
-      1,
-      4,
-      2
-     ],
-     "two_theta": 58.139,
-     "intensity": 3.6
-    },
-    {
-     "hkl": [
-      1,
-      0,
-      3
-     ],
-     "two_theta": 58.225,
-     "intensity": 2.06
-    },
-    {
-     "hkl": [
-      4,
-      0,
-      2
-     ],
-     "two_theta": 58.821,
+     "two_theta": 36.662,
      "intensity": 1.03
     },
     {
      "hkl": [
-      5,
-      0,
+      2,
+      2,
       1
      ],
-     "two_theta": 59.177,
-     "intensity": 6.34
+     "two_theta": 36.967,
+     "intensity": 2.93
     },
     {
      "hkl": [
       1,
-      1,
-      3
+      5,
+      -1
      ],
-     "two_theta": 59.28,
-     "intensity": 1.61
-    },
-    {
-     "hkl": [
-      4,
-      1,
-      2
-     ],
-     "two_theta": 59.87,
-     "intensity": 1.31
+     "two_theta": 37.165,
+     "intensity": 4.53
     },
     {
      "hkl": [
       3,
+      -1,
+      0
+     ],
+     "two_theta": 37.366,
+     "intensity": 3.53
+    },
+    {
+     "hkl": [
       3,
-      2
-     ],
-     "two_theta": 60.112,
-     "intensity": 0.01
-    },
-    {
-     "hkl": [
-      5,
       1,
-      1
+      0
      ],
-     "two_theta": 60.222,
-     "intensity": 8.3
+     "two_theta": 37.874,
+     "intensity": 3.17
     },
     {
      "hkl": [
       2,
-      5,
-      1
-     ],
-     "two_theta": 60.945,
-     "intensity": 0.12
-    },
-    {
-     "hkl": [
-      0,
-      2,
-      3
-     ],
-     "two_theta": 61.245,
-     "intensity": 2.83
-    },
-    {
-     "hkl": [
-      2,
-      4,
-      2
-     ],
-     "two_theta": 61.612,
-     "intensity": 0.11
-    },
-    {
-     "hkl": [
-      4,
       4,
       0
      ],
-     "two_theta": 62.074,
+     "two_theta": 37.97,
+     "intensity": 5.62
+    },
+    {
+     "hkl": [
+      1,
+      -5,
+      -1
+     ],
+     "two_theta": 38.252,
+     "intensity": 3.19
+    },
+    {
+     "hkl": [
+      1,
+      1,
+      -3
+     ],
+     "two_theta": 38.801,
+     "intensity": 0.98
+    },
+    {
+     "hkl": [
+      3,
+      -3,
+      -1
+     ],
+     "two_theta": 39.137,
+     "intensity": 5.21
+    },
+    {
+     "hkl": [
+      3,
+      3,
+      -1
+     ],
+     "two_theta": 39.488,
+     "intensity": 7.76
+    },
+    {
+     "hkl": [
+      1,
+      -1,
+      -3
+     ],
+     "two_theta": 39.758,
+     "intensity": 3.72
+    },
+    {
+     "hkl": [
+      1,
+      -3,
+      2
+     ],
+     "two_theta": 40.153,
+     "intensity": 1.16
+    },
+    {
+     "hkl": [
+      1,
+      -5,
+      1
+     ],
+     "two_theta": 40.524,
+     "intensity": 3.69
+    },
+    {
+     "hkl": [
+      2,
+      -4,
+      -2
+     ],
+     "two_theta": 40.533,
+     "intensity": 2.17
+    },
+    {
+     "hkl": [
+      0,
+      4,
+      2
+     ],
+     "two_theta": 41.373,
+     "intensity": 1.51
+    },
+    {
+     "hkl": [
+      3,
+      -3,
+      -2
+     ],
+     "two_theta": 41.431,
+     "intensity": 0.65
+    },
+    {
+     "hkl": [
+      2,
+      -2,
+      -3
+     ],
+     "two_theta": 41.802,
+     "intensity": 1.69
+    },
+    {
+     "hkl": [
+      3,
+      -3,
+      0
+     ],
+     "two_theta": 42.048,
+     "intensity": 0.46
+    },
+    {
+     "hkl": [
+      0,
+      6,
+      0
+     ],
+     "two_theta": 42.205,
+     "intensity": 13.6
+    },
+    {
+     "hkl": [
+      2,
+      -4,
+      1
+     ],
+     "two_theta": 42.627,
+     "intensity": 14.53
+    },
+    {
+     "hkl": [
+      0,
+      0,
+      3
+     ],
+     "two_theta": 42.706,
+     "intensity": 0.6
+    },
+    {
+     "hkl": [
+      1,
+      5,
+      1
+     ],
+     "two_theta": 43.075,
+     "intensity": 6.42
+    },
+    {
+     "hkl": [
+      3,
+      -1,
+      -3
+     ],
+     "two_theta": 43.153,
+     "intensity": 2.49
+    },
+    {
+     "hkl": [
+      3,
+      3,
+      0
+     ],
+     "two_theta": 43.421,
+     "intensity": 0.85
+    },
+    {
+     "hkl": [
+      1,
+      -5,
+      -2
+     ],
+     "two_theta": 44.806,
+     "intensity": 0.83
+    },
+    {
+     "hkl": [
+      4,
+      0,
+      -2
+     ],
+     "two_theta": 44.887,
+     "intensity": 3.84
+    },
+    {
+     "hkl": [
+      4,
+      0,
+      -1
+     ],
+     "two_theta": 45.147,
+     "intensity": 3.28
+    },
+    {
+     "hkl": [
+      2,
+      4,
+      1
+     ],
+     "two_theta": 45.185,
+     "intensity": 0.84
+    },
+    {
+     "hkl": [
+      2,
+      0,
+      2
+     ],
+     "two_theta": 45.465,
+     "intensity": 1.25
+    },
+    {
+     "hkl": [
+      1,
+      -3,
+      -3
+     ],
+     "two_theta": 45.528,
+     "intensity": 1.15
+    },
+    {
+     "hkl": [
+      0,
+      6,
+      1
+     ],
+     "two_theta": 45.661,
+     "intensity": 6.32
+    },
+    {
+     "hkl": [
+      3,
+      -1,
+      1
+     ],
+     "two_theta": 45.679,
+     "intensity": 1.46
+    },
+    {
+     "hkl": [
+      0,
+      2,
+      3
+     ],
+     "two_theta": 46.08,
+     "intensity": 0.94
+    },
+    {
+     "hkl": [
+      3,
+      1,
+      1
+     ],
+     "two_theta": 46.438,
+     "intensity": 1.29
+    },
+    {
+     "hkl": [
+      3,
+      3,
+      -3
+     ],
+     "two_theta": 46.699,
+     "intensity": 1.3
+    },
+    {
+     "hkl": [
+      2,
+      -2,
+      2
+     ],
+     "two_theta": 46.811,
+     "intensity": 4.28
+    },
+    {
+     "hkl": [
+      4,
+      2,
+      -2
+     ],
+     "two_theta": 47.1,
+     "intensity": 4.05
+    },
+    {
+     "hkl": [
+      4,
+      -2,
+      -2
+     ],
+     "two_theta": 47.261,
+     "intensity": 9.89
+    },
+    {
+     "hkl": [
+      2,
+      6,
+      -1
+     ],
+     "two_theta": 47.979,
+     "intensity": 0.94
+    },
+    {
+     "hkl": [
+      2,
+      -6,
+      0
+     ],
+     "two_theta": 48.519,
+     "intensity": 4.73
+    },
+    {
+     "hkl": [
+      3,
+      -5,
+      -1
+     ],
+     "two_theta": 48.57,
+     "intensity": 1.24
+    },
+    {
+     "hkl": [
+      2,
+      2,
+      2
+     ],
+     "two_theta": 48.649,
+     "intensity": 7.31
+    },
+    {
+     "hkl": [
+      3,
+      5,
+      -1
+     ],
+     "two_theta": 49.063,
+     "intensity": 0.97
+    },
+    {
+     "hkl": [
+      4,
+      0,
+      -3
+     ],
+     "two_theta": 49.248,
+     "intensity": 12.95
+    },
+    {
+     "hkl": [
+      3,
+      -3,
+      1
+     ],
+     "two_theta": 49.412,
+     "intensity": 0.93
+    },
+    {
+     "hkl": [
+      0,
+      6,
+      -2
+     ],
+     "two_theta": 49.635,
+     "intensity": 3.8
+    },
+    {
+     "hkl": [
+      0,
+      4,
+      -3
+     ],
+     "two_theta": 49.881,
+     "intensity": 4.58
+    },
+    {
+     "hkl": [
+      1,
+      -1,
+      3
+     ],
+     "two_theta": 49.929,
+     "intensity": 3.38
+    },
+    {
+     "hkl": [
+      4,
+      0,
+      0
+     ],
+     "two_theta": 49.973,
+     "intensity": 12.05
+    },
+    {
+     "hkl": [
+      2,
+      6,
+      0
+     ],
+     "two_theta": 50.157,
+     "intensity": 3.85
+    },
+    {
+     "hkl": [
+      2,
+      6,
+      -2
+     ],
+     "two_theta": 50.268,
+     "intensity": 3.07
+    },
+    {
+     "hkl": [
+      1,
+      -7,
+      0
+     ],
+     "two_theta": 50.865,
+     "intensity": 3.5
+    },
+    {
+     "hkl": [
+      1,
+      1,
+      3
+     ],
+     "two_theta": 50.983,
+     "intensity": 9.22
+    },
+    {
+     "hkl": [
+      4,
+      2,
+      -3
+     ],
+     "two_theta": 51.014,
      "intensity": 1.12
     },
     {
      "hkl": [
       1,
-      2,
-      3
+      7,
+      -1
      ],
-     "two_theta": 62.381,
-     "intensity": 0.14
+     "two_theta": 51.217,
+     "intensity": 0.65
     },
     {
      "hkl": [
       2,
-      1,
-      3
+      0,
+      -4
      ],
-     "two_theta": 62.716,
-     "intensity": 2.33
+     "two_theta": 51.494,
+     "intensity": 25.66
+    },
+    {
+     "hkl": [
+      3,
+      3,
+      1
+     ],
+     "two_theta": 51.539,
+     "intensity": 0.8
     },
     {
      "hkl": [
       4,
+      -2,
+      0
+     ],
+     "two_theta": 51.569,
+     "intensity": 1.21
+    },
+    {
+     "hkl": [
       2,
+      -6,
+      -2
+     ],
+     "two_theta": 52.312,
+     "intensity": 1.98
+    },
+    {
+     "hkl": [
+      1,
+      -7,
+      -1
+     ],
+     "two_theta": 52.401,
+     "intensity": 1.49
+    },
+    {
+     "hkl": [
+      2,
+      -4,
       2
      ],
-     "two_theta": 62.954,
-     "intensity": 0.1
+     "two_theta": 52.421,
+     "intensity": 4.78
     },
     {
      "hkl": [
+      1,
       5,
-      2,
-      1
+      2
      ],
-     "two_theta": 63.296,
-     "intensity": 5.54
-    },
-    {
-     "hkl": [
-      3,
-      5,
-      0
-     ],
-     "two_theta": 63.326,
-     "intensity": 2.21
-    },
-    {
-     "hkl": [
-      0,
-      6,
-      0
-     ],
-     "two_theta": 64.344,
-     "intensity": 6.18
-    },
-    {
-     "hkl": [
-      5,
-      3,
-      0
-     ],
-     "two_theta": 65.084,
-     "intensity": 6.37
+     "two_theta": 52.493,
+     "intensity": 1.19
     },
     {
      "hkl": [
       4,
-      4,
-      1
-     ],
-     "two_theta": 65.312,
-     "intensity": 2.27
-    },
-    {
-     "hkl": [
-      2,
-      2,
-      3
-     ],
-     "two_theta": 65.723,
-     "intensity": 6.14
-    },
-    {
-     "hkl": [
-      0,
-      5,
-      2
-     ],
-     "two_theta": 66.197,
-     "intensity": 2.65
-    },
-    {
-     "hkl": [
-      0,
-      3,
-      3
-     ],
-     "two_theta": 66.278,
-     "intensity": 8.66
-    },
-    {
-     "hkl": [
-      3,
-      5,
-      1
-     ],
-     "two_theta": 66.531,
-     "intensity": 2.7
-    },
-    {
-     "hkl": [
-      3,
-      4,
-      2
-     ],
-     "two_theta": 67.167,
-     "intensity": 5.4
-    },
-    {
-     "hkl": [
-      3,
-      0,
-      3
-     ],
-     "two_theta": 67.247,
-     "intensity": 2.64
-    },
-    {
-     "hkl": [
-      1,
-      5,
-      2
-     ],
-     "two_theta": 67.287,
-     "intensity": 0.26
-    },
-    {
-     "hkl": [
-      1,
-      3,
-      3
-     ],
-     "two_theta": 67.367,
-     "intensity": 0.26
-    },
-    {
-     "hkl": [
-      0,
-      6,
-      1
-     ],
-     "two_theta": 67.524,
-     "intensity": 2.44
-    },
-    {
-     "hkl": [
-      4,
-      3,
-      2
-     ],
-     "two_theta": 67.917,
-     "intensity": 0.52
-    },
-    {
-     "hkl": [
-      3,
-      1,
-      3
-     ],
-     "two_theta": 68.222,
-     "intensity": 0.14
-    },
-    {
-     "hkl": [
-      6,
-      0,
-      0
-     ],
-     "two_theta": 68.236,
-     "intensity": 2.82
-    },
-    {
-     "hkl": [
-      5,
-      3,
-      1
-     ],
-     "two_theta": 68.246,
-     "intensity": 4.16
-    },
-    {
-     "hkl": [
-      1,
-      6,
-      1
-     ],
-     "two_theta": 68.603,
-     "intensity": 0.31
-    },
-    {
-     "hkl": [
-      2,
-      6,
-      0
-     ],
-     "two_theta": 68.712,
-     "intensity": 7.94
-    },
-    {
-     "hkl": [
-      5,
-      1,
-      2
-     ],
-     "two_theta": 69.839,
-     "intensity": 2.12
-    },
-    {
-     "hkl": [
-      2,
-      5,
-      2
-     ],
-     "two_theta": 70.508,
-     "intensity": 5.64
-    },
-    {
-     "hkl": [
-      2,
-      3,
-      3
-     ],
-     "two_theta": 70.586,
-     "intensity": 8.39
-    },
-    {
-     "hkl": [
-      3,
-      2,
-      3
-     ],
-     "two_theta": 71.11,
-     "intensity": 0.22
-    },
-    {
-     "hkl": [
-      6,
       2,
       0
      ],
-     "two_theta": 72.074,
-     "intensity": 0.23
+     "two_theta": 52.619,
+     "intensity": 2.59
     },
     {
      "hkl": [
-      6,
-      1,
-      1
-     ],
-     "two_theta": 72.279,
-     "intensity": 0.08
-    },
-    {
-     "hkl": [
-      5,
       2,
-      2
-     ],
-     "two_theta": 72.698,
-     "intensity": 10.89
-    },
-    {
-     "hkl": [
-      0,
-      4,
-      3
-     ],
-     "two_theta": 73.019,
-     "intensity": 1.07
-    },
-    {
-     "hkl": [
-      4,
-      5,
-      1
-     ],
-     "two_theta": 73.984,
-     "intensity": 0.2
-    },
-    {
-     "hkl": [
-      1,
-      4,
-      3
-     ],
-     "two_theta": 74.064,
-     "intensity": 0.34
-    },
-    {
-     "hkl": [
-      4,
-      4,
-      2
-     ],
-     "two_theta": 74.592,
-     "intensity": 1.56
-    },
-    {
-     "hkl": [
-      5,
-      4,
-      1
-     ],
-     "two_theta": 74.908,
-     "intensity": 4.95
-    },
-    {
-     "hkl": [
-      6,
       2,
+      -4
+     ],
+     "two_theta": 52.65,
+     "intensity": 1.8
+    },
+    {
+     "hkl": [
+      1,
+      -3,
+      3
+     ],
+     "two_theta": 53.108,
+     "intensity": 1.18
+    },
+    {
+     "hkl": [
+      2,
+      -6,
       1
      ],
-     "two_theta": 75.101,
-     "intensity": 1.31
-    },
-    {
-     "hkl": [
-      4,
-      1,
-      3
-     ],
-     "two_theta": 75.601,
-     "intensity": 0.09
-    },
-    {
-     "hkl": [
-      3,
-      5,
-      2
-     ],
-     "two_theta": 75.742,
-     "intensity": 0.84
-    },
-    {
-     "hkl": [
-      3,
-      3,
-      3
-     ],
-     "two_theta": 75.818,
-     "intensity": 1.59
+     "two_theta": 53.166,
+     "intensity": 1.1
     },
     {
      "hkl": [
@@ -37576,125 +33932,134 @@
       6,
       2
      ],
-     "two_theta": 76.684,
-     "intensity": 0.29
+     "two_theta": 53.264,
+     "intensity": 2.91
+    },
+    {
+     "hkl": [
+      4,
+      -4,
+      -1
+     ],
+     "two_theta": 53.397,
+     "intensity": 3.1
+    },
+    {
+     "hkl": [
+      4,
+      4,
+      -2
+     ],
+     "two_theta": 53.464,
+     "intensity": 5.88
+    },
+    {
+     "hkl": [
+      0,
+      4,
+      3
+     ],
+     "two_theta": 53.498,
+     "intensity": 1.89
+    },
+    {
+     "hkl": [
+      4,
+      -4,
+      -2
+     ],
+     "two_theta": 53.756,
+     "intensity": 4.07
+    },
+    {
+     "hkl": [
+      4,
+      4,
+      -1
+     ],
+     "two_theta": 54.278,
+     "intensity": 2.52
+    },
+    {
+     "hkl": [
+      1,
+      -1,
+      -4
+     ],
+     "two_theta": 54.313,
+     "intensity": 0.94
+    },
+    {
+     "hkl": [
+      2,
+      -2,
+      -4
+     ],
+     "two_theta": 54.487,
+     "intensity": 2.92
     },
     {
      "hkl": [
       3,
-      6,
-      1
+      5,
+      -3
      ],
-     "two_theta": 76.997,
+     "two_theta": 54.72,
      "intensity": 2.89
     },
     {
      "hkl": [
-      2,
-      4,
-      3
-     ],
-     "two_theta": 77.165,
-     "intensity": 3.62
-    },
-    {
-     "hkl": [
-      5,
-      3,
-      2
-     ],
-     "two_theta": 77.37,
-     "intensity": 1.77
-    },
-    {
-     "hkl": [
-      1,
-      6,
-      2
-     ],
-     "two_theta": 77.711,
-     "intensity": 0.19
-    },
-    {
-     "hkl": [
       1,
       7,
-      0
+      -2
      ],
-     "two_theta": 77.836,
-     "intensity": 1.73
+     "two_theta": 54.877,
+     "intensity": 2.03
     },
     {
      "hkl": [
-      4,
       2,
+      4,
+      2
+     ],
+     "two_theta": 55.779,
+     "intensity": 4.94
+    },
+    {
+     "hkl": [
+      1,
+      3,
       3
      ],
-     "two_theta": 78.38,
-     "intensity": 0.0
+     "two_theta": 56.1,
+     "intensity": 0.65
     },
     {
      "hkl": [
-      0,
-      0,
-      4
-     ],
-     "two_theta": 79.079,
-     "intensity": 0.54
-    },
-    {
-     "hkl": [
-      6,
-      3,
-      1
-     ],
-     "two_theta": 79.725,
-     "intensity": 0.0
-    },
-    {
-     "hkl": [
-      0,
-      7,
-      1
-     ],
-     "two_theta": 79.774,
-     "intensity": 2.98
-    },
-    {
-     "hkl": [
-      0,
       1,
-      4
+      3,
+      -4
      ],
-     "two_theta": 79.997,
-     "intensity": 2.36
+     "two_theta": 56.28,
+     "intensity": 1.0
     },
     {
      "hkl": [
-      5,
-      5,
-      0
+      3,
+      3,
+      -4
      ],
-     "two_theta": 80.255,
-     "intensity": 0.89
-    },
-    {
-     "hkl": [
-      6,
-      0,
-      2
-     ],
-     "two_theta": 80.32,
-     "intensity": 0.34
+     "two_theta": 56.324,
+     "intensity": 1.72
     },
     {
      "hkl": [
       2,
       6,
-      2
+      1
      ],
-     "two_theta": 80.769,
-     "intensity": 0.13
+     "two_theta": 56.424,
+     "intensity": 0.63
     },
     {
      "hkl": [
@@ -37702,366 +34067,1762 @@
       7,
       1
      ],
-     "two_theta": 80.79,
-     "intensity": 0.01
-    },
-    {
-     "hkl": [
-      1,
-      1,
-      4
-     ],
-     "two_theta": 81.012,
-     "intensity": 0.08
+     "two_theta": 56.517,
+     "intensity": 0.41
     },
     {
      "hkl": [
       4,
-      6,
-      0
+      4,
+      -3
      ],
-     "two_theta": 81.181,
-     "intensity": 0.35
-    },
-    {
-     "hkl": [
-      6,
-      1,
-      2
-     ],
-     "two_theta": 81.234,
-     "intensity": 0.03
-    },
-    {
-     "hkl": [
-      0,
-      5,
-      3
-     ],
-     "two_theta": 81.356,
-     "intensity": 0.02
+     "two_theta": 56.779,
+     "intensity": 0.73
     },
     {
      "hkl": [
       3,
+      -5,
+      1
+     ],
+     "two_theta": 56.979,
+     "intensity": 2.12
+    },
+    {
+     "hkl": [
+      3,
+      -5,
+      -3
+     ],
+     "two_theta": 57.128,
+     "intensity": 3.79
+    },
+    {
+     "hkl": [
+      0,
+      8,
+      0
+     ],
+     "two_theta": 57.378,
+     "intensity": 3.4
+    },
+    {
+     "hkl": [
+      0,
+      0,
+      4
+     ],
+     "two_theta": 58.089,
+     "intensity": 0.79
+    },
+    {
+     "hkl": [
+      0,
+      8,
+      -1
+     ],
+     "two_theta": 58.255,
+     "intensity": 1.01
+    },
+    {
+     "hkl": [
+      5,
+      -1,
+      -1
+     ],
+     "two_theta": 58.486,
+     "intensity": 1.53
+    },
+    {
+     "hkl": [
       4,
+      0,
+      1
+     ],
+     "two_theta": 58.528,
+     "intensity": 0.6
+    },
+    {
+     "hkl": [
+      4,
+      2,
+      -4
+     ],
+     "two_theta": 58.76,
+     "intensity": 3.24
+    },
+    {
+     "hkl": [
+      5,
+      1,
+      -1
+     ],
+     "two_theta": 58.815,
+     "intensity": 0.58
+    },
+    {
+     "hkl": [
+      0,
+      2,
+      -4
+     ],
+     "two_theta": 58.915,
+     "intensity": 4.24
+    },
+    {
+     "hkl": [
+      5,
+      -1,
+      -3
+     ],
+     "two_theta": 59.211,
+     "intensity": 1.03
+    },
+    {
+     "hkl": [
+      1,
+      -3,
+      -4
+     ],
+     "two_theta": 59.267,
+     "intensity": 0.6
+    },
+    {
+     "hkl": [
+      2,
+      0,
       3
      ],
-     "two_theta": 82.256,
+     "two_theta": 59.454,
+     "intensity": 1.05
+    },
+    {
+     "hkl": [
+      4,
+      -2,
+      -4
+     ],
+     "two_theta": 59.996,
+     "intensity": 2.72
+    },
+    {
+     "hkl": [
+      3,
+      -3,
+      2
+     ],
+     "two_theta": 60.018,
+     "intensity": 0.75
+    },
+    {
+     "hkl": [
+      1,
+      -5,
+      3
+     ],
+     "two_theta": 60.048,
+     "intensity": 0.48
+    },
+    {
+     "hkl": [
+      2,
+      -6,
+      -3
+     ],
+     "two_theta": 60.167,
+     "intensity": 0.55
+    },
+    {
+     "hkl": [
+      3,
+      5,
+      1
+     ],
+     "two_theta": 60.185,
+     "intensity": 3.51
+    },
+    {
+     "hkl": [
+      1,
+      -7,
+      2
+     ],
+     "two_theta": 60.239,
+     "intensity": 2.35
+    },
+    {
+     "hkl": [
+      2,
+      -2,
+      3
+     ],
+     "two_theta": 60.303,
+     "intensity": 1.74
+    },
+    {
+     "hkl": [
+      5,
+      3,
+      -2
+     ],
+     "two_theta": 60.818,
+     "intensity": 0.85
+    },
+    {
+     "hkl": [
+      0,
+      2,
+      4
+     ],
+     "two_theta": 61.099,
+     "intensity": 1.3
+    },
+    {
+     "hkl": [
+      2,
+      -4,
+      -4
+     ],
+     "two_theta": 61.212,
+     "intensity": 2.38
+    },
+    {
+     "hkl": [
+      2,
+      -6,
+      2
+     ],
+     "two_theta": 61.465,
+     "intensity": 1.24
+    },
+    {
+     "hkl": [
+      3,
+      7,
+      -2
+     ],
+     "two_theta": 61.585,
+     "intensity": 0.61
+    },
+    {
+     "hkl": [
+      5,
+      -3,
+      -1
+     ],
+     "two_theta": 61.966,
+     "intensity": 0.96
+    },
+    {
+     "hkl": [
+      2,
+      8,
+      -1
+     ],
+     "two_theta": 62.077,
+     "intensity": 4.29
+    },
+    {
+     "hkl": [
+      1,
+      7,
+      -3
+     ],
+     "two_theta": 62.266,
+     "intensity": 1.91
+    },
+    {
+     "hkl": [
+      3,
+      -7,
+      0
+     ],
+     "two_theta": 62.266,
+     "intensity": 0.52
+    },
+    {
+     "hkl": [
+      2,
+      -8,
+      0
+     ],
+     "two_theta": 62.332,
+     "intensity": 8.68
+    },
+    {
+     "hkl": [
+      2,
+      2,
+      3
+     ],
+     "two_theta": 62.391,
+     "intensity": 0.44
+    },
+    {
+     "hkl": [
+      5,
+      3,
+      -3
+     ],
+     "two_theta": 62.551,
+     "intensity": 6.46
+    },
+    {
+     "hkl": [
+      3,
+      3,
+      2
+     ],
+     "two_theta": 62.697,
+     "intensity": 0.7
+    },
+    {
+     "hkl": [
+      4,
+      -6,
+      -1
+     ],
+     "two_theta": 62.914,
+     "intensity": 7.2
+    },
+    {
+     "hkl": [
+      5,
+      3,
+      -1
+     ],
+     "two_theta": 62.917,
      "intensity": 1.23
     },
     {
      "hkl": [
       1,
       5,
-      3
+      -4
      ],
-     "two_theta": 82.368,
-     "intensity": 0.02
-    },
-    {
-     "hkl": [
-      7,
-      1,
-      0
-     ],
-     "two_theta": 82.656,
-     "intensity": 0.18
+     "two_theta": 62.96,
+     "intensity": 0.67
     },
     {
      "hkl": [
       0,
-      2,
-      4
+      8,
+      -2
      ],
-     "two_theta": 82.736,
-     "intensity": 1.09
+     "two_theta": 62.982,
+     "intensity": 2.49
     },
     {
      "hkl": [
       4,
+      6,
+      -2
+     ],
+     "two_theta": 63.107,
+     "intensity": 0.41
+    },
+    {
+     "hkl": [
       5,
-      2
+      -3,
+      -3
      ],
-     "two_theta": 82.881,
-     "intensity": 0.27
+     "two_theta": 63.197,
+     "intensity": 2.59
     },
     {
      "hkl": [
       4,
-      3,
+      -6,
+      -2
+     ],
+     "two_theta": 63.502,
+     "intensity": 2.56
+    },
+    {
+     "hkl": [
+      0,
+      6,
       3
      ],
-     "two_theta": 82.955,
+     "two_theta": 63.995,
+     "intensity": 5.94
+    },
+    {
+     "hkl": [
+      4,
+      6,
+      -1
+     ],
+     "two_theta": 64.105,
+     "intensity": 1.7
+    },
+    {
+     "hkl": [
+      2,
+      8,
+      0
+     ],
+     "two_theta": 64.187,
+     "intensity": 6.65
+    },
+    {
+     "hkl": [
+      4,
+      -4,
+      1
+     ],
+     "two_theta": 64.56,
+     "intensity": 0.75
+    },
+    {
+     "hkl": [
+      3,
+      7,
+      0
+     ],
+     "two_theta": 64.696,
      "intensity": 1.19
     },
     {
      "hkl": [
-      2,
-      0,
-      4
+      5,
+      1,
+      -4
      ],
-     "two_theta": 83.135,
-     "intensity": 2.62
+     "two_theta": 64.814,
+     "intensity": 1.55
     },
     {
      "hkl": [
-      6,
+      2,
+      -4,
+      3
+     ],
+     "two_theta": 64.85,
+     "intensity": 6.28
+    },
+    {
+     "hkl": [
+      5,
+      -1,
+      -4
+     ],
+     "two_theta": 65.287,
+     "intensity": 2.24
+    },
+    {
+     "hkl": [
+      1,
+      -1,
+      4
+     ],
+     "two_theta": 65.376,
+     "intensity": 1.73
+    },
+    {
+     "hkl": [
       4,
+      6,
+      -3
+     ],
+     "two_theta": 65.859,
+     "intensity": 0.97
+    },
+    {
+     "hkl": [
+      2,
+      6,
+      2
+     ],
+     "two_theta": 66.016,
+     "intensity": 3.25
+    },
+    {
+     "hkl": [
+      2,
+      -8,
+      1
+     ],
+     "two_theta": 66.072,
+     "intensity": 1.82
+    },
+    {
+     "hkl": [
+      4,
+      -6,
       0
      ],
-     "two_theta": 83.179,
-     "intensity": 0.95
-    },
-    {
-     "hkl": [
-      5,
-      5,
-      1
-     ],
-     "two_theta": 83.188,
-     "intensity": 3.48
-    },
-    {
-     "hkl": [
-      1,
-      2,
-      4
-     ],
-     "two_theta": 83.744,
-     "intensity": 0.1
-    },
-    {
-     "hkl": [
-      5,
-      4,
-      2
-     ],
-     "two_theta": 83.777,
-     "intensity": 6.25
+     "two_theta": 66.073,
+     "intensity": 1.35
     },
     {
      "hkl": [
       2,
-      7,
-      1
-     ],
-     "two_theta": 83.822,
-     "intensity": 2.61
-    },
-    {
-     "hkl": [
-      5,
       0,
-      3
+      -5
      ],
-     "two_theta": 83.851,
-     "intensity": 4.57
+     "two_theta": 66.22,
+     "intensity": 0.51
     },
     {
      "hkl": [
-      6,
-      2,
-      2
-     ],
-     "two_theta": 83.964,
-     "intensity": 0.2
-    },
-    {
-     "hkl": [
-      2,
       1,
-      4
-     ],
-     "two_theta": 84.043,
-     "intensity": 1.54
-    },
-    {
-     "hkl": [
-      4,
-      6,
-      1
-     ],
-     "two_theta": 84.108,
-     "intensity": 1.08
-    },
-    {
-     "hkl": [
-      7,
-      0,
-      1
-     ],
-     "two_theta": 84.669,
-     "intensity": 0.5
-    },
-    {
-     "hkl": [
-      5,
-      1,
-      3
-     ],
-     "two_theta": 84.758,
-     "intensity": 0.33
-    },
-    {
-     "hkl": [
-      2,
-      5,
-      3
-     ],
-     "two_theta": 85.39,
-     "intensity": 0.38
-    },
-    {
-     "hkl": [
-      7,
-      1,
-      1
-     ],
-     "two_theta": 85.575,
-     "intensity": 0.26
-    },
-    {
-     "hkl": [
-      3,
-      6,
-      2
-     ],
-     "two_theta": 85.812,
-     "intensity": 0.37
-    },
-    {
-     "hkl": [
-      3,
-      7,
+      -9,
       0
      ],
-     "two_theta": 85.935,
-     "intensity": 0.26
+     "two_theta": 66.265,
+     "intensity": 0.52
     },
     {
      "hkl": [
+      2,
       6,
-      4,
-      1
+      -4
      ],
-     "two_theta": 86.095,
-     "intensity": 1.52
+     "two_theta": 66.296,
+     "intensity": 1.99
     },
     {
      "hkl": [
-      2,
-      2,
+      1,
+      1,
       4
      ],
-     "two_theta": 86.759,
-     "intensity": 1.25
+     "two_theta": 66.525,
+     "intensity": 2.31
     },
     {
      "hkl": [
-      0,
       3,
-      4
+      -5,
+      -4
      ],
-     "two_theta": 87.266,
-     "intensity": 0.12
+     "two_theta": 66.739,
+     "intensity": 0.42
+    },
+    {
+     "hkl": [
+      3,
+      -1,
+      -5
+     ],
+     "two_theta": 66.958,
+     "intensity": 0.97
     },
     {
      "hkl": [
       5,
-      2,
-      3
+      -3,
+      0
      ],
-     "two_theta": 87.472,
-     "intensity": 0.01
+     "two_theta": 66.974,
+     "intensity": 0.84
     },
     {
      "hkl": [
       1,
-      3,
-      4
+      9,
+      0
      ],
-     "two_theta": 88.269,
-     "intensity": 0.01
-    },
-    {
-     "hkl": [
-      7,
-      2,
-      1
-     ],
-     "two_theta": 88.286,
-     "intensity": 1.41
-    },
-    {
-     "hkl": [
-      6,
-      3,
-      2
-     ],
-     "two_theta": 88.488,
-     "intensity": 0.37
-    },
-    {
-     "hkl": [
-      0,
-      7,
-      2
-     ],
-     "two_theta": 88.535,
-     "intensity": 0.0
-    },
-    {
-     "hkl": [
-      3,
-      7,
-      1
-     ],
-     "two_theta": 88.841,
-     "intensity": 0.02
-    },
-    {
-     "hkl": [
-      3,
-      1,
-      4
-     ],
-     "two_theta": 89.06,
-     "intensity": 1.85
+     "two_theta": 67.279,
+     "intensity": 4.65
     },
     {
      "hkl": [
       4,
       4,
-      3
+      1
      ],
-     "two_theta": 89.29,
-     "intensity": 0.04
+     "two_theta": 67.409,
+     "intensity": 2.41
+    },
+    {
+     "hkl": [
+      4,
+      -6,
+      -3
+     ],
+     "two_theta": 67.786,
+     "intensity": 3.43
     },
     {
      "hkl": [
       1,
-      7,
-      2
+      -9,
+      -1
      ],
-     "two_theta": 89.537,
+     "two_theta": 67.829,
      "intensity": 1.14
     },
     {
      "hkl": [
-      7,
+      1,
+      -3,
+      4
+     ],
+     "two_theta": 67.829,
+     "intensity": 5.6
+    },
+    {
+     "hkl": [
+      5,
+      -5,
+      -2
+     ],
+     "two_theta": 67.946,
+     "intensity": 0.57
+    },
+    {
+     "hkl": [
+      5,
+      3,
+      -4
+     ],
+     "two_theta": 67.95,
+     "intensity": 2.91
+    },
+    {
+     "hkl": [
+      1,
+      -9,
+      1
+     ],
+     "two_theta": 68.364,
+     "intensity": 2.0
+    },
+    {
+     "hkl": [
+      4,
+      0,
+      -5
+     ],
+     "two_theta": 68.618,
+     "intensity": 4.78
+    },
+    {
+     "hkl": [
+      5,
       3,
       0
      ],
-     "two_theta": 89.896,
+     "two_theta": 68.651,
+     "intensity": 1.55
+    },
+    {
+     "hkl": [
+      4,
+      6,
+      0
+     ],
+     "two_theta": 68.764,
+     "intensity": 2.92
+    },
+    {
+     "hkl": [
+      2,
+      4,
+      3
+     ],
+     "two_theta": 68.837,
+     "intensity": 2.96
+    },
+    {
+     "hkl": [
+      5,
+      -5,
+      -1
+     ],
+     "two_theta": 68.919,
+     "intensity": 0.5
+    },
+    {
+     "hkl": [
+      6,
+      0,
+      -2
+     ],
+     "two_theta": 69.266,
+     "intensity": 8.17
+    },
+    {
+     "hkl": [
+      1,
+      9,
+      -2
+     ],
+     "two_theta": 69.431,
+     "intensity": 7.69
+    },
+    {
+     "hkl": [
+      4,
+      2,
+      -5
+     ],
+     "two_theta": 69.562,
+     "intensity": 3.77
+    },
+    {
+     "hkl": [
+      5,
+      5,
+      -3
+     ],
+     "two_theta": 69.569,
+     "intensity": 1.13
+    },
+    {
+     "hkl": [
+      2,
+      8,
+      1
+     ],
+     "two_theta": 69.9,
+     "intensity": 2.35
+    },
+    {
+     "hkl": [
+      4,
+      0,
+      2
+     ],
+     "two_theta": 69.995,
+     "intensity": 8.13
+    },
+    {
+     "hkl": [
+      1,
+      -7,
+      3
+     ],
+     "two_theta": 70.085,
+     "intensity": 0.63
+    },
+    {
+     "hkl": [
+      1,
+      -1,
+      -5
+     ],
+     "two_theta": 70.182,
+     "intensity": 2.92
+    },
+    {
+     "hkl": [
+      5,
+      5,
+      -1
+     ],
+     "two_theta": 70.418,
+     "intensity": 0.76
+    },
+    {
+     "hkl": [
+      5,
+      -5,
+      -3
+     ],
+     "two_theta": 70.589,
+     "intensity": 2.18
+    },
+    {
+     "hkl": [
+      3,
+      -1,
+      3
+     ],
+     "two_theta": 70.748,
+     "intensity": 0.44
+    },
+    {
+     "hkl": [
+      4,
+      -2,
+      2
+     ],
+     "two_theta": 70.805,
+     "intensity": 1.1
+    },
+    {
+     "hkl": [
+      0,
+      8,
+      -3
+     ],
+     "two_theta": 71.127,
+     "intensity": 1.17
+    },
+    {
+     "hkl": [
+      6,
+      2,
+      -2
+     ],
+     "two_theta": 71.177,
+     "intensity": 1.69
+    },
+    {
+     "hkl": [
+      2,
+      4,
+      -5
+     ],
+     "two_theta": 71.213,
+     "intensity": 1.34
+    },
+    {
+     "hkl": [
+      1,
+      3,
+      -5
+     ],
+     "two_theta": 71.393,
+     "intensity": 4.47
+    },
+    {
+     "hkl": [
+      0,
+      6,
+      -4
+     ],
+     "two_theta": 71.405,
+     "intensity": 0.69
+    },
+    {
+     "hkl": [
+      3,
+      -3,
+      -5
+     ],
+     "two_theta": 71.423,
+     "intensity": 0.43
+    },
+    {
+     "hkl": [
+      3,
+      7,
+      1
+     ],
+     "two_theta": 71.65,
+     "intensity": 0.49
+    },
+    {
+     "hkl": [
+      6,
+      -2,
+      -3
+     ],
+     "two_theta": 71.713,
+     "intensity": 1.28
+    },
+    {
+     "hkl": [
+      3,
+      1,
+      3
+     ],
+     "two_theta": 71.825,
+     "intensity": 1.1
+    },
+    {
+     "hkl": [
+      4,
+      6,
+      -4
+     ],
+     "two_theta": 72.137,
+     "intensity": 0.41
+    },
+    {
+     "hkl": [
+      1,
+      -9,
+      -2
+     ],
+     "two_theta": 72.944,
+     "intensity": 1.95
+    },
+    {
+     "hkl": [
+      3,
+      -3,
+      3
+     ],
+     "two_theta": 73.148,
+     "intensity": 0.84
+    },
+    {
+     "hkl": [
+      2,
+      -8,
+      2
+     ],
+     "two_theta": 73.267,
+     "intensity": 4.14
+    },
+    {
+     "hkl": [
+      2,
+      -8,
+      -3
+     ],
+     "two_theta": 73.318,
+     "intensity": 1.1
+    },
+    {
+     "hkl": [
+      5,
+      -5,
+      0
+     ],
+     "two_theta": 73.443,
+     "intensity": 0.55
+    },
+    {
+     "hkl": [
+      6,
+      -2,
+      -1
+     ],
+     "two_theta": 73.565,
+     "intensity": 0.62
+    },
+    {
+     "hkl": [
+      0,
+      10,
+      0
+     ],
+     "two_theta": 73.749,
+     "intensity": 1.83
+    },
+    {
+     "hkl": [
+      4,
+      4,
+      -5
+     ],
+     "two_theta": 73.968,
+     "intensity": 1.73
+    },
+    {
+     "hkl": [
+      6,
+      0,
+      -4
+     ],
+     "two_theta": 74.021,
+     "intensity": 1.52
+    },
+    {
+     "hkl": [
+      6,
+      2,
+      -1
+     ],
+     "two_theta": 74.366,
+     "intensity": 0.75
+    },
+    {
+     "hkl": [
+      5,
+      -1,
+      -5
+     ],
+     "two_theta": 74.612,
+     "intensity": 1.35
+    },
+    {
+     "hkl": [
+      3,
+      5,
+      -5
+     ],
+     "two_theta": 74.68,
+     "intensity": 0.94
+    },
+    {
+     "hkl": [
+      0,
+      0,
+      5
+     ],
+     "two_theta": 74.725,
+     "intensity": 0.73
+    },
+    {
+     "hkl": [
+      1,
+      -3,
+      -5
+     ],
+     "two_theta": 74.776,
+     "intensity": 1.57
+    },
+    {
+     "hkl": [
+      3,
+      -9,
+      -1
+     ],
+     "two_theta": 74.87,
+     "intensity": 1.27
+    },
+    {
+     "hkl": [
+      4,
+      -4,
+      2
+     ],
+     "two_theta": 75.058,
+     "intensity": 1.06
+    },
+    {
+     "hkl": [
+      4,
+      -8,
+      -1
+     ],
+     "two_theta": 75.121,
+     "intensity": 2.05
+    },
+    {
+     "hkl": [
+      2,
+      0,
+      4
+     ],
+     "two_theta": 75.155,
+     "intensity": 2.26
+    },
+    {
+     "hkl": [
+      0,
+      2,
+      -5
+     ],
+     "two_theta": 75.21,
+     "intensity": 1.72
+    },
+    {
+     "hkl": [
+      6,
+      2,
+      -4
+     ],
+     "two_theta": 75.396,
+     "intensity": 0.98
+    },
+    {
+     "hkl": [
+      4,
+      8,
+      -2
+     ],
+     "two_theta": 75.422,
+     "intensity": 7.01
+    },
+    {
+     "hkl": [
+      4,
+      -6,
+      -4
+     ],
+     "two_theta": 75.46,
+     "intensity": 0.71
+    },
+    {
+     "hkl": [
+      2,
+      -2,
+      4
+     ],
+     "two_theta": 75.67,
+     "intensity": 0.59
+    },
+    {
+     "hkl": [
+      6,
+      -4,
+      -2
+     ],
+     "two_theta": 75.878,
+     "intensity": 2.64
+    },
+    {
+     "hkl": [
+      4,
+      -8,
+      -2
+     ],
+     "two_theta": 75.907,
+     "intensity": 5.12
+    },
+    {
+     "hkl": [
+      6,
+      4,
+      -2
+     ],
+     "two_theta": 76.489,
+     "intensity": 0.76
+    },
+    {
+     "hkl": [
+      6,
+      4,
+      -3
+     ],
+     "two_theta": 76.587,
+     "intensity": 2.94
+    },
+    {
+     "hkl": [
+      5,
+      3,
+      -5
+     ],
+     "two_theta": 76.647,
+     "intensity": 3.12
+    },
+    {
+     "hkl": [
+      0,
+      8,
+      3
+     ],
+     "two_theta": 77.031,
+     "intensity": 1.41
+    },
+    {
+     "hkl": [
+      4,
+      -4,
+      -5
+     ],
+     "two_theta": 77.141,
+     "intensity": 2.54
+    },
+    {
+     "hkl": [
+      0,
+      6,
+      4
+     ],
+     "two_theta": 77.301,
+     "intensity": 1.13
+    },
+    {
+     "hkl": [
+      4,
+      8,
+      -3
+     ],
+     "two_theta": 77.731,
      "intensity": 0.91
+    },
+    {
+     "hkl": [
+      2,
+      -10,
+      0
+     ],
+     "two_theta": 77.954,
+     "intensity": 1.02
+    },
+    {
+     "hkl": [
+      2,
+      -10,
+      -1
+     ],
+     "two_theta": 78.206,
+     "intensity": 0.73
+    },
+    {
+     "hkl": [
+      6,
+      -4,
+      -1
+     ],
+     "two_theta": 78.275,
+     "intensity": 2.06
+    },
+    {
+     "hkl": [
+      6,
+      0,
+      0
+     ],
+     "two_theta": 78.633,
+     "intensity": 5.07
+    },
+    {
+     "hkl": [
+      5,
+      -3,
+      -5
+     ],
+     "two_theta": 78.689,
+     "intensity": 1.12
+    },
+    {
+     "hkl": [
+      4,
+      4,
+      2
+     ],
+     "two_theta": 78.702,
+     "intensity": 1.73
+    },
+    {
+     "hkl": [
+      2,
+      8,
+      2
+     ],
+     "two_theta": 78.874,
+     "intensity": 6.67
+    },
+    {
+     "hkl": [
+      3,
+      -5,
+      3
+     ],
+     "two_theta": 78.902,
+     "intensity": 0.94
+    },
+    {
+     "hkl": [
+      5,
+      -7,
+      -1
+     ],
+     "two_theta": 78.945,
+     "intensity": 0.9
+    },
+    {
+     "hkl": [
+      0,
+      4,
+      -5
+     ],
+     "two_theta": 79.077,
+     "intensity": 0.72
+    },
+    {
+     "hkl": [
+      1,
+      5,
+      4
+     ],
+     "two_theta": 79.113,
+     "intensity": 0.51
+    },
+    {
+     "hkl": [
+      3,
+      -5,
+      -5
+     ],
+     "two_theta": 79.156,
+     "intensity": 3.09
+    },
+    {
+     "hkl": [
+      2,
+      10,
+      -2
+     ],
+     "two_theta": 79.188,
+     "intensity": 2.13
+    },
+    {
+     "hkl": [
+      1,
+      9,
+      2
+     ],
+     "two_theta": 79.313,
+     "intensity": 0.58
+    },
+    {
+     "hkl": [
+      6,
+      -2,
+      0
+     ],
+     "two_theta": 79.682,
+     "intensity": 0.81
+    },
+    {
+     "hkl": [
+      4,
+      -8,
+      -3
+     ],
+     "two_theta": 80.138,
+     "intensity": 0.66
+    },
+    {
+     "hkl": [
+      6,
+      2,
+      0
+     ],
+     "two_theta": 80.942,
+     "intensity": 1.84
+    },
+    {
+     "hkl": [
+      2,
+      -10,
+      1
+     ],
+     "two_theta": 81.137,
+     "intensity": 0.82
+    },
+    {
+     "hkl": [
+      4,
+      8,
+      0
+     ],
+     "two_theta": 81.179,
+     "intensity": 0.8
+    },
+    {
+     "hkl": [
+      1,
+      -9,
+      -3
+     ],
+     "two_theta": 81.354,
+     "intensity": 1.3
+    },
+    {
+     "hkl": [
+      6,
+      0,
+      -5
+     ],
+     "two_theta": 81.517,
+     "intensity": 1.26
+    },
+    {
+     "hkl": [
+      4,
+      6,
+      -5
+     ],
+     "two_theta": 81.63,
+     "intensity": 0.68
+    },
+    {
+     "hkl": [
+      3,
+      -1,
+      -6
+     ],
+     "two_theta": 82.302,
+     "intensity": 4.37
+    },
+    {
+     "hkl": [
+      0,
+      8,
+      -4
+     ],
+     "two_theta": 82.314,
+     "intensity": 2.78
+    },
+    {
+     "hkl": [
+      1,
+      -5,
+      -5
+     ],
+     "two_theta": 82.615,
+     "intensity": 1.51
+    },
+    {
+     "hkl": [
+      1,
+      -7,
+      4
+     ],
+     "two_theta": 82.765,
+     "intensity": 2.36
+    },
+    {
+     "hkl": [
+      3,
+      -9,
+      -3
+     ],
+     "two_theta": 82.787,
+     "intensity": 1.93
+    },
+    {
+     "hkl": [
+      2,
+      0,
+      -6
+     ],
+     "two_theta": 82.822,
+     "intensity": 0.65
+    },
+    {
+     "hkl": [
+      1,
+      -9,
+      3
+     ],
+     "two_theta": 82.856,
+     "intensity": 0.69
+    },
+    {
+     "hkl": [
+      0,
+      10,
+      2
+     ],
+     "two_theta": 83.066,
+     "intensity": 1.46
+    },
+    {
+     "hkl": [
+      3,
+      3,
+      -6
+     ],
+     "two_theta": 83.395,
+     "intensity": 0.44
+    },
+    {
+     "hkl": [
+      4,
+      8,
+      -4
+     ],
+     "two_theta": 83.433,
+     "intensity": 1.14
+    },
+    {
+     "hkl": [
+      2,
+      -8,
+      3
+     ],
+     "two_theta": 83.609,
+     "intensity": 0.74
+    },
+    {
+     "hkl": [
+      2,
+      -8,
+      -4
+     ],
+     "two_theta": 83.678,
+     "intensity": 1.27
+    },
+    {
+     "hkl": [
+      1,
+      1,
+      5
+     ],
+     "two_theta": 83.787,
+     "intensity": 0.77
+    },
+    {
+     "hkl": [
+      0,
+      4,
+      5
+     ],
+     "two_theta": 83.86,
+     "intensity": 1.21
+    },
+    {
+     "hkl": [
+      4,
+      -8,
+      1
+     ],
+     "two_theta": 83.88,
+     "intensity": 1.46
+    },
+    {
+     "hkl": [
+      6,
+      -4,
+      0
+     ],
+     "two_theta": 84.057,
+     "intensity": 3.18
+    },
+    {
+     "hkl": [
+      3,
+      5,
+      3
+     ],
+     "two_theta": 84.061,
+     "intensity": 3.2
+    },
+    {
+     "hkl": [
+      5,
+      7,
+      -4
+     ],
+     "two_theta": 84.128,
+     "intensity": 2.84
+    },
+    {
+     "hkl": [
+      4,
+      -2,
+      3
+     ],
+     "two_theta": 84.606,
+     "intensity": 0.43
+    },
+    {
+     "hkl": [
+      2,
+      -6,
+      -5
+     ],
+     "two_theta": 84.669,
+     "intensity": 2.88
+    },
+    {
+     "hkl": [
+      6,
+      6,
+      -2
+     ],
+     "two_theta": 85.008,
+     "intensity": 0.62
+    },
+    {
+     "hkl": [
+      1,
+      9,
+      -4
+     ],
+     "two_theta": 85.369,
+     "intensity": 1.52
+    },
+    {
+     "hkl": [
+      6,
+      -6,
+      -3
+     ],
+     "two_theta": 85.398,
+     "intensity": 2.06
+    },
+    {
+     "hkl": [
+      1,
+      11,
+      -2
+     ],
+     "two_theta": 86.002,
+     "intensity": 0.94
+    },
+    {
+     "hkl": [
+      5,
+      1,
+      -6
+     ],
+     "two_theta": 86.018,
+     "intensity": 0.43
+    },
+    {
+     "hkl": [
+      5,
+      -5,
+      -5
+     ],
+     "two_theta": 86.025,
+     "intensity": 1.0
+    },
+    {
+     "hkl": [
+      3,
+      9,
+      -4
+     ],
+     "two_theta": 86.03,
+     "intensity": 2.54
+    },
+    {
+     "hkl": [
+      6,
+      4,
+      0
+     ],
+     "two_theta": 86.55,
+     "intensity": 2.79
+    },
+    {
+     "hkl": [
+      7,
+      3,
+      -3
+     ],
+     "two_theta": 86.694,
+     "intensity": 0.7
+    },
+    {
+     "hkl": [
+      2,
+      -6,
+      4
+     ],
+     "two_theta": 86.715,
+     "intensity": 0.88
+    },
+    {
+     "hkl": [
+      5,
+      -1,
+      -6
+     ],
+     "two_theta": 86.921,
+     "intensity": 1.16
+    },
+    {
+     "hkl": [
+      6,
+      4,
+      -5
+     ],
+     "two_theta": 87.026,
+     "intensity": 0.95
+    },
+    {
+     "hkl": [
+      4,
+      -8,
+      -4
+     ],
+     "two_theta": 87.7,
+     "intensity": 1.35
+    },
+    {
+     "hkl": [
+      3,
+      -7,
+      3
+     ],
+     "two_theta": 87.854,
+     "intensity": 0.89
+    },
+    {
+     "hkl": [
+      6,
+      6,
+      -4
+     ],
+     "two_theta": 88.107,
+     "intensity": 0.44
+    },
+    {
+     "hkl": [
+      6,
+      0,
+      1
+     ],
+     "two_theta": 88.268,
+     "intensity": 0.82
+    },
+    {
+     "hkl": [
+      5,
+      3,
+      -6
+     ],
+     "two_theta": 88.421,
+     "intensity": 1.11
+    },
+    {
+     "hkl": [
+      4,
+      -4,
+      3
+     ],
+     "two_theta": 88.442,
+     "intensity": 1.14
+    },
+    {
+     "hkl": [
+      1,
+      3,
+      -6
+     ],
+     "two_theta": 88.62,
+     "intensity": 1.02
+    },
+    {
+     "hkl": [
+      3,
+      -9,
+      2
+     ],
+     "two_theta": 88.726,
+     "intensity": 1.05
+    },
+    {
+     "hkl": [
+      2,
+      -10,
+      -3
+     ],
+     "two_theta": 88.909,
+     "intensity": 0.44
+    },
+    {
+     "hkl": [
+      2,
+      8,
+      -5
+     ],
+     "two_theta": 89.403,
+     "intensity": 0.48
+    },
+    {
+     "hkl": [
+      1,
+      -5,
+      5
+     ],
+     "two_theta": 89.844,
+     "intensity": 1.59
+    },
+    {
+     "hkl": [
+      0,
+      8,
+      4
+     ],
+     "two_theta": 89.904,
+     "intensity": 0.71
     }
    ],
    "note": "钠长石",
    "cif_source": "1544370.cif",
    "cod_phase": "7-5_Albite",
    "wavelength": 1.5406,
-   "peaks_version": "0.5.2-hkl-consistent"
+   "peaks_version": "0.5.3-round2-fix",
+   "peaks_source": "COD 9000525 (NaAlSi3O8, 52 位点, 晶胞接管)"
   },
   {
    "key": "Biotite",
@@ -42684,5 +40445,5 @@
    "peaks_version": "0.5.2-hkl-consistent"
   }
  ],
- "peaks_note": "v0.15.2: 全部峰表按真实晶体结构 (CifParser 空间群展开 + 消光条件) 重算, 修正旧版按 P1 非对称单元计算导致的强度/峰位错误 || v1.1.2 (库 0.5.2): 按各自 lattice 重新索引 hkl 并吸附 2θ —— 修复 v0.15.2 重算时 的 hkl 写坏 (Zincite/Calcite/Corundum/Brucite 等 29/106 条受影响, 512 条 hkl 改名, 79 条重复/无法匹配的峰丢弃); 修复后 106/106 条峰表与晶胞自洽 (偏差 0.000°), 识别 Top-10 召回保持 19/20; 另修 rietveld_refiner._calc_d_spacing_from_hkl 漏掉的 三斜归一化因子 (非正交晶胞此前全错)。"
+ "peaks_note": "v0.15.2: 全部峰表按真实晶体结构 (CifParser 空间群展开 + 消光条件) 重算, 修正旧版按 P1 非对称单元计算导致的强度/峰位错误 || v1.1.2 (库 0.5.2): 按各自 lattice 重新索引 hkl 并吸附 2θ —— 修复 v0.15.2 重算时 的 hkl 写坏 (Zincite/Calcite/Corundum/Brucite 等 29/106 条受影响, 512 条 hkl 改名, 79 条重复/无法匹配的峰丢弃); 修复后 106/106 条峰表与晶胞自洽 (偏差 0.000°), 识别 Top-10 召回保持 19/20; 另修 rietveld_refiner._calc_d_spacing_from_hkl 漏掉的 三斜归一化因子 (非正交晶胞此前全错)。|| 0.5.3 (库 0.5.3): Cristobalite 条目由 β 型正交晶胞 (COD 9017505, 主线 21.35°) 换为室温稳定 α 相 (COD 9001578, P4_12_12, 主线 21.99°), 修复 5-x 样品检索 MISS|| 0.5.3 (库 0.5.3): NCM 811 条目由 P2_1/c 坏超胞 (5420 峰→截断 400, 主线 18.44° 错位) 换为层状 R-3m 结构 (COD 1520789, 主线 18.78°), 修复 1-2 检索 MISS 与幻影线覆盖毯误召回|| 0.5.3 (第二批): Boehmite 由 Al10.64O16 (I4_1/amd, 错相) 换为 γ-AlOOH (COD 9012250, C m c m, 主线 14.43°); Albite 由 Pnnm 错晶胞换为三斜低钠长石 (COD 9000525, C -1, 主线 28.10°)"
 }

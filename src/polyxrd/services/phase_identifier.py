@@ -35,6 +35,28 @@ _COVER_CONSIST_POW = 1.0
 # λ (_COMBO_FOM_WEIGHT) 在 0.05→1.0 六档上完全不敏感 → 维持 0.05。
 _COVER_CONSIST_ALPHA = 1.0
 
+# S14b: 自解释率缩放 (覆盖毯坍缩主修)。密集弱线相 (库内百余条弱线) 靠
+# "运气线"撞上强观测峰即可在覆盖目标 Σ_j max_i vec_i[j] 里拿高分
+# (实测 2-1: Gypsum 自身 cover 仅 7.5%、主线 11.59°(I=100) 未命中任何观测峰,
+# covvec 却=2.0, 2.5 倍于 cover=76% 的 Calcite → 组合丢 Calcite 留 Gypsum)。
+# 根因: 覆盖目标只奖励"解释观测峰", 从不惩罚"自己的峰表没被解释"。
+# 修法: 每候选相算**强度加权自解释率** r = Σ_k b_k·q_k / Σ_k b_k
+#   (b_k = 参考强度归一, q_k = 该参考峰对全部实测峰的最佳命中质量),
+#   覆盖向量乘 (ε + (1-ε)·r^β)。真实相强线大多命中 → r≈0.8-1 几乎无影响;
+#   覆盖毯相强线未命中 → r≈0.05, 贡献按 r^β 塌缩 (按 b 加权使惩罚由强线主导,
+#   噪声弱线的零星命中拉不回来)。
+# β=1/ε=0 起步 (v2.3.1); 13 试样基准验证见 docs/基准报告-物相检索与精修-v2.3.md。
+_COMBO_SELF_RECALL_BETA = 1.0
+_COMBO_SELF_RECALL_EPS = 0.0
+
+# S14c: 检索 FoM 可观测性下限 (S09 min_visible_frac 默认启用)。
+# 运动学强度谱的密集相 (Muscovite 267 线 / Albite 313 线 / Hornblende 211 线)
+# 大量弱线在实验中本就不可见, 全部计入漏检罚分 → 真相被压出 top20。
+# I_ref/Imax < 0.1 的参考线不计漏检; 13 试样实证: A 级零回归,
+# B 级 top3 29→31、top10 40→42、MRR 0.455→0.478。
+# scale="auto" (S10) 与 scale_penalty 实测变差 (B 级 top3 −3), 维持默认关闭。
+_FOM_MIN_VISIBLE_FRAC = 0.1
+
 
 def _combo_fom_weight(obs_int) -> float:
     """S03: λ = _COMBO_FOM_WEIGHT × 平均观测权重。
@@ -506,6 +528,39 @@ class PhaseIdentifier:
         return vec
 
     @staticmethod
+    def _phase_self_recall(phase, obs_tt, tolerance: float) -> float:
+        """S14b: 相参考峰表被实测数据解释的**强度加权**自解释率 r ∈ [0,1]。
+
+        r = Σ_k b_k·q_k / Σ_k b_k
+          b_k = I_ref_k / I_ref_max         (参考强度归一; 惩罚由强线主导)
+          q_k = max_j (1 − |Δ_kj| / tol)    (该参考峰对实测峰的最佳命中质量, 无命中=0)
+
+        与 m.coverage (逐线计数百分比) 的区别: 按参考强度加权后, 密集弱线相
+        "少量弱线沾上强观测峰、主线全落空"的覆盖毯形态得到 r≈0 的重罚,
+        而真实相 (主线命中) 保持 r≈0.8–1。
+        """
+        ref_peaks = [(float(tt), float(i)) for _, tt, i in phase.get_reference_peaks()
+                     if i is not None]
+        if not ref_peaks or not obs_tt:
+            return 1.0
+        ref_i = np.asarray([i for _, i in ref_peaks], dtype=float)
+        ref_max = float(ref_i.max())
+        if not (ref_max > 1e-12):
+            return 1.0
+        b = ref_i / ref_max
+        obs = np.asarray([float(t) for t in obs_tt], dtype=float)
+        q = np.zeros(len(ref_peaks), dtype=float)
+        for k, (rt, _) in enumerate(ref_peaks):
+            d = np.abs(obs - rt)
+            within = d <= tolerance
+            if within.any():
+                q[k] = float((1.0 - d[within] / tolerance).max())
+        den = float(b.sum())
+        if not (den > 1e-12):
+            return 1.0
+        return float(np.dot(b, q) / den)
+
+    @staticmethod
     def _branch_and_bound_select(masks, metal_flags, n_obs,
                                  size_targets=None, scores=None,
                                  cover_vectors=None,
@@ -730,6 +785,8 @@ class PhaseIdentifier:
         pool: list = []
         masks: list[int] = []
         cover_vectors: list = []
+        beta = _COMBO_SELF_RECALL_BETA
+        eps = _COMBO_SELF_RECALL_EPS
         for m in pool_src:
             if _is_pure_metal(m.phase) and m.coverage < 0.55:
                 continue
@@ -738,8 +795,12 @@ class PhaseIdentifier:
                 continue
             pool.append(m)
             masks.append(msk)
-            cover_vectors.append(
-                self._phase_cover_vector(m.phase, obs_tt, obs_int, tolerance))
+            cv = self._phase_cover_vector(m.phase, obs_tt, obs_int, tolerance)
+            if beta > 0.0:
+                # S14b: 自解释率缩放 — "只解释别人、解释不了自己"的覆盖毯相塌缩
+                r = self._phase_self_recall(m.phase, obs_tt, tolerance)
+                cv = cv * (eps + (1.0 - eps) * (r ** beta))
+            cover_vectors.append(cv)
         if not pool:
             return []
 
@@ -786,7 +847,7 @@ class PhaseIdentifier:
         fom_obs_range=None,
         fom_scale=None,
         fom_scale_penalty: float = 0.0,
-        fom_min_visible_frac: float = 0.0,
+        fom_min_visible_frac: float = _FOM_MIN_VISIBLE_FRAC,
     ) -> list[PhaseMatchResult]:
         """执行物相识别（支持三态元素过滤）
 
