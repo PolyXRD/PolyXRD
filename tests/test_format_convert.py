@@ -25,7 +25,7 @@ from polyxrd.services.pattern_convert import (                          # noqa: 
     write_pattern,
 )
 
-GESHI = Path(r"E:\TEMP\test_xrd\geshi")
+GESHI = Path(r"D:/Project/XRD/test_xrd\geshi")
 SAMPLE = GESHI / "4-1.dat"
 
 pytestmark = pytest.mark.skipif(

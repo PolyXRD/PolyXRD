@@ -2,7 +2,7 @@
 # 用法: pwsh -NoProfile -File scripts/create_github_release_v0.9.10.ps1
 param()
 $ErrorActionPreference = 'Stop'
-Set-Location 'E:\TEMP\PolyXRD'
+Set-Location 'D:/Project/XRD/PolyXRD'
 
 # PortableGit on PATH (pwsh 7 环境默认没有 git; GCM 内部也要定位 git.exe)
 $gitBin = 'C:\Users\Administrator\.workbuddy\binaries\PortableGit\versions\1.2.0\mingw64\bin'
@@ -14,7 +14,7 @@ $tag   = 'v0.9.10'
 $baseURL = "https://api.github.com/repos/$owner/$repo"
 
 # ---- Token: 优先从临时文件读 (由外部 GCM 预取), 否则 git credential fill ----
-$tokenFile = 'E:\TEMP\PolyXRD\.gcm_out_tmp'
+$tokenFile = 'D:/Project/XRD/PolyXRD\.gcm_out_tmp'
 $token = $null
 if (Test-Path $tokenFile) {
   foreach ($line in Get-Content $tokenFile) {
@@ -180,8 +180,8 @@ function Upload-Asset([string]$filePath, [string]$assetName, [string]$contentTyp
   throw "FAILED upload $assetName after $retries tries"
 }
 
-$rel = 'E:\TEMP\PolyXRD\release_staging'
-$inst = 'E:\TEMP\PolyXRD\installer_output'
+$rel = 'D:/Project/XRD/PolyXRD\release_staging'
+$inst = 'D:/Project/XRD/PolyXRD\installer_output'
 
 Upload-Asset -FilePath (Join-Path $rel  'PolyXRD_COD_Inorganics_v0.9.10.zip') -AssetName 'PolyXRD_COD_Inorganics_v0.9.10.zip' -ContentType 'application/zip'
 Upload-Asset -FilePath (Join-Path $rel  'PolyXRD_COD_Full_v0.9.10.zip')       -AssetName 'PolyXRD_COD_Full_v0.9.10.zip'       -ContentType 'application/zip'

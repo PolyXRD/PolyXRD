@@ -22,7 +22,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-DATA = Path(r"E:\TEMP\test_xrd\txt")
+DATA = Path(r"D:/Project/XRD/test_xrd\txt")
 OUT = ROOT / "docs" / "基准报告-物相检索-v1.md"
 TOP_N = 20
 

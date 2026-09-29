@@ -13,10 +13,10 @@ from pathlib import Path
 
 import pytest
 
-DATA_DIR = Path(r"E:/TEMP/test_xrd/txt")
+DATA_DIR = Path(r"D:/Project/XRD/test_xrd/txt")
 
 
-# v2.1 P2-4: 本地试样目录缺失时整体跳过 (CI 环境无 E:/TEMP/test_xrd)
+# v2.1 P2-4: 本地试样目录缺失时整体跳过 (CI 环境无 D:/Project/XRD/test_xrd)
 pytestmark = pytest.mark.skipif(
     not (DATA_DIR / "4-1.txt").exists(),
     reason=f"本地试样目录不存在: {DATA_DIR}",

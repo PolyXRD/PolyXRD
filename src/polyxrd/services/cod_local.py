@@ -861,7 +861,7 @@ def get_cod_root(default: Optional[Path] = None) -> Path:
          — **项目根优先** (v0.11.0 修复: 系统重装后盘符 D:→E:, 旧
          d:\\TEMP 硬编码抢在项目根之前命中老树, 导致下载写 E: 运行读 D:)
       4. AppConfig.cif_db_path / "cod"  (存在的话)
-      5. d:\\TEMP\\PolyXRD\\cod  (旧系统盘遗留, 仅兜底)
+      5. D:/Project/XRD/PolyXRD\\cod  (旧系统盘遗留, 仅兜底)
       6. ~/.polyxrd/cif_db/cod (创建并返回)
     """
     # Phase 1: check candidates that have cod_index.sqlite alongside
@@ -877,9 +877,6 @@ def get_cod_root(default: Optional[Path] = None) -> Path:
     index_candidates.append(AppConfig._PROJECT_ROOT / "cod")
     index_candidates.append(AppConfig._PROJECT_ROOT / "cod" / "cif")
     index_candidates.append(cfg.get_cif_db_path() / "cod")
-    index_candidates.append(Path(r"d:\TEMP\PolyXRD\cod"))
-    index_candidates.append(Path(r"d:\TEMP\PolyXRD\cod\cif"))
-    index_candidates.append(Path(r"d:\TEMP\cod\cif"))
     for c in index_candidates:
         idx = c.parent / "cod_index.sqlite" if c.name == "cif" else c.parent / "cod_index.sqlite"
         if c.exists() and idx.exists():
@@ -898,8 +895,6 @@ def get_cod_root(default: Optional[Path] = None) -> Path:
         cfg.user_db_dir() / "cod",       # 用户可写目录优先
         cfg.get_cif_db_path() / "cod",
         AppConfig._PROJECT_ROOT / "cod",
-        Path(r"d:\TEMP\PolyXRD\cod"),
-        Path(r"d:\TEMP\cod\cif"),
     ]
     for fallback in fallbacks:
         if is_inside_app_dir(fallback):

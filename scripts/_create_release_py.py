@@ -18,7 +18,7 @@ OWNER, REPO = 'PolyXRD', 'PolyXRD'
 TAG = VERSION = '0.11.0'
 BASE = f'https://api.github.com/repos/{OWNER}/{REPO}'
 UPLOAD = 'https://uploads.github.com/repos/{OWNER}/{REPO}/releases/{id}/assets'
-INST = r'E:\TEMP\PolyXRD\installer_output'
+INST = r'D:/Project/XRD/PolyXRD\installer_output'
 BANNED = re.compile(r'PDF2|Portable', re.I)
 
 BODY = """## PolyXRD v0.11.0

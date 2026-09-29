@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from polyxrd.models.phase import Phase, PhaseMatchResult
 from polyxrd.services.phase_identifier import PhaseIdentifier
 
-DATA_DIR = Path(r"E:\TEMP\test_xrd\txt")
+DATA_DIR = Path(r"D:/Project/XRD/test_xrd\txt")
 
 
 def _mk_match(name, formula, tt_intens, score, elements):
@@ -144,7 +144,7 @@ def _name_eq(a: str, b: str) -> bool:
 
 @pytest.mark.parametrize("sample", sorted(TRUTH_CASES))
 @pytest.mark.skipif(not DATA_DIR.exists(),
-                    reason="真实测试数据 E:/TEMP/test_xrd/txt 不存在")
+                    reason="真实测试数据 D:/Project/XRD/test_xrd/txt 不存在")
 @pytest.mark.skip(reason="M-A 未收口: 池内密集相挤占与检索 MISS 待 S08-S10 修复后启用 (手册 S07)")
 def test_combination_contains_truth(sample):
     """组合结果必须包含真值相 (S01 映射表口径)。"""

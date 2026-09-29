@@ -15,7 +15,7 @@ OWNER, REPO = 'PolyXRD', 'PolyXRD'
 TAG = 'v0.15.0'
 VERSION = '0.15.0'
 BASE = f'https://api.github.com/repos/{OWNER}/{REPO}'
-INST = r'E:\TEMP\PolyXRD\installer_output'
+INST = r'D:/Project/XRD/PolyXRD\installer_output'
 CURL = r'C:\Windows\System32\curl.exe'
 BANNED = re.compile(r'PDF2|Portable', re.I)
 

@@ -17,7 +17,7 @@ import sys
 import time
 import zipfile
 
-ROOT = r"E:\TEMP\PolyXRD"
+ROOT = r"D:/Project/XRD/PolyXRD"
 VER = "0.14.0"
 JOBS = [
     ("cod_data/cod_index.sqlite", "cod_index.sqlite",

@@ -22,9 +22,9 @@ import sys
 import tempfile
 from pathlib import Path
 
-TAR_SRC = Path(r"d:\TEMP\PolyXRD\cod\cod-cifs-mysql.tar")
+TAR_SRC = Path(r"D:/Project/XRD/PolyXRD\cod\cod-cifs-mysql.tar")
 if not TAR_SRC.exists():
-    TAR_SRC = Path(r"d:\TEMP\PolyXRD\cod-cifs-mysql.tar")
+    TAR_SRC = Path(r"D:/Project/XRD/PolyXRD\cod-cifs-mysql.tar")
 
 SAMPLE_ENTRIES = 1000
 
@@ -44,7 +44,7 @@ def main() -> int:
 
     try:
         # 1) 导入 build_index_from_tar; 先检查它是否支持 max_entries
-        sys.path.insert(0, str(Path(r"d:\TEMP\PolyXRD\src")))
+        sys.path.insert(0, str(Path(r"D:/Project/XRD/PolyXRD\src")))
         from polyxrd.services.cod_local import CODLocalIndexer
 
         indexer = CODLocalIndexer(cod_root=cod_root, db_path=db_path)
