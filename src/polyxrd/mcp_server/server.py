@@ -28,8 +28,8 @@ from polyxrd.mcp_server.session import get_session
 # ── Create MCP server instance ────────────────────────────────
 mcp = MCPServer(
     name="polyxrd",
-    # v2.1 P3: 版本号与主程序对齐 (旧值 0.9.0 为文档漂移)
-    version="2.1.0",
+    # v2.3.0: 与主程序版本单源对齐 (从包 __init__ 取, 防再次漂移)
+    version=__import__("polyxrd").__version__,
     title="PolyXRD — XRD Analysis Suite",
     description="AI-friendly XRD analysis: load → preprocess → peaks → phases → Rietveld → export",
 )

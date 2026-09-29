@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar, Optional
 
+from polyxrd import __version__
+
 
 @dataclass
 class AppConfig:
@@ -17,7 +19,8 @@ class AppConfig:
 
     # 应用信息
     app_name: str = "PolyXRD"
-    app_version: str = "2.1.0"
+    # v2.3.0: 从包 __init__.__version__ 取值, 消除双源漂移 (曾漏 bump 卡在 2.1.0)
+    app_version: str = __version__
     app_org: str = "PolyXRD"
 
     # 窗口设置
