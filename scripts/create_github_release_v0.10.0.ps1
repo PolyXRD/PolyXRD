@@ -6,7 +6,7 @@
 #   底部有 $BANNED 守卫, 任何含 PDF2 的路径一旦混进来会直接抛错终止。
 param()
 $ErrorActionPreference = 'Stop'
-Set-Location 'E:\TEMP\PolyXRD'
+Set-Location 'D:/Project/XRD/PolyXRD'
 
 # PortableGit on PATH (pwsh 7 环境默认没有 git; GCM 内部也要定位 git.exe)
 $gitBin = 'C:\Users\Administrator\.workbuddy\binaries\PortableGit\versions\1.2.0\mingw64\bin'
@@ -17,10 +17,10 @@ $repo    = 'PolyXRD'
 $tag     = 'v0.10.0'
 $version = '0.10.0'
 $baseURL = "https://api.github.com/repos/$owner/$repo"
-$inst    = 'E:\TEMP\PolyXRD\installer_output'
+$inst    = 'D:/Project/XRD/PolyXRD\installer_output'
 
 # ---- Token: 优先从临时文件读, 否则 git credential fill ----
-$tokenFile = 'E:\TEMP\PolyXRD\.gcm_out_tmp'
+$tokenFile = 'D:/Project/XRD/PolyXRD\.gcm_out_tmp'
 $token = $null
 if (Test-Path $tokenFile) {
   foreach ($line in Get-Content $tokenFile) {

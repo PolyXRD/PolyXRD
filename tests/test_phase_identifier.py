@@ -9,7 +9,7 @@ from polyxrd.models.xrd_data import XRDData
 from polyxrd.services.phase_identifier import PhaseIdentifier
 from polyxrd.services.peak_finder import PeakFinder
 
-DATA_DIR = "E:/TEMP/test_xrd/txt"
+DATA_DIR = "D:/Project/XRD/test_xrd/txt"
 
 
 class TestPhaseIdentifier:

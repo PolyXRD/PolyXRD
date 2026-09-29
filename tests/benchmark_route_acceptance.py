@@ -1,6 +1,6 @@
 """A/B 路线验收基准 (任务 #59/#60/#61 收口取证)
 ================================================
-对 E:\\TEMP\\test_xrd 的 13 个真实试样:
+对 D:/Project/XRD/test_xrd 的 13 个真实试样:
   1. 识别物相 (元素过滤按 物相结果.txt 真值) → B&B 组合
   2. PhaseStructureResolver 从 COD 库回填 CIF 结构 (B 路线链路)
   3. builtin 精修 (v0.15.1 CIF |F|² 参考峰, use_cif_peaks=True)
@@ -22,7 +22,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-DATA = Path(r"E:\TEMP\test_xrd\txt")
+DATA = Path(r"D:/Project/XRD/test_xrd\txt")
 OUT = ROOT / os.environ.get("BENCH_OUT", "_route_benchmark_result.txt")
 
 MAYBE = ["H", "Li", "Be", "B", "C", "N", "O", "F", "Na", "Mg",

@@ -1,6 +1,6 @@
 # ⚠️ 已废弃 (DEPRECATED) —— 请勿使用本脚本
 #
-# 历史: 这是 v0.9.0 时期的附件上传脚本, 把工作目录硬编码成 `d:\TEMP\PolyXRD`。
+# 历史: 这是 v0.9.0 时期的附件上传脚本, 把工作目录硬编码成 `D:/Project/XRD/PolyXRD`。
 # 2026-09 重装系统后盘符变更为 E:, 该路径已失效; 附件命名规则也已从
 # `PolyXRD_COD_*_v0.9.x.zip` 改为 `PolyXRD-v<ver>-Databases-*.zip`。
 #

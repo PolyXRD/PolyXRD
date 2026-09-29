@@ -21,7 +21,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-DATA = Path(r"E:\TEMP\test_xrd\txt")
+DATA = Path(r"D:/Project/XRD/test_xrd\txt")
 OUT = ROOT / "docs" / "基准报告-精修-v2.0.0.md"
 
 BUDGET = dict(engine="builtin", max_cycles=10, n_starts=1,

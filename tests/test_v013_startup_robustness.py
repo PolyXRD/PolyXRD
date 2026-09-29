@@ -39,7 +39,7 @@ def test_app_dir_none_when_not_frozen(monkeypatch):
     monkeypatch.delattr(sys, "frozen", raising=False)
     assert cod_local.app_dir() is None
     # 非打包时一律不拦 (开发树里的 cod/ 与 cod_index.sqlite 必须照旧可用)
-    assert cod_local.is_inside_app_dir(Path(r"E:\TEMP\PolyXRD\cod")) is False
+    assert cod_local.is_inside_app_dir(Path(r"D:/ExternalOutsideApp/cod")) is False
 
 
 def test_is_inside_app_dir(fake_install):

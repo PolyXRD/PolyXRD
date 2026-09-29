@@ -15,7 +15,7 @@ import sys
 import time
 import zipfile
 
-ROOT = r"E:\TEMP\PolyXRD"
+ROOT = r"D:/Project/XRD/PolyXRD"
 SRC = os.path.join(ROOT, "cod_data", "COD_inorganics.sqlite")
 OUT = os.path.join(ROOT, "installer_output",
                    "PolyXRD-v0.13.2-Databases-COD-inorg.zip")

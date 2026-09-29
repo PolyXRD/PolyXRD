@@ -1,7 +1,7 @@
 """
 PolyXRD 13 试样端到端验证 (含元素限定)
 =====================================
-逐一加载 E:/TEMP/test_xrd/txt 下的 13 个 XRD 试样,
+逐一加载 D:/Project/XRD/test_xrd/txt 下的 13 个 XRD 试样,
 按元素限定文件执行三态元素过滤物相识别 + Rietveld 精修定量,
 比对预期物相和含量, 生成测试报告。
 """
@@ -93,7 +93,7 @@ PHASE_NAME_MAP = {
     "α-FeO(OH)": "Goethite",
 }
 
-DATA_DIR = Path(r"E:/TEMP/test_xrd/txt")
+DATA_DIR = Path(r"D:/Project/XRD/test_xrd/txt")
 
 
 def load_xrd(file_path: Path):

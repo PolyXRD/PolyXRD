@@ -32,7 +32,7 @@ WL = 1.5406
 _PDF2_WL = 80
 
 _REAL_DB = Path(__file__).resolve().parents[1] / "cod_data" / "PDF2_2004.sqlite"
-_RAW_DAT = Path(r"E:\TEMP\XRD-PDF2-2004\pdf2 - 2004.dat")
+_RAW_DAT = Path(r"D:/Project/XRD/XRD-PDF2-2004\pdf2 - 2004.dat")
 
 requires_real_db = pytest.mark.skipif(
     not _REAL_DB.exists(),

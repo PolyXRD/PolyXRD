@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "polyxrd"
-version = "2.1.0"
+version = "2.3.0"
 description = "X射线衍射仪数据分析软件 - 物相分析与Rietveld结构精修"
 readme = "README.md"
 # 双许可 (学术免费 / 商业需单独书面授权): SPDX 无对应标准标识符,
@@ -44,7 +44,7 @@ dependencies = [
     "scipy>=1.10",
     "PySide6>=6.5",
     "matplotlib>=3.7",
-    "pymatgen>=2024.1.1",
+    "pymatgen==2025.10.7",
     "lmfit>=1.3",
     "powerxrd>=1.0",
     "pandas>=2.0.0",
