@@ -161,10 +161,17 @@ function Upload-Asset([string]$filePath, [string]$assetName, [string]$contentTyp
   if (-not (Test-Path $filePath)) { throw "附件不存在: $filePath" }
   $fi = Get-Item $filePath
   $size = $fi.Length
+  # ★ 用 digest(sha256) 而非 size 判定是否可跳过:
+  #   同名附件体积相同但内容已变 (例: 重建后 Setup 字节变了、SHA256 文本仍 860 B)
+  #   只比 size 会静默保留过期附件 —— 历史上踩过 (v2.4.0 被计划任务二次构建覆盖)。
+  $localHash = 'sha256:' + (Get-FileHash -Algorithm SHA256 -Path $filePath).Hash.ToLower()
   foreach ($o in $existingAssets) { if ($o.name -eq $assetName) {
-    if ($o.state -eq 'uploaded' -and $o.size -eq $size) {
-      Write-Host "SKIP $assetName (already uploaded, size match)"
+    if ($o.state -eq 'uploaded' -and $o.size -eq $size -and $o.digest -eq $localHash) {
+      Write-Host "SKIP $assetName (already uploaded, size+digest match)"
       return $o
+    }
+    if ($o.state -eq 'uploaded' -and $o.digest -ne $localHash) {
+      Write-Host ("  stale: remote digest=" + $o.digest + " local=" + $localHash + " -> replace")
     }
     Write-Host "  del existing asset id=$($o.id) ..."
     Invoke-RestMethod -Uri "$baseURL/releases/assets/$($o.id)" -Headers $headers -Method Delete | Out-Null
