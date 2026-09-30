@@ -57,6 +57,55 @@ _COMBO_SELF_RECALL_EPS = 0.0
 # scale="auto" (S10) 与 scale_penalty 实测变差 (B 级 top3 −3), 维持默认关闭。
 _FOM_MIN_VISIBLE_FRAC = 0.1
 
+# B-3: FoM 特异性项局部噪声自适应幅度下限 (替代全局下限)。
+# 寻峰无幅度下限 (min_signal_abs=0 / min_prominence_frac=0) 时, 自动检峰里
+# 噪声峰 ~88% 总数但仅贡献 ~28% 总强度, v2.1 强度加权口径下特异性项仍被
+# 噪声累积强度淹没 (惩罚项 0.084 vs 干净峰表 0.040)。B-3 按 2θ 局部窗口
+# (5° 内) MAD×k 阈值过滤 obs 峰强度, 强度 < 阈值的峰不计入特异性项 ——
+# 安静区局部 MAD 小→弱峰保留, 噪声区局部 MAD 大→假峰剔除。
+# 0 = 关 (默认行为与 v2.3 一致); 3.0 ≈ 3σ 显著性。
+# ⚠️ 默认关闭 (k=0.0): 13 试样 A/B 标尺实测, 单独启用 k=3 仅 B 级 top10 +1
+#  (42→43)、MISS 零变化, 却使 7-2 Clinochlore A5→7/B12→16、5-1 Cristobalite
+#  B11→12 退化; 与 B-4 叠加更放大 Clinochlore 退化 (见下 B-4 注释)。能力以
+#  参数 fom_local_mad_k 保留, 供噪声谱按需开启。
+_FOM_LOCAL_MAD_K = 0.0
+_FOM_LOCAL_MAD_WINDOW = 5.0
+
+# B-4: PO (择优取向) 感知检索评分。
+# 层状/链状硅酸盐 (Muscovite 2M1 / Hornblende) 在压片制样时晶面强烈择优
+# 取向, 实测强度与运动学计算强度系统性偏离 → 参考峰强线被压成弱线、漏检
+# 罚分飙升 → v2.3 最后 4 个 MISS (Muscovite×2 / Hornblende / Zircon)。
+# B-4 在检索阶段对"参考峰密集" (≥ _FOM_PO_MIN_REFS 条) 的候选做 r∈grid
+# March-Dollase 网格搜索 (织构轴 [001]), 选最优 r 的 FoM 作为该候选最终分。
+# 两道保守护栏 (13 试样 A/B 标尺扫参标定):
+#   护栏1 _FOM_PO_MIN_REFS: 只对极密集峰表 (≥80 线) 候选做 PO —— Muscovite
+#     267 / Hornblende 211 是典型 PO 受害者; 放宽到 30 会让 7-2 Clinochlore
+#     等中等密度相被 r 网格误优化而整体变差 (B top3 −2 / MRR_B −0.026),
+#     收紧到 150 则少收 5-2b Muscovite。实测 80~100 为平台, 取 80。
+#   护栏2 _FOM_PO_IMPROVE_FRAC: r≠1.0 的 FoM 须比 r=1.0 好 > 10% 才采用。
+#     阈值由 0.05 提到 0.10 反而更优: 0.05 放行大量"轻微虚假优化"的伪匹配候选
+#     挤掉真相 (5-2b Muscovite 仍 MISS), 0.10 只接受实质改善。
+# r=1.0 = 无取向 (与 v2.3 一致); r<1 → [001] 平行晶面增强; r>1 → 垂直增强。
+_FOM_PO_GRID = (0.6, 0.8, 1.0, 1.3)
+_FOM_PO_AXIS = (0, 0, 1)
+_FOM_PO_MIN_REFS = 80
+_FOM_PO_IMPROVE_FRAC = 0.10
+
+# B-5: PFSM (峰型拟合重排) 接入排序链路。
+# FoM 基于峰位匹配, 对密集峰表相 (Cristobalite 71 线) 容易因"弱线漏检"
+# 把真相压到 top14 (5-1 Cristobalite 被 top12 组合截断 = MISS)。PFSM 直接
+# 比实测谱 vs 单相合成谱的形态相关性, 不依赖峰位一一匹配, 对弱线多的相
+# 更稳健。``profile_fitting_score`` 已存在但未接入排序。
+# B-5 在 FoM 排序后对 top ``_FOM_PFSM_TOP_N`` 候选算 PFSM corr, 按综合分
+#   (1-w)·FoM_rank + w·PFSM_rank 重排 (rank 升序, 越低越前)。
+# 0 = 关 (默认行为退回 FoM-only 排序)。
+# 实测: w=0.2 在 5-1 让 Cristobalite 排 14→11 (进 top12), 但组合算法仍选
+# Zircon 而非 Cristobalite → B-5 未能解决 5-1 组合缺失; 同时退化 3-1
+# (Corundum 2→6, Fluorite 3→7) 与 5-2b (Muscovite 10→19). 5-1 的真问题在
+# build_refinement_combination 的选择策略, 非搜索截断. 故默认关闭, 留参数供按需开启.
+_FOM_PFSM_TOP_N = 50
+_FOM_PFSM_WEIGHT = 0.0
+
 
 def _combo_fom_weight(obs_int) -> float:
     """S03: λ = _COMBO_FOM_WEIGHT × 平均观测权重。
@@ -848,6 +897,12 @@ class PhaseIdentifier:
         fom_scale=None,
         fom_scale_penalty: float = 0.0,
         fom_min_visible_frac: float = _FOM_MIN_VISIBLE_FRAC,
+        fom_local_mad_k: float = _FOM_LOCAL_MAD_K,
+        fom_local_mad_window: float = _FOM_LOCAL_MAD_WINDOW,
+        fom_po_grid: Optional[tuple] = _FOM_PO_GRID,
+        fom_po_axis: tuple = _FOM_PO_AXIS,
+        fom_pfsm_top_n: int = _FOM_PFSM_TOP_N,
+        fom_pfsm_weight: float = _FOM_PFSM_WEIGHT,
     ) -> list[PhaseMatchResult]:
         """执行物相识别（支持三态元素过滤）
 
@@ -857,6 +912,17 @@ class PhaseIdentifier:
             element_filter: 元素过滤条件 {"must": [...], "maybe": [...], "exclude": [...]}
             top_n: 返回候选数量
             tolerance: 2θ匹配容差 (度)
+            fom_local_mad_k: B-3 局部 MAD 倍数, 默认 ``_FOM_LOCAL_MAD_K``
+                (0.0 = 默认关闭, 行为退回 v2.3); >0 启用特异性项局部噪声过滤。
+            fom_local_mad_window: B-3 局部窗口宽度 (度), 默认 5.0。
+            fom_po_grid: B-4 March-Dollase r 网格 (默认 ``_FOM_PO_GRID`` =
+                (0.6, 0.8, 1.0, 1.3), 织构轴 [001]); None = 不启用 PO 搜索。
+            fom_po_axis: B-4 织构轴方向, 默认 (0,0,1)。
+            fom_pfsm_top_n: B-5 PFSM 重排的候选数 (默认 ``_FOM_PFSM_TOP_N``=50);
+                对 FoM 排序后的 top N 候选算 PFSM corr 重排; 0 = 关 (FoM-only)。
+            fom_pfsm_weight: B-5 PFSM 重排权重 w ∈ [0, 1] (默认 ``_FOM_PFSM_WEIGHT``
+                = 0.0, 即默认关闭; >0 才启用 PFSM 重排);
+                综合分 = (1-w)·FoM_rank + w·PFSM_rank, 按升序重排。
 
         Returns:
             匹配结果列表，按FOM升序排列 (FOM越低越好)
@@ -881,10 +947,46 @@ class PhaseIdentifier:
                 scale=fom_scale,
                 scale_penalty=fom_scale_penalty,
                 min_visible_frac=fom_min_visible_frac,
+                obs_local_mad_k=fom_local_mad_k,
+                obs_local_mad_window=fom_local_mad_window,
+                po_grid=fom_po_grid,
+                po_axis=fom_po_axis,
             )
             results.append(match_result)
 
         results.sort(key=lambda r: r.score)
+
+        # ── B-5: PFSM (峰型拟合) 重排 top N 候选 ───────────────────
+        # 对 FoM 排序后的 top fom_pfsm_top_n 候选算 profile_fitting_score
+        # (实测谱 vs 单相合成谱相关性), 按综合分 (1-w)·FoM_rank + w·PFSM_rank
+        # 重排。PFSM 不依赖峰位一一匹配, 对密集峰表相 (Cristobalite 71 线)
+        # 的弱线漏检更稳健。
+        if (fom_pfsm_top_n > 0 and fom_pfsm_weight > 0
+                and len(results) > 1
+                and data is not None and getattr(data, "two_theta", None) is not None):
+            from polyxrd.services.foam import profile_fitting_score
+            n_pfsm = min(fom_pfsm_top_n, len(results))
+            top = results[:n_pfsm]
+            try:
+                pfsm = [profile_fitting_score(data, r.phase) for r in top]
+            except Exception:
+                pfsm = None
+            if pfsm is not None:
+                # FoM rank = 0..n-1 (已升序)
+                fom_ranks = list(range(n_pfsm))
+                # PFSM rank: corr 越高越好 → 按 -corr 升序取 rank
+                corr_order = sorted(range(n_pfsm),
+                                    key=lambda i: -float(pfsm[i].get("corr", 0.0)))
+                pfsm_ranks = [0] * n_pfsm
+                for rank, i in enumerate(corr_order):
+                    pfsm_ranks[i] = rank
+                w = float(fom_pfsm_weight)
+                combined = [
+                    (i, (1.0 - w) * fom_ranks[i] + w * pfsm_ranks[i])
+                    for i in range(n_pfsm)
+                ]
+                combined.sort(key=lambda x: x[1])
+                results = [top[i] for i, _ in combined] + results[n_pfsm:]
 
         # ── 组合重排: 纯金属比例限制在 20% 以内, 避免过多纯金属挤占前 top_n ──
         if len(results) > 0:
@@ -962,6 +1064,10 @@ class PhaseIdentifier:
         scale=None,
         scale_penalty: float = 0.0,
         min_visible_frac: float = 0.0,
+        obs_local_mad_k: float = 0.0,
+        obs_local_mad_window: float = 5.0,
+        po_grid: Optional[tuple] = None,
+        po_axis: tuple = (0, 0, 1),
     ) -> PhaseMatchResult:
         """基于匹配因子 (FoM) 匹配单个物相。
 
@@ -972,10 +1078,26 @@ class PhaseIdentifier:
           - 未解释实验峰特异性惩罚 + 匹配对强度余弦一致性
         纯金属相额外 ×1.5 惩罚 (单元素金属参考峰少易误匹配)。
 
+        B-3: ``obs_local_mad_k > 0`` 时, 用 :func:`polyxrd.services.foam.local_mad_threshold`
+        按 2θ 局部窗口 MAD×k 算每峰噪声阈值, 传入 compute_fom 的
+        ``obs_noise_floor`` 过滤特异性项 (强度 < 阈值的峰不计入未解释强度,
+        安静区弱峰保留、噪声区假峰剔除)。
+
+        B-4: ``po_grid`` 非空且候选有 hkl 信息时, 对每个 r∈po_grid 做
+        March-Dollase 择优取向校正 (:meth:`RietveldRefiner.apply_preferred_orientation`,
+        织构轴 = ``po_axis`` 默认 [001]), 用校正后强度算 FoM, 取最优 r
+        的 FoM 作为该候选最终分。r=1.0 = 无取向 (与 v2.3 一致)。无 hkl 信息
+        的候选跳过 PO 搜索 (用原参考峰表)。
+
         Args:
             phase: 候选物相
             peaks: 实验峰列表
             tolerance: 容差
+            obs_local_mad_k: B-3 局部 MAD 倍数, 0 = 关 (默认行为与 v2.3 一致)
+            obs_local_mad_window: B-3 局部窗口宽度 (度)
+            po_grid: B-4 March-Dollase r 网格 (如 (0.6, 0.8, 1.0, 1.3));
+                None = 不启用 PO 搜索
+            po_axis: B-4 织构轴方向, 默认 (0,0,1) = c 轴
 
         Returns:
             PhaseMatchResult (score 越低越好)
@@ -988,16 +1110,63 @@ class PhaseIdentifier:
                 total_peaks=0, confidence="无参考数据", method="fom"
             )
 
-        fom = compute_fom(
-            [p.two_theta for p in peaks],
-            [p.intensity for p in peaks],
-            reference_peaks,
-            tol=tolerance,
-            obs_range=obs_range,
-            scale=scale,
-            scale_penalty=scale_penalty,
-            min_visible_frac=min_visible_frac,
-        )
+        obs_tt = [p.two_theta for p in peaks]
+        obs_i = [p.intensity for p in peaks]
+        obs_noise_floor = None
+        if obs_local_mad_k > 0 and len(obs_tt) >= 3:
+            from polyxrd.services.foam import local_mad_threshold
+            obs_noise_floor = local_mad_threshold(
+                obs_tt, obs_i,
+                window_deg=float(obs_local_mad_window),
+                k=float(obs_local_mad_k),
+            )
+
+        # B-4: March-Dollase r 网格搜索, 选最优 r 的 FoM
+        # 保守口径 1: 只对参考峰数 ≥ _FOM_PO_MIN_REFS 的密集峰表候选做 PO 搜索
+        #   (Muscovite 267 线 / Hornblende 211 线等才需要; 简单峰表相不做)
+        # 保守口径 2: 先算 r=1.0 (无取向) 的 FoM, 只在 r≠1.0 的改善 > 5% 时
+        #   才采用 —— 避免伪匹配候选在 r 网格上"轻微优化"挤掉真相。
+        has_hkl = any(h and any(h) for h, _, _ in reference_peaks)
+        if (po_grid and has_hkl
+                and total_ref_peaks >= _FOM_PO_MIN_REFS):
+            from polyxrd.services.rietveld_refiner import RietveldRefiner
+            fom_base = compute_fom(
+                obs_tt, obs_i, reference_peaks, tol=tolerance,
+                obs_range=obs_range, scale=scale,
+                scale_penalty=scale_penalty,
+                min_visible_frac=min_visible_frac,
+                obs_noise_floor=obs_noise_floor,
+            )
+            best_fom = fom_base
+            for r_val in po_grid:
+                r_f = float(r_val)
+                if abs(r_f - 1.0) < 1e-6:
+                    continue  # 已算 (fom_base)
+                corrected_phase = RietveldRefiner.apply_preferred_orientation(
+                    phase, direction=tuple(po_axis), r=r_f)
+                corrected_refs = corrected_phase.get_reference_peaks()
+                fom_r = compute_fom(
+                    obs_tt, obs_i, corrected_refs, tol=tolerance,
+                    obs_range=obs_range, scale=scale,
+                    scale_penalty=scale_penalty,
+                    min_visible_frac=min_visible_frac,
+                    obs_noise_floor=obs_noise_floor,
+                )
+                if fom_r.score < best_fom.score * (1.0 - _FOM_PO_IMPROVE_FRAC):
+                    best_fom = fom_r
+            fom = best_fom
+        else:
+            fom = compute_fom(
+                obs_tt,
+                obs_i,
+                reference_peaks,
+                tol=tolerance,
+                obs_range=obs_range,
+                scale=scale,
+                scale_penalty=scale_penalty,
+                min_visible_frac=min_visible_frac,
+                obs_noise_floor=obs_noise_floor,
+            )
         score = float(fom.score)
         if _is_pure_metal(phase):
             score *= _PURE_METAL_PENALTY

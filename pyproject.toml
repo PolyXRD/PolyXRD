@@ -66,6 +66,7 @@ dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "pyinstaller>=6.0",
+    "ruff>=0.6.0",
 ]
 mcp = [
     "mcp>=0.9.0",
@@ -93,3 +94,11 @@ omit = ["tests/*", "src/polyxrd/views/*"]
 
 [tool.coverage.report]
 show_missing = true
+
+# C 组工程: ruff 静态门禁.
+# 启用三个高信号严重缺陷规则 (F821 未定义名 / F601 字面字典重复键 / RUF012
+# 类属性可变默认值), 与 CI 步骤 `.github/workflows/test.yml` 的
+# `ruff check src/ --select F821,F601,RUF012` 完全一致
+# (services/ 的 F841/F541 等更严规则尚未纳入门禁, 待单独清理批次).
+[tool.ruff.lint]
+select = ["F821", "F601", "RUF012"]

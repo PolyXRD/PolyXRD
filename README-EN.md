@@ -142,7 +142,7 @@ Core design philosophy:
    Each slot states "download package: … → extracts to …"; match it and click "Import…" on that row
    → effective immediately, no restart
    ↓
-⑤ Start using it! See docs/5分钟上手_4-1样例.md (Chinese quick-start example)
+⑤ Start using it!
 ```
 
 > **Release contents**: a release provides the **Setup installer + Portable package + two COD index database packages**
@@ -156,10 +156,10 @@ Core design philosophy:
 
 > **About the PDF2-2004 database**: this is an ICDD commercial database, **copyright-protected; this repository does not distribute it and the release does not include it**.
 > Users with a valid license may prepare `PDF2_2004.sqlite` themselves and import it into the PDF2 slot via "External Database Manager…";
-> if unlicensed, simply leave the slot empty — all other features are unaffected (see [docs/外挂数据库使用说明.md](docs/外挂数据库使用说明.md), Chinese).
+> if unlicensed, simply leave the slot empty — all other features are unaffected.
 
 > Even with no database mounted, the program still works with its built-in **106** common reference phases.
-> Detailed instructions and troubleshooting: [docs/外挂数据库使用说明.md](docs/外挂数据库使用说明.md) (Chinese).
+> Detailed instructions and troubleshooting: see the paragraphs above (the "External Database Manager" dialog describes each slot).
 
 ### Option B · Developers / secondary development (run from source)
 

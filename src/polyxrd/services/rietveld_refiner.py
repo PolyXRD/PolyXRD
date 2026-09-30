@@ -18,7 +18,7 @@ import os
 import logging
 import time
 from pathlib import Path
-from typing import Callable, Optional
+from typing import ClassVar, Callable, Optional
 
 import numpy as np
 
@@ -44,7 +44,8 @@ class RietveldRefiner:
     """
 
     # ── v2.0.0 (W26/W27): 分阶段精修 ────────────────────────────────────
-    _MASK_ALL_ON = {
+    # ClassVar: 类常量, 仅以 dict(...) 复制读取, 不就地修改 (规避 RUF012).
+    _MASK_ALL_ON: ClassVar[dict] = {
         "scale": True, "background": True, "profile": True, "cell": True,
         "zero_shift": True, "texture": True, "displacement": True,
         "b_overall": True,
@@ -3775,8 +3776,15 @@ class RietveldRefiner:
 
     @staticmethod
     def _hkl_angle(hkl: tuple, direction: tuple) -> float:
-        """hkl 散射矢量与择优轴方向的夹角 (度); 退化方向返回 90。"""
-        h = np.asarray([float(v) for v in hkl], dtype=float)
+        """hkl 散射矢量与择优轴方向的夹角 (度); 退化方向返回 90。
+
+        六方/三方四指标 (h,k,i,l) 自动截前 3 维 (h,k,l) ——
+        与 _phase_to_reflist 的处理一致 (rietveld_refiner.py:1077-1082)。
+        """
+        h_full = tuple(hkl) if hkl else ()
+        if len(h_full) > 3:
+            h_full = h_full[:3]
+        h = np.asarray([float(v) for v in h_full], dtype=float)
         d = np.asarray([float(v) for v in direction], dtype=float)
         if np.linalg.norm(h) < 1e-12 or np.linalg.norm(d) < 1e-12:
             return 90.0
