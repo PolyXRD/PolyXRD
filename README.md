@@ -7,7 +7,7 @@
     峰检测 &nbsp;·&nbsp; 多物相定性检索 &nbsp;·&nbsp; Rietveld 结构精修 &nbsp;·&nbsp; Le Bail 晶胞精修 &nbsp;·&nbsp; 指标化 &nbsp;·&nbsp; 3D 结构可视化 &nbsp;·&nbsp; 三库外挂检索 (COD 无机物 / COD 全库 / PDF2-2004)
   </p>
   <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v2.3.0-blue?style=flat-square" /></a>
+    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v2.4.0-blue?style=flat-square" /></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
     &nbsp;
@@ -38,21 +38,21 @@
 
 ---
 
-## 🆕 最新版本 v2.3.0（2026-09-30）
+## 🆕 最新版本 v2.4.0（2026-09-30）
 
-**物相检索 / 组合精度大版本**（13 试样基准实证，详见 [docs/基准报告-物相检索与精修-v2.3.md](docs/基准报告-物相检索与精修-v2.3.md)）：
+**检索排序链路定稿 + 工程门禁补齐**（13 试样基准实证，详见 [docs/基准报告-物相检索-v1.md](docs/基准报告-物相检索-v1.md) 与 [docs/代码评估与改进-v2.3.0.md](docs/代码评估与改进-v2.3.0.md)）：
 
-| 指标 | v2.1.0 前 | v2.3.0 |
+| 指标 | v2.3.0 | v2.4.0 |
 |---|---|---|
-| 检索 B 级 top10 / MISS | 73% / 8 | **86% / 4** |
-| 组合相级命中 / 试样级完全命中 | 59.2% / 3 of 13 | **85.7% / 8 of 13** |
-| COD 结构回填 | — | 100% (49/49) |
+| 检索 A 级 top10 / MISS | 92% / 0 | **96% / 0** |
+| 检索 B 级 MISS / top3 | 4 / 63% | **2 / 67%** |
+| 检索 MRR (A / B) | 0.491 / 0.478 | **0.498 / 0.487** |
+| 组合相级 / 试样级完全命中 | 85.7% / 8 of 13 | 85.7% / 8 of 13 |
 
-- **检索 FoM 链改进**：可观测性下限默认启用（运动学弱线不计漏检）
-- **组合覆盖毯坍缩**：强度加权自解释率 + s* 尺度一致性，密集弱线相不再挤掉真相
-- **内建库 0.5.3**：修复 Cristobalite / NCM 811 / Boehmite / Albite 四个坏条目 + 全库审计脚本
-- 版本号单源化（config/mcp 由包 `__version__` 取值）
-- 👉 [下载 v2.3.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v2.3.0)
+- **B-4 PO（择优取向）感知检索评分默认启用**：对极密集峰表相做 March-Dollase `r` 网格搜索，回收 5-2 / 5-2b Muscovite 两个 B 级 MISS
+- **B-3 局部 MAD 噪声幅度下限**：13 试样 A/B 标尺复核为净负，默认关闭（代码与参数保留，可按需开启）
+- **CI ruff 静态门禁**（F821/F601/RUF012）+ **MCP 工具面冒烟**（工具覆盖率 11%→67%）
+- 👉 [下载 v2.4.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v2.4.0)
 
 ---
 
