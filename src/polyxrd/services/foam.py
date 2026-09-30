@@ -39,6 +39,65 @@ def _as_float_array(values) -> np.ndarray:
     return np.asarray([float(v) for v in values], dtype=float)
 
 
+def local_mad_threshold(
+    obs_two_theta,
+    obs_intensity,
+    window_deg: float = 5.0,
+    k: float = 3.0,
+    min_count: int = 3,
+) -> np.ndarray:
+    """对每个实验峰返回所在 2θ 局部窗口的强度 MAD×k 阈值 (B-3)。
+
+    用于 FoM 特异性项过滤"局部噪声峰": 强度 < 该阈值的峰视为局部噪声,
+    不计入未解释强度也不计入总强度, 抑制噪声峰淹没特异性项。
+
+      - 安静区 (峰强度都低): 局部 MAD 小 → 阈值低 → 弱峰保留;
+      - 噪声区 (噪声峰密集): 局部 MAD 大 → 阈值高 → 假峰剔除。
+
+    这是"局部 MAD 自适应幅度下限", 替代全局 ``min_prominence_frac``/
+    ``min_signal_abs`` 的一刀切口径 (P1-3 实验已证伪: 全局下限 0.02 会
+    误杀 Rutile 等真实弱峰)。
+
+    Args:
+        obs_two_theta: 实验峰 2θ (可迭代)
+        obs_intensity: 实验峰强度 (背景扣除后)
+        window_deg: 局部窗口宽度 (度), 默认 5.0
+        k: MAD 倍数 (3.0 ≈ 3σ 显著性)
+        min_count: 窗口内最少峰数, 不足回退到全局 MAD×k
+    Returns:
+        与 ``obs_two_theta`` 同序的阈值数组; 输入为空返回空数组。
+        阈值含义: 强度 ≥ 阈值 = 该峰显著高于局部噪声; < 阈值 = 视为局部噪声。
+    """
+    obs_arr = np.asarray([float(t) for t in obs_two_theta], dtype=float)
+    int_arr = np.asarray([float(v) for v in obs_intensity], dtype=float)
+    n = obs_arr.size
+    if n == 0:
+        return np.array([], dtype=float)
+    # 全局 MAD 兜底 (窗口样本不足时用)
+    g_med = float(np.median(int_arr))
+    g_mad = float(np.median(np.abs(int_arr - g_med))) + 1e-9
+    g_thr = float(k * 1.4826 * g_mad)
+    order = np.argsort(obs_arr)
+    tt = obs_arr[order]
+    ii = int_arr[order]
+    half = float(window_deg) / 2.0
+    lo_idx = np.searchsorted(tt, tt - half)
+    hi_idx = np.searchsorted(tt, tt + half)
+    thr_sorted = np.full(n, g_thr, dtype=float)  # 默认 = 全局阈值
+    for j in range(n):
+        l, r = int(lo_idx[j]), int(hi_idx[j])
+        win = ii[l:r]
+        if win.size < min_count:
+            continue  # 保留全局阈值
+        l_med = float(np.median(win))
+        l_mad = float(np.median(np.abs(win - l_med))) + 1e-9
+        thr_sorted[j] = float(k * 1.4826 * l_mad)
+    # 恢复原顺序
+    inv = np.empty(n, dtype=np.intp)
+    inv[order] = np.arange(n)
+    return thr_sorted[inv]
+
+
 # ── 匹配因子 (FoM) 调参常量 ────────────────────────────────
 _FOM_W_MIN = 0.3               # 参考峰基础权重 (强峰权重上限 1.0)
 _FOM_SPEC_WEIGHT = 0.30        # 未解释实验峰惩罚权重
@@ -55,6 +114,7 @@ def compute_fom(
     min_visible_frac: float = 0.0,
     scale=None,
     scale_penalty: float = 0.0,
+    obs_noise_floor=None,
 ) -> FoMResult:
     """物相参考峰 vs 实验峰的匹配因子 (0.9.11 加权互斥版)。
 
@@ -106,6 +166,10 @@ def compute_fom(
         min_visible_frac: 保守可观测阈值 (I_ref/Imax), 默认 0.0
         scale: 强度尺度因子 (正数 / "auto" / None)
         scale_penalty: 尺度因子降权强度 ∈ [0, 1), 默认 0.0 (关)
+        obs_noise_floor: 实验峰局部噪声阈值数组 (B-3, 与 obs_two_theta 同序同长)。
+            强度 < 该阈值的实验峰在特异性项里视为局部噪声, 不计入未解释
+            强度也不计入总强度 (位置项/漏峰项不受影响)。None = 不过滤
+            (默认行为与 v2.3 一致)。常用 :func:`local_mad_threshold` 计算。
     Returns:
         FoMResult (score 越小越好; scale/scale_rel 记录 s* 与相对强度)
     """
@@ -236,19 +300,31 @@ def compute_fom(
     bad = (sum_dev + missed_w) / w_sum
     missed = len(vis) - matched
 
-    # ── 3. 特异性: 未被解释的实验峰 (v2.1 P1-3: 强度加权) ─────
+    # ── 3. 特异性: 未被解释的实验峰 (v2.1 P1-3: 强度加权; B-3: 局部 MAD 过滤) ──
     # 旧口径 = 未解释峰数/总峰数 —— 峰检测无幅度下限时, 噪声峰(数多但强度低)
     # 会把该比项推到 ~0.88, 特异性惩罚被打满, FoM 区分力丧失。
-    # 改为强度加权: Σ(未解释峰强度)/Σ(全部观测峰强度) —— 噪声峰贡献的强度
+    # v2.1 改为强度加权: Σ(未解释峰强度)/Σ(全部观测峰强度) —— 噪声峰贡献的强度
     # 占比天然很小, 而一条真正强而未被解释的峰仍能给出有力惩罚。
+    # B-3 进一步: 用 obs_noise_floor 把"显著低于局部噪声"的峰从分母/分子里
+    # 剔除 —— 噪声区密集假峰的累积强度(~28% 总强度)不再淹没特异性项,
+    # 安静区弱峰强度虽低但局部 MAD 也低→不会被剔, 保留其特异性贡献。
     n_obs = int(obs_tt.size)
     unexplained = n_obs - len(used_obs)
-    total_int = float(np.sum(obs_int)) if n_obs else 0.0
+    if obs_noise_floor is not None:
+        noise_arr = np.asarray([float(v) for v in obs_noise_floor], dtype=float)
+        if noise_arr.size == n_obs:
+            sig_mask = obs_int >= noise_arr
+        else:
+            sig_mask = np.ones(n_obs, dtype=bool)
+    else:
+        sig_mask = np.ones(n_obs, dtype=bool)
+    total_int = float(np.sum(obs_int[sig_mask])) if n_obs else 0.0
     if n_obs == 0:
         unexp_ratio = 0.0
     elif total_int > 1e-12:
-        unexp_int = float(np.sum(
-            obs_int[j] for j in range(n_obs) if j not in used_obs
+        unexp_int = float(sum(
+            float(obs_int[j]) for j in range(n_obs)
+            if j not in used_obs and sig_mask[j]
         ))
         unexp_ratio = unexp_int / total_int
     else:
@@ -279,6 +355,11 @@ def compute_fom(
         if scale_penalty > 0:
             score *= (1.0 + scale_penalty * (1.0 - scale_rel))
 
+    # B-3: unexplained_obs/total_obs 按"显著峰"口径 (与特异性项同口径),
+    # 让 FoMResult.specificity 属性反映显著峰的解释率而非全部峰。
+    sig_total = int(np.sum(sig_mask)) if n_obs else 0
+    sig_unexplained = sig_total - sum(1 for j in used_obs if sig_mask[j]) \
+        if n_obs else 0
     return FoMResult(
         score=float(max(score, 1e-4)),
         matched=matched,
@@ -287,8 +368,8 @@ def compute_fom(
         intensity_score=ic,
         method="fom",
         delta_2theta=float(tol),
-        unexplained_obs=int(unexplained),
-        total_obs=n_obs,
+        unexplained_obs=int(sig_unexplained),
+        total_obs=sig_total,
         scale=float(s_star),
         scale_rel=float(scale_rel),
     )

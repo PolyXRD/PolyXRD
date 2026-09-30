@@ -36,7 +36,12 @@ jobs:
       - name: Install project + test deps
         run: |
           python -m pip install --upgrade pip
-          pip install -e .[dev]
+          pip install -e .[dev,mcp]
+
+      - name: Ruff static gate (F821/F601/RUF012)
+        # C 组工程: 全局严重缺陷门禁. services/ 是核心算法层, 后续可扩到 F841/F541
+        # 等更严规则 (当前 43 个, 待单独清理批次).
+        run: ruff check src/ --select F821,F601,RUF012
 
       - name: Run test suite
         run: pytest -q --tb=short
