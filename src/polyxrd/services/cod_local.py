@@ -500,7 +500,7 @@ def parse_atom_sites_from_cif(text: str) -> list[dict]:
 
 # ── SQLite 连接/表结构 ────────────────────────────────────────
 
-_SCHEMA_SQL = f"""
+_SCHEMA_SQL = """
 PRAGMA journal_mode = WAL;
 PRAGMA synchronous = NORMAL;
 PRAGMA cache_size = -65536;    -- 64 MB cache

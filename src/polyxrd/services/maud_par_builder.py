@@ -374,7 +374,7 @@ def cod_id_to_cif_path(cod_id: int, cod_root: Path) -> Path:
 
 def detect_maud_root(prefer: str = "MAUD3") -> Path:
     """默认查找 C:\\\\MAUD3 (优先) 或 C:\\\\MAUD2 (回退)."""
-    candidates = [Path(f"C:\\{prefer}"), Path(f"C:\\MAUD2"), Path(f"C:\\MAUD3")]
+    candidates = [Path(f"C:\\{prefer}"), Path("C:\\MAUD2"), Path("C:\\MAUD3")]
     for c in candidates:
         if (c / "jdk" / "bin" / "java.exe").exists():
             return c

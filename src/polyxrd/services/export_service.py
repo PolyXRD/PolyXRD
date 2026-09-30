@@ -122,7 +122,7 @@ class ExportService:
                         f.write(f"            α={lat.alpha:.2f}, "
                                 f"β={lat.beta:.2f}, γ={lat.gamma:.2f}°\n")
                     else:
-                        f.write(f"  晶格参数: -\n")
+                        f.write("  晶格参数: -\n")
                     f.write(f"  空间群: {phase.space_group}\n")
                     f.write(f"  质量分数: {phase.weight_fraction:.2f} wt%\n")
                     if phase.reference_peaks:
