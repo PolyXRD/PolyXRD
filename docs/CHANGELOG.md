@@ -2741,9 +2741,12 @@ DW 统计量能区分"残差是白噪声"还是"逐点相关（模型不完备�
 > **定位**：v2.3.0 发布后对检索排序链路的补强（承接 S19 残余 MISS）。
 > 相关改动由外部评估提出，**经第二方独立复核 + 13 试样扫参标定后定稿**；
 > 完整复核记录见 `docs/代码评估与改进-v2.3.0.md`（§9 复核订正）。
-> **已发布**：tag `v2.4.0`（main，`3447427..` 之后）；五处版本号已 bump，Setup + Portable
-> 均已重建并通过四轮二进制验收（SHA-256 独立重算 / Portable 结构+启动 / 冻结版 GUI
-> 启动含版本号断言 / 静默安装到全新目录）。
+> **已发布**：tag `v2.4.0`（main，commit `91fad84`）；五处版本号已 bump，Setup + Portable
+> 均已重建并通过五轮二进制验收（SHA-256 独立重算 / Portable 结构+启动 / 冻结版 GUI
+> 启动含版本号断言 / 静默安装到全新目录 / 安装版 EXE 启动）。
+> **注**：首轮 23:32 的产物被遗留的 `schtasks` 构建任务于 23:59 二次触发覆盖
+> （构建含 Build Date 导致字节变化），已改用 00:10 重建产物重新完成全部验收后再发布，
+> 远端 `size + digest` 与本地逐项比对一致。
 
 ### 检索排序链路（`services/phase_identifier.py` / `services/foam.py`）
 
@@ -2790,7 +2793,7 @@ DW 统计量能区分"残差是白噪声"还是"逐点相关（模型不完备�
 
 | 附件 | 体积 | SHA-256（前 16 位） | 说明 |
 |---|---|---|---|
-| `PolyXRD-Setup-v2.4.0.exe` | 258,861,276 B（246.9 MB） | `a2dc9664ed260c77` | Inno Setup 安装包，随 Release 分发 |
+| `PolyXRD-Setup-v2.4.0.exe` | 258,886,417 B（246.9 MB） | `fe1bce5b25fdd8f8` | Inno Setup 安装包，随 Release 分发 |
 | `SHA256-v2.4.0.txt` | — | — | Setup + Portable 校验值 |
 
 - 本版 Release **仅上传 Setup + SHA-256**（用户指定）；Portable zip 与 COD 索引库包
