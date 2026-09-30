@@ -37,6 +37,24 @@
 
 ---
 
+## 🆕 最新版本 v2.3.0（2026-09-30）
+
+**物相检索 / 组合精度大版本**（13 试样基准实证，详见 [docs/基准报告-物相检索与精修-v2.3.md](docs/基准报告-物相检索与精修-v2.3.md)）：
+
+| 指标 | v2.1.0 前 | v2.3.0 |
+|---|---|---|
+| 检索 B 级 top10 / MISS | 73% / 8 | **86% / 4** |
+| 组合相级命中 / 试样级完全命中 | 59.2% / 3 of 13 | **85.7% / 8 of 13** |
+| COD 结构回填 | — | 100% (49/49) |
+
+- **检索 FoM 链改进**：可观测性下限默认启用（运动学弱线不计漏检）
+- **组合覆盖毯坍缩**：强度加权自解释率 + s* 尺度一致性，密集弱线相不再挤掉真相
+- **内建库 0.5.3**：修复 Cristobalite / NCM 811 / Boehmite / Albite 四个坏条目 + 全库审计脚本
+- 版本号单源化（config/mcp 由包 `__version__` 取值）
+- 👉 [下载 v2.3.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v2.3.0)
+
+---
+
 ## ✨ 功能清单
 
 ### ① 数据处理流水线
@@ -112,7 +130,7 @@
 ### 方式 A · 普通用户 (推荐, 无需 Python)
 
 ```
-① 下载 PolyXRD-Setup-vX.Y.Z.exe (Windows x64)
+① 下载 PolyXRD-Setup-vX.Y.Z.exe (Windows x64) 或 Portable 便携包（解压即用）
    ↓
 ② 安装 (默认 C:\Program Files\PolyXRD\) 后直接运行 PolyXRD.exe
    ↓
@@ -126,9 +144,9 @@
 ⑤ 开始使用! 参考 docs/5分钟上手_4-1样例.md
 ```
 
-> **发布口径**：Release 仅提供 **Setup 安装包 + 两个 COD 索引库包**。
-> 便捷版（Portable）与 PDF2-2004 包**不随 Release 分发**（后者为 ICDD 版权库），
-> 需要时请联系作者。
+> **发布口径**：Release 提供 **Setup 安装包 + Portable 便携包 + 两个 COD 索引库包**
+> （Setup 241 MB / Portable 369 MB / 无机物索引 134 MB / 全库索引 206 MB）。
+> PDF2-2004 包为 ICDD 版权库，**不随 Release 分发**，需要时自行准备库文件。
 
 > **瘦身无机库说明**：索引式无机库不含内嵌 CIF。本机若有 COD 原始
 > `cod/cif/` 归档（四级分片目录）则直接按需读取；没有时会自动回退到 COD
