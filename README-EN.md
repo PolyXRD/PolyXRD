@@ -7,7 +7,7 @@
     Peak detection &nbsp;·&nbsp; Multi-phase qualitative search &nbsp;·&nbsp; Rietveld structure refinement &nbsp;·&nbsp; Le Bail cell refinement &nbsp;·&nbsp; Indexing &nbsp;·&nbsp; 3D structure visualization &nbsp;·&nbsp; Three external databases (COD Inorganics / COD Full / PDF2-2004)
   </p>
   <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v2.3.0-blue?style=flat-square" /></a>
+    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v2.4.0-blue?style=flat-square" /></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
     &nbsp;
@@ -38,21 +38,21 @@ Core design philosophy:
 
 ---
 
-## 🆕 Latest Release v2.3.0 (2026-09-30)
+## 🆕 Latest Release v2.4.0 (2026-09-30)
 
-**A major release for phase-search / combination accuracy** (validated on a 13-sample benchmark; see [docs/基准报告-物相检索与精修-v2.3.md](docs/基准报告-物相检索与精修-v2.3.md), Chinese):
+**Search-ranking chain finalized + engineering gates added** (validated on a 13-sample benchmark; see [docs/基准报告-物相检索-v1.md](docs/基准报告-物相检索-v1.md) and [docs/代码评估与改进-v2.3.0.md](docs/代码评估与改进-v2.3.0.md), Chinese):
 
-| Metric | Before v2.1.0 | v2.3.0 |
+| Metric | v2.3.0 | v2.4.0 |
 |---|---|---|
-| Search level-B top10 / MISS | 73% / 8 | **86% / 4** |
-| Combination phase-level hit / sample-level complete | 59.2% / 3 of 13 | **85.7% / 8 of 13** |
-| COD structure backfill | — | 100% (49/49) |
+| Search level-A top10 / MISS | 92% / 0 | **96% / 0** |
+| Search level-B MISS / top3 | 4 / 63% | **2 / 67%** |
+| Search MRR (level A / B) | 0.491 / 0.478 | **0.498 / 0.487** |
+| Combination phase-level hit / sample-level complete | 85.7% / 8 of 13 | 85.7% / 8 of 13 |
 
-- **Search FoM chain improvements**: observability floor enabled by default (kinematically weak lines no longer counted as misses)
-- **Coverage-blanket collapse in combination selection**: intensity-weighted self-recall + s\* scale consistency — dense weak-line phases no longer displace true phases
-- **Built-in library 0.5.3**: fixed four broken entries (Cristobalite / NCM 811 / Boehmite / Albite) + a library-wide audit script
-- Single-sourced version string (config/mcp now read the package `__version__`)
-- 👉 [Download v2.3.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v2.3.0)
+- **B-4 preferred-orientation-aware search scoring enabled by default**: March-Dollase `r` grid search for very dense reference-peak phases; recovers two level-B Muscovite MISS (5-2 / 5-2b)
+- **B-3 local-MAD noise floor**: measured as net-negative on the 13-sample A/B scale, disabled by default (code and parameters retained for opt-in)
+- **CI ruff static gate** (F821/F601/RUF012) + **MCP tool-surface smoke tests** (tool coverage 11% → 67%)
+- 👉 [Download v2.4.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v2.4.0)
 
 ---
 
@@ -275,5 +275,5 @@ When using this software, also comply with third-party license terms of upstream
 ---
 
 <div align="right">
-  <i>PolyXRD Team · 2025 — 2026 · doc version 2.3.0 (2026-09-30) · contact: sshztx@outlook.com</i>
+  <i>PolyXRD Team · 2025 — 2026 · doc version 2.4.0 (2026-09-30) · contact: sshztx@outlook.com</i>
 </div>
