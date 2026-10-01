@@ -525,6 +525,17 @@ class PhaseView(QWidget):
                 marked_peaks=list(marked),
             )
 
+    def _on_search_residual(self) -> None:
+        """仅对选中相解释不到的残差峰再检索 (v2.5 D2, 迭代式物相分析)。"""
+        with busy(self, tr("busy.identify")) as acquired:
+            if not acquired:
+                return
+            self._current_method = "fom"
+            self._vm.search_residual_peaks(
+                element_filter=self._filter_dict if self._filter_dict else None,
+                top_n=10,
+            )
+
     def _on_quick_identify(self) -> None:
         """快速识别（无元素过滤）"""
         with busy(self, tr("busy.identify")) as acquired:
@@ -666,9 +677,17 @@ class PhaseView(QWidget):
         act_marked = menu.addAction(tr("vw.phase_view.act_rematch_marked"))
         act_marked.setEnabled(bool(marked))
         act_marked.setToolTip(tr("vw.phase_view.act_rematch_marked_tip"))
+        # v2.5 D2: 仅对当前选中相解释不到的残差峰再检索
+        has_selected = bool(self._vm.selected_phases)
+        act_residual = menu.addAction(tr("vw.phase_view.act_search_residual"))
+        act_residual.setEnabled(has_selected)
+        act_residual.setToolTip(tr("vw.phase_view.act_search_residual_tip"))
         chosen = menu.exec(self._candidate_list.viewport().mapToGlobal(pos))
         if chosen is act_marked:
             self._on_rematch_marked(marked)
+            return
+        if chosen is act_residual:
+            self._on_search_residual()
             return
         if chosen is not act_export:
             return

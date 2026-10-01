@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "polyxrd"
-version = "2.4.0"
+version = "2.5.0"
 description = "X射线衍射仪数据分析软件 - 物相分析与Rietveld结构精修"
 readme = "README.md"
 # 双许可 (学术免费 / 商业需单独书面授权): SPDX 无对应标准标识符,

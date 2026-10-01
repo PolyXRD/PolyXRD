@@ -115,6 +115,7 @@ def compute_fom(
     scale=None,
     scale_penalty: float = 0.0,
     obs_noise_floor=None,
+    zero_shift: float = 0.0,
 ) -> FoMResult:
     """物相参考峰 vs 实验峰的匹配因子 (0.9.11 加权互斥版)。
 
@@ -170,10 +171,15 @@ def compute_fom(
             强度 < 该阈值的实验峰在特异性项里视为局部噪声, 不计入未解释
             强度也不计入总强度 (位置项/漏峰项不受影响)。None = 不过滤
             (默认行为与 v2.3 一致)。常用 :func:`local_mad_threshold` 计算。
+        zero_shift: 参考峰 2θ 整体偏移 (度, B-6)。正值 = 参考峰右移,
+            负值 = 左移。用于 per-entry 零点校正 (仿 Match! 自动零点校正):
+            对每个候选在小网格上扫 dz, 取最优 FoM。默认 0.0 = 不偏移
+            (与历史行为完全一致)。
     Returns:
         FoMResult (score 越小越好; scale/scale_rel 记录 s* 与相对强度)
     """
-    refs = [(float(tt), float(i)) for _, tt, i in ref_peaks if i is not None]
+    zs = float(zero_shift)
+    refs = [(float(tt) + zs, float(i)) for _, tt, i in ref_peaks if i is not None]
     if not refs:
         return FoMResult(score=999.0, matched=0, missed=0,
                          delta_2theta=float(tol))
@@ -431,11 +437,18 @@ def profile_fitting_score(
     xrd,
     phase,
     fwhm: Optional[float] = None,
+    baseline_rwp: Optional[float] = None,
 ) -> dict:
     """峰型匹配评分 (v4 风格): 不依赖峰表, 直接比实测谱 vs 参考棒谱合成谱。
 
+    Args:
+        baseline_rwp: 无该相时的基线 Rwp (%)。提供时返回 ``delta_rwp``
+            = baseline_rwp - rwp, 即加入该相后的 Rwp 降幅 (Match! 口径)。
+            None 时不返回 delta_rwp。
+
     Returns:
-        {"corr": 皮尔逊相关, "scale": 最优尺度因子, "rwp": Rwp, "n_peaks": int}
+        {"corr": 皮尔逊相关, "scale": 最优尺度因子, "rwp": Rwp%,
+         "n_peaks": int, "delta_rwp": float (仅 baseline_rwp 提供时)}
     """
     import numpy as _np
     grid = _np.asarray(xrd.two_theta, dtype=float)
@@ -443,7 +456,10 @@ def profile_fitting_score(
     refs = [(float(tt), float(i)) for _, tt, i in phase.get_reference_peaks()
             if i is not None]
     if not refs:
-        return {"corr": 0.0, "scale": 0.0, "rwp": 999.0, "n_peaks": 0}
+        out = {"corr": 0.0, "scale": 0.0, "rwp": 999.0, "n_peaks": 0}
+        if baseline_rwp is not None:
+            out["delta_rwp"] = 0.0
+        return out
     if fwhm is None or fwhm <= 0:
         fwhm = 0.2
     sigma = fwhm / 2.355
@@ -461,7 +477,10 @@ def profile_fitting_score(
     corr = float(_np.dot(obs_n, mod_n) / den) if den > 1e-12 else 0.0
     resid = obs - scale * ymodel
     rwp = float(_np.sqrt(_np.sum(resid ** 2) / max(_np.sum(obs ** 2), 1e-12)))
-    return {"corr": corr, "scale": scale, "rwp": rwp * 100.0, "n_peaks": len(refs)}
+    out = {"corr": corr, "scale": scale, "rwp": rwp * 100.0, "n_peaks": len(refs)}
+    if baseline_rwp is not None:
+        out["delta_rwp"] = float(baseline_rwp) - rwp * 100.0
+    return out
 
 
 # ─────────────────────────────────────────────────────────────

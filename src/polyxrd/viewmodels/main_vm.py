@@ -61,6 +61,7 @@ class MainViewModel(QObject):
         self._data_vm.error.connect(self._on_error)
         self._phase_vm.peaks_detected.connect(self._on_peaks_detected)
         self._phase_vm.error.connect(self._on_error)
+        self._phase_vm.info.connect(self.status_changed.emit)
         self._phase_vm.phase_identified.connect(self._on_phase_identified)
         self._refinement_vm.refinement_completed.connect(self._on_refinement_completed)
         self._refinement_vm.refinement_log.connect(self.refinement_log.emit)
@@ -330,6 +331,23 @@ class MainViewModel(QObject):
         self.status_changed.emit(tr("status.identifying_profile"))
         self._phase_vm.identify_phases_profile_fitting(
             data, element_filter=element_filter, top_n=top_n, fwhm=fwhm
+        )
+
+    def search_residual_peaks(
+        self,
+        element_filter: Optional[dict] = None,
+        top_n: int = 5,
+        tolerance: float = 0.30,
+    ) -> None:
+        """仅对选中相解释不到的残差峰再检索 (迭代式物相分析)。"""
+        data = self.current_data
+        if data is None:
+            self.error_occurred.emit("请先加载数据")
+            return
+        self.status_changed.emit(tr("status.identifying_phases"))
+        self._phase_vm.search_residual_peaks(
+            data, element_filter=element_filter, top_n=top_n,
+            tolerance=tolerance,
         )
 
     def select_phase(self, phase: Phase) -> None:

@@ -21,6 +21,23 @@ import numpy as np
 # (覆盖项主导, FoM 项在 13 试样上从未翻盘) → 维持 0.05 不变。
 _COMBO_FOM_WEIGHT = 0.05
 
+# v2.5 E1: 按 FoM 质量缩放各相 cover_vector, 让少峰但 FoM 优的相
+#   在联合覆盖中不被多峰相稀释。factor = 1 + boost*(1 - norm_fom),
+#   norm_fom 为池内 FoM 分数 min-max 归一 (0=最优, 1=最差)。
+#   boost=0 退回原行为 (纯覆盖主导)。
+#   v2.5 消融: 关 E1 后组合 44/49 与 10/13 完全不变 → 确为中性基础设施。
+_COMBO_FOM_COVER_BOOST = 0.5
+
+# v2.5 E2: 池保底回收阈值。matched_peaks >= 此值的候选即使 FoM 排名在
+#   pool_top_n 之外也强制进入 B&B 池。2 = 与 B-1 最小关联峰口径一致。
+#   v2.5 消融: 关 E2 后组合 44/49 与 10/13 完全不变 → 确为中性基础设施。
+_COMBO_KEEP_MATCHED = 2
+
+# v2.5 E3: B&B 目标中匹配峰数奖励权重。每多匹配 1 个实测峰给此权重的奖励,
+#   让弱线相 (self-recall 低但 matched_peaks 高) 能与强线覆盖毯相竞争。
+#   0 = 关闭 (退回纯覆盖+FoM)。
+_COMBO_MATCHED_WEIGHT = 0.0
+
 # S14: 覆盖尺度一致性锐化指数。c = (min/max)^p; p=1 为线性 min/max,
 # p=2 对"弱线配强峰"的失配惩罚更狠 (400+ 线密集相在强度维也稠密,
 # 线性 ratio 压不塌其覆盖毯)。
@@ -103,8 +120,45 @@ _FOM_PO_IMPROVE_FRAC = 0.10
 # Zircon 而非 Cristobalite → B-5 未能解决 5-1 组合缺失; 同时退化 3-1
 # (Corundum 2→6, Fluorite 3→7) 与 5-2b (Muscovite 10→19). 5-1 的真问题在
 # build_refinement_combination 的选择策略, 非搜索截断. 故默认关闭, 留参数供按需开启.
+# v2.5 C3 复测: 改用 ΔRwp 排序 + 双过滤后, w=0.3 仍使 B 级 MISS 2→3
+# (Clinochlore 被挤出 top20)、B top3 32→31 → 默认仍关, 基础设施保留。
 _FOM_PFSM_TOP_N = 50
 _FOM_PFSM_WEIGHT = 0.0
+
+# B-5 PFSM 双过滤 (仿 Match! "Minimum Rwp reduction required" +
+# "Minimum intensity scale factor"):
+#   - delta_rwp < _FOM_PFSM_MIN_RWP_REDUCTION (%) 的候选视为伪阳性, 不进重排;
+#   - scale < _FOM_PFSM_MIN_SCALE 的候选视为微量/噪声, 不进重排。
+# 开启 PFSM 时 (fom_pfsm_weight > 0) 生效; 排序指标用 ΔRwp (替代旧的 corr,
+# 因 corr 对背景/峰形整体形状敏感, 微量相弱贡献被主相淹没; ΔRwp 直接度量
+# "该相对解释残差的贡献", 物理意义更明确)。
+_FOM_PFSM_MIN_RWP_REDUCTION = 0.5
+_FOM_PFSM_MIN_SCALE = 0.02
+
+# B-6: per-entry 零点偏移网格搜索 (仿 Match! Automatic zero point adaptation)。
+# 样品位移 / 仪器零点残差会使峰位整体偏移, 全局校正只能修一个平均偏移;
+# per-entry 在小网格上扫 dz 取最优 FoM, 让真值相"对得更准"。
+# 两道护栏 (借鉴 B-4 PO 经验):
+#   护栏1 幅度限制: |dz| ≤ 0.15°, 超过 = 数据质量问题而非零点问题;
+#   护栏2 改善阈值: dz≠0 的 FoM 须比 dz=0 好 > 10% 才采用, 避免"轻微优化"
+#     的伪匹配挤掉真相 (与 B-4 PO 同款 0.10 口径; 0.05 实测让 7-2 少峰相
+#     Hornblende/Zircon 被密集相挤到 top20 外, A 级 MISS 0→2)。
+# **v2.5 验收消融 (13 试样) 实测为净负 → 默认关闭** (与 B-3 同款处置):
+#   唯一收益 = B top10 42→44, 但该收益与 B-7 重叠 (关 B-6 保 B-7 时 B top10
+#   仍为 44); 代价 = A MISS 0→1 (7-2 Zircon)、A top3 33→32、MRR_A 0.499→0.493、
+#   MRR_B 0.488→0.485、组合相级 45→44 (7-2 Clinochlore 被挤掉)。
+#   参数 `fom_zero_grid` 保留, 供零点漂移明显的谱按需开启
+#   (grid=(±0.05,0) + frac=0.20 亦验证为次优解, 逊于直接关闭)。
+_FOM_ZERO_GRID: Optional[tuple] = None
+_FOM_ZERO_IMPROVE_FRAC = 0.10
+
+# B-7: 最小关联峰数惩罚 (仿 Match! "Min. no. of corr. peaks" 默认 2)。
+# 窄 2θ 窗口内只有 1 条参考峰能对上实测峰时, 偶然匹配概率高 → 伪阳性。
+# 用 ×2 惩罚而非直接淘汰, 避免误杀高对称少峰相 (Zircon 等)。
+# **v2.5 验收消融: 本版组合改善 (42→44 相级 / 8→10 试样级) 与检索 B top10
+# +2 的唯一真实来源**; E1/E2/B-6 对结果均无贡献 (见 docs/CHANGELOG §[2.5.0])。
+_FOM_MIN_CORR_PEAKS = 2
+_FOM_LOW_CORR_PENALTY = 2.0
 
 
 def _combo_fom_weight(obs_int) -> float:
@@ -613,7 +667,9 @@ class PhaseIdentifier:
     def _branch_and_bound_select(masks, metal_flags, n_obs,
                                  size_targets=None, scores=None,
                                  cover_vectors=None,
-                                 fom_weight: float = 0.0) -> list:
+                                 fom_weight: float = 0.0,
+                                 matched_peaks=None,
+                                 matched_weight: float = 0.0) -> list:
         """分支定界: 选择使"联合覆盖"最大的物相子集。
 
         目标函数 (对给定规模 k):
@@ -665,6 +721,11 @@ class PhaseIdentifier:
             obj = cov
             if fom_weight and scores:
                 obj = cov - fom_weight * sum(scores[i] for i in combo)
+            # v2.5 E3: 匹配峰数奖励 — 多峰匹配 (matched_peaks 高) 是真相强信号,
+            #   即使弱线相被 self-recall 压塌, 匹配峰数也能把它拉回竞争。
+            if matched_weight and matched_peaks:
+                obj = obj + matched_weight * sum(
+                    float(matched_peaks[i]) for i in combo)
             if obj > best_cov_k[k] + 1e-12 or (
                 abs(obj - best_cov_k[k]) <= 1e-12 and best_combo_k[k] is not None and scores
                 and sum(scores[i] for i in combo)
@@ -823,11 +884,24 @@ class PhaseIdentifier:
         if pool_top_n is None:
             pool_top_n = (max(8, 2 * expected_count)
                           if expected_count and expected_count > 0 else 12)
-        pool_src = kept[:max(int(pool_top_n), 1)]
-        dropped = kept[max(int(pool_top_n), 1):]
+        cut = max(int(pool_top_n), 1)
+        pool_src = list(kept[:cut])
+        dropped = kept[cut:]
+        # v2.5 E2: matched_peaks >= _COMBO_KEEP_MATCHED 的相不被池裁剪丢弃
+        #   (与 B-1 最小关联峰口径一致: 多峰匹配 = 真候选信号, 即使 FoM 排名
+        #    靠后也应进入 B&B, 否则 5-2b Muscovite(rank11) / 7-1 Kaolinite(rank15)
+        #    这类真相会被一刀切)。只追加, 不重排。
+        rescued = [m for m in dropped
+                   if getattr(m, "matched_peaks", 0) >= _COMBO_KEEP_MATCHED]
+        if rescued:
+            pool_src.extend(rescued)
+            if log_cb:
+                names = ", ".join(f"{m.phase.name}" for m in rescued)
+                log_cb(f"[combo] 池保底回收 (matched>={_COMBO_KEEP_MATCHED}): [{names}]")
+        dropped = [m for m in dropped if m not in rescued]
         if log_cb and dropped:
             names = ", ".join(
-                f"{m.phase.name}(rank {i + len(pool_src) + 1})"
+                f"{m.phase.name}(rank {i + cut + 1})"
                 for i, m in enumerate(dropped))
             log_cb(f"[combo] 被池裁剪丢弃 (pool_top_n={pool_top_n}): [{names}]")
 
@@ -853,6 +927,18 @@ class PhaseIdentifier:
         if not pool:
             return []
 
+        # v2.5 E1: 按 FoM 质量缩放 cover_vector —— 少峰但 FoM 优的相
+        #   不被多峰相的覆盖毯稀释。池内 min-max 归一, factor∈[1, 1+boost]。
+        if _COMBO_FOM_COVER_BOOST > 0.0:
+            sc = np.array([float(m.score) for m in pool], dtype=float)
+            smin, smax = float(sc.min()), float(sc.max())
+            rng = smax - smin
+            if rng > 1e-12:
+                norm = (sc - smin) / rng          # 0=最优, 1=最差
+                factors = 1.0 + _COMBO_FOM_COVER_BOOST * (1.0 - norm)
+                for i, f in enumerate(factors):
+                    cover_vectors[i] = cover_vectors[i] * float(f)
+
         # 4. B&B 全局选择 (S02: 目标 = 强度 × 命中质量的联合覆盖)
         metal_flags = [_is_pure_metal(m.phase) for m in pool]
         if expected_count and expected_count > 0:
@@ -860,8 +946,9 @@ class PhaseIdentifier:
         else:
             size_targets = None
         scores = [m.score for m in pool]
+        matched_list = [getattr(m, "matched_peaks", 0) for m in pool]
 
-        # 规模退化: 若 expected_count > 池内可解释候选数, 池全选
+        # 规模退化: 若 expected_count >= 池内可解释候选数, 池全选
         if size_targets and size_targets[0] >= len(pool):
             return [m.phase for m in pool]
 
@@ -869,6 +956,8 @@ class PhaseIdentifier:
             masks, metal_flags, len(obs_tt), size_targets, scores,
             cover_vectors=cover_vectors,
             fom_weight=_combo_fom_weight(obs_int),
+            matched_peaks=matched_list,
+            matched_weight=_COMBO_MATCHED_WEIGHT,
         )
         chosen = [pool[i].phase for i in selected]
         if log_cb:
@@ -903,6 +992,7 @@ class PhaseIdentifier:
         fom_po_axis: tuple = _FOM_PO_AXIS,
         fom_pfsm_top_n: int = _FOM_PFSM_TOP_N,
         fom_pfsm_weight: float = _FOM_PFSM_WEIGHT,
+        fom_zero_grid: Optional[tuple] = _FOM_ZERO_GRID,
     ) -> list[PhaseMatchResult]:
         """执行物相识别（支持三态元素过滤）
 
@@ -923,6 +1013,9 @@ class PhaseIdentifier:
             fom_pfsm_weight: B-5 PFSM 重排权重 w ∈ [0, 1] (默认 ``_FOM_PFSM_WEIGHT``
                 = 0.0, 即默认关闭; >0 才启用 PFSM 重排);
                 综合分 = (1-w)·FoM_rank + w·PFSM_rank, 按升序重排。
+            fom_zero_grid: B-6 per-entry 零点偏移网格 (默认 ``_FOM_ZERO_GRID``
+                = None, 即默认关闭 —— 13 试样消融实测净负, 见常量注释);
+                传入如 (-0.05, 0.0, 0.05) 可按需启用零点搜索。
 
         Returns:
             匹配结果列表，按FOM升序排列 (FOM越低越好)
@@ -951,6 +1044,7 @@ class PhaseIdentifier:
                 obs_local_mad_window=fom_local_mad_window,
                 po_grid=fom_po_grid,
                 po_axis=fom_po_axis,
+                zero_grid=fom_zero_grid,
             )
             results.append(match_result)
 
@@ -958,9 +1052,10 @@ class PhaseIdentifier:
 
         # ── B-5: PFSM (峰型拟合) 重排 top N 候选 ───────────────────
         # 对 FoM 排序后的 top fom_pfsm_top_n 候选算 profile_fitting_score
-        # (实测谱 vs 单相合成谱相关性), 按综合分 (1-w)·FoM_rank + w·PFSM_rank
-        # 重排。PFSM 不依赖峰位一一匹配, 对密集峰表相 (Cristobalite 71 线)
-        # 的弱线漏检更稳健。
+        # (实测谱 vs 单相合成谱), 按综合分 (1-w)·FoM_rank + w·PFSM_rank 重排。
+        # v2.5 起 PFSM 排序指标改用 ΔRwp (替代旧的 corr): corr 对背景/峰形整体
+        # 形状敏感, 微量相弱贡献被主相淹没; ΔRwp 直接度量"该相对解释残差的贡献"。
+        # 双过滤 (仿 Match!): delta_rwp < 0.5% 或 scale < 0.02 的候选不进重排。
         if (fom_pfsm_top_n > 0 and fom_pfsm_weight > 0
                 and len(results) > 1
                 and data is not None and getattr(data, "two_theta", None) is not None):
@@ -968,25 +1063,35 @@ class PhaseIdentifier:
             n_pfsm = min(fom_pfsm_top_n, len(results))
             top = results[:n_pfsm]
             try:
-                pfsm = [profile_fitting_score(data, r.phase) for r in top]
+                # baseline_rwp = 100.0 (无任何相时残差=全谱, Rwp=100%)
+                pfsm = [profile_fitting_score(data, r.phase, baseline_rwp=100.0)
+                        for r in top]
             except Exception:
                 pfsm = None
             if pfsm is not None:
-                # FoM rank = 0..n-1 (已升序)
-                fom_ranks = list(range(n_pfsm))
-                # PFSM rank: corr 越高越好 → 按 -corr 升序取 rank
-                corr_order = sorted(range(n_pfsm),
-                                    key=lambda i: -float(pfsm[i].get("corr", 0.0)))
-                pfsm_ranks = [0] * n_pfsm
-                for rank, i in enumerate(corr_order):
-                    pfsm_ranks[i] = rank
-                w = float(fom_pfsm_weight)
-                combined = [
-                    (i, (1.0 - w) * fom_ranks[i] + w * pfsm_ranks[i])
-                    for i in range(n_pfsm)
+                # 双过滤: 只保留 delta_rwp 与 scale 达标的候选参与重排
+                keep_mask = [
+                    float(p.get("delta_rwp", 0.0)) >= _FOM_PFSM_MIN_RWP_REDUCTION
+                    and float(p.get("scale", 0.0)) >= _FOM_PFSM_MIN_SCALE
+                    for p in pfsm
                 ]
-                combined.sort(key=lambda x: x[1])
-                results = [top[i] for i, _ in combined] + results[n_pfsm:]
+                kept_idx = [i for i, k in enumerate(keep_mask) if k]
+                if kept_idx:
+                    # FoM rank = 0..n-1 (已升序)
+                    fom_ranks = list(range(n_pfsm))
+                    # PFSM rank: delta_rwp 越高越好 → 按 -delta_rwp 升序取 rank
+                    drwp_order = sorted(kept_idx,
+                                        key=lambda i: -float(pfsm[i].get("delta_rwp", 0.0)))
+                    pfsm_ranks = [n_pfsm] * n_pfsm  # 未通过过滤 → 排末尾
+                    for rank, i in enumerate(drwp_order):
+                        pfsm_ranks[i] = rank
+                    w = float(fom_pfsm_weight)
+                    combined = [
+                        (i, (1.0 - w) * fom_ranks[i] + w * pfsm_ranks[i])
+                        for i in range(n_pfsm)
+                    ]
+                    combined.sort(key=lambda x: x[1])
+                    results = [top[i] for i, _ in combined] + results[n_pfsm:]
 
         # ── 组合重排: 纯金属比例限制在 20% 以内, 避免过多纯金属挤占前 top_n ──
         if len(results) > 0:
@@ -1068,6 +1173,7 @@ class PhaseIdentifier:
         obs_local_mad_window: float = 5.0,
         po_grid: Optional[tuple] = None,
         po_axis: tuple = (0, 0, 1),
+        zero_grid: Optional[tuple] = _FOM_ZERO_GRID,
     ) -> PhaseMatchResult:
         """基于匹配因子 (FoM) 匹配单个物相。
 
@@ -1089,6 +1195,11 @@ class PhaseIdentifier:
         的 FoM 作为该候选最终分。r=1.0 = 无取向 (与 v2.3 一致)。无 hkl 信息
         的候选跳过 PO 搜索 (用原参考峰表)。
 
+        B-6: ``zero_grid`` 非空时, 对 (PO 校正后的) 参考峰在 dz 网格上做
+        per-entry 零点偏移搜索 (仿 Match! 自动零点校正), 取最优 dz 的 FoM。
+        默认 None = 不启用 (13 试样消融实测净负, 见 ``_FOM_ZERO_GRID`` 注释)。
+        护栏: |dz| ≤ 0.15° 且改善 > ``_FOM_ZERO_IMPROVE_FRAC`` (0.10) 才采用。
+
         Args:
             phase: 候选物相
             peaks: 实验峰列表
@@ -1098,6 +1209,8 @@ class PhaseIdentifier:
             po_grid: B-4 March-Dollase r 网格 (如 (0.6, 0.8, 1.0, 1.3));
                 None = 不启用 PO 搜索
             po_axis: B-4 织构轴方向, 默认 (0,0,1) = c 轴
+            zero_grid: B-6 零点偏移网格 (如 (-0.10, -0.05, 0.0, 0.05, 0.10));
+                None = 不启用零点搜索
 
         Returns:
             PhaseMatchResult (score 越低越好)
@@ -1138,6 +1251,7 @@ class PhaseIdentifier:
                 obs_noise_floor=obs_noise_floor,
             )
             best_fom = fom_base
+            best_refs_for_zero = reference_peaks
             for r_val in po_grid:
                 r_f = float(r_val)
                 if abs(r_f - 1.0) < 1e-6:
@@ -1154,7 +1268,9 @@ class PhaseIdentifier:
                 )
                 if fom_r.score < best_fom.score * (1.0 - _FOM_PO_IMPROVE_FRAC):
                     best_fom = fom_r
+                    best_refs_for_zero = corrected_refs
             fom = best_fom
+            refs_for_zero = best_refs_for_zero
         else:
             fom = compute_fom(
                 obs_tt,
@@ -1167,7 +1283,35 @@ class PhaseIdentifier:
                 min_visible_frac=min_visible_frac,
                 obs_noise_floor=obs_noise_floor,
             )
+            refs_for_zero = reference_peaks
+
+        # B-6: per-entry 零点偏移网格搜索 (在 PO 选出的最佳参考峰上扫 dz)
+        # 护栏1: |dz| ≤ 0.15°; 护栏2: 改善 > _FOM_ZERO_IMPROVE_FRAC 才采用。
+        best_dz = 0.0
+        if zero_grid:
+            fom_base = fom
+            for dz_val in zero_grid:
+                dz = float(dz_val)
+                if abs(dz) < 1e-9:
+                    continue  # dz=0 已算 (fom_base)
+                if abs(dz) > 0.15:
+                    continue  # 护栏1: 幅度过大 = 数据质量问题
+                fom_dz = compute_fom(
+                    obs_tt, obs_i, refs_for_zero, tol=tolerance,
+                    obs_range=obs_range, scale=scale,
+                    scale_penalty=scale_penalty,
+                    min_visible_frac=min_visible_frac,
+                    obs_noise_floor=obs_noise_floor,
+                    zero_shift=dz,
+                )
+                if fom_dz.score < fom_base.score * (1.0 - _FOM_ZERO_IMPROVE_FRAC):
+                    fom = fom_dz
+                    best_dz = dz
+
         score = float(fom.score)
+        # B-7: 关联峰数 < 2 时惩罚 (抑制窄窗口偶然匹配的伪阳性)
+        if fom.matched < _FOM_MIN_CORR_PEAKS:
+            score *= _FOM_LOW_CORR_PENALTY
         if _is_pure_metal(phase):
             score *= _PURE_METAL_PENALTY
         score = max(score, 0.01)
@@ -1179,6 +1323,7 @@ class PhaseIdentifier:
             total_peaks=total_ref_peaks,
             confidence=confidence_from_score(score),
             method="fom",
+            zero_shift=best_dz,
         )
 
     def add_phase(self, phase: Phase) -> None:

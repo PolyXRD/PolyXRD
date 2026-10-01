@@ -331,6 +331,7 @@ translations = {
         "peak_finder_hi_failed": "High-precision peak detection failed: {error}",
         "no_peaks": "Please detect peaks first",
         "no_phase_selected": "Please select phases first",
+        "no_residual_peaks": "All observed peaks are explained by selected phases; no residual peaks to search",
         "refine_window_no_overlap": "The 2θ window [{lo}, {hi}] does not overlap the data range [{dlo}, {dhi}]; cannot refine",
         "refine_window_too_few": "Only {n} data points inside the 2θ window [{lo}, {hi}] — not enough to refine (needs ≥ 3); widen the range"
     },
@@ -785,6 +786,8 @@ translations = {
             "act_export_cif": "Export CIF File…",
             "act_rematch_marked": "Re-match Marked Peaks Only…",
             "act_rematch_marked_tip": "Re-run Search/Match using only the peaks selected in the peak assignment table below (for trace/residual phase hunting). Select rows first to enable.",
+            "act_search_residual": "Search Unexplained Peaks Only…",
+            "act_search_residual_tip": "Re-run Search/Match using only the residual peaks not explained by currently selected phases (iterative trace-phase addition). Check at least one phase first.",
             "dlg_export_cif_title": "Export CIF File",
             "dlg_export_cif_filter": "CIF Files (*.cif)",
             "msg_export_cif": "Export CIF",

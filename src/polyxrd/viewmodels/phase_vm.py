@@ -33,6 +33,7 @@ class PhaseViewModel(QObject):
     phase_identified = Signal(list)
     phase_selected = Signal(object)
     error = Signal(str)
+    info = Signal(str)
     # M21: 勾选集合变更 (Match! 式多相叠加)
     selection_changed = Signal(list)
     assignment_changed = Signal(object, object)   # (assignments, ref_hit)
@@ -319,6 +320,34 @@ class PhaseViewModel(QObject):
             return [], [[] for _ in self._selected_phases]
         return assign_peaks(self._peaks.peaks, self._selected_phases,
                             tolerance=tolerance)
+
+    def search_residual_peaks(self, data, tolerance: float = 0.30,
+                              element_filter: Optional[dict] = None,
+                              top_n: int = 5) -> None:
+        """仅对当前选中相解释不到的实测峰 (残差峰) 再做一次物相检索。
+
+        用于迭代式物相分析: 先确认主相, 再对未解释的峰追查残余微量相。
+        无选中相或无残差峰时直接返回 (不触发检索)。
+        """
+        if not self._peaks:
+            self.error.emit(tr("error.no_peaks"))
+            return
+        if not self._selected_phases:
+            self.error.emit(tr("error.no_phase_selected"))
+            return
+        assignments, _ = self.current_assignment(tolerance=tolerance)
+        residual_2t = [a.two_theta for a in assignments
+                       if a.phase_index is None]
+        if not residual_2t:
+            self.info.emit(tr("error.no_residual_peaks"))
+            return
+        self.identify_phases(
+            data,
+            element_filter=element_filter,
+            top_n=top_n,
+            tolerance=tolerance,
+            marked_peaks=residual_2t,
+        )
 
     def add_custom_phase(self, phase: Phase) -> None:
         """添加自定义物相"""

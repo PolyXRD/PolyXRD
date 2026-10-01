@@ -157,6 +157,8 @@ class PhaseMatchResult:
         confidence: 置信度描述
         r_factor: R因子 (Profile Fitting模式使用, 越低越好)
         method: 识别方法 ("fom" 或 "profile_fitting")
+        zero_shift: B-6 per-entry 零点校正采用的 2θ 偏移 (度); 0.0 = 未启用或
+            dz=0 最优
     """
     phase: Phase
     score: float
@@ -165,6 +167,7 @@ class PhaseMatchResult:
     confidence: str = ""
     r_factor: float = 0.0
     method: str = "fom"
+    zero_shift: float = 0.0
 
     @property
     def coverage(self) -> float:

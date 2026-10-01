@@ -7,7 +7,7 @@
     Peak detection &nbsp;·&nbsp; Multi-phase qualitative search &nbsp;·&nbsp; Rietveld structure refinement &nbsp;·&nbsp; Le Bail cell refinement &nbsp;·&nbsp; Indexing &nbsp;·&nbsp; 3D structure visualization &nbsp;·&nbsp; Three external databases (COD Inorganics / COD Full / PDF2-2004)
   </p>
   <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v2.4.0-blue?style=flat-square" /></a>
+    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v2.5.0-blue?style=flat-square" /></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
     &nbsp;
@@ -38,21 +38,23 @@ Core design philosophy:
 
 ---
 
-## 🆕 Latest Release v2.4.0 (2026-09-30)
+## 🆕 Latest Release v2.5.0 (2026-10-01)
 
-**Search-ranking chain finalized + engineering gates added** (validated on a 13-sample benchmark; see [docs/基准报告-物相检索-v1.md](docs/基准报告-物相检索-v1.md) and [docs/代码评估与改进-v2.3.0.md](docs/代码评估与改进-v2.3.0.md), Chinese):
+**Search-chain enhancements + combination-strategy tuning + residual-peak search** (validated on a 13-sample benchmark; see [docs/基准报告-物相检索-v1.md](docs/基准报告-物相检索-v1.md) and [docs/基准报告-物相组合-v1.md](docs/基准报告-物相组合-v1.md), Chinese):
 
-| Metric | v2.3.0 | v2.4.0 |
+| Metric | v2.4.0 | v2.5.0 |
 |---|---|---|
-| Search level-A top10 / MISS | 92% / 0 | **96% / 0** |
-| Search level-B MISS / top3 | 4 / 63% | **2 / 67%** |
-| Search MRR (level A / B) | 0.491 / 0.478 | **0.498 / 0.487** |
-| Combination phase-level hit / sample-level complete | 85.7% / 8 of 13 | 85.7% / 8 of 13 |
+| Search level-A top10 / MISS | 96% / 0 | **96% / 0** |
+| Search level-B top10 / MISS | 86% / 2 | **90% / 2** |
+| Search MRR (level A / B) | 0.498 / 0.487 | **0.499 / 0.488** |
+| Combination phase-level hit / sample-level complete | 42/49 / 8 of 13 | **45/49 / 10 of 13** |
 
-- **B-4 preferred-orientation-aware search scoring enabled by default**: March-Dollase `r` grid search for very dense reference-peak phases; recovers two level-B Muscovite MISS (5-2 / 5-2b)
-- **B-3 local-MAD noise floor**: measured as net-negative on the 13-sample A/B scale, disabled by default (code and parameters retained for opt-in)
-- **CI ruff static gate** (F821/F601/RUF012) + **MCP tool-surface smoke tests** (tool coverage 11% → 67%)
-- 👉 [Download v2.4.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v2.4.0)
+- **Minimum correlated peaks penalty (B-7, on by default)**: candidates with < 2 matched peaks get FoM ×2, suppressing false positives — **the sole source of this release's gains** (combination +3 phases / +2 samples, search level-B top10 +2)
+- **B-6 per-candidate zero-point adaptive correction (default off)**: fully implemented, but the 13-sample ablation measured a net negative (level-A MISS 0→1, MRR drop) — same treatment as B-3; code and the `fom_zero_grid` parameter are kept for spectra with real zero-point drift
+- **PFSM ΔRwp reordering (default off)**: ranks by Rwp reduction instead of correlation, with dual filtering (min Rwp reduction + min scale factor)
+- **Residual-peak search**: right-click menu "Search unexplained peaks only" for iterative weak-phase recovery
+- **Combination strategy E1/E2**: FoM-weighted cover_vector scaling, matched≥2 pool rescue (ablation-verified as neutral infrastructure)
+- 👉 [Download v2.5.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v2.5.0)
 
 ---
 
@@ -275,5 +277,5 @@ When using this software, also comply with third-party license terms of upstream
 ---
 
 <div align="right">
-  <i>PolyXRD Team · 2025 — 2026 · doc version 2.4.0 (2026-09-30) · contact: sshztx@outlook.com</i>
+  <i>PolyXRD Team · 2025 — 2026 · doc version 2.5.0 (2026-10-01) · contact: sshztx@outlook.com</i>
 </div>

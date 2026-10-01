@@ -331,6 +331,7 @@ translations = {
         "peak_finder_hi_failed": "高精度峰检测失败：{error}",
         "no_peaks": "请先检测峰",
         "no_phase_selected": "请先选择物相",
+        "no_residual_peaks": "所有实测峰已被选中相解释，无残差峰可检索",
         "refine_window_no_overlap": "2θ 窗口 [{lo}, {hi}] 与数据范围 [{dlo}, {dhi}] 没有交集, 无法精修",
         "refine_window_too_few": "2θ 窗口 [{lo}, {hi}] 内仅 {n} 个数据点, 不足以精修 (需 ≥ 3), 请放宽区间"
     },
@@ -785,6 +786,8 @@ translations = {
             "act_export_cif": "导出 CIF 文件…",
             "act_rematch_marked": "仅对标记峰再匹配…",
             "act_rematch_marked_tip": "只使用峰归属表中选中的峰重新检索 (用于微量相/残差相追查)。在下方峰归属表选行后可用。",
+            "act_search_residual": "仅对未解释峰再搜索…",
+            "act_search_residual_tip": "只使用当前选中相解释不到的残差峰重新检索 (迭代式追加微量相)。需先勾选至少一个物相。",
             "dlg_export_cif_title": "导出 CIF 文件",
             "dlg_export_cif_filter": "CIF 文件 (*.cif)",
             "msg_export_cif": "导出 CIF",
