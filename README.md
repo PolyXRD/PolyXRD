@@ -7,7 +7,7 @@
     峰检测 &nbsp;·&nbsp; 多物相定性检索 &nbsp;·&nbsp; Rietveld 结构精修 &nbsp;·&nbsp; Le Bail 晶胞精修 &nbsp;·&nbsp; 指标化 &nbsp;·&nbsp; 3D 结构可视化 &nbsp;·&nbsp; 三库外挂检索 (COD 无机物 / COD 全库 / PDF2-2004)
   </p>
   <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v2.4.0-blue?style=flat-square" /></a>
+    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v2.5.0-blue?style=flat-square" /></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
     &nbsp;
@@ -38,21 +38,23 @@
 
 ---
 
-## 🆕 最新版本 v2.4.0（2026-09-30）
+## 🆕 最新版本 v2.5.0（2026-10-01）
 
-**检索排序链路定稿 + 工程门禁补齐**（13 试样基准实证，详见 [docs/基准报告-物相检索-v1.md](docs/基准报告-物相检索-v1.md) 与 [docs/代码评估与改进-v2.3.0.md](docs/代码评估与改进-v2.3.0.md)）：
+**检索链路增强 + 组合策略优化 + 残差峰搜索**（13 试样基准实证，详见 [docs/基准报告-物相检索-v1.md](docs/基准报告-物相检索-v1.md) 与 [docs/基准报告-物相组合-v1.md](docs/基准报告-物相组合-v1.md)）：
 
-| 指标 | v2.3.0 | v2.4.0 |
+| 指标 | v2.4.0 | v2.5.0 |
 |---|---|---|
-| 检索 A 级 top10 / MISS | 92% / 0 | **96% / 0** |
-| 检索 B 级 MISS / top3 | 4 / 63% | **2 / 67%** |
-| 检索 MRR (A / B) | 0.491 / 0.478 | **0.498 / 0.487** |
-| 组合相级 / 试样级完全命中 | 85.7% / 8 of 13 | 85.7% / 8 of 13 |
+| 检索 A 级 top10 / MISS | 96% / 0 | **96% / 0** |
+| 检索 B 级 top10 / MISS | 86% / 2 | **90% / 2** |
+| 检索 MRR (A / B) | 0.498 / 0.487 | **0.499 / 0.488** |
+| 组合相级命中 / 试样级完全 | 42/49 / 8 of 13 | **45/49 / 10 of 13** |
 
-- **B-4 PO（择优取向）感知检索评分默认启用**：对极密集峰表相做 March-Dollase `r` 网格搜索，回收 5-2 / 5-2b Muscovite 两个 B 级 MISS
-- **B-3 局部 MAD 噪声幅度下限**：13 试样 A/B 标尺复核为净负，默认关闭（代码与参数保留，可按需开启）
-- **CI ruff 静态门禁**（F821/F601/RUF012）+ **MCP 工具面冒烟**（工具覆盖率 11%→67%）
-- 👉 [下载 v2.4.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v2.4.0)
+- **最小关联峰惩罚（B-7，默认启用）**：匹配峰 < 2 的候选 FoM ×2，抑制假阳性 —— **本版全部收益的来源**（组合 +3 相 / +2 试样、检索 B top10 +2）
+- **B-6 逐候选零点自适应校正（默认关）**：实现完成，但 13 试样消融实测净负（A 级 MISS 0→1、MRR 下降），与 B-3 同款处置 —— 代码与参数 `fom_zero_grid` 保留，供零点漂移谱按需开启
+- **PFSM ΔRwp 重排（默认关）**：以 Rwp 下降量替代相关性排序，双过滤（最小 Rwp 降幅 + 最小缩放因子）
+- **残差峰搜索**：右键菜单"仅搜索未解释峰"，迭代式补全弱线相
+- **组合策略 E1/E2**：cover_vector 按 FoM 质量缩放、matched≥2 池保底回收（消融实证为中性基础设施）
+- 👉 [下载 v2.5.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v2.5.0)
 
 ---
 

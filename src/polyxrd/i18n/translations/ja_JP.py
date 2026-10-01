@@ -331,6 +331,7 @@ translations = {
         "peak_finder_hi_failed": "高精度ピーク検出に失敗しました：{error}",
         "no_peaks": "先にピークを検出してください",
         "no_phase_selected": "先に相を選択してください",
+        "no_residual_peaks": "すべての実測ピークは選択相で説明されており、残差ピークはありません",
         "refine_window_no_overlap": "2θ ウィンドウ [{lo}, {hi}] がデータ範囲 [{dlo}, {dhi}] と重なりません。精密化できません",
         "refine_window_too_few": "2θ ウィンドウ [{lo}, {hi}] 内のデータ点は {n} 点のみで精密化に不足します (3 点以上必要)。範囲を広げてください"
     },
@@ -785,6 +786,8 @@ translations = {
             "act_export_cif": "CIF ファイルを書き出し…",
             "act_rematch_marked": "マークしたピークのみ再マッチ…",
             "act_rematch_marked_tip": "下のピーク帰属表で選択したピークのみを使って再検索します (微量相・残差相の追跡用)。行を選択すると有効になります。",
+            "act_search_residual": "未説明ピークのみ再検索…",
+            "act_search_residual_tip": "現在選択中の相で説明できない残差ピークのみを使って再検索します (反復的な微量相の追加用)。少なくとも1つの相をチェックしてください。",
             "dlg_export_cif_title": "CIF ファイルの書き出し",
             "dlg_export_cif_filter": "CIF ファイル (*.cif)",
             "msg_export_cif": "CIF 書き出し",

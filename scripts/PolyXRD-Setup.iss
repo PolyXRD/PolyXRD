@@ -1,6 +1,6 @@
 ; ============================================================
 ; PolyXRD Setup - Inno Setup Script
-; 使用: iscc /DAppVersion=2.4.0 /O"installer_output" /F"PolyXRD-Setup-v2.4.0" scripts\PolyXRD-Setup.iss
+; 使用: iscc /DAppVersion=2.5.0 /O"installer_output" /F"PolyXRD-Setup-v2.5.0" scripts\PolyXRD-Setup.iss
 ;
 ; 语言 (v2.0.1 新增中文):
 ;   简体中文 / 繁體中文 / English / 日本語
@@ -9,7 +9,7 @@
 ; ============================================================
 
 #ifndef AppVersion
-  #define AppVersion "2.4.0"
+  #define AppVersion "2.5.0"
 #endif
 
 #define AppName "PolyXRD"

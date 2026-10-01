@@ -144,3 +144,6 @@ PDF2_2004.sqlite
 .workbuddy/
 _bdist/
 _bwork/
+
+# TRAE IDE 工作文档 (外部 AI 协作产物, 不入库)
+.trae/
