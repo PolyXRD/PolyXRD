@@ -2860,6 +2860,10 @@ DW 统计量能区分"残差是白噪声"还是"逐点相关（模型不完备�
 - 新增 7 个测试文件共 **19 用例**（zero_shift / min_corr / ΔRwp / combo 池回收 /
   残差搜索 VM / profile_fitting_rwp / zero_adapt）；全量回归 **1222 passed / 6 skipped**。
 - `PhaseMatchResult` 新增 `zero_shift` 字段（记录 B-6 采用的偏移）。
+- **`build.bat` 构建顺序修正（二进制验收抓到）**：`dist/PolyXRD/VERSION.txt` 是持久文件，
+  PyInstaller 不生成它；原先「写 VERSION.txt」排在 Inno 编译之后，导致把上次构建的旧
+  VERSION.txt 一起打进安装包（首轮验收实测安装目录显示 **v2.4.0**、而 EXE 是 v2.5.0）。
+  已把 `scripts\_build_post.py version %APPVER%` 提到 Inno 编译之前（步骤 3/6 前置）。
 
 ### 基准（13 试样，定稿配置 = B-7 开 / B-6 关 / E1+E2 开）
 
@@ -2879,9 +2883,16 @@ DW 统计量能区分"残差是白噪声"还是"逐点相关（模型不完备�
 
 - **版本号五处收口已由验收方补齐**（外部改动漏了 `build.bat APPVER` 与
   `scripts/PolyXRD-Setup.iss AppVersion` 两处，若直接打包会产出 v2.4.0 的安装包）。
-- 发布 v2.5.0 需重建 Setup + Portable 并做全套二进制验收（参照 v2.4.0 五轮口径）；
-  **构建完成后立刻删除 schtasks 计划任务**（防到点二次触发覆盖产物）。
 - `.trae/`（TRAE IDE 工作文档）已加入 `.gitignore`，不入库。
+- **二进制五轮验收全部 PASS（在新产物上重跑）**：
+  ① 独立重算 SHA-256 与清单逐项一致；② `_accept_portable.py 2.5.0` RESULT OK
+  （12252 条目 / 根含 `PolyXRD.exe` / 无业务库 / 包内 VERSION.txt=2.5.0 / 启动 SUCCESS）；
+  ③ 冻结版 `dist` EXE 启动 `start v2.5.0` + MainWindow OK + visible，`VERSION_MATCH True`；
+  ④ 全新目录静默安装 `SETUP_EXIT=0`（12225 文件 / 1045 MB / 45.7s）；
+  ⑤ 安装版 EXE 启动 VERDICT PASS、`VERSION_MATCH True`。
+  首轮验收抓到安装包内 VERSION.txt 残留 v2.4.0（见上文构建顺序修正），修正后重建并整轮复验通过。
+- 本 Release 附件**只发 Setup + SHA256**（用户指定）；Release 正文注明 COD 库可沿用
+  v2.4.0 Release 的同名库包导入；**PDF2-2004 不随任何 Release 分发**。
 
 ## 附录 A · 路线图模块（M01–M25）与版本对照
 
