@@ -101,6 +101,12 @@ if defined ISCC goto :have_iscc
 echo [警告] 未找到 Inno Setup, 跳过安装程序生成
 goto :no_iscc
 
+REM -- VERSION.txt 必须在 Inno 编译前写入: dist/VERSION.txt 是持久文件,
+REM    PyInstaller 不生成它, 若晚于 ISCC 则安装包内会和 EXE 版本号不一致。
+echo.
+echo [步骤 3/6 前置] 写 VERSION.txt (必须先于 Inno 打包, 否则安装包内残留旧版本)...
+echo.
+"%PYTHON%" scripts\_build_post.py version %APPVER%
 :have_iscc
 %ISCC% /DAppVersion=%APPVER% /O"installer_output" /F"PolyXRD-Setup-v%APPVER%" scripts\PolyXRD-Setup.iss
 if %errorlevel% neq 0 (
@@ -110,10 +116,7 @@ if %errorlevel% neq 0 (
 :no_iscc
 
 echo.
-echo [步骤 4/6 前置] 写 VERSION.txt (必须先于 Setup/Portable 打包, 否则包内缺失)...
-echo.
 
-"%PYTHON%" scripts\_build_post.py version %APPVER%
 
 REM 便携版附加文件(启动器/安全模式/使用说明) -- Setup 已先打包, 故只进便携包
 "%PYTHON%" scripts\_build_post.py portable-extras %APPVER%
