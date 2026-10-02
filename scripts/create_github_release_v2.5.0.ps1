@@ -188,6 +188,12 @@ function Upload-Asset([string]$filePath, [string]$assetName, [string]$contentTyp
       '-H', "Accept: application/vnd.github+json",
       '-H', "User-Agent: PolyXRD-upload/2.0",
       '-H', "Content-Type: $contentType",
+      # 显式去掉 curl 默认的 'Expect: 100-continue'。这条不是性能项而是正确性项:
+      # 保留它时, 经会缓冲首包的中间网关会让 curl 长时间停在等待态。
+      # 另注: 2026-10-02 实测本机上行 2.65 MB/s (246.9MB / 93.3s), 此前"上行只有
+      # 40-190KB/s"的判断有误 —— 真正的失败原因是启动上传的父进程随工具会话被回收,
+      # 必须用 Popen 脱离会话启动且绝不 wait()。
+      '-H', 'Expect:',
       '--data-binary', "@$filePath",
       $uri
     )
