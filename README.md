@@ -7,7 +7,7 @@
     峰检测 &nbsp;·&nbsp; 多物相定性检索 &nbsp;·&nbsp; Rietveld 结构精修 &nbsp;·&nbsp; Le Bail 晶胞精修 &nbsp;·&nbsp; 指标化 &nbsp;·&nbsp; 3D 结构可视化 &nbsp;·&nbsp; 三库外挂检索 (COD 无机物 / COD 全库 / PDF2-2004)
   </p>
   <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v2.5.0-blue?style=flat-square" /></a>
+    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v2.6.0-blue?style=flat-square" /></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
     &nbsp;
@@ -15,7 +15,7 @@
     &nbsp;
     <img src="https://img.shields.io/badge/UI-PySide6%20(Qt6)-41cd52?style=flat-square" />
     &nbsp;
-    <img src="https://img.shields.io/badge/Tests-1100%2B%20collected-brightgreen?style=flat-square" />
+    <img src="https://img.shields.io/badge/Tests-1250%2B%20collected-brightgreen?style=flat-square" />
   </p>
   <p><i>🌐 English documentation: [README-EN.md](README-EN.md)</i></p>
 </div>
@@ -38,23 +38,17 @@
 
 ---
 
-## 🆕 最新版本 v2.5.0（2026-10-01）
+## 🆕 最新版本 v2.6.0（2026-10-06）
 
-**检索链路增强 + 组合策略优化 + 残差峰搜索**（13 试样基准实证，详见 [docs/基准报告-物相检索-v1.md](docs/基准报告-物相检索-v1.md) 与 [docs/基准报告-物相组合-v1.md](docs/基准报告-物相组合-v1.md)）：
+**用户自建数据库 + 数据页谱图主导布局 + 精修页重排**（算法链路零改动，v2.5.0 基准直接沿用；详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §2.6.0）：
 
-| 指标 | v2.4.0 | v2.5.0 |
-|---|---|---|
-| 检索 A 级 top10 / MISS | 96% / 0 | **96% / 0** |
-| 检索 B 级 top10 / MISS | 86% / 2 | **90% / 2** |
-| 检索 MRR (A / B) | 0.498 / 0.487 | **0.499 / 0.488** |
-| 组合相级命中 / 试样级完全 | 42/49 / 8 of 13 | **45/49 / 10 of 13** |
-
-- **最小关联峰惩罚（B-7，默认启用）**：匹配峰 < 2 的候选 FoM ×2，抑制假阳性 —— **本版全部收益的来源**（组合 +3 相 / +2 试样、检索 B top10 +2）
-- **B-6 逐候选零点自适应校正（默认关）**：实现完成，但 13 试样消融实测净负（A 级 MISS 0→1、MRR 下降），与 B-3 同款处置 —— 代码与参数 `fom_zero_grid` 保留，供零点漂移谱按需开启
-- **PFSM ΔRwp 重排（默认关）**：以 Rwp 下降量替代相关性排序，双过滤（最小 Rwp 降幅 + 最小缩放因子）
-- **残差峰搜索**：右键菜单"仅搜索未解释峰"，迭代式补全弱线相
-- **组合策略 E1/E2**：cover_vector 按 FoM 质量缩放、matched≥2 池保底回收（消融实证为中性基础设施）
-- 👉 [下载 v2.5.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v2.5.0)
+- **用户自建数据库（新功能）**：把手里那批 CIF 灌入与 COD 无机库同构的本地 SQLite，成为第 6 个物相数据源；支持导入/导出/挂载/检索，空库时下拉置灰并提示去建库；用户库 Phase 自带晶胞 + 全胞原子位点，可直接进内置引擎精修。
+- **数据页谱图主导布局**：三向 splitter 让谱图区最大化，右栏一键收起吃满整宽。
+- **精修页重排**：残差压成紧凑条（画布 60–130px、无工具栏），外部引擎面板下移到左列日志下方。
+- **算法零改动**：检索 / 组合 / FoM 与 v2.5.0 完全一致，13 试样基准 **组合相级 45/49、试样级完全 10/13** 直接沿用，无功能性回退。
+- **构建修复**：修正 build.bat 中 VERSION.txt 写入被 goto 跳过导致安装包版本文件残留旧版本的发布阻断 bug（PyInstaller 未嵌入版本资源，VERSION.txt 为唯一版本标识）。
+- **测试**：新增 `test_user_db_v260.py` 33 用例；全量回归 **1257 passed / 6 skipped / 0 failed**。
+- 👉 [下载 v2.6.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v2.6.0)
 
 ---
 
