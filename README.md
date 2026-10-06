@@ -7,7 +7,7 @@
     峰检测 &nbsp;·&nbsp; 多物相定性检索 &nbsp;·&nbsp; Rietveld 结构精修 &nbsp;·&nbsp; Le Bail 晶胞精修 &nbsp;·&nbsp; 指标化 &nbsp;·&nbsp; 3D 结构可视化 &nbsp;·&nbsp; 三库外挂检索 (COD 无机物 / COD 全库 / PDF2-2004)
   </p>
   <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v2.6.0-blue?style=flat-square" /></a>
+    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v2.7.0-blue?style=flat-square" /></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
     &nbsp;
@@ -38,17 +38,28 @@
 
 ---
 
-## 🆕 最新版本 v2.6.0（2026-10-06）
+## 🆕 最新版本 v2.7.0（2026-10-07）
 
-**用户自建数据库 + 数据页谱图主导布局 + 精修页重排**（算法链路零改动，v2.5.0 基准直接沿用；详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §2.6.0）：
+**物相检索 FoM：判据解耦 + 数据驱动标定**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §2.7.0 与 [docs/v2.7.0-物相检索改进计划.md](docs/v2.7.0-物相检索改进计划.md)）：
 
-- **用户自建数据库（新功能）**：把手里那批 CIF 灌入与 COD 无机库同构的本地 SQLite，成为第 6 个物相数据源；支持导入/导出/挂载/检索，空库时下拉置灰并提示去建库；用户库 Phase 自带晶胞 + 全胞原子位点，可直接进内置引擎精修。
-- **数据页谱图主导布局**：三向 splitter 让谱图区最大化，右栏一键收起吃满整宽。
-- **精修页重排**：残差压成紧凑条（画布 60–130px、无工具栏），外部引擎面板下移到左列日志下方。
-- **算法零改动**：检索 / 组合 / FoM 与 v2.5.0 完全一致，13 试样基准 **组合相级 45/49、试样级完全 10/13** 直接沿用，无功能性回退。
-- **构建修复**：修正 build.bat 中 VERSION.txt 写入被 goto 跳过导致安装包版本文件残留旧版本的发布阻断 bug（PyInstaller 未嵌入版本资源，VERSION.txt 为唯一版本标识）。
-- **测试**：新增 `test_user_db_v260.py` 33 用例；全量回归 **1257 passed / 6 skipped / 0 failed**。
-- 👉 [下载 v2.6.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v2.6.0)
+- **判据解耦（C-1）**：把原先混在一起的 `bad` 拆成独立加权的「峰位项 / 漏检项」（`_FOM_MISS_WEIGHT`），并对齐参考实现「峰位吻合与参考峰覆盖是两项不等权判据」的结构；默认权重 1.0 与旧版数值完全一致。
+- **判据可观测**：`FoMResult` 新增 `position_dev` / `miss_penalty` / `spec_penalty` 三个分项字段，排序结果第一次可解释、可逐项标定。
+- **特异性权重标定**：经 13 试样消融由 0.30 → **0.50** —— 这是本版**唯一的评分变更**，对应 XinMatch 反解结论「解释实验谱的能力与峰位吻合同等重要」。
+- **可复现消融仪**：新增 `scripts/bench_fom_ablation.py`（kwargs + 常量双通道打补丁、自动还原），一次输出检索 A/B 级 + 组合双指标，补齐此前「只有总分、无逐项消融」的缺口。
+- **4 项内联魔法数**提升为模块常量（值不变），为后续标定留出接口。
+
+**基准（13 试样实测）**
+
+| 指标 | v2.6.0 | v2.7.0 |
+|---|---|---|
+| 检索 A 级 top10 / MISS / MRR | 47/49 / 0 / 0.499 | 47/49 / 0 / 0.498 |
+| 检索 B 级 top10 / MISS / MRR | 44/49 / 2 / 0.488 | **45/49** / 2 / **0.490** |
+| 组合相级 / 试样级完全 | 45/49 / 10 of 13 | 45/49 / 10 of 13 |
+
+> 另有 5 项「看起来很对」的改动被消融实测否决并留档（尺度感知可观测性、抬高可观测门槛、
+> 降低漏检惩罚、PFSM 参与排序等），详见计划文档 §三 —— 留档以避免后续重复踩坑。
+
+**上一版 v2.6.0**（用户自建数据库 + 数据页谱图主导布局 + 精修页重排）：👉 [下载 v2.6.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v2.6.0)
 
 ---
 
