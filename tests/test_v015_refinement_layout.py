@@ -5,6 +5,11 @@
 - 右栏新增「已勾选物相」列表 (selection_changed 驱动, 右键导出 CIF)
 - 外部精修程序容器存在 (M25 填充)
 - _WINDOW_STATE_VERSION 升到 3
+
+v2.6.0 目标 3 再度重排 (向 GSAS-II / MAUD 看齐):
+- 残差条由「1/6 高度的独立大图」→ 固定高度 (60~130px) 紧凑条,
+  stretch=0, 无标题无工具栏, 主图 stretch=5 独占纵向余量
+- 外部精修程序面板由「右栏底部」→「左栏日志下方」, 右栏得以松绑
 """
 import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -31,23 +36,58 @@ def view(qapp):
     v.deleteLater()
 
 
+def _left_column(view):
+    """左栏容器 (对比图 / 残差条 / 日志 / 外部程序 的共同父级)。"""
+    return view._compare_plot.parentWidget()
+
+
+def _left_slots(view):
+    """左栏里各关键控件的槽位: 名字 → 布局索引。"""
+    left = _left_column(view)
+    assert left is not None
+    lay = left.layout()
+    assert lay is not None
+    slots: dict[str, int] = {}
+    for i in range(lay.count()):
+        w = lay.itemAt(i).widget()
+        if w is view._compare_plot:
+            slots["compare"] = i
+        elif w is view._residual_plot:
+            slots["residual"] = i
+        elif w is view._ext_group:
+            slots["ext"] = i
+        elif w is view._log_view.parentWidget():
+            slots["log"] = i
+    return lay, slots
+
+
 def test_residual_is_thin_strip(view):
-    """残差条 stretch=1, 主图 stretch=5 (原为均分)。"""
-    lay = view._compare_plot.parentWidget().layout() \
-        if view._compare_plot.parentWidget() else None
-    # 直接查左栏布局的 stretch
-    from PySide6.QtWidgets import QVBoxLayout
-    left_layout = None
-    p = view._compare_plot.parentWidget()
-    if p is not None:
-        lay = p.layout()
-        if lay is not None:
-            for i in range(lay.count()):
-                w = lay.itemAt(i).widget()
-                if w is view._compare_plot:
-                    assert lay.stretch(i) == 5
-                if w is view._residual_plot:
-                    assert lay.stretch(i) == 1
+    """v2.6.0: 残差条 = 固定高度紧凑条 (stretch=0), 主图 stretch=5 拿全部余量。
+
+    旧版是 5:1 均分且残差带标题+工具栏 —— 残差白占约 1/4 高度;
+    新版向 GSAS-II / MAUD 看齐: 主图下一条残差, 高度锁在 60~130px。
+    """
+    lay, slots = _left_slots(view)
+    assert {"compare", "residual"} <= set(slots), "两张图必须同属左栏"
+
+    assert lay.stretch(slots["compare"]) == 5
+    # 不参与拉伸: 布局把富余高度全给主图
+    assert lay.stretch(slots["residual"]) == 0
+
+    res = view._residual_plot
+    assert res._compact is True
+    assert res._toolbar is None, "紧凑条不该带 matplotlib 工具栏"
+    assert res._canvas.minimumHeight() == 60
+    assert res._canvas.maximumHeight() <= 130, "残差条要真的『一条』那么高"
+
+
+def test_external_group_sits_below_log_in_left_column(view):
+    """v2.6.0: 外部精修程序面板从右栏底部移到左栏 (日志正下方)。"""
+    _lay, slots = _left_slots(view)
+    assert "ext" in slots, "外部精修程序面板必须在左栏 (不再挂右栏)"
+    assert {"compare", "residual", "log", "ext"} <= set(slots)
+    # 自上而下: 对比图 → 残差条 → 精修日志 → 外部程序
+    assert slots["compare"] < slots["residual"] < slots["log"] < slots["ext"]
 
 
 def test_residual_follows_compare_xlim(view):

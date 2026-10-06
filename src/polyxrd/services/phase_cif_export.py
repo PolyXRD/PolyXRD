@@ -55,7 +55,10 @@ def _cod_db():
 
 
 def resolve_cod_id(phase: Phase) -> Optional[int]:
-    """从物相里尽力解析 COD 编号: 名字 / 化学式 / cif_path 文件名。"""
+    """从物相里尽力解析库条目编号: 显式 db_id / 名字 / 化学式 / cif_path 文件名。"""
+    db_id = getattr(phase, "db_id", None)
+    if isinstance(db_id, int):
+        return db_id
     cod_id = extract_cod_id(
         getattr(phase, "name", "") or "", getattr(phase, "formula", "") or ""
     )
@@ -114,8 +117,18 @@ def get_phase_cif_text(phase: Phase) -> tuple[str, Optional[int]]:
 
     db = _cod_db()
 
-    # 2) COD 编号直取 (五级回退)
+    # 2) 库编号直取 (五级回退)。用户库条目 (9 亿段 ID) 的 CIF 存在
+    #    user_phases.sqlite 的 cif_gz 里, 与 COD 库不互通, 单独走一支。
     cod_id = resolve_cod_id(phase)
+    if cod_id is not None and cod_id >= 900_000_000:
+        try:
+            from polyxrd.services import user_db
+
+            text = user_db.get_user_cif(cod_id)
+        except Exception:  # noqa: BLE001
+            text = None
+        if text and text.strip():
+            return text, cod_id
     if cod_id is not None and db is not None:
         try:
             text = db.get_cif(cod_id)

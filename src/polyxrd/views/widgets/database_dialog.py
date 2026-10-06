@@ -31,7 +31,7 @@ from PySide6.QtWidgets import (
 )
 
 from polyxrd.i18n import tr
-from polyxrd.services import db_import
+from polyxrd.services import db_import, user_db
 from polyxrd.services.db_import import DB_KINDS, inspect_db_file
 
 _FILE_FILTER = "vw.database_dialog.file_filter"
@@ -73,6 +73,8 @@ class DatabaseManagerDialog(QDialog):
 
         for i, kind in enumerate(DB_KINDS):
             self._build_row(grid, i, kind)
+
+        root.addWidget(self._build_user_group())
 
         root.addStretch(1)
 
@@ -145,8 +147,97 @@ class DatabaseManagerDialog(QDialog):
             "pkg": pkg_lbl,
         }
 
+    # ── 用户自建库分组 (v2.6.0) ────────────────────────────
+    def _build_user_group(self) -> QWidget:
+        """用户数据库分组: 与上面三个"下载后挂载"的库不同, 这个库由用户
+        自己导入 CIF 生成 (不存在"下载包"), 因此只给状态 + 管理/挂载入口。
+
+        为什么放在挂载页: 物相源下拉里的「用户数据库」要能在这里一眼看到
+        "有没有条目 / 多少条", 否则下拉里被置灰时用户不知道去哪建库。
+        """
+        box = QFrame()
+        box.setFrameShape(QFrame.Shape.StyledPanel)
+        lay = QVBoxLayout(box)
+        lay.setSpacing(4)
+
+        title = QLabel(f"<b>{tr('user_db.group_title')}</b>")
+        lay.addWidget(title)
+
+        self._user_status = QLabel("—")
+        self._user_status.setWordWrap(True)
+        lay.addWidget(self._user_status)
+
+        self._user_path = QLabel("—")
+        self._user_path.setStyleSheet("color: palette(mid);")
+        self._user_path.setWordWrap(True)
+        self._user_path.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse)
+        lay.addWidget(self._user_path)
+
+        hint = QLabel(tr("user_db.group_hint"))
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: palette(mid);")
+        lay.addWidget(hint)
+
+        row = QHBoxLayout()
+        row.setSpacing(6)
+        self._btn_user_manage = QPushButton(tr("user_db.btn_manage"))
+        self._btn_user_manage.clicked.connect(self._on_open_user_db)
+        self._btn_user_mount = QPushButton(tr("user_db.btn_mount_sqlite"))
+        self._btn_user_mount.clicked.connect(self._on_mount_user_sqlite)
+        row.addWidget(self._btn_user_manage)
+        row.addWidget(self._btn_user_mount)
+        row.addStretch(1)
+        lay.addLayout(row)
+        return box
+
+    def _on_open_user_db(self) -> None:
+        from polyxrd.views.widgets.user_db_dialog import UserDatabaseDialog
+
+        dlg = UserDatabaseDialog(self)
+        dlg.changed.connect(self._refresh)
+        dlg.changed.connect(self.databases_changed.emit)
+        dlg.exec()
+        self._refresh()
+
+    def _on_mount_user_sqlite(self) -> None:
+        """把已导出的用户库 .sqlite 挂载回来 (换机器 / 同事分享的场景)。"""
+        path, _ = QFileDialog.getOpenFileName(
+            self, tr("user_db.mount_sqlite_title"), str(Path.home()),
+            tr("user_db.sqlite_filter"))
+        if not path:
+            return
+        try:
+            user_db.mount_user_db(path)
+        except Exception as e:  # noqa: BLE001 - 挂载失败要如实提示
+            QMessageBox.critical(self, tr("user_db.mount_sqlite_title"),
+                                 str(e))
+            return
+        st = user_db.user_stats()
+        self._refresh()
+        self.databases_changed.emit()
+        QMessageBox.information(
+            self, tr("user_db.mount_sqlite_title"),
+            tr("user_db.mount_ok_body", rows=st["rows"], path=st["path"]))
+
+    def _refresh_user_group(self) -> None:
+        try:
+            st = user_db.user_stats()
+        except Exception:  # noqa: BLE001
+            self._user_status.setText("—")
+            return
+        self._user_path.setText(st.get("path") or "—")
+        if not st.get("exists") or not st.get("rows"):
+            self._user_status.setText(
+                f"<span style='color:#b9770e'>{tr('user_db.status_empty')}</span>")
+            return
+        self._user_status.setText(
+            f"<span style='color:#1e8449'>{tr('user_db.status_mounted')}</span>"
+            f" · {tr('user_db.status_rows', rows=st['rows'], size=st['size_mb'])}")
+
     # ── 刷新 ──────────────────────────────────────────────
     def _refresh(self) -> None:
+        self._refresh_user_group()
         for st in db_import.slot_states():
             row = self._rows.get(st["kind"])
             if row is None:
