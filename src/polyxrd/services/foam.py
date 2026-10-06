@@ -100,8 +100,29 @@ def local_mad_threshold(
 
 # ── 匹配因子 (FoM) 调参常量 ────────────────────────────────
 _FOM_W_MIN = 0.3               # 参考峰基础权重 (强峰权重上限 1.0)
-_FOM_SPEC_WEIGHT = 0.30        # 未解释实验峰惩罚权重
+# v2.7.0: 0.30 → 0.50。依据 XinMatch 对参考实现 FoM 的定量反解 —— "解释实验谱
+# 的能力"与"峰位吻合"在模型内同等重要 (各 ~33%), 而旧值 0.30 相对 bad
+# (典型 0.2~1.1) 明显偏低。13 试样消融: 0.30→0.50 使 B 级 top10 44→45/49
+# (90%→92%)、MRR 0.488→0.490, A 级与组合零回退; 0.55 起组合开始退化 (44/49),
+# 故 0.50 为实测最优点。详见 docs/v2.7.0-物相检索改进计划.md §三。
+_FOM_SPEC_WEIGHT = 0.50        # 未解释实验峰惩罚权重
 _FOM_INTENSITY_WEIGHT = 0.20   # 强度一致性乘性权重
+
+# ── v2.7.0: 原内联魔法数提升为模块常量 (行为不变, 仅为可消融/可标定) ──
+# 335→336 行等处的字面量 Historically 写死在函数体内, 无法做参数消融;
+# 提升后默认值与 v2.6.0 完全一致。
+_FOM_SCALE_STRONG_FRAC = 0.2   # s* 拟合只用 I_ref/Imax ≥ 该值的强线匹配对
+_FOM_VISIBLE_INT_FRAC = 0.01   # scale="auto" 可观测阈值 = 该值 × max(I_obs)
+_FOM_STRONG_MISS_FRAC = 0.5    # 漏检分档: I_ref/Imax ≥ 该值视为强线
+_FOM_STRONG_MISS_MULT = 2.0    # 强线漏检的权重倍率 (弱线维持 1.0)
+
+# v2.7.0 C-1: 漏检项独立权重 (参考 XinMatch 反解的 FoM 结构 —— 峰位吻合与
+# "应关联参考峰覆盖"是**两项独立判据**, 权重并不相等)。
+# v2.6.0 及以前两者被硬编码为等权 (同时除以 w_sum 后相加), 导致参考峰多的
+# 复杂相 (层状硅酸盐: 白云母/角闪石/绿泥石/高岭石) 被漏检项系统性拖死 ——
+# 13 试样诊断见 docs/v2.7.0-物相检索改进计划.md §二。
+# 1.0 = 与 v2.6.0 行为完全一致; <1 削弱漏检惩罚。
+_FOM_MISS_WEIGHT = 1.0
 
 
 def compute_fom(
@@ -131,7 +152,8 @@ def compute_fom(
          (Σ未解释强度 / Σ总强度) 而非峰计数 —— 峰检测无幅度下限时噪声峰
          数量多但强度低, 计数口径会把惩罚打满、丧失区分力 (v2.1 P1-3)。
 
-    ``score = (bad + 0.30·未解释强度比) · (1 - 0.20·强度余弦)``
+    ``score = (bad + 0.50·未解释强度比) · (1 - 0.20·强度余弦)``
+    (v2.7.0: 特异性权重 0.30 → 0.50, 消融依据见常量注释)
 
     v2.2 S11 位置偏差改陡降核: 命中对的偏差项由线性 ``w·(|Δ|/tol)`` 改为
     高斯核 ``w·(1 − exp(−0.5·(2Δ/tol)²))`` —— 零偏差→0、tol 边缘→≈1,
@@ -231,7 +253,7 @@ def compute_fom(
         strong_ri = set()
         if i_max > 0:
             strong_ri = {k for k, (_tt, it) in enumerate(refs)
-                         if it / i_max >= 0.2}
+                         if it / i_max >= _FOM_SCALE_STRONG_FRAC}
         fit_pairs = [(ri, j) for ri, j, _d in match_pairs
                      if (ri in strong_ri or not strong_ri)]
         if not fit_pairs:
@@ -259,7 +281,7 @@ def compute_fom(
         eff_scale = float(scale)
     max_obs_int = float(obs_int.max()) if obs_int.size else 0.0
     if eff_scale is not None and max_obs_int > 1e-12:
-        thr = 0.01 * max_obs_int
+        thr = _FOM_VISIBLE_INT_FRAC * max_obs_int
         visible = [v and (eff_scale * it >= thr)
                    for (_tt, it), v in zip(refs, visible)]
     elif min_visible_frac > 0 and i_max > 0:
@@ -281,8 +303,6 @@ def compute_fom(
     # ── S12: 漏检分档 (在 S09 可观测性过滤之后) ────────────────
     # 强线 (I/Imax ≥ 0.5) 被漏的代价 ×2, 弱线维持 —— 伪匹配常表现为
     # "弱线全蹭到、强线全缺席", 单一权重的漏峰项对此区分不足。
-    _STRONG_MISS_FRAC = 0.5
-    _STRONG_MISS_MULT = 2.0
     vis_matched = {ri for ri, _j, _d in match_pairs if ri in vis_set}
     sum_dev = 0.0
     missed_w = 0.0
@@ -300,10 +320,14 @@ def compute_fom(
     for k in vis:
         if k not in vis_matched:
             w_k = weights[k]
-            if i_max > 0 and refs[k][1] / i_max >= _STRONG_MISS_FRAC:
-                w_k *= _STRONG_MISS_MULT
+            if i_max > 0 and refs[k][1] / i_max >= _FOM_STRONG_MISS_FRAC:
+                w_k *= _FOM_STRONG_MISS_MULT
             missed_w += w_k
-    bad = (sum_dev + missed_w) / w_sum
+    # v2.7.0 C-1: 峰位项与漏检项解耦 —— 各自归一化后再按 _FOM_MISS_WEIGHT 加权。
+    # v2.6.0 口径 = (sum_dev + missed_w)/w_sum, 等价于 _FOM_MISS_WEIGHT=1.0。
+    bad_pos = sum_dev / w_sum
+    bad_miss = missed_w / w_sum
+    bad = bad_pos + _FOM_MISS_WEIGHT * bad_miss
     missed = len(vis) - matched
 
     # ── 3. 特异性: 未被解释的实验峰 (v2.1 P1-3: 强度加权; B-3: 局部 MAD 过滤) ──
@@ -378,6 +402,9 @@ def compute_fom(
         total_obs=sig_total,
         scale=float(s_star),
         scale_rel=float(scale_rel),
+        position_dev=float(bad_pos),
+        miss_penalty=float(bad_miss),
+        spec_penalty=float(unexp_ratio),
     )
 
 

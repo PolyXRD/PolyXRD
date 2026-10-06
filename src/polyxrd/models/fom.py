@@ -28,6 +28,11 @@ class FoMResult:
                (互斥匹配对上的最优最小二乘解; 0 = 未计算)
         scale_rel: s*·I_ref,max / I_obs,max ∈ [0,1] —— 该相最强线经 s* 缩放后
                占最强实测峰的比例 (0 = 未计算); "只配上噪声"的伪匹配该值极小
+        position_dev: v2.7.0 峰位项 (Σw·位置偏差核 / Σw), 已归一化 ∈ [0,~1]
+        miss_penalty: v2.7.0 漏检项 (Σw·漏检 / Σw), 已归一化 ∈ [0,~2]
+        spec_penalty: v2.7.0 特异性项 = 未解释实验峰强度比 ∈ [0,1]
+        (position_penalty = position_dev + _FOM_MISS_WEIGHT·miss_penalty,
+         即 v2.6.0 的 bad; 拆开后每项可独立标定/诊断)
     """
     score: float = 999.0
     matched: int = 0
@@ -40,6 +45,9 @@ class FoMResult:
     total_obs: int = 0
     scale: float = 0.0
     scale_rel: float = 0.0
+    position_dev: float = 0.0
+    miss_penalty: float = 0.0
+    spec_penalty: float = 0.0
 
     @property
     def total(self) -> int:
@@ -69,6 +77,9 @@ class FoMResult:
             "total_obs": self.total_obs,
             "scale": self.scale,
             "scale_rel": self.scale_rel,
+            "position_dev": self.position_dev,
+            "miss_penalty": self.miss_penalty,
+            "spec_penalty": self.spec_penalty,
         }
 
     @classmethod
@@ -85,6 +96,9 @@ class FoMResult:
             total_obs=data.get("total_obs", 0),
             scale=data.get("scale", 0.0),
             scale_rel=data.get("scale_rel", 0.0),
+            position_dev=data.get("position_dev", 0.0),
+            miss_penalty=data.get("miss_penalty", 0.0),
+            spec_penalty=data.get("spec_penalty", 0.0),
         )
 
 
