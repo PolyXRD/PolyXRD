@@ -38,7 +38,11 @@ class TestDbSourceCombo:
     def test_pdf2_item_present_and_aligned(self, pv):
         view, _vm = pv
         keys = view._db_source_keys
-        assert keys == ["builtin", "cod_inorganics", "cod_full", "merged", "pdf2"]
+        # v2.6.0: 末尾追加 "user" (用户自建库) —— 前 5 项索引一律不动,
+        # 免得历史持久化的 db_source 索引错位 (选 A 跑 B)。
+        assert keys == [
+            "builtin", "cod_inorganics", "cod_full", "merged", "pdf2", "user",
+        ]
         # 文案条数必须与 key 一一对应 (错位会让选 A 跑 B)
         assert view._db_combo.count() == len(keys)
         assert view._db_combo.itemText(keys.index("pdf2")).startswith("PDF2-2004")
@@ -75,15 +79,36 @@ class TestDbSourceCombo:
 
         monkeypatch.setattr(db_import, "live_counts",
                             lambda: {"cod_inorganics": 0, "pdf2": 0, "cod_index": 0})
+        # 用户库条目数走真实 user_phases.sqlite: 固定为 0, 结果才与开发机状态无关
+        monkeypatch.setattr(PhaseView, "_user_phase_count", staticmethod(lambda: 0))
         view, _vm = pv
         view._db_combo.setCurrentIndex(view._db_source_keys.index("pdf2"))
         view.refresh_db_sources()
 
         model = view._db_combo.model()
         assert model.item(0).isEnabled()
-        for i in (1, 2, 3, 4):
+        # 1..5 = cod_inorganics / cod_full / merged / pdf2 / user
+        for i in range(1, len(view._db_source_keys)):
             assert not model.item(i).isEnabled(), f"index {i} 应置灰"
         assert view._current_db_source() == "builtin", "选中项应回退到内置库"
+
+    def test_user_db_source_disabled_and_hinted_when_empty(self, pv, monkeypatch):
+        """v2.6.0: 用户库没有条目时置灰, 并给出「去导入 CIF」的专用提示。
+
+        置灰而不只是标灰 —— 用户看到灰项会去菜单找入口, 看到提示会直接照做。
+        """
+        from PySide6.QtCore import Qt
+
+        monkeypatch.setattr(PhaseView, "_user_phase_count", staticmethod(lambda: 0))
+        view, _vm = pv
+        view.refresh_db_sources()
+
+        idx = view._db_source_keys.index("user")
+        item = view._db_combo.model().item(idx)
+        assert item is not None and not item.isEnabled()
+        assert "用户数据库" in view._db_source_labels()[idx]
+        hint = item.data(Qt.ItemDataRole.ToolTipRole) or item.toolTip()
+        assert "CIF" in str(hint), "置灰项必须指路, 否则用户不知道去哪导入"
 
     def test_unmounted_hint_points_to_menu(self, pv, monkeypatch):
         """置灰项必须告诉用户去哪导入, 否则用户只会看到灰掉的选项。"""

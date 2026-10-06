@@ -261,7 +261,14 @@ def test_identify_with_pdf2_shares_cod_rank_score():
 
 
 def test_elements_from_db_formula_is_single_source():
-    """公式解析单点实现: COD 路径与 PDF2 路径都 import 同一个函数。"""
+    """公式解析单点实现: COD / PDF2 / 用户库三条路径都 import 同一个函数。
+
+    v2.6.0 起 COD 路径把「候选 → Phase」这一段抽成了共用的
+    ``PhaseIdentifier._rank_candidates``, 调用点由 ``elements_from_db_formula(formula)``
+    变成 ``elements_from_db_formula(d.get("formula", "") or "")`` (变量名跟着详情字典走)。
+    因此断言放宽为「引用了这个单点函数」+「没有各自复制一份闭包」——
+    不变量是"只有一份实现", 而不是某个具体实参写法。
+    """
     from polyxrd.utils.formula_parser import elements_from_db_formula as impl
 
     assert impl("Li1.13 Mn2 O4") == {"Li", "Mn", "O"}
@@ -271,11 +278,24 @@ def test_elements_from_db_formula_is_single_source():
     import polyxrd.services.phase_identifier as pim
     assert pim.elements_from_db_formula is impl
 
-    cod_src = inspect.getsource(pim.PhaseIdentifier.identify_with_cod_inorganics)
-    pdf2_src = inspect.getsource(pim.PhaseIdentifier.identify_with_pdf2)
-    for src in (cod_src, pdf2_src):
-        assert "elements_from_db_formula(formula)" in src
-        assert "def _elements_from_db_formula" not in src
+    mod_src = inspect.getsource(pim)
+    # 只有一份实现: 模块里不得再冒出私有副本
+    assert "def _elements_from_db_formula" not in mod_src
+
+    # 三条检索路径都要落到这个单点函数上。COD / PDF2 在自己的 make_phase
+    # 闭包里直接调; 用户库走的是共用的 ``_rank_candidates`` + ``_make_user_phase``,
+    # 所以字面调用在 ``_make_user_phase`` 里, 不在 identify_with_user_db 里。
+    for meth in (
+        pim.PhaseIdentifier.identify_with_cod_inorganics,
+        pim.PhaseIdentifier.identify_with_pdf2,
+        pim.PhaseIdentifier._make_user_phase,
+    ):
+        assert "elements_from_db_formula(" in inspect.getsource(meth), meth.__name__
+
+    # 用户库路径本身不含字面调用 —— 它复用 COD 那条共用排序段
+    user_src = inspect.getsource(pim.PhaseIdentifier.identify_with_user_db)
+    assert "_rank_candidates(" in user_src
+    assert "def _elements_from_db_formula" not in user_src
 
 
 def test_identify_with_pdf2_uses_default_peak_list(monkeypatch):

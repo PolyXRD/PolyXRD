@@ -54,9 +54,12 @@ class PlotWidget(QWidget):
     _X_ZOOM_STEP = 0.15      # 每格滚轮缩放幅度
     _X_OVERSCAN = 0.20       # 允许越出数据范围的比例
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: Optional[QWidget] = None, *, compact: bool = False) -> None:
         super().__init__(parent)
         self._ylabel_base = "Intensity"
+        # v2.6.0: compact 模式 —— 无工具栏/按钮行/标题的扁条形图,
+        # 供精修页残差条使用 (GSAS-II/MAUD 风格: 主图下一条残差, 不独立成区)
+        self._compact = compact
         self._setup_ui()
         self._data_list: list[XRDData] = []
         self._peaks: list[Peak] = []
@@ -83,11 +86,29 @@ class PlotWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         # matplotlib Figure
-        self._figure = Figure(figsize=(8, 5), dpi=100, tight_layout=True)
+        fig_h = 1.4 if self._compact else 5
+        self._figure = Figure(figsize=(8, fig_h), dpi=100, tight_layout=True)
         self._canvas = FigureCanvasQTAgg(self._figure)
-        self._canvas.setMinimumHeight(300)
+        self._canvas.setMinimumHeight(60 if self._compact else 300)
         self._canvas.mpl_connect("button_press_event", self._on_mouse_press)
         self._canvas.mpl_connect("motion_notify_event", self._on_mouse_move)
+
+        if self._compact:
+            # 紧凑残差条: 只有画布本身。无工具栏/按钮/标题/Y 轴交互面板,
+            # 高度锁定在一条的量级, 让主对比图拿走全部纵向空间。
+            self._toolbar = None
+            # hint 标签仍要存在: _on_y_scale_changed 会写它 (compact 下无右键
+            # 菜单入口, 该回调理论上不触发, 但不能因缺属性而崩)
+            self._y_scale_hint = QLabel()
+            self._y_scale_hint.hide()
+            layout.addWidget(self._canvas)
+            self._axes = self._figure.add_subplot(111)
+            self._axes.set_xlabel("2θ (°)")
+            self._axes.set_ylabel("Δ")
+            self._axes.grid(True, alpha=0.3)
+            self._canvas.setMinimumHeight(60)
+            self._canvas.setMaximumHeight(130)
+            return
 
         # Toolbar
         self._toolbar = NavigationToolbar2QT(self._canvas, self)

@@ -1009,6 +1009,12 @@ class MainWindow(QMainWindow):
         self._actions["db_manager"].triggered.connect(self._on_database_manager)
         db_menu.addAction(self._actions["db_manager"])
 
+        # v2.6.0: 用户自建库 —— 导入自己收集的 CIF, 建一个与 COD 无机库同构
+        # 的本地库 (含 d-I 索引 + 原子坐标), 可在物相源里检索、可直接精修。
+        self._actions["user_db"] = QAction(tr("menu.database.user_db"), self)
+        self._actions["user_db"].triggered.connect(self._on_user_database)
+        db_menu.addAction(self._actions["user_db"])
+
         db_menu.addSeparator()
 
         self._actions["db_open_dir"] = QAction(tr("menu.database.open_dir"), self)
@@ -1295,6 +1301,7 @@ class MainWindow(QMainWindow):
             "export": "toolbar.export",
             "clear_data": "menu.file.clear_data",
             "db_manager": "menu.database.manage",
+            "user_db": "menu.database.user_db",
             "db_open_dir": "menu.database.open_dir",
         }
         for key, tr_key in action_translations.items():
@@ -1615,6 +1622,19 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     # 事件处理 - 外挂数据库 (0.10.0)
     # ------------------------------------------------------------------
+
+    def _on_user_database(self) -> None:
+        """v2.6.0: 打开用户数据库管理 (导入 CIF / 查看 / 导出 / 清空)。
+
+        导入或删除后立即刷新物相源下拉的计数与可用性 —— 用户库从无到有
+        必须让「用户数据库」这一源马上可选, 否则刚导入完还得重启。
+        """
+        from polyxrd.views.widgets.user_db_dialog import UserDatabaseDialog
+
+        dialog = UserDatabaseDialog(self)
+        dialog.changed.connect(self._on_databases_changed)
+        dialog.exec()
+        self._on_databases_changed()
 
     def _on_database_manager(self) -> None:
         """打开外挂数据库管理, 导入/取消挂载后立即刷新物相源下拉。"""

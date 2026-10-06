@@ -67,8 +67,9 @@ class PhaseView(QWidget):
         self._current_results: list = []
         self._element_dialog: Optional[ElementFilterDialog] = None
         # 数据库源: key 与 PhaseViewModel.identify_phases 的 db_source 对应
+        # (顺序即下拉索引, 末尾追加新源可保持既有索引不变)
         self._db_source_keys = [
-            "builtin", "cod_inorganics", "cod_full", "merged", "pdf2",
+            "builtin", "cod_inorganics", "cod_full", "merged", "pdf2", "user",
         ]
         self._setup_ui()
         self._setup_connections()
@@ -418,7 +419,18 @@ class PhaseView(QWidget):
             self._db_label("vw.phase_view.db_cod_full", _n("cod_index")),
             tr("vw.phase_view.db_merged"),
             self._db_label("vw.phase_view.db_pdf2", _n("pdf2")),
+            self._db_label("vw.phase_view.db_user", self._user_phase_count()),
         ]
+
+    @staticmethod
+    def _user_phase_count() -> int:
+        """用户自建库条目数 (库不存在 → 0, 用于置灰/计数文案)。"""
+        try:
+            from polyxrd.services import user_db
+
+            return int(user_db.user_stats().get("rows", 0))
+        except Exception:  # noqa: BLE001
+            return 0
 
     @staticmethod
     def _db_label(base_key: str, count: int) -> str:
@@ -474,6 +486,8 @@ class PhaseView(QWidget):
             _disable(3, hint)
         if counts.get("pdf2", 0) <= 0:
             _disable(4, hint)
+        if self._user_phase_count() <= 0:
+            _disable(5, tr("vw.phase_view.db_user_empty_hint"))
 
         # 当前选中项若刚被置灰 → 退回内置库 (否则用户按"识别"会一无所获)
         idx = self._db_combo.currentIndex()

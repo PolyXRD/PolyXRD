@@ -1703,16 +1703,20 @@ class CIFDatabase:
             )
         return [dict(row) for row in cur.fetchall()]
 
-    def get_cod_phase(self, cod_id: int) -> Optional[dict]:
+    def get_cod_phase(self, cod_id: int, conn=None) -> Optional[dict]:
         """获取 COD 数据库中指定 COD ID 的物相详情(含 d-I 峰)。
 
         Args:
             cod_id: COD 数据库条目 ID
+            conn: 可选外部连接 (v2.6.0 用户库同构复用)。传入时不再走
+                ``_get_cod_conn`` —— 用户库 (``user_phases.sqlite``) 与
+                COD 无机库**表结构一致**, 因此检索/详情两条链路可以整段复用。
 
         Returns:
             物相详情字典,含 peaks_d / peaks_i 列表;未找到返回 None
         """
-        conn = self._get_cod_conn()
+        if conn is None:
+            conn = self._get_cod_conn()
         if conn is None:
             return None
         cur = conn.execute(
@@ -1732,15 +1736,18 @@ class CIFDatabase:
         # 因 CIF 式子被截断而刻意不动), 这类记录的元素集会解析成磷等无关元素,
         # 导致 ① 结果名称显示成 "P 63 m c" ② 元素过滤把真物相误杀。
         # 恢复失败时原样保留 (recover_inorg_formula 保证不返回空串)。
-        try:
-            from polyxrd.services.cod_local import recover_inorg_formula
-            data["formula"] = recover_inorg_formula(
-                conn, cod_id,
-                data.get("formula") or "",
-                data.get("space_group") or "",
-            )
-        except Exception:  # noqa: BLE001 - 回退不该影响详情返回
-            pass
+        # 用户库条目 (cod_id ≥ 9 亿段) 的 formula 来自 CIF _chemical_formula_sum
+        # 或全胞位点推导, 不经 COD 建库字段 bug, 跳过回退以免被误改。
+        if int(cod_id) < 900_000_000:
+            try:
+                from polyxrd.services.cod_local import recover_inorg_formula
+                data["formula"] = recover_inorg_formula(
+                    conn, cod_id,
+                    data.get("formula") or "",
+                    data.get("space_group") or "",
+                )
+            except Exception:  # noqa: BLE001 - 回退不该影响详情返回
+                pass
         # 把逗号分隔的字符串解析成 float 列表,方便上层使用
         if data.get("peaks_d"):
             data["peaks_d_list"] = [float(x) for x in data["peaks_d"].split(",") if x.strip()]
@@ -1764,6 +1771,7 @@ class CIFDatabase:
         limit: int = 50,
         max_ref_peaks: int = 40,
         elements_allowed: set | None = None,
+        conn=None,
     ) -> list[dict]:
         """用测得的 d 值列表在 COD 数据库中搜索匹配物相。
 
@@ -1809,6 +1817,7 @@ class CIFDatabase:
             min_match: 最少反向匹配测量峰数,低于此数的物相被丢弃
             limit: 返回结果上限
             max_ref_peaks: 每个物相参与匹配的最大主要峰数(I 值最高的)
+            conn: 可选外部连接 (v2.6.0 用户库同构复用), 语义同 get_cod_phase
 
         Returns:
             匹配物相列表,每项含 cod_id, formula, space_group, n_peaks,
@@ -1819,7 +1828,8 @@ class CIFDatabase:
             intensity_weighted_top_recall(measured_i 提供时),
             main_peak_match(measured_i 提供时)
         """
-        conn = self._get_cod_conn()
+        if conn is None:
+            conn = self._get_cod_conn()
         if conn is None or not measured_d:
             return []
 

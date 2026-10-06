@@ -1474,6 +1474,68 @@ class PhaseIdentifier:
         combined.sort(key=lambda r: r.score)
         return combined[:top_n]
 
+    def _rank_candidates(
+        self,
+        cands: list[dict],
+        *,
+        fetch,
+        make_phase,
+        ef,
+        data: XRDData,
+        peaks: PeakList,
+        top_n: int,
+        tolerance: float,
+        wavelength: float,
+    ) -> list[PhaseMatchResult]:
+        """预筛候选 → Phase → 统一 FOM 评分 → 排序。
+
+        COD 无机库与用户库**表结构同构**, 预筛之后的这一段完全共用:
+          - ``fetch(cod_id)`` → 详情 dict (``get_cod_phase``, 可带外部 conn)
+          - ``make_phase(detail, cand, ref_peaks)`` → Phase (两库命名/附带字段不同)
+
+        排序以 Hanawalt 预筛质量为主 (主峰原则/强峰精确率/加权召回),
+        FOM 仅作同分决胜 — 否则"参考峰多的密集物相反超少峰真物相"。
+        """
+        tt_min, tt_max = float(data.two_theta[0]), float(data.two_theta[-1])
+
+        results: list[tuple[dict, PhaseMatchResult]] = []
+        for c in cands:
+            detail = fetch(c["cod_id"])
+            if not detail:
+                continue
+            ref_peaks = []
+            for d_val, i_val in zip(detail.get("peaks_d_list", []),
+                                    detail.get("peaks_i_list", [])):
+                if d_val <= 0:
+                    continue
+                sin_theta = wavelength / (2.0 * d_val)
+                if sin_theta > 1.0:
+                    continue
+                tt = 2.0 * float(np.degrees(np.arcsin(sin_theta)))
+                if tt_min <= tt <= tt_max:
+                    ref_peaks.append(((0, 0, 0), tt, float(i_val)))
+            if not ref_peaks:
+                continue
+
+            phase = make_phase(detail, c, ref_peaks)
+            if ef and not elements_match_filter(
+                phase.elements,
+                has=ef["has"], maybe=ef["maybe"], exclude=ef["exclude"],
+                must_have=ef["must_have"],
+            ):
+                continue
+            results.append((c, self._match_phase_fom(phase, peaks, tolerance)))
+
+        # ── 排序: Hanawalt 预筛质量 × 匹配因子 加权混合 (0.9.11) ──────
+        # 旧口径是字典序 (main_peak_match → top_precision → 召回 → FOM),
+        # main_peak_match 是 0/1 二值: 多相样品里只有主物相能拿 1, 其余
+        # 真物相被整体压到后面。改为加权混合后 13 试样基准 Top-10 24%→29%。
+        # 0.9.11 修订: 初版 h 权重 0.30 + fom_good 用固定尺度 1.2, 但多相样品
+        # 里几乎所有候选的 FoM 都 > 1.2 → fom_good 饱和为 0 → 退化成 0.3·h,
+        # FoM 信息被整体丢弃 (Top-10 15→12)。改用 w=0.10 + exp(-fom/0.8)。
+        results.sort(key=lambda it: -cod_rank_score(it))
+        return [r for _, r in results[:top_n]]
+
     def identify_with_cod_inorganics(
         self,
         data: XRDData,
@@ -1557,55 +1619,130 @@ class PhaseIdentifier:
         if not cands:
             return []
 
-        tt_min, tt_max = float(data.two_theta[0]), float(data.two_theta[-1])
+        return self._rank_candidates(
+            cands,
+            fetch=cdb.get_cod_phase,
+            make_phase=lambda d, c, rp: Phase(
+                name=f"{d.get('formula', '') or ''} (COD {c['cod_id']})",
+                formula=d.get("formula", "") or "",
+                space_group=d.get("space_group", ""),
+                reference_peaks=rp,
+                elements=elements_from_db_formula(d.get("formula", "") or ""),
+            ),
+            ef=ef, data=data, peaks=peaks, top_n=top_n,
+            tolerance=tolerance, wavelength=wavelength,
+        )
 
-        # 3. 候选 → Phase → 统一 FOM 评分
-        #    排序以 Hanawalt 预筛质量为主 (主峰原则/强峰精确率/加权召回),
-        #    FOM 仅作同分决胜 — 否则"参考峰多的密集物相反超少峰真物相"
-        results: list[tuple[dict, PhaseMatchResult]] = []
-        for c in cands:
-            detail = cdb.get_cod_phase(c["cod_id"])
-            if not detail:
-                continue
-            ref_peaks = []
-            for d_val, i_val in zip(detail.get("peaks_d_list", []),
-                                    detail.get("peaks_i_list", [])):
-                if d_val <= 0:
-                    continue
-                sin_theta = wavelength / (2.0 * d_val)
-                if sin_theta > 1.0:
-                    continue
-                tt = 2.0 * float(np.degrees(np.arcsin(sin_theta)))
-                if tt_min <= tt <= tt_max:
-                    ref_peaks.append(((0, 0, 0), tt, float(i_val)))
-            if not ref_peaks:
-                continue
+    def identify_with_user_db(
+        self,
+        data: XRDData,
+        peaks: Optional[PeakList] = None,
+        element_filter: Optional[dict] = None,
+        top_n: int = 5,
+        tolerance: float = 0.15,
+        prefilter_limit: int = 100,
+        prefilter_tolerance: float = 0.02,
+        prefilter_tolerance_rel: float = 0.0,
+        prefilter_min_match: int = 3,
+        prefilter_max_ref_peaks: int = 40,
+    ) -> list[PhaseMatchResult]:
+        """物相识别: 用户自建库 (``user_phases.sqlite``, v2.6.0)。
 
-            formula = detail.get("formula", "") or ""
-            phase = Phase(
-                name=f"{formula} (COD {c['cod_id']})",
-                formula=formula,
-                space_group=detail.get("space_group", ""),
-                reference_peaks=ref_peaks,
-                elements=elements_from_db_formula(formula),
+        流程与 ``identify_with_cod_inorganics`` 完全一致 (同一套 d-I 预筛 +
+        同一套 FOM 排序), 差别只有两点:
+          1. 数据源换成用户库只读连接;
+          2. 返回的 Phase **带晶胞与全胞原子位点**, 可直接进内置引擎精修
+             (用户库条目本来就存了原子坐标, 不必再回库/读 CIF)。
+        """
+        if peaks is None:
+            peaks = default_peak_list(data)
+
+        try:
+            from polyxrd.services import user_db
+            from polyxrd.services.cif_database import CIFDatabase
+        except Exception:
+            return []
+
+        conn = user_db.user_conn()
+        if conn is None:
+            return []
+
+        try:
+            cdb = CIFDatabase(enable_cod_local=False)
+            wavelength = self._config.default_wavelength
+
+            # 1. 实验峰 2θ → d 值
+            d_list: list[float] = []
+            i_list: list[float] = []
+            for p in peaks.peaks:
+                sin_theta = np.sin(np.radians(p.two_theta / 2.0))
+                if sin_theta <= 1e-6:
+                    continue
+                d_list.append(wavelength / (2.0 * sin_theta))
+                i_list.append(float(p.intensity))
+            if not d_list:
+                return []
+
+            # 2. Hanawalt d-I 预筛 (复用 COD 无机库同一实现, 仅换连接)
+            ef = normalize_element_filter(element_filter) if element_filter else None
+            allowed_pool = (set(ef["must_have"]) | set(ef["has"]) | set(ef["maybe"])
+                            if ef else set())
+            elements_allowed = allowed_pool if allowed_pool else None
+            cands = cdb.search_cod_by_d_peaks(
+                d_list, i_list, tolerance=prefilter_tolerance,
+                tolerance_rel=prefilter_tolerance_rel,
+                min_match=prefilter_min_match,
+                max_ref_peaks=prefilter_max_ref_peaks,
+                limit=prefilter_limit,
+                elements_allowed=elements_allowed,
+                conn=conn,
             )
-            if ef and not elements_match_filter(
-                phase.elements,
-                has=ef["has"], maybe=ef["maybe"], exclude=ef["exclude"],
-                must_have=ef["must_have"],
-            ):
-                continue
-            results.append((c, self._match_phase_fom(phase, peaks, tolerance)))
+            if not cands:
+                return []
 
-        # ── 排序: Hanawalt 预筛质量 × 匹配因子 加权混合 (0.9.11) ──────
-        # 旧口径是字典序 (main_peak_match → top_precision → 召回 → FOM),
-        # main_peak_match 是 0/1 二值: 多相样品里只有主物相能拿 1, 其余
-        # 真物相被整体压到后面。改为加权混合后 13 试样基准 Top-10 24%→29%。
-        # 0.9.11 修订: 初版 h 权重 0.30 + fom_good 用固定尺度 1.2, 但多相样品
-        # 里几乎所有候选的 FoM 都 > 1.2 → fom_good 饱和为 0 → 退化成 0.3·h,
-        # FoM 信息被整体丢弃 (Top-10 15→12)。改用 w=0.10 + exp(-fom/0.8)。
-        results.sort(key=lambda it: -cod_rank_score(it))
-        return [r for _, r in results[:top_n]]
+            # 3. 候选 → Phase (带晶胞/位点) → FOM 评分
+            return self._rank_candidates(
+                cands,
+                fetch=lambda cid: cdb.get_cod_phase(cid, conn=conn),
+                make_phase=self._make_user_phase,
+                ef=ef, data=data, peaks=peaks, top_n=top_n,
+                tolerance=tolerance, wavelength=wavelength,
+            )
+        except Exception:  # noqa: BLE001 - 检索失败不该抛到 UI
+            return []
+        finally:
+            conn.close()
+
+    @staticmethod
+    def _make_user_phase(detail: dict, cand: dict, ref_peaks: list) -> Phase:
+        """用户库候选 → 可直接精修的 Phase (晶胞 + 全胞原子位点)。"""
+        from polyxrd.models.phase import LatticeParams
+        from polyxrd.services import user_db
+
+        cid = int(cand["cod_id"])
+        formula = detail.get("formula", "") or ""
+        # 名称保持语言中立 (与 COD 分支的 "(COD 1234567)" 同构), 且 ID 前缀
+        # USER- 自带来源信息; 别在这里拼 tr(...) —— Phase 名会被序列化进
+        # 项目文件, 存进术语随语言变的名字以后读不出来。
+        name = f"{formula} ({user_db.display_id_of(cid)})"
+        lattice = LatticeParams(
+            a=float(detail.get("cell_a") or 0.0),
+            b=float(detail.get("cell_b") or 0.0),
+            c=float(detail.get("cell_c") or 0.0),
+            alpha=float(detail.get("cell_alpha") or 90.0),
+            beta=float(detail.get("cell_beta") or 90.0),
+            gamma=float(detail.get("cell_gamma") or 90.0),
+        )
+        return Phase(
+            name=name,
+            formula=formula,
+            space_group=detail.get("space_group", "") or "",
+            lattice=lattice if lattice.a else None,
+            atomic_sites=user_db.get_user_atomic_sites(cid),
+            reference_peaks=ref_peaks,
+            elements=elements_from_db_formula(formula),
+            db_id=cid,
+        )
 
     def identify_with_pdf2(
         self,

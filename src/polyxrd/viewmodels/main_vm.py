@@ -302,7 +302,7 @@ class MainViewModel(QObject):
 
         Args:
             db_source: 数据库源 ("builtin" / "cod_inorganics" /
-                "cod_full" / "merged")
+                "cod_full" / "merged" / "pdf2" / "user")
             marked_peaks: 标记峰 2θ 序列 (v2.2 S13, None → 全部实测峰)
         """
         data = self.current_data

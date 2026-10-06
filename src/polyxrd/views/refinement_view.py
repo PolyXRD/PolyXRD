@@ -84,26 +84,44 @@ class RefinementView(QWidget):
         main_layout = QHBoxLayout(top_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
 
-        # 左侧：图表区
+        # ── 左栏布局 (v2.6.0 重排) ────────────────────────────
+        # 旧版: [对比图 5 | 残差图 1 (独立大图, 带标题+工具栏) | 日志 2],
+        #       外部精修程序挤在右栏底部 —— 残差白占 ~1/4 高度, 右栏挤成一团。
+        # 新版 (GSAS-II/MAUD 风格):
+        #   左栏 = 对比图 (大) + 残差紧凑条 (≤130px, 无标题无工具栏)
+        #          + 精修日志 + 外部精修程序面板
+        #   右栏 = 纯参数/结果 (控制 / 结果 / 物相含量 / 已选物相), 不再拥挤
         left_widget = QWidget()
         left_layout = QVBoxLayout(left_widget)
         left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(4)
 
-        # 对比图 (M24: 拉大)
+        # 对比图
         self._compare_plot = PlotWidget()
         self._label_compare = QLabel(tr("view.refinement.label_compare"))
         left_layout.addWidget(self._label_compare)
         left_layout.addWidget(self._compare_plot, stretch=5)
 
-        # 残差图 (M24: 改细条, X 轴与主图双向同步)
-        self._residual_plot = PlotWidget()
-        self._label_residual = QLabel(tr("view.refinement.label_residual"))
-        left_layout.addWidget(self._label_residual)
-        left_layout.addWidget(self._residual_plot, stretch=1)
+        # 残差紧凑条 (v2.6.0: compact 模式, X 轴与主图双向同步)
+        self._residual_plot = PlotWidget(compact=True)
+        left_layout.addWidget(self._residual_plot, stretch=0)
         self._install_x_sync()
 
-        # 精修过程日志 (M24: 从整页底栏移到左栏残差条下方)
+        # 精修过程日志
         left_layout.addWidget(self._build_log_panel(), stretch=2)
+
+        # 外部精修程序区 (v2.6.0: 从右栏移到左栏日志下方 ——
+        # 三行状态灯 + 按钮的横条面板, 放左栏底部正好, 右栏得以松绑)
+        from polyxrd.views.widgets.external_engines_group import (
+            ExternalEnginesGroup,
+        )
+
+        self._ext_engines = ExternalEnginesGroup()
+        self._ext_engines.set_context_provider(self._external_context)
+        self._ext_engines.log_message.connect(self._append_log)
+        self._ext_engines.fullprof_requested.connect(self._on_external_fullprof)
+        self._ext_group = self._ext_engines
+        left_layout.addWidget(self._ext_group)
 
         # 右侧：控制区
         right_widget = QWidget()
@@ -248,18 +266,6 @@ class RefinementView(QWidget):
         self._group_selected.setLayout(sel_layout)
         right_layout.addWidget(self._group_selected, stretch=1)
 
-        # 外部精修程序区 (M25-2: GSAS-II / MAUD / FullProf 配置与启动)
-        from polyxrd.views.widgets.external_engines_group import (
-            ExternalEnginesGroup,
-        )
-
-        self._ext_engines = ExternalEnginesGroup()
-        self._ext_engines.set_context_provider(self._external_context)
-        self._ext_engines.log_message.connect(self._append_log)
-        self._ext_engines.fullprof_requested.connect(self._on_external_fullprof)
-        self._ext_group = self._ext_engines
-        right_layout.addWidget(self._ext_group)
-
         main_layout.addWidget(left_widget, stretch=2)
         main_layout.addWidget(right_widget, stretch=1)
 
@@ -345,9 +351,8 @@ class RefinementView(QWidget):
         self._group_selected.setTitle(tr("vw.refinement_view.selected_phases"))
         self._group_log.setTitle(tr("view.refinement.group_log"))
 
-        # 图上方的小标题
+        # 图上方的小标题 (残差紧凑条无标题, 图例即语义)
         self._label_compare.setText(tr("view.refinement.label_compare"))
-        self._label_residual.setText(tr("view.refinement.label_residual"))
 
         # 表单行标签 (布局内部造的 QLabel, 用 labelForField 反查)
         ctrl_rows = (

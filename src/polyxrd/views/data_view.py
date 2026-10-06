@@ -44,21 +44,43 @@ class DataView(QWidget):
 
     def _setup_ui(self) -> None:
         main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
 
-        # 分割器
-        splitter = QSplitter(Qt.Orientation.Horizontal)
+        # v2.6.0: 谱图主导布局。
+        # 旧版是 [谱图 | 数据处理+峰检测+峰归属表] 两栏, 谱图宽度只占 ~55%;
+        # 且峰归属表挤在右栏里, 把控制面板越撑越高。改为三层:
+        #   左栏 (主区)  = 竖向 splitter [谱图 (大) / 峰归属表 (底部横条)]
+        #   右栏 (窄)   = 数据处理 + 峰检测 参数组, 可一键收起
+        # 谱图因此同时拿到 ~3/4 宽度 × ~3/4 高度, 面积约为旧版两倍。
+        self._splitter_h = QSplitter(Qt.Orientation.Horizontal)
+        self._splitter_v = QSplitter(Qt.Orientation.Vertical)
 
-        # 左侧：绘图区
-        left_widget = QWidget()
-        left_layout = QVBoxLayout(left_widget)
-        left_layout.setContentsMargins(0, 0, 0, 0)
-
+        # ── 左栏上部: 谱图 ────────────────────────────────────
         self._plot = PlotWidget()
-        left_layout.addWidget(self._plot)
 
-        # 右侧：控制面板
-        right_widget = QWidget()
-        right_layout = QVBoxLayout(right_widget)
+        # ── 左栏下部: 峰归属表 (横条) ─────────────────────────
+        self._peak_table = PeakTable()
+        self._splitter_v.addWidget(self._plot)
+        self._splitter_v.addWidget(self._peak_table)
+        # 谱图 : 峰表 ≈ 72 : 28 —— 峰表只作核对, 不该跟谱图抢高度
+        self._splitter_v.setSizes([720, 280])
+        self._splitter_v.setStretchFactor(0, 3)
+        self._splitter_v.setStretchFactor(1, 1)
+
+        # ── 右栏: 参数面板 (可收起) ───────────────────────────
+        self._right_widget = QWidget()
+        right_layout = QVBoxLayout(self._right_widget)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+
+        # 收起/展开按钮: 收起后谱图几乎占满整页宽 (看谱细节时用)
+        self._btn_toggle_panel = QPushButton("»")
+        self._btn_toggle_panel.setFixedWidth(28)
+        self._btn_toggle_panel.setToolTip(tr("vw.data_view.toggle_panel_tip"))
+        self._btn_toggle_panel.clicked.connect(self._on_toggle_panel)
+        btn_row = QHBoxLayout()
+        btn_row.addStretch(1)
+        btn_row.addWidget(self._btn_toggle_panel)
+        right_layout.addLayout(btn_row)
 
         # 数据处理组
         self._group_process = QGroupBox(tr("vw.data_view.data_preprocess"))
@@ -131,15 +153,29 @@ class DataView(QWidget):
         self._group_peak.setLayout(peak_layout)
         right_layout.addWidget(self._group_peak)
 
-        # 峰列表
-        self._peak_table = PeakTable()
-        right_layout.addWidget(self._peak_table, stretch=1)
+        # 右栏底部弹性: 参数组靠上, 不随窗口拉伸出现大空洞
+        right_layout.addStretch(1)
 
-        splitter.addWidget(left_widget)
-        splitter.addWidget(right_widget)
-        splitter.setSizes([700, 300])
+        # v2.6.0: 组装 —— 左 [谱图/峰表] 右 [参数], 默认 78 : 22
+        self._splitter_h.addWidget(self._splitter_v)
+        self._splitter_h.addWidget(self._right_widget)
+        self._splitter_h.setSizes([780, 220])
+        self._splitter_h.setStretchFactor(0, 3)
+        self._splitter_h.setStretchFactor(1, 1)
 
-        main_layout.addWidget(splitter)
+        main_layout.addWidget(self._splitter_h)
+
+    def _on_toggle_panel(self) -> None:
+        """收起/展开右栏参数面板 (收起时谱图占满整页宽)。"""
+        sizes = self._splitter_h.sizes()
+        right_visible = bool(sizes[1] > 10) if len(sizes) > 1 else True
+        if right_visible:
+            self._splitter_h.setSizes([1, 0])
+            self._btn_toggle_panel.setText("«")
+        else:
+            total = sum(sizes) or 1000
+            self._splitter_h.setSizes([int(total * 0.78), int(total * 0.22)])
+            self._btn_toggle_panel.setText("»")
 
     def _setup_connections(self) -> None:
         self._vm.data_changed.connect(self._on_data_changed)
@@ -175,6 +211,7 @@ class DataView(QWidget):
         self._peak_distance.setToolTip(tr("vw.data_view.peak_distance_tip"))
         self._peak_hi.setText(tr("vw.data_view.high_precision"))
         self._peak_hi.setToolTip(tr("vw.data_view.peak_hi_tip"))
+        self._btn_toggle_panel.setToolTip(tr("vw.data_view.toggle_panel_tip"))
 
     # ------------------------------------------------------------------
     # 事件处理
