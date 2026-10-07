@@ -1,4 +1,4 @@
-"""Build PolyXRD v2.5.0 使用手册 PDF from markdown + screenshots."""
+"""Build PolyXRD v2.7.0 使用手册 PDF from markdown + screenshots."""
 import re
 import subprocess
 import sys
@@ -7,17 +7,18 @@ from pathlib import Path
 import markdown
 
 MANUAL_DIR = Path(__file__).resolve().parent.parent / "docs" / "manual"
-MD_PATH = MANUAL_DIR / "PolyXRD使用手册-v2.5.0.md"
-OUT_HTML = MANUAL_DIR / "PolyXRD使用手册-v2.5.0.html"
-OUT_PDF = MANUAL_DIR / "PolyXRD使用手册-v2.5.0.pdf"
+MD_PATH = MANUAL_DIR / "PolyXRD使用手册-v2.7.0.md"
+OUT_HTML = MANUAL_DIR / "PolyXRD使用手册-v2.7.0.html"
+OUT_PDF = MANUAL_DIR / "PolyXRD使用手册-v2.7.0.pdf"
 IMG_DIR = MANUAL_DIR / "img"
 
 # (anchor_in_md, image_file, caption) — insert figure after the heading line
 FIGURES = [
-    ("## 第 3 章　主界面导览", "01_main_data_empty.png", "图 3-1　主窗口：顶部工具栏、左侧参数面板、中央谱图区"),
+    ("## 第 3 章　主界面导览", "01_main_data_empty.png", "图 3-1　主窗口：顶部工具栏、左侧参数面板、中央谱图区（v2.6.0 谱图主导布局）"),
+    ("### 2.4 数据库挂载（重要）", "09_database_manager.png", "图 2-1　数据库管理器：每个库独立导入 / 挂载"),
+    ("### 2.5 用户自建数据库（v2.6.0 新增）", "09b_user_db_dialog.png", "图 2-2　用户自建数据库：导入自己收集的 CIF / 私有物相"),
     ("### 4.1 加载数据", "02_data_loaded.png", "图 4-1　加载数据后：谱图自动绘出，X 轴自适应收缩到数据范围"),
     ("### 4.3 保存、导出与格式转换", "10_format_convert.png", "图 4-2　谱图格式转换：选择目标格式批量或单个转换"),
-    ("### 2.4 数据库挂载", "09_database_manager.png", "图 2-1　数据库管理器：每个库独立导入 / 挂载"),
     ("### 5.1 操作", "03_phase_peaks.png", "图 5-1　峰检测：竖标记为检出峰位，右侧参数可实时调节灵敏度"),
     ("### 6.7 检索结果解读", "04_phase_identified.png", "图 6-1　识别结果：候选列表含 FoM / 化学式 / 空间群"),
     ("### 6.6 数据库选择", "11_cod_search.png", "图 6-2　COD 在线检索：按化学式 / 矿物名 / 空间群查询"),
@@ -69,7 +70,7 @@ em { color: #555; }
 COVER_HTML = """<div class="cover">
 <h1>PolyXRD 软件使用手册</h1>
 <p class="sub">X 射线衍射物相分析 · 结构精修 · 多引擎集成</p>
-<p class="sub">版本 v2.5.0 ｜ 2026 年 10 月</p>
+<p class="sub">版本 v2.7.0 ｜ 2026 年 10 月</p>
 <p class="badge">完整工作流：数据加载 → 预处理 → 峰检测 → 物相检索 → Rietveld 精修 → 报告</p>
 <p class="foot">—— 内部配套文档 ——</p>
 </div>
@@ -89,7 +90,7 @@ TOC_HTML = """<div class="chapter">
 <p style="margin:4px 0;font-size:11pt;"><a href="#ch10"><b style="color:#1a4f8b;display:inline-block;width:70px;">第 10 章</b>基本原理</a></p>
 <p style="margin:4px 0;font-size:11pt;"><a href="#ch11"><b style="color:#1a4f8b;display:inline-block;width:70px;">第 11 章</b>使用技巧与最佳实践</a></p>
 <p style="margin:4px 0;font-size:11pt;"><a href="#ch12"><b style="color:#1a4f8b;display:inline-block;width:70px;">第 12 章</b>常见问题（FAQ）</a></p>
-<p style="margin:4px 0;font-size:11pt;"><a href="#ch13"><b style="color:#1a4f8b;display:inline-block;width:70px;">附录 A</b>v2.5.0 变更要点</a></p>
+<p style="margin:4px 0;font-size:11pt;"><a href="#ch13"><b style="color:#1a4f8b;display:inline-block;width:70px;">附录 A</b>v2.7.0 变更要点</a></p>
 </div>
 """
 
@@ -179,7 +180,7 @@ def main():
 <head>
 <meta charset="utf-8">
 <meta name="color-scheme" content="light">
-<title>PolyXRD v2.5.0 软件使用手册</title>
+<title>PolyXRD v2.7.0 软件使用手册</title>
 <style>
 {CSS}
 </style>
