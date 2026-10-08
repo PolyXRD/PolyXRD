@@ -1,0 +1,38 @@
+﻿样品,格式,类别,真值组分,召回率,cod_inorganics命中,builtin命中,pdf2兜底,精修相,Rwp%,GOF,质量,精修窗口,状态
+CORUNDUM,raw,单相氧化物,corundum/al2o3,1.0,Y@1,Y@1,-,Corundum,17.711,2.297,差,"[10.0, 80.0]",ok
+FLUORITE,raw,单相卤化物,fluorite/caf2,1.0,Y@1,Y@1,-,Fluorite,24.486,2.342,差,"[10.0, 80.0]",ok
+ZINCITE,raw,单相氧化物,zincite/zno,1.0,N,Y@1,-,Zincite,22.995,4.092,差,"[10.0, 80.0]",ok
+BRUCITE,raw,单相氢氧化物,brucite/mg(oh)2/mgoh,1.0,N,Y@1,-,,,,,,ok
+MAGNETIT,raw,单相氧化物,magnetite/fe3o4,1.0,Y@3,Y@1,-,,,,,,ok
+ZIRCON,raw,单相硅酸盐,zircon/zrsio4,1.0,Y@2,N,-,,,,,,ok
+SILICA,raw,单相石英,quartz/silicon dioxide/sio2,1.0,N,Y@1,-,Cristobalite,6.294,1.006,良好,"[10.0, 80.0]",ok
+Y2O3,raw,单相氧化物,y2o3/yttria/yttrium,1.0,N,N,Y@1,Yttrium Oxide (PDF2 431036),26.068,6.868,很差,"[10.0, 80.0]",ok
+CPD-1A,raw,三组分混合(1a),corundum/al2o3; zincite/zno; fluorite/caf2,1.0,N; N; Y@1,Y@4; Y@2; Y@1,-; -; -,,,,,,ok
+CPD-1B,raw,三组分混合(1b),corundum/al2o3; zincite/zno; fluorite/caf2,1.0,Y@1; N; N,Y@1; Y@3; Y@2,-; -; -,,,,,,ok
+CPD-1C,raw,三组分混合(1c),corundum/al2o3; zincite/zno; fluorite/caf2,1.0,N; N; N,Y@3; Y@1; Y@2,-; -; -,,,,,,ok
+CPD-1G,raw,三组分混合(1g),corundum/al2o3; zincite/zno; fluorite/caf2,1.0,N; N; Y@7,Y@3; Y@2; Y@1,-; -; -,,,,,,ok
+CPD-2,raw,四组分+择尤(2),corundum/al2o3; zincite/zno; fluorite/caf2; brucite/mg(oh)2,1.0,N; N; N; N,Y@4; Y@2; Y@1; Y@3,-; -; -; -,,,,,,ok
+CPD-3,raw,三组分+非晶(3),corundum/al2o3; zincite/zno; fluorite/caf2; glass/amorphous/sio2,0.75,N; N; Y@7; N,Y@3; Y@2; Y@1; N,-; -; -; -,,,,,,ok
+CPD-4,raw,三组分+微吸收(4),corundum/al2o3; magnetite/fe3o4; zircon/zrsio4,1.0,N; N; Y@1,Y@1; Y@2; N,-; -; -,,,,,,ok
+BAUXITE,mdi,七相混合(铝土矿),gibbsite; goethite; boehmite; hematite; quartz/sio2; kaolinite; anatase,0.857,N; N; N; N; N; N; N,Y@1; Y@4; Y@5; Y@2; Y@3; N; Y@6,-; -; -; -; -; -; -,,,,,,ok
+GRANODIO,mdi,天然花岗闪长岩(无固定含量),quartz/sio2; feldspar; albite; biotite; clinochlore; hornblende; zircon,0.571,N; N; N; N; N; N; N,Y@2; Y@6; Y@3; Y@1; N; N; N,-; -; -; -; -; -; -,,,,,,ok
+PHARM1GR,raw,五相药物混合(1),mannitol; sucrose; valine; starch; nizatidine,0.4,N; N; N; N; N,Y@2; N; Y@1; N; N,-; -; -; -; -,,,,,,ok
+PHARM2GR,raw,五相药物混合(2),mannitol; sucrose; valine; starch; nizatidine,0.8,N; N; N; N; N,Y@2; Y@4; Y@1; N; Y@3,-; -; -; -; -,,,,,,ok
+MANNITOL,raw,单相有机物,mannitol,1.0,N,Y@1,-,,,,,,ok
+SUCROSE,raw,单相有机物,sucrose,1.0,N,Y@1,-,,,,,,ok
+VALINE,raw,单相有机物,valine,1.0,N,Y@1,-,,,,,,ok
+STARCH,raw,单相有机物(近非晶),starch,0.0,N,N,-,,,,,,ok
+NIZATIDI,raw,单相有机物,nizatidine,1.0,N,Y@1,-,,,,,,ok
+Cu-007,txt,单相金属Cu,copper/cu/fcc,1.0,Y@2,Y@1,-,Copper,19.796,1.237,差,"[37.0, 80.0]",ok
+Cu-010,txt,单相金属Cu,copper/cu/fcc,1.0,Y@2,Y@1,-,,,,,,ok
+Cu-013,txt,单相金属Cu,copper/cu/fcc,1.0,Y@1,Y@1,-,,,,,,ok
+Cu-017低角,txt,单相金属Cu(低角),copper/cu/fcc,1.0,Y@2,Y@1,-,,,,,,ok
+Cu-018高角,txt,单相金属Cu(高角),copper/cu/fcc,1.0,Y@4,Y@1,-,,,,,,ok
+Poly-025,txt,高聚物(近非晶),polymer/poly/organic,0.0,N,N,-,,,,,,ok
+Poly-027,txt,高聚物(近非晶),polymer/poly/organic,0.0,N,N,-,,,,,,ok
+Poly-029,txt,高聚物(近非晶),polymer/poly/organic,0.0,N,N,-,,,,,,ok
+TiO2双相,raw,双相TiO2(锐钛+金红),anatase; rutile; tio2,1.0,N; N; N,Y@1; Y@2; Y@1,-; -; -,,,,,,ok
+AlCoO-750c,txt,Co掺杂Al2O3(750C),alcoo/coal/al2o3/cobalt,1.0,N,Y@3,-,,,,,,ok
+AlCoO-650c,txt,Co掺杂Al2O3(650C),alcoo/coal/al2o3/cobalt,1.0,N,Y@4,-,,,,,,ok
+AlCoO-750cB,txt,Co掺杂Al2O3(750C),alcoo/coal/al2o3/cobalt,1.0,N,Y@4,-,,,,,,ok
+NCM811,mdi,三元正极NCM811(致密相召回难点),ncm/nickel cobalt manganese/limn/lini/li(ni/licoo2/mn,1.0,Y@2,Y@1,-,,,,,,ok

@@ -579,7 +579,13 @@ class PhaseView(QWidget):
         self._vm._phase_vm.clear_selection()
 
         if not phase_results:
-            self._method_label.setText(tr("vw.phase_view.no_match"))
+            # P2-2: 没匹配上时, 若谱图本身是弥散包络 (近非晶), 说明这是物理无解
+            # 而非检索失败 —— 直接告诉用户, 免得反复换库空转。
+            info = getattr(self._vm, "amorphous_info", None) or {}
+            if info.get("level") == "amorphous":
+                self._method_label.setText(tr("vw.phase_view.no_match_amorphous"))
+            else:
+                self._method_label.setText(tr("vw.phase_view.no_match"))
             self._match_table.clear_table()
             self._refresh_overlay()
             try:
@@ -597,6 +603,13 @@ class PhaseView(QWidget):
         else:
             self._method_label.setText(
                 f"Search/Match 结果 [{db_src}] (FOM值越低越好)"
+            )
+
+        # P2-2: 谱图弥散但已匹配到结晶相 → 提示按"结晶相 + 非晶背景"处理
+        _info = getattr(self._vm, "amorphous_info", None) or {}
+        if _info.get("level") == "partially_amorphous":
+            self._method_label.setText(
+                self._method_label.text() + tr("vw.phase_view.amorphous_partial")
             )
 
         for result in phase_results:

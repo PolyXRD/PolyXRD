@@ -1770,6 +1770,7 @@ class CIFDatabase:
         min_match: int = 3,
         limit: int = 50,
         max_ref_peaks: int = 40,
+        main_peak_topk: int = 1,
         elements_allowed: set | None = None,
         conn=None,
     ) -> list[dict]:
@@ -1861,10 +1862,21 @@ class CIFDatabase:
             main_meas_i_in_sorted = max(range(n_meas),
                                          key=lambda k: meas_i_sorted[k])
             main_meas_d = meas_sorted[main_meas_i_in_sorted]
+            # 样品最强峰集合 (前 main_peak_topk 个最强峰的 d), 用于放宽主峰匹配:
+            # COD 等参考库的"最强峰"排序常与实验谱略有出入(同一物相两条强线
+            # 谁是 #1 可能互换), 若只比对单一最强峰会把真物相误杀; 比对前 K 个
+            # 最强峰即可保留 Hanawalt 主峰原则的判别力又避免这种脆性。
+            if main_peak_topk and main_peak_topk > 1:
+                _tk = max(1, int(main_peak_topk))
+                _ti = np.argsort(-np.asarray(meas_i_sorted, dtype=np.float64))[:_tk]
+                main_meas_d_topk = [float(meas_sorted[i]) for i in _ti]
+            else:
+                main_meas_d_topk = [main_meas_d] if main_meas_d is not None else []
         else:
             meas_i_sorted = None
             total_i = 0.0
             main_meas_d = None
+            main_meas_d_topk = []
         # ── 0.9.11+: 扫描层向量化 ────────────────────────────
         # 四个热点的定位与替换策略见本模块 `_parse_float_csv` 上方的
         # 模块级注释。语义**逐条对齐**旧实现 (含并列时的先后、去重顺序、
@@ -1956,14 +1968,16 @@ class CIFDatabase:
                 hit_m = _interval_hit(np.sort(ud), md - t_md, md + t_md)
                 n_meas_in_top = int(hit_m.sum())
                 covered_i_sum = float(mi_np[hit_m].sum()) if use_intensity else 0.0
-                # main_peak_match: 物相最强去重峰是否落在样品最强峰窗口内
+                # main_peak_match: 物相最强去重峰是否落在样品前 K 个最强峰窗口内
                 if use_intensity:
                     phase_main_d = float(ud[0])
-                    t_main = max(_tol_scalar(phase_main_d, tol_abs, _trel, use_rel),
-                                 _tol_scalar(main_meas_d, tol_abs, _trel, use_rel))
-                    main_peak_match = (
-                        1.0 if abs(phase_main_d - main_meas_d) <= t_main else 0.0
-                    )
+                    main_peak_match = 0.0
+                    for _mdk in main_meas_d_topk:
+                        t_main = max(_tol_scalar(phase_main_d, tol_abs, _trel, use_rel),
+                                     _tol_scalar(_mdk, tol_abs, _trel, use_rel))
+                        if abs(phase_main_d - _mdk) <= t_main:
+                            main_peak_match = 1.0
+                            break
                 else:
                     main_peak_match = 0.0
                 # top_precision: 最强前 5 个去重峰中有多少被观察到 (窗口以物相峰为中心)

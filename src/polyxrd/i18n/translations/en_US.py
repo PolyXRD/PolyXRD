@@ -825,6 +825,8 @@ translations = {
             "db_user_empty_hint": "The user database has no entries yet. Import your own CIF files via “Database ▸ Manage User Database…”.",
             "db_user": "User Database",
             "no_match": "No matching phases found",
+            "no_match_amorphous": "No matching phases — the pattern is a diffuse halo (near-amorphous); crystalline search does not apply",
+            "amorphous_partial": " · contains amorphous/diffuse background",
             "result_profile": "Profile Fitting Result [{db_src}] (correlation closer to 100% is better)",
             "result_search": "Search/Match Result [{db_src}] (lower FOM is better)",
             "cand_profile": "{name} - Match: {score:.1f}% (R={rfactor:.3f}){sg}{elem}",

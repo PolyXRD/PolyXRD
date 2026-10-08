@@ -1,0 +1,38 @@
+﻿样品,格式,类别,真值组分数,召回率,cod_inorganics命中,builtin命中,pdf2兜底,精修相,Rwp%,GOF,质量,精修窗口,精修状态,检索状态,非晶判定,动态范围,尖锐度
+CORUNDUM,raw,单相氧化物,1,1.0,1,1,0,"Corundum, syn (PDF2 431484)",17.287,2.242,差,"[10.0, 80.0]",ok,ok,crystalline,180.84,0.4559
+FLUORITE,raw,单相卤化物,1,1.0,1,1,0,Calcium Fluoride (PDF2 650535),24.486,2.342,差,"[10.0, 80.0]",ok,ok,crystalline,640.06,0.501
+ZINCITE,raw,单相氧化物,1,1.0,0,1,0,"Zincite, syn (PDF2 361451)",21.901,3.897,差,"[10.0, 80.0]",ok,ok,crystalline,393.52,0.4841
+BRUCITE,raw,单相氢氧化物,1,1.0,0,1,0,,,,,,,ok,crystalline,1364.02,0.5093
+MAGNETIT,raw,单相氧化物,1,1.0,1,1,0,,,,,,,ok,crystalline,115.91,0.2461
+ZIRCON,raw,单相硅酸盐,1,1.0,1,0,0,,,,,,,ok,crystalline,243.21,0.3685
+SILICA,raw,单相石英,1,1.0,0,1,0,,,,,,no_lattice_phase,ok,partially_amorphous,8.14,0.0377
+Y2O3,raw,单相氧化物,1,1.0,0,0,1,Yttrium Oxide (PDF2 431036),26.068,6.868,很差,"[10.0, 80.0]",ok,ok,crystalline,513.03,0.5305
+CPD-1A,raw,三组分混合(1a),3,1.0,1,3,0,,,,,,,ok,crystalline,513.05,0.4798
+CPD-1B,raw,三组分混合(1b),3,1.0,1,3,0,,,,,,,ok,crystalline,153.25,0.4428
+CPD-1C,raw,三组分混合(1c),3,1.0,0,3,0,,,,,,,ok,crystalline,372.0,0.4748
+CPD-1G,raw,三组分混合(1g),3,1.0,1,3,0,,,,,,,ok,crystalline,168.81,0.4142
+CPD-2,raw,四组分+择尤(2),4,1.0,0,4,0,,,,,,,ok,crystalline,231.24,0.4244
+CPD-3,raw,三组分+非晶(3),4,0.75,1,3,1,,,,,,,ok,crystalline,67.61,0.2875
+CPD-4,raw,三组分+微吸收(4),3,1.0,1,2,0,,,,,,,ok,crystalline,82.33,0.347
+BAUXITE,mdi,七相混合(铝土矿),7,0.857,0,6,1,,,,,,,ok,crystalline,113.88,0.2788
+GRANODIO,mdi,天然花岗闪长岩(无固定含量),7,0.571,0,4,1,,,,,,,ok,crystalline,334.03,0.334
+PHARM1GR,raw,五相药物混合(1),5,0.4,0,2,1,,,,,,,ok,crystalline,586.76,0.4475
+PHARM2GR,raw,五相药物混合(2),5,0.8,0,4,1,,,,,,,ok,crystalline,343.99,0.3148
+MANNITOL,raw,单相有机物,1,1.0,0,1,0,,,,,,,ok,crystalline,198.36,0.4312
+SUCROSE,raw,单相有机物,1,1.0,0,1,0,,,,,,,ok,crystalline,180.1,0.4013
+VALINE,raw,单相有机物,1,1.0,0,1,0,,,,,,,ok,crystalline,3025.44,0.6311
+STARCH,raw,单相有机物(近非晶),1,0.0,0,0,0,,,,,,,ok,amorphous,5.52,0.0192
+NIZATIDI,raw,单相有机物,1,1.0,0,1,0,,,,,,,ok,crystalline,58.65,0.2664
+Cu-007,txt,单相金属Cu,1,1.0,1,1,0,Copper (PDF2 892838),98.251,6.145,很差,"[37.0, 80.0]",ok,ok,crystalline,407.15,0.8341
+Cu-010,txt,单相金属Cu,1,1.0,1,1,0,,,,,,,ok,crystalline,276.07,0.283
+Cu-013,txt,单相金属Cu,1,1.0,1,1,0,,,,,,,ok,partially_amorphous,57.8,0.0542
+Cu-017低角,txt,单相金属Cu(低角),1,1.0,1,1,0,,,,,,,ok,crystalline,140.85,0.283
+Cu-018高角,txt,单相金属Cu(高角),1,1.0,1,1,0,,,,,,,ok,crystalline,76.53,0.2837
+Poly-025,txt,高聚物(近非晶),1,0.0,0,0,0,,,,,,,ok,amorphous,16.17,0.1358
+Poly-027,txt,高聚物(近非晶),1,0.0,0,0,0,,,,,,,ok,amorphous,16.68,0.1491
+Poly-029,txt,高聚物(近非晶),1,0.0,0,0,0,,,,,,,ok,amorphous,13.87,0.1266
+TiO2双相,raw,双相TiO2(锐钛+金红),3,1.0,0,3,0,,,,,,,ok,crystalline,432.47,0.4962
+AlCoO-750c,txt,Co掺杂Al2O3(750C),1,1.0,0,1,0,,,,,,,ok,crystalline,158.8,0.4508
+AlCoO-650c,txt,Co掺杂Al2O3(650C),1,1.0,0,1,0,,,,,,,ok,partially_amorphous,21.5,0.1621
+AlCoO-750cB,txt,Co掺杂Al2O3(750C),1,1.0,0,1,0,,,,,,,ok,partially_amorphous,21.5,0.1621
+NCM811,mdi,三元正极NCM811(致密相召回难点),1,1.0,1,1,0,,,,,,,ok,partially_amorphous,20.08,0.0941

@@ -1,0 +1,391 @@
+{
+  "version": "0.1.0",
+  "wavelength": 1.5406,
+  "note": "有机/药物相参考库: 蔗糖取自 COD 结构因子计算 (多型已验证吻合); 甘露醇/缬氨酸/尼扎替丁/淀粉取自校准实验标准谱 (无版权风险)。exp 来源相无晶胞, 仅用于检索匹配、不支持 Rietveld 精修。",
+  "phases": [
+    {
+      "key": "sucrose",
+      "name": "Sucrose",
+      "formula": "C12H22O11",
+      "space_group": "P 1 21 1",
+      "lattice": {
+        "a": 7.763,
+        "b": 8.7109,
+        "c": 10.8701,
+        "alpha": 90.0,
+        "beta": 102.937,
+        "gamma": 90.0
+      },
+      "peaks": [
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 8.339,
+          "intensity": 100.0
+        },
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 10.147,
+          "intensity": 17.3
+        },
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 11.687,
+          "intensity": 10.9
+        },
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 12.755,
+          "intensity": 2.4
+        },
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 13.148,
+          "intensity": 34.8
+        },
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 15.5,
+          "intensity": 6.2
+        },
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 15.832,
+          "intensity": 3.6
+        },
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 16.325,
+          "intensity": 1.7
+        },
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 16.723,
+          "intensity": 1.5
+        },
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 18.84,
+          "intensity": 7.5
+        },
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 19.598,
+          "intensity": 3.7
+        },
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 20.374,
+          "intensity": 1.1
+        },
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 20.837,
+          "intensity": 1.4
+        },
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 22.048,
+          "intensity": 1.6
+        },
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 24.109,
+          "intensity": 1.7
+        },
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 24.759,
+          "intensity": 5.0
+        },
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 25.198,
+          "intensity": 1.8
+        },
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 25.653,
+          "intensity": 1.1
+        },
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 26.473,
+          "intensity": 1.1
+        },
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 27.667,
+          "intensity": 1.1
+        },
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 30.996,
+          "intensity": 1.7
+        },
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 31.942,
+          "intensity": 2.0
+        }
+      ],
+      "peaks_source": "COD 2300557 (pymatgen Cu Kα 结构因子)",
+      "category": "organic"
+    },
+    {
+      "key": "mannitol",
+      "name": "Mannitol",
+      "formula": "C6H14O6",
+      "space_group": "",
+      "lattice": null,
+      "peaks": [
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 10.46,
+          "intensity": 24.5
+        },
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 14.64,
+          "intensity": 37.1
+        },
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 18.74,
+          "intensity": 68.5
+        },
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 21.04,
+          "intensity": 20.9
+        },
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 23.4,
+          "intensity": 100.0
+        },
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 44.04,
+          "intensity": 16.6
+        }
+      ],
+      "peaks_source": "实验标准谱 MANNITOL.RAW (实测峰位/相对强度)",
+      "category": "organic"
+    },
+    {
+      "key": "valine",
+      "name": "Valine",
+      "formula": "C5H11NO2",
+      "space_group": "",
+      "lattice": null,
+      "peaks": [
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 8.04,
+          "intensity": 100.0
+        },
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 16.06,
+          "intensity": 9.1
+        },
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 32.38,
+          "intensity": 19.1
+        }
+      ],
+      "peaks_source": "实验标准谱 VALINE.RAW (实测峰位/相对强度)",
+      "category": "organic"
+    },
+    {
+      "key": "nizatidine",
+      "name": "Nizatidine",
+      "formula": "C12H21N5O2S2",
+      "space_group": "",
+      "lattice": null,
+      "peaks": [
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 6.9,
+          "intensity": 71.9
+        },
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 14.38,
+          "intensity": 100.0
+        },
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 19.5,
+          "intensity": 30.1
+        },
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 23.14,
+          "intensity": 33.8
+        },
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 24.36,
+          "intensity": 31.3
+        },
+        {
+          "hkl": [
+            0,
+            0,
+            0
+          ],
+          "two_theta": 26.38,
+          "intensity": 70.6
+        }
+      ],
+      "peaks_source": "实验标准谱 NIZATIDI.RAW (实测峰位/相对强度)",
+      "category": "organic"
+    }
+  ]
+}

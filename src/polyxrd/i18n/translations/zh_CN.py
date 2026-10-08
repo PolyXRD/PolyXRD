@@ -825,6 +825,8 @@ translations = {
             "db_unmounted_hint": "该数据库未挂载。请从菜单「数据库 ▸ 外挂数据库管理…」导入已解压的库文件。",
             "db_user_empty_hint": "用户数据库里还没有条目。请从菜单「数据库 ▸ 用户数据库管理…」导入你自己的 CIF 文件。",
             "no_match": "未找到匹配物相",
+            "no_match_amorphous": "未找到匹配物相 —— 谱图呈弥散包络 (近非晶), 结晶相检索不适用",
+            "amorphous_partial": " · 含非晶/弥散背景",
             "result_profile": "Profile Fitting 结果 [{db_src}] (相关系数越接近100%越好)",
             "result_search": "Search/Match 结果 [{db_src}] (FOM值越低越好)",
             "cand_profile": "{name} - 匹配度: {score:.1f}% (R={rfactor:.3f}){sg}{elem}",
