@@ -140,6 +140,14 @@ class DataLoader:
         with open(file_path, "r", encoding="utf-8-sig", errors="ignore") as f:
             lines = f.readlines()
 
+        # 防御: 拒绝 JADE / PDF 物相识别报告 (非衍射强度数据)。
+        # 这类文件若被当成 2 列表格误解析, 会产生完全虚假的峰 → 误导性检索结果。
+        if "phase id report" in "".join(lines[:40]).lower():
+            raise ValueError(
+                f"文件 {file_path} 是 JADE/PDF 物相识别报告, 不含衍射强度数据; "
+                f"请加载对应的 .raw / .mdi / .xy 等原始谱图文件。"
+            )
+
         if delimiter is None:
             delimiter = self._detect_delimiter(lines)
 
@@ -414,18 +422,15 @@ class DataLoader:
     ) -> tuple[np.ndarray, np.ndarray, dict]:
         """加载二进制 RAW 格式。
 
-        先按 ``RAW2`` 定长头解析 (实测结构, 见 test_xrd/geshi/4-1.raw):
-          - ``0x000``: 4 字节魔数 ``b"RAW2"``, 后接定长文本头
-          - ``0x102``: int16 LE = 数据点数 n (据此反推数据段偏移 ``len - n*4``)
-          - ``0x10C``: float32 LE = 步长     ``0x110``: float32 LE = 起始 2θ
-          - 数据段: n 个 little-endian float32 强度
-        实测该文件 = 316 字节头 + 7251 个 float32 (start=5.0, step=0.02, 首值 207),
-        与同目录 ``4-1.dat`` 完全一致。
-
-        未被识别的 RAW 变体 (Bruker 等) 仍走旧的"前半 2θ / 后半强度"启发式,
-        保持既有行为不回归。
+        按魔数分流:
+          - ``b"RAW2"``  → Rigaku/通用 RAW2 定长头 (见 ``_load_raw2``)
+          - ``b"FI\\x00\\x00"`` → Rigaku RINT-2000 二进制 (见 ``_load_rigaku_raw``)
+          - 其它未识别变体 (Bruker 等) 仍走旧的"前半 2θ / 后半强度"启发式,
+            保持既有行为不回归。
         """
         raw = file_path.read_bytes()
+        if raw[:4] == b"FI\x00\x00":
+            return self._load_rigaku_raw(raw, file_path)
         if raw[:4] == b"RAW2":
             return self._load_raw2(raw, file_path)
 
@@ -520,6 +525,55 @@ class DataLoader:
         # 乘上几千个序号后累积漂移能到 3e-6° (末点 150.000 会读成 149.999997)。
         # 用 8 位有效数字归一, 既抹掉 float32 噪声, 又保留真实的小数步长(如 0.019999)。
         return float(f"{start:.8g}"), float(f"{step:.8g}")
+
+    # ------------------------------------------------------------------
+    # Rigaku RINT-2000 二进制 (.raw, 魔数 b"FI\x00\x00")
+    # ------------------------------------------------------------------
+    # 实测结构 (csuHJW 教学集, 多台 Rigaku RINT 仪器输出一致):
+    #   - 0x000 : 4 字节魔数 b"FI\x00\x00"
+    #   - 0xB92 (2962): 三个连续 little-endian float32 = (起始 2θ, 终止 2θ, 步长)
+    #   - 数据段: 文件末尾的 n 个 little-endian float32 强度, n = round((end-start)/step)
+    #     即"定长 3162 字节头 + 变长 float32 强度"; 头除轴参数外均为 0 / 仪器参数,
+    #     不存显式波长 (默认 Cu Kα, 由 config 提供)。已用同目录 .txt 对照交叉验证
+    #     (铜 fcc 峰 43.3/50.4/74.1/89.9/95.1° 精确命中, 相关系数 0.93~0.99)。
+    _RIGAKU_MAGIC = b"FI\x00\x00"
+    _RIGAKU_AXIS_OFF = 0xB92      # 2962: start, end, step (3 × float32)
+    _RIGAKU_HDR_FIXED = 0xC5A     # 3162: 退化兜底定长头长
+
+    def _load_rigaku_raw(
+        self, raw: bytes, file_path: Path
+    ) -> tuple[np.ndarray, np.ndarray, dict]:
+        """Rigaku RINT-2000 二进制 ``.raw`` (魔数 ``FI\\x00\\x00``)。"""
+        import struct
+
+        if len(raw) < self._RIGAKU_AXIS_OFF + 12:
+            raise ValueError(f"Rigaku RAW 文件过短, 无法读取轴参数: {file_path}")
+        start = struct.unpack_from("<f", raw, self._RIGAKU_AXIS_OFF)[0]
+        end = struct.unpack_from("<f", raw, self._RIGAKU_AXIS_OFF + 4)[0]
+        step = struct.unpack_from("<f", raw, self._RIGAKU_AXIS_OFF + 8)[0]
+        if not (0.0 < step <= 2.0 and 0.0 <= start < end < 180.0):
+            raise ValueError(
+                f"Rigaku RAW 轴参数异常 (start={start}, end={end}, step={step}): {file_path}"
+            )
+        n = int(round((end - start) / step))
+        if n < 2:
+            raise ValueError(f"Rigaku RAW 点数异常 (n={n}): {file_path}")
+
+        # 数据段 = 文件末尾 n 个 float32 (与定长头 3162 一致; 以轴参数推导为准, 抗头长漂移)
+        offset = len(raw) - n * 4
+        if offset < 0 or offset + n * 4 > len(raw) or offset & 3:
+            offset = self._RIGAKU_HDR_FIXED
+            n = (len(raw) - offset) // 4
+        if n < 2:
+            raise ValueError(f"Rigaku RAW 数据段过短: {file_path}")
+
+        intensity = np.frombuffer(
+            raw[offset:offset + n * 4], dtype="<f4"
+        ).astype(float)
+        two_theta = start + step * np.arange(n, dtype=float)
+
+        meta: dict = {"rigaku_raw": True, "raw_header_len": offset}
+        return two_theta, intensity, meta
 
     def _load_mdi(
         self, file_path: Path, fmt: str = "mdi", **kwargs

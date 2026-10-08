@@ -1,0 +1,2661 @@
+{
+  "version": "1.0",
+  "generated": "2026-10-08 16:09",
+  "roots": {
+    "xrdata_iucr": "D:/Project/XRD/XRData/IUCr",
+    "xrdata_csuhjw": "D:/Project/XRD/XRData/csuHJW",
+    "test_xrd": "D:/Project/XRD/test_xrd"
+  },
+  "datasets": {
+    "xrdata_iucr": [
+      {
+        "id": "CORUNDUM",
+        "category": "单相氧化物",
+        "truth": [
+          [
+            "Corundum Al2O3",
+            100.0
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/IUCr/CORUNDUM.RAW",
+            "size": 29320
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "FLUORITE",
+        "category": "单相卤化物",
+        "truth": [
+          [
+            "Fluorite CaF2",
+            100.0
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/IUCr/FLUORITE.RAW",
+            "size": 29320
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "ZINCITE",
+        "category": "单相氧化物",
+        "truth": [
+          [
+            "Zincite ZnO",
+            100.0
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/IUCr/ZINCITE.RAW",
+            "size": 29320
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "BRUCITE",
+        "category": "单相氢氧化物",
+        "truth": [
+          [
+            "Brucite Mg(OH)2",
+            100.0
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/IUCr/BRUCITE.RAW",
+            "size": 29320
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "MAGNETIT",
+        "category": "单相氧化物",
+        "truth": [
+          [
+            "Magnetite Fe3O4",
+            100.0
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/IUCr/MAGNETIT.RAW",
+            "size": 29320
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "ZIRCON",
+        "category": "单相硅酸盐",
+        "truth": [
+          [
+            "Zircon ZrSiO4",
+            100.0
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/IUCr/ZIRCON.RAW",
+            "size": 29320
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "SILICA",
+        "category": "单相石英",
+        "truth": [
+          [
+            "alpha-Quartz SiO2",
+            100.0
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/IUCr/SILICA.RAW",
+            "size": 29320
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "CPD-Y2O3",
+        "category": "单相氧化物",
+        "truth": [
+          [
+            "Y2O3",
+            100.0
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/IUCr/CPD-Y2O3.RAW",
+            "size": 29320
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "CPD-1A",
+        "category": "三组分混合(1a)",
+        "truth": [
+          [
+            "Al2O3",
+            1.15
+          ],
+          [
+            "ZnO",
+            4.04
+          ],
+          [
+            "CaF2",
+            94.81
+          ]
+        ],
+        "formats": {
+          "mdi": {
+            "path": "D:/Project/XRD/XRData/IUCr/CPD-1A.mdi",
+            "size": 59896
+          },
+          "raw": {
+            "path": "D:/Project/XRD/XRData/IUCr/CPD-1A.RAW",
+            "size": 29320
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "CPD-1B",
+        "category": "三组分混合(1b)",
+        "truth": [
+          [
+            "Al2O3",
+            94.31
+          ],
+          [
+            "ZnO",
+            1.36
+          ],
+          [
+            "CaF2",
+            4.33
+          ]
+        ],
+        "formats": {
+          "mdi": {
+            "path": "D:/Project/XRD/XRData/IUCr/CPD-1B.mdi",
+            "size": 59896
+          },
+          "raw": {
+            "path": "D:/Project/XRD/XRData/IUCr/CPD-1B.RAW",
+            "size": 29320
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "CPD-1C",
+        "category": "三组分混合(1c)",
+        "truth": [
+          [
+            "Al2O3",
+            5.04
+          ],
+          [
+            "ZnO",
+            93.59
+          ],
+          [
+            "CaF2",
+            1.36
+          ]
+        ],
+        "formats": {
+          "mdi": {
+            "path": "D:/Project/XRD/XRData/IUCr/CPD-1C.mdi",
+            "size": 59896
+          },
+          "raw": {
+            "path": "D:/Project/XRD/XRData/IUCr/CPD-1C.RAW",
+            "size": 29320
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "CPD-1D",
+        "category": "三组分混合(1d)",
+        "truth": [
+          [
+            "Al2O3",
+            13.53
+          ],
+          [
+            "ZnO",
+            32.89
+          ],
+          [
+            "CaF2",
+            53.58
+          ]
+        ],
+        "formats": {
+          "mdi": {
+            "path": "D:/Project/XRD/XRData/IUCr/CPD-1D.mdi",
+            "size": 59896
+          },
+          "raw": {
+            "path": "D:/Project/XRD/XRData/IUCr/CPD-1D.RAW",
+            "size": 29320
+          }
+        },
+        "notes": "当前 validate_xrdata.py 未覆盖 (可作扩展验收样本)"
+      },
+      {
+        "id": "CPD-1E",
+        "category": "三组分混合(1e)",
+        "truth": [
+          [
+            "Al2O3",
+            55.12
+          ],
+          [
+            "ZnO",
+            15.25
+          ],
+          [
+            "CaF2",
+            29.62
+          ]
+        ],
+        "formats": {
+          "mdi": {
+            "path": "D:/Project/XRD/XRData/IUCr/CPD-1E.mdi",
+            "size": 59896
+          },
+          "raw": {
+            "path": "D:/Project/XRD/XRData/IUCr/CPD-1E.RAW",
+            "size": 29320
+          }
+        },
+        "notes": "当前 validate_xrdata.py 未覆盖 (可作扩展验收样本)"
+      },
+      {
+        "id": "CPD-1F",
+        "category": "三组分混合(1f)",
+        "truth": [
+          [
+            "Al2O3",
+            27.06
+          ],
+          [
+            "ZnO",
+            55.22
+          ],
+          [
+            "CaF2",
+            17.72
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/IUCr/CPD-1F.RAW",
+            "size": 29320
+          }
+        },
+        "notes": "当前 validate_xrdata.py 未覆盖 (可作扩展验收样本)"
+      },
+      {
+        "id": "CPD-1G",
+        "category": "三组分混合(1g,可单测)",
+        "truth": [
+          [
+            "Al2O3",
+            31.37
+          ],
+          [
+            "ZnO",
+            34.21
+          ],
+          [
+            "CaF2",
+            34.42
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/IUCr/CPD-1G.RAW",
+            "size": 29320
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "CPD-1H",
+        "category": "三组分混合(1h)",
+        "truth": [
+          [
+            "Al2O3",
+            35.12
+          ],
+          [
+            "ZnO",
+            30.19
+          ],
+          [
+            "CaF2",
+            34.69
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/IUCr/CPD-1H.RAW",
+            "size": 29320
+          }
+        },
+        "notes": "当前 validate_xrdata.py 未覆盖 (可作扩展验收样本)"
+      },
+      {
+        "id": "CPD-2",
+        "category": "四组分+择优取向",
+        "truth": [
+          [
+            "Al2O3",
+            21.27
+          ],
+          [
+            "ZnO",
+            19.94
+          ],
+          [
+            "CaF2",
+            22.53
+          ],
+          [
+            "Brucite Mg(OH)2",
+            36.26
+          ]
+        ],
+        "formats": {
+          "mdi": {
+            "path": "D:/Project/XRD/XRData/IUCr/CPD-2.mdi",
+            "size": 59896
+          },
+          "raw": {
+            "path": "D:/Project/XRD/XRData/IUCr/CPD-2.RAW",
+            "size": 29320
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "CPD-3",
+        "category": "三组分+非晶",
+        "truth": [
+          [
+            "Al2O3",
+            30.79
+          ],
+          [
+            "ZnO",
+            19.68
+          ],
+          [
+            "CaF2",
+            20.06
+          ],
+          [
+            "Glass (SiO2,非晶)",
+            29.47
+          ]
+        ],
+        "formats": {
+          "mdi": {
+            "path": "D:/Project/XRD/XRData/IUCr/CPD-3.mdi",
+            "size": 59896
+          },
+          "raw": {
+            "path": "D:/Project/XRD/XRData/IUCr/CPD-3.RAW",
+            "size": 29320
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "CPD-4",
+        "category": "三组分+微吸收",
+        "truth": [
+          [
+            "Al2O3",
+            50.46
+          ],
+          [
+            "Magnetite Fe3O4",
+            19.64
+          ],
+          [
+            "Zircon ZrSiO4",
+            29.9
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/IUCr/CPD-4.RAW",
+            "size": 29320
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "BAUXITE",
+        "category": "七相合成铝土矿",
+        "truth": [
+          [
+            "Gibbsite",
+            54.9
+          ],
+          [
+            "Boehmite",
+            14.93
+          ],
+          [
+            "Hematite",
+            10.0
+          ],
+          [
+            "Goethite",
+            9.98
+          ],
+          [
+            "Quartz",
+            5.16
+          ],
+          [
+            "Kaolinite",
+            3.02
+          ],
+          [
+            "Anatase",
+            2.0
+          ]
+        ],
+        "formats": {
+          "mdi": {
+            "path": "D:/Project/XRD/XRData/IUCr/BAUXITE.mdi",
+            "size": 59896
+          },
+          "raw": {
+            "path": "D:/Project/XRD/XRData/IUCr/BAUXITE.RAW",
+            "size": 29320
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "GRANODIO",
+        "category": "天然花岗闪长岩",
+        "truth": [
+          [
+            "Quartz(主)",
+            null
+          ],
+          [
+            "Feldspar(主)",
+            null
+          ],
+          [
+            "Albite(主)",
+            null
+          ],
+          [
+            "Biotite(主)",
+            null
+          ],
+          [
+            "Clinochlore(次)",
+            null
+          ],
+          [
+            "Hornblende(次)",
+            null
+          ],
+          [
+            "Zircon(痕量)",
+            null
+          ]
+        ],
+        "formats": {
+          "mdi": {
+            "path": "D:/Project/XRD/XRData/IUCr/GRANODIO.mdi",
+            "size": 59896
+          },
+          "raw": {
+            "path": "D:/Project/XRD/XRData/IUCr/GRANODIO.RAW",
+            "size": 29320
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "PHARM1GR",
+        "category": "五相药物混合(1)",
+        "truth": [
+          [
+            "Mannitol",
+            null
+          ],
+          [
+            "Sucrose",
+            null
+          ],
+          [
+            "DL-Valine",
+            null
+          ],
+          [
+            "Starch",
+            null
+          ],
+          [
+            "Nizatidine",
+            null
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/IUCr/PHARM1GR.RAW",
+            "size": 19320
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "PHARM2GR",
+        "category": "五相药物混合(2)",
+        "truth": [
+          [
+            "Mannitol",
+            null
+          ],
+          [
+            "Sucrose",
+            null
+          ],
+          [
+            "DL-Valine",
+            null
+          ],
+          [
+            "Starch",
+            null
+          ],
+          [
+            "Nizatidine",
+            null
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/IUCr/PHARM2GR.RAW",
+            "size": 19320
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "MANNITOL",
+        "category": "单相有机物",
+        "truth": [
+          [
+            "Mannitol",
+            100.0
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/IUCr/MANNITOL.RAW",
+            "size": 19320
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "SUCROSE",
+        "category": "单相有机物",
+        "truth": [
+          [
+            "Sucrose",
+            100.0
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/IUCr/SUCROSE.RAW",
+            "size": 19320
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "VALINE",
+        "category": "单相有机物",
+        "truth": [
+          [
+            "DL-Valine",
+            100.0
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/IUCr/VALINE.RAW",
+            "size": 19320
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "STARCH",
+        "category": "单相有机物(近非晶)",
+        "truth": [
+          [
+            "Starch",
+            100.0
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/IUCr/STARCH.RAW",
+            "size": 19320
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "NIZATIDI",
+        "category": "单相有机物",
+        "truth": [
+          [
+            "Nizatidine",
+            100.0
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/IUCr/NIZATIDI.RAW",
+            "size": 19320
+          }
+        },
+        "notes": ""
+      }
+    ],
+    "xrdata_csuhjw": [
+      {
+        "id": "data001",
+        "category": "双相TiO2(锐钛+金红石)",
+        "truth": [
+          [
+            "TiO2锐钛矿",
+            null
+          ],
+          [
+            "TiO2金红石",
+            null
+          ]
+        ],
+        "formats": {
+          "mdi": {
+            "path": "D:/Project/XRD/XRData/csuHJW/data001：TiO2双相.mdi",
+            "size": 28958
+          },
+          "pdf": {
+            "path": "D:/Project/XRD/XRData/csuHJW/data001：TiO2双相.pdf",
+            "size": 600
+          },
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/data001：TiO2双相.raw",
+            "size": 17162
+          },
+          "rpt": {
+            "path": "D:/Project/XRD/XRData/csuHJW/data001：TiO2双相.rpt",
+            "size": 1009
+          },
+          "txt": {
+            "path": "D:/Project/XRD/XRData/csuHJW/data001：TiO2双相.txt",
+            "size": 827
+          }
+        },
+        "notes": ".txt/.rpt 是 JADE Phase ID Report, 会防御性报错; 用 .raw (Rigaku 解析器) 或 .mdi"
+      },
+      {
+        "id": "data002",
+        "category": "标准硅 Si",
+        "truth": [
+          [
+            "Si",
+            100.0
+          ]
+        ],
+        "formats": {
+          "pdf": {
+            "path": "D:/Project/XRD/XRData/csuHJW/data002：标准Si.pdf",
+            "size": 472
+          },
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/data002：标准Si.raw",
+            "size": 19162
+          }
+        },
+        "notes": ".pdf 为报告非谱图"
+      },
+      {
+        "id": "data003",
+        "category": "AlCoO-650C",
+        "truth": [
+          [
+            "Al2O3(Co掺杂)",
+            null
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/data003：AlCoO-650C.raw",
+            "size": 15162
+          }
+        },
+        "notes": "仅 .raw (Rigaku), 无 txt 副本"
+      },
+      {
+        "id": "data004",
+        "category": "AlCoO-750C",
+        "truth": [
+          [
+            "Al2O3(Co掺杂)",
+            null
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/data004：AlCoO-750C.raw",
+            "size": 15162
+          },
+          "sav": {
+            "path": "D:/Project/XRD/XRData/csuHJW/data004：AlCoO-750C.sav",
+            "size": 29238
+          },
+          "txt": {
+            "path": "D:/Project/XRD/XRData/csuHJW/data004：AlCoO-750C.txt",
+            "size": 39031
+          }
+        },
+        "notes": ".sav 为 Bruker 专有"
+      },
+      {
+        "id": "data005",
+        "category": "AlCoO-650C",
+        "truth": [
+          [
+            "Al2O3(Co掺杂)",
+            null
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/data005：AlCoO-650C.raw",
+            "size": 15162
+          },
+          "txt": {
+            "path": "D:/Project/XRD/XRData/csuHJW/data005：AlCoO-650C.txt",
+            "size": 37134
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "data006",
+        "category": "AlCoO-750C",
+        "truth": [
+          [
+            "Al2O3(Co掺杂)",
+            null
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/data006：AlCoO-750C.raw",
+            "size": 4262
+          },
+          "txt": {
+            "path": "D:/Project/XRD/XRData/csuHJW/data006：AlCoO-750C.TXT",
+            "size": 18243
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "data007",
+        "category": "铜 Cu",
+        "truth": [
+          [
+            "Cu(FCC)",
+            100.0
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data007：铜衍射谱系列.raw",
+            "size": 16162
+          },
+          "txt": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data007：铜衍射谱系列.TXT",
+            "size": 65242
+          }
+        },
+        "notes": "Data007-016 为同一 Cu 系列不同条件"
+      },
+      {
+        "id": "data008",
+        "category": "铜 Cu",
+        "truth": [
+          [
+            "Cu(FCC)",
+            100.0
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data008：铜衍射谱系列.raw",
+            "size": 16162
+          },
+          "txt": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data008：铜衍射谱系列.TXT",
+            "size": 65468
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "data009",
+        "category": "铜 Cu",
+        "truth": [
+          [
+            "Cu(FCC)",
+            100.0
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data009：铜衍射谱系列.raw",
+            "size": 16162
+          },
+          "txt": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data009：铜衍射谱系列.TXT",
+            "size": 66135
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "data010",
+        "category": "铜 Cu",
+        "truth": [
+          [
+            "Cu(FCC)",
+            100.0
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data010：铜衍射谱系列.raw",
+            "size": 16162
+          },
+          "txt": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data010：铜衍射谱系列.TXT",
+            "size": 67289
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "data011",
+        "category": "铜 Cu",
+        "truth": [
+          [
+            "Cu(FCC)",
+            100.0
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data011：铜衍射谱系列.raw",
+            "size": 16162
+          },
+          "txt": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data011：铜衍射谱系列.TXT",
+            "size": 68196
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "data012",
+        "category": "铜 Cu",
+        "truth": [
+          [
+            "Cu(FCC)",
+            100.0
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data012：铜衍射谱系列.raw",
+            "size": 16162
+          },
+          "txt": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data012：铜衍射谱系列.TXT",
+            "size": 69097
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "data013",
+        "category": "铜 Cu",
+        "truth": [
+          [
+            "Cu(FCC)",
+            100.0
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data013：铜衍射谱系列.raw",
+            "size": 16162
+          },
+          "txt": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data013：铜衍射谱系列.TXT",
+            "size": 70486
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "data014",
+        "category": "铜 Cu",
+        "truth": [
+          [
+            "Cu(FCC)",
+            100.0
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data014：铜衍射谱系列.raw",
+            "size": 16162
+          },
+          "txt": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data014：铜衍射谱系列.TXT",
+            "size": 71601
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "data015",
+        "category": "铜 Cu",
+        "truth": [
+          [
+            "Cu(FCC)",
+            100.0
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data015：铜衍射谱系列.raw",
+            "size": 16162
+          },
+          "txt": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data015：铜衍射谱系列.TXT",
+            "size": 72259
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "data016",
+        "category": "铜 Cu",
+        "truth": [
+          [
+            "Cu(FCC)",
+            100.0
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data016：铜衍射谱系列.raw",
+            "size": 16162
+          },
+          "txt": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data016：铜衍射谱系列.TXT",
+            "size": 72259
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "data017",
+        "category": "铜 低角度",
+        "truth": [
+          [
+            "Cu(FCC)",
+            100.0
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data017：铜的低角度衍射谱.raw",
+            "size": 8162
+          },
+          "txt": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data017：铜的低角度衍射谱.txt",
+            "size": 16195
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "data018",
+        "category": "铜 高角度",
+        "truth": [
+          [
+            "Cu(FCC)",
+            100.0
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data018：铜的高角度衍射谱.raw",
+            "size": 8582
+          },
+          "txt": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data018：铜的高角度衍射谱.txt",
+            "size": 17408
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "data019",
+        "category": "Al-Zn-Mg合金时效态",
+        "truth": [
+          [
+            "Al(基体)",
+            null
+          ],
+          [
+            "MgZn2(时效相)",
+            null
+          ]
+        ],
+        "formats": {
+          "pdf": {
+            "path": "D:/Project/XRD/XRData/csuHJW/data019：Al-Zn-Mg合金时效态.pdf",
+            "size": 597
+          },
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/data019：Al-Zn-Mg合金时效态.raw",
+            "size": 18162
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "data020",
+        "category": "残余奥氏体钢",
+        "truth": [
+          [
+            "奥氏体",
+            null
+          ],
+          [
+            "铁素体",
+            null
+          ]
+        ],
+        "formats": {
+          "pdf": {
+            "path": "D:/Project/XRD/XRData/csuHJW/data020：残余奥氏体钢.pdf",
+            "size": 596
+          },
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/data020：残余奥氏体钢.raw",
+            "size": 15162
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "data021",
+        "category": "氧化铁",
+        "truth": [
+          [
+            "Fe2O3/Fe3O4",
+            null
+          ]
+        ],
+        "formats": {
+          "pdf": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data021：氧化铁.pdf",
+            "size": 595
+          },
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data021：氧化铁.raw",
+            "size": 19162
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "data022",
+        "category": "黏土矿物",
+        "truth": [
+          [
+            "黏土(高岭石/云母类)",
+            null
+          ]
+        ],
+        "formats": {
+          "pdf": {
+            "path": "D:/Project/XRD/XRData/csuHJW/data022：黏土矿物.pdf",
+            "size": 1322
+          },
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/data022：黏土矿物.raw",
+            "size": 15562
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "data023",
+        "category": "含非晶相 ZnO+CaCO3+Al2O3",
+        "truth": [
+          [
+            "ZnO",
+            null
+          ],
+          [
+            "CaCO3",
+            null
+          ],
+          [
+            "Al2O3",
+            null
+          ],
+          [
+            "非晶",
+            null
+          ]
+        ],
+        "formats": {
+          "pdf": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data023：含非晶相 ZnO+CaCO3+Al2O3：25.pdf",
+            "size": 719
+          },
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data023：含非晶相 ZnO+CaCO3+Al2O3：25.raw",
+            "size": 18162
+          },
+          "sav": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data023：含非晶相 ZnO+CaCO3+Al2O3：25.sav",
+            "size": 38043
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "data024",
+        "category": "炭原丝",
+        "truth": [
+          [
+            "碳(近非晶)",
+            null
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data024：炭原丝.raw",
+            "size": 14162
+          }
+        },
+        "notes": "近非晶, 不宜强行结晶相匹配"
+      },
+      {
+        "id": "data025",
+        "category": "高聚物1",
+        "truth": [
+          [
+            "polymer(近非晶)",
+            null
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data025：高聚物1.raw",
+            "size": 7562
+          },
+          "txt": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data025：高聚物1.txt",
+            "size": 14656
+          }
+        },
+        "notes": "data025-029 高聚物系列, 近非晶"
+      },
+      {
+        "id": "data026",
+        "category": "高聚物2",
+        "truth": [
+          [
+            "polymer(近非晶)",
+            null
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data026：高聚物2.raw",
+            "size": 7562
+          },
+          "txt": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data026：高聚物2.txt",
+            "size": 14497
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "data027",
+        "category": "高聚物3",
+        "truth": [
+          [
+            "polymer(近非晶)",
+            null
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data027：高聚物3.raw",
+            "size": 7562
+          },
+          "txt": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data027：高聚物3.txt",
+            "size": 14584
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "data028",
+        "category": "高聚物4",
+        "truth": [
+          [
+            "polymer(近非晶)",
+            null
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data028：高聚物4.raw",
+            "size": 7562
+          },
+          "txt": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data028：高聚物4.txt",
+            "size": 14543
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "data029",
+        "category": "高聚物5",
+        "truth": [
+          [
+            "polymer(近非晶)",
+            null
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data029：高聚物5.raw",
+            "size": 7562
+          },
+          "txt": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data029：高聚物5.txt",
+            "size": 14371
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "data030",
+        "category": "LiMnO2+Si",
+        "truth": [
+          [
+            "LiMnO2",
+            null
+          ],
+          [
+            "Si(内标)",
+            null
+          ]
+        ],
+        "formats": {
+          "pdf": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data030：LiMnO2+Si.pdf",
+            "size": 761
+          },
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data030：LiMnO2+Si.raw",
+            "size": 17166
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "data031",
+        "category": "ZrB-ZrB2",
+        "truth": [
+          [
+            "ZrB",
+            null
+          ],
+          [
+            "ZrB2",
+            null
+          ]
+        ],
+        "formats": {
+          "abc": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data031：ZrB-ZrB2.abc",
+            "size": 1902
+          },
+          "pdf": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data031：ZrB-ZrB2.pdf",
+            "size": 592
+          },
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data031：ZrB-ZrB2.raw",
+            "size": 17162
+          }
+        },
+        "notes": ".abc 专有格式"
+      },
+      {
+        "id": "data032",
+        "category": "Lansolazole(药物)",
+        "truth": [
+          [
+            "Lansolazole",
+            null
+          ]
+        ],
+        "formats": {
+          "is0": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data032： Lansolazole.is0",
+            "size": 13419
+          },
+          "is1": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data032： Lansolazole.is1",
+            "size": 13731
+          },
+          "is2": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data032： Lansolazole.is2",
+            "size": 13679
+          },
+          "pdf": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data032： Lansolazole.pdf",
+            "size": 463
+          },
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data032： Lansolazole.raw",
+            "size": 12562
+          }
+        },
+        "notes": ".is0/.is1/.is2 专有格式; 无机库难覆盖"
+      },
+      {
+        "id": "data033",
+        "category": "单相锐钛矿",
+        "truth": [
+          [
+            "Anatase TiO2",
+            100.0
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data033：单相锐钛矿.raw",
+            "size": 17162
+          },
+          "sav": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data033：单相锐钛矿.sav",
+            "size": 35053
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "data034",
+        "category": "7046-7P(编号样品)",
+        "truth": [],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data034：7046-7P.raw",
+            "size": 29158
+          },
+          "sav": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data034：7046-7P.sav",
+            "size": 58084
+          }
+        },
+        "notes": "真值未知, 需查 7046-7P 编号含义"
+      },
+      {
+        "id": "data035",
+        "category": "硬质合金 WC 残余应力",
+        "truth": [
+          [
+            "WC",
+            100.0
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/data035：硬质合金深冷处理后WC相的残余应力.raw",
+            "size": 9632
+          },
+          "sav": {
+            "path": "D:/Project/XRD/XRData/csuHJW/data035：硬质合金深冷处理后WC相的残余应力.sav",
+            "size": 12673
+          }
+        },
+        "notes": "应力测试用途"
+      },
+      {
+        "id": "data036",
+        "category": "ZnO-CaCO3-SiO2+Al2O3 四元混合",
+        "truth": [
+          [
+            "ZnO",
+            null
+          ],
+          [
+            "CaCO3",
+            null
+          ],
+          [
+            "SiO2",
+            null
+          ],
+          [
+            "Al2O3",
+            null
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data036：ZnO-CaCO3-SiO2+Al2O3.raw",
+            "size": 17162
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "data037",
+        "category": "Amorphous+SiO2",
+        "truth": [
+          [
+            "SiO2(结晶)",
+            null
+          ],
+          [
+            "非晶",
+            null
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data037：Amorphous+SiO2.raw",
+            "size": 18162
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "data038",
+        "category": "Y2O3",
+        "truth": [
+          [
+            "Y2O3",
+            100.0
+          ]
+        ],
+        "formats": {
+          "pdf": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data038：Y2O3.pdf",
+            "size": 464
+          },
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data038：Y2O3.raw",
+            "size": 21162
+          },
+          "rrp": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data038：Y2O3.rrp",
+            "size": 214968
+          }
+        },
+        "notes": ".rrp 专有格式"
+      },
+      {
+        "id": "data039",
+        "category": "LiMnO2+Si",
+        "truth": [
+          [
+            "LiMnO2",
+            null
+          ],
+          [
+            "Si(内标)",
+            null
+          ]
+        ],
+        "formats": {
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data039：LiMnO2+Si.raw",
+            "size": 17166
+          }
+        },
+        "notes": ""
+      },
+      {
+        "id": "data040",
+        "category": "NCM811 三元正极",
+        "truth": [
+          [
+            "NCM811 LiNi0.8Co0.1Mn0.1O2",
+            null
+          ]
+        ],
+        "formats": {
+          "mdi": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data040：NCM：811.mdi",
+            "size": 28958
+          },
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data040：NCM：811.raw",
+            "size": 17162
+          }
+        },
+        "notes": "致密相; .raw 为 Rigaku 可解析"
+      },
+      {
+        "id": "data041",
+        "category": "ZnO+CaCO3",
+        "truth": [
+          [
+            "ZnO",
+            null
+          ],
+          [
+            "CaCO3",
+            null
+          ]
+        ],
+        "formats": {
+          "cif": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data041/CaCO3.cif",
+            "size": 4521
+          },
+          "lst": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data041/Data041.lst",
+            "size": 54397
+          },
+          "par": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data041/Data041.par",
+            "size": 1653
+          },
+          "xls": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data041/Data041.XLS",
+            "size": 734
+          },
+          "mdi": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data041/Data041：ZnO+CaCO3.mdi",
+            "size": 33084
+          },
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data041/Data041：ZnO+CaCO3.raw",
+            "size": 19162
+          },
+          "txt": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data041/Data041：ZnO+CaCO3.txt",
+            "size": 56809
+          }
+        },
+        "notes": "目录型: 子目录含 ZnO.cif/CaCO3.cif 可作精修起点"
+      },
+      {
+        "id": "data042",
+        "category": "陶瓷ZrSiO4-1180部分晶化",
+        "truth": [
+          [
+            "ZrSiO4",
+            null
+          ],
+          [
+            "ZrO2",
+            null
+          ],
+          [
+            "Cristobalite",
+            null
+          ]
+        ],
+        "formats": {
+          "cif": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data042/Cristobalite.cif",
+            "size": 3695
+          },
+          "lst": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data042/Data042：1：陶瓷ZrSiO-1180 部分晶化.lst",
+            "size": 117518
+          },
+          "par": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data042/Data042：1：陶瓷ZrSiO-1180 部分晶化.par",
+            "size": 129905
+          },
+          "txt": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data042/Data042：1：陶瓷ZrSiO-1180 部分晶化.txt",
+            "size": 54317
+          }
+        },
+        "notes": "目录型: 子目录含 3 个 .cif; 仅 par/lst/txt, 原始谱图或需从 par 恢复"
+      },
+      {
+        "id": "data043",
+        "category": "Ni(OH)2",
+        "truth": [
+          [
+            "Ni(OH)2",
+            null
+          ]
+        ],
+        "formats": {
+          "apf": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data043/(Ni Co Mn)(OH)2.apf",
+            "size": 1425
+          },
+          "spf": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data043/(Ni Co Mn)(OH)2.spf",
+            "size": 1701
+          },
+          "cif": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data043/(Ni,Co,Mn)(OH)2.cif",
+            "size": 11934
+          },
+          "raw": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data043/07009：3：Ni(OH)2.raw",
+            "size": 18162
+          },
+          "lst": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data043/Data043：Ni(OH)2.lst",
+            "size": 145951
+          },
+          "par": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data043/Data043：Ni(OH)2.par",
+            "size": 21443
+          },
+          "txt": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data043/Data043：Ni(OH)2.txt",
+            "size": 49847
+          }
+        },
+        "notes": "目录型: 子目录含 .apf/.spf/.cif 与 07009 Ni(OH)2.raw"
+      },
+      {
+        "id": "data044",
+        "category": "Al-MgZn2过时效态",
+        "truth": [
+          [
+            "Al",
+            null
+          ],
+          [
+            "MgZn2",
+            null
+          ]
+        ],
+        "formats": {
+          "cif": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data044/Al.cif",
+            "size": 9385
+          },
+          "par": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data044/Data044：Al-MgZn2过时效态.par",
+            "size": 22201
+          },
+          "txt": {
+            "path": "D:/Project/XRD/XRData/csuHJW/Data044/Data044：Al-MgZn2过时效态.txt",
+            "size": 49805
+          }
+        },
+        "notes": "目录型: 子目录含 Al.cif/MgZn2.cif; 仅 txt/par"
+      }
+    ],
+    "test_xrd_baseline13": [
+      {
+        "id": "1-1",
+        "category": "13试样基准(元素限定+定量)",
+        "truth": [
+          [
+            "LiFePO4",
+            100.0
+          ]
+        ],
+        "formats": {
+          "txt": {
+            "path": "D:/Project/XRD/test_xrd/txt/1-1.txt",
+            "size": 103523
+          },
+          "mdi": {
+            "path": "D:/Project/XRD/test_xrd/mdi/1-1.mdi",
+            "size": 40271
+          }
+        },
+        "notes": "端到端验收入口: tests/test_xrd_samples.py (含元素限定)"
+      },
+      {
+        "id": "1-2",
+        "category": "13试样基准(元素限定+定量)",
+        "truth": [
+          [
+            "NCM 811",
+            100.0
+          ]
+        ],
+        "formats": {
+          "txt": {
+            "path": "D:/Project/XRD/test_xrd/txt/1-2.txt",
+            "size": 66578
+          },
+          "mdi": {
+            "path": "D:/Project/XRD/test_xrd/mdi/1-2.mdi",
+            "size": 28958
+          },
+          "raw": {
+            "path": "D:/Project/XRD/test_xrd/raw/1-2.raw",
+            "size": 17162
+          }
+        },
+        "notes": "端到端验收入口: tests/test_xrd_samples.py (含元素限定)"
+      },
+      {
+        "id": "2-1",
+        "category": "13试样基准(元素限定+定量)",
+        "truth": [
+          [
+            "ZnO",
+            50.0
+          ],
+          [
+            "CaCO3",
+            50.0
+          ]
+        ],
+        "formats": {
+          "txt": {
+            "path": "D:/Project/XRD/test_xrd/txt/2-1.txt",
+            "size": 72783
+          },
+          "mdi": {
+            "path": "D:/Project/XRD/test_xrd/mdi/2-1.mdi",
+            "size": 33084
+          },
+          "raw": {
+            "path": "D:/Project/XRD/test_xrd/raw/2-1.raw",
+            "size": 19162
+          },
+          "xy": {
+            "path": "D:/Project/XRD/test_xrd/xy/2-1.xy",
+            "size": 72783
+          }
+        },
+        "notes": "端到端验收入口: tests/test_xrd_samples.py (含元素限定)"
+      },
+      {
+        "id": "2-2",
+        "category": "13试样基准(元素限定+定量)",
+        "truth": [
+          [
+            "TiO2锐钛矿",
+            null
+          ],
+          [
+            "TiO2金红石",
+            null
+          ]
+        ],
+        "formats": {
+          "txt": {
+            "path": "D:/Project/XRD/test_xrd/txt/2-2.txt",
+            "size": 59235
+          },
+          "mdi": {
+            "path": "D:/Project/XRD/test_xrd/mdi/2-2.mdi",
+            "size": 28958
+          },
+          "raw": {
+            "path": "D:/Project/XRD/test_xrd/raw/2-2.raw",
+            "size": 17162
+          },
+          "xy": {
+            "path": "D:/Project/XRD/test_xrd/xy/2-2.xy",
+            "size": 59235
+          }
+        },
+        "notes": "端到端验收入口: tests/test_xrd_samples.py (含元素限定)"
+      },
+      {
+        "id": "3-1",
+        "category": "13试样基准(元素限定+定量)",
+        "truth": [
+          [
+            "ZnO",
+            93.59
+          ],
+          [
+            "Al2O3",
+            5.04
+          ],
+          [
+            "CaF2",
+            1.36
+          ]
+        ],
+        "formats": {
+          "txt": {
+            "path": "D:/Project/XRD/test_xrd/txt/3-1.txt",
+            "size": 127478
+          },
+          "mdi": {
+            "path": "D:/Project/XRD/test_xrd/mdi/3-1.mdi",
+            "size": 59896
+          },
+          "raw": {
+            "path": "D:/Project/XRD/test_xrd/raw/3-1.raw",
+            "size": 29320
+          },
+          "xy": {
+            "path": "D:/Project/XRD/test_xrd/xy/3-1.xy",
+            "size": 127478
+          }
+        },
+        "notes": "端到端验收入口: tests/test_xrd_samples.py (含元素限定); ≈ IUCr CPD-1C (同配比)"
+      },
+      {
+        "id": "3-2",
+        "category": "13试样基准(元素限定+定量)",
+        "truth": [
+          [
+            "ZnO",
+            19.68
+          ],
+          [
+            "Al2O3",
+            30.79
+          ],
+          [
+            "CaF2",
+            20.06
+          ],
+          [
+            "非晶玻璃",
+            29.47
+          ]
+        ],
+        "formats": {
+          "txt": {
+            "path": "D:/Project/XRD/test_xrd/txt/3-2.txt",
+            "size": 128052
+          },
+          "mdi": {
+            "path": "D:/Project/XRD/test_xrd/mdi/3-2.mdi",
+            "size": 59896
+          },
+          "raw": {
+            "path": "D:/Project/XRD/test_xrd/raw/3-2.RAW",
+            "size": 29320
+          },
+          "xy": {
+            "path": "D:/Project/XRD/test_xrd/xy/3-2.xy",
+            "size": 128052
+          }
+        },
+        "notes": "端到端验收入口: tests/test_xrd_samples.py (含元素限定); ≈ IUCr CPD-3 (含非晶)"
+      },
+      {
+        "id": "4-1",
+        "category": "13试样基准(元素限定+定量)",
+        "truth": [
+          [
+            "ZnO",
+            19.94
+          ],
+          [
+            "Al2O3",
+            21.27
+          ],
+          [
+            "CaF2",
+            22.53
+          ],
+          [
+            "Mg(OH)2",
+            36.26
+          ]
+        ],
+        "formats": {
+          "txt": {
+            "path": "D:/Project/XRD/test_xrd/txt/4-1.txt",
+            "size": 145020
+          },
+          "mdi": {
+            "path": "D:/Project/XRD/test_xrd/mdi/4-1.mdi",
+            "size": 59896
+          },
+          "raw": {
+            "path": "D:/Project/XRD/test_xrd/raw/4-1.raw",
+            "size": 29320
+          },
+          "xy": {
+            "path": "D:/Project/XRD/test_xrd/xy/4-1.xy",
+            "size": 145020
+          }
+        },
+        "notes": "端到端验收入口: tests/test_xrd_samples.py (含元素限定); ≈ IUCr CPD-2 (择优取向)"
+      },
+      {
+        "id": "5-1",
+        "category": "13试样基准(元素限定+定量)",
+        "truth": [
+          [
+            "SiO2(α-石英)",
+            null
+          ],
+          [
+            "SiO2(方石英)",
+            null
+          ],
+          [
+            "CaCO3",
+            null
+          ],
+          [
+            "MgCO3",
+            null
+          ],
+          [
+            "CaMg(CO3)2",
+            null
+          ]
+        ],
+        "formats": {
+          "txt": {
+            "path": "D:/Project/XRD/test_xrd/txt/5-1.txt",
+            "size": 133443
+          },
+          "mdi": {
+            "path": "D:/Project/XRD/test_xrd/mdi/5-1.mdi",
+            "size": 53685
+          }
+        },
+        "notes": "端到端验收入口: tests/test_xrd_samples.py (含元素限定)"
+      },
+      {
+        "id": "5-2",
+        "category": "13试样基准(元素限定+定量)",
+        "truth": [
+          [
+            "SiO2(α-石英)",
+            null
+          ],
+          [
+            "SiO2(方石英)",
+            null
+          ],
+          [
+            "CaCO3",
+            null
+          ],
+          [
+            "Fe2O3",
+            null
+          ],
+          [
+            "K{Al2[AlSi3O10](OH)2}（白云母）",
+            null
+          ]
+        ],
+        "formats": {
+          "txt": {
+            "path": "D:/Project/XRD/test_xrd/txt/5-2.txt",
+            "size": 133397
+          },
+          "mdi": {
+            "path": "D:/Project/XRD/test_xrd/mdi/5-2.mdi",
+            "size": 52819
+          },
+          "xy": {
+            "path": "D:/Project/XRD/test_xrd/xy/5-2.xy",
+            "size": 132227
+          }
+        },
+        "notes": "端到端验收入口: tests/test_xrd_samples.py (含元素限定)"
+      },
+      {
+        "id": "5-2b",
+        "category": "13试样基准(元素限定+定量)",
+        "truth": [
+          [
+            "SiO2(α-石英)",
+            null
+          ],
+          [
+            "SiO2(方石英)",
+            null
+          ],
+          [
+            "CaCO3",
+            null
+          ],
+          [
+            "Fe2O3",
+            null
+          ],
+          [
+            "K{Al2[AlSi3O10](OH)2}（白云母）",
+            null
+          ]
+        ],
+        "formats": {
+          "txt": {
+            "path": "D:/Project/XRD/test_xrd/txt/5-2b.txt",
+            "size": 133445
+          },
+          "mdi": {
+            "path": "D:/Project/XRD/test_xrd/mdi/5-2b.mdi",
+            "size": 51682
+          }
+        },
+        "notes": "端到端验收入口: tests/test_xrd_samples.py (含元素限定)"
+      },
+      {
+        "id": "5-3",
+        "category": "13试样基准(元素限定+定量)",
+        "truth": [
+          [
+            "SiO2",
+            null
+          ],
+          [
+            "Ca2Al2SiO7",
+            null
+          ],
+          [
+            "Ca5[PO4]3F",
+            null
+          ],
+          [
+            "α-FeO（OH）",
+            null
+          ],
+          [
+            "Al2[(OH)4/Si2O5] （高岭土）",
+            null
+          ]
+        ],
+        "formats": {
+          "txt": {
+            "path": "D:/Project/XRD/test_xrd/txt/5-3.txt",
+            "size": 133443
+          },
+          "mdi": {
+            "path": "D:/Project/XRD/test_xrd/mdi/5-3.mdi",
+            "size": 50534
+          }
+        },
+        "notes": "端到端验收入口: tests/test_xrd_samples.py (含元素限定)"
+      },
+      {
+        "id": "7-1",
+        "category": "13试样基准(元素限定+定量)",
+        "truth": [
+          [
+            "Quartz",
+            5.16
+          ],
+          [
+            "Boehmite",
+            14.93
+          ],
+          [
+            "Anatase",
+            2.0
+          ],
+          [
+            "Goethite",
+            9.98
+          ],
+          [
+            "Kaolinite",
+            3.02
+          ],
+          [
+            "Gibbsite",
+            54.9
+          ],
+          [
+            "Hematite",
+            10.0
+          ]
+        ],
+        "formats": {
+          "txt": {
+            "path": "D:/Project/XRD/test_xrd/txt/7-1.txt",
+            "size": 145022
+          },
+          "mdi": {
+            "path": "D:/Project/XRD/test_xrd/mdi/7-1.mdi",
+            "size": 59896
+          },
+          "raw": {
+            "path": "D:/Project/XRD/test_xrd/raw/7-1.RAW",
+            "size": 29320
+          }
+        },
+        "notes": "端到端验收入口: tests/test_xrd_samples.py (含元素限定); = IUCr BAUXITE (合成铝土矿)"
+      },
+      {
+        "id": "7-2",
+        "category": "13试样基准(元素限定+定量)",
+        "truth": [
+          [
+            "Quartz(主)",
+            null
+          ],
+          [
+            "Feldspar(主)",
+            null
+          ],
+          [
+            "Albite(主)",
+            null
+          ],
+          [
+            "Biotite(主)",
+            null
+          ],
+          [
+            "Clinochlore(次)",
+            null
+          ],
+          [
+            "Hornblende(次)",
+            null
+          ],
+          [
+            "Zircon(痕量)",
+            null
+          ]
+        ],
+        "formats": {
+          "txt": {
+            "path": "D:/Project/XRD/test_xrd/txt/7-2.txt",
+            "size": 145020
+          },
+          "mdi": {
+            "path": "D:/Project/XRD/test_xrd/mdi/7-2.mdi",
+            "size": 59896
+          },
+          "raw": {
+            "path": "D:/Project/XRD/test_xrd/raw/7-2.RAW",
+            "size": 29320
+          }
+        },
+        "notes": "端到端验收入口: tests/test_xrd_samples.py (含元素限定); = IUCr GRANODIO (花岗闪长岩)"
+      }
+    ],
+    "test_xrd_geshi": [
+      {
+        "id": "4-1",
+        "category": "格式转换测试集(同一谱图5种格式)",
+        "truth": [
+          [
+            "ZnO",
+            19.94
+          ],
+          [
+            "Al2O3",
+            21.27
+          ],
+          [
+            "CaF2",
+            22.53
+          ],
+          [
+            "Mg(OH)2",
+            36.26
+          ]
+        ],
+        "formats": {
+          "dat": {
+            "path": "D:/Project/XRD/test_xrd/geshi/geshi/4-1.dat",
+            "size": 145020
+          },
+          "mdi": {
+            "path": "D:/Project/XRD/test_xrd/geshi/geshi/4-1.mdi",
+            "size": 59896
+          },
+          "raw": {
+            "path": "D:/Project/XRD/test_xrd/geshi/geshi/4-1.raw",
+            "size": 29320
+          },
+          "txt": {
+            "path": "D:/Project/XRD/test_xrd/geshi/geshi/4-1.txt",
+            "size": 145020
+          },
+          "xy": {
+            "path": "D:/Project/XRD/test_xrd/geshi/geshi/4-1.xy",
+            "size": 145020
+          }
+        },
+        "notes": "验证 格式转换(dat/mdi/raw/txt/xy) 读入一致性与转换器"
+      }
+    ],
+    "test_xrd_raw_export": [
+      {
+        "id": "5-1#1##20260123-124003_100",
+        "category": "原始仪器导出目录(5-1)",
+        "truth": [
+          [
+            "SiO2(α-石英)",
+            null
+          ],
+          [
+            "SiO2(方石英)",
+            null
+          ],
+          [
+            "CaCO3",
+            null
+          ],
+          [
+            "MgCO3",
+            null
+          ],
+          [
+            "CaMg(CO3)2",
+            null
+          ]
+        ],
+        "formats": {
+          "cif": {
+            "path": "D:/Project/XRD/test_xrd/5/5-1#1##20260123-124003_100/5Entry_96-900-8230.cif",
+            "size": 6509
+          },
+          "mdi": {
+            "path": "D:/Project/XRD/test_xrd/5/5-1#1##20260123-124003_100/5-1#1##20260123-124003_100.mdi",
+            "size": 53685
+          },
+          "mtd": {
+            "path": "D:/Project/XRD/test_xrd/5/5-1#1##20260123-124003_100/5-1#1##20260123-124003_100.mtd",
+            "size": 5076803
+          },
+          "txt": {
+            "path": "D:/Project/XRD/test_xrd/5/5-1#1##20260123-124003_100/5-1#1##20260123-124003_100.txt",
+            "size": 133443
+          },
+          "par": {
+            "path": "D:/Project/XRD/test_xrd/5/5-1#1##20260123-124003_100/5-1.par",
+            "size": 285749
+          },
+          "lst": {
+            "path": "D:/Project/XRD/test_xrd/5/5-1#1##20260123-124003_100/5-1.par.lst",
+            "size": 149978
+          }
+        },
+        "notes": "含 .mtd/.par/.lst 仪器文件与匹配 .cif (精修起点); 5-2b=5-2 无择优取向"
+      },
+      {
+        "id": "5-2#1##20260126-164127_100",
+        "category": "原始仪器导出目录(5-2)",
+        "truth": [
+          [
+            "SiO2(α-石英)",
+            null
+          ],
+          [
+            "SiO2(方石英)",
+            null
+          ],
+          [
+            "CaCO3",
+            null
+          ],
+          [
+            "Fe2O3",
+            null
+          ],
+          [
+            "K{Al2[AlSi3O10](OH)2}（白云母）",
+            null
+          ]
+        ],
+        "formats": {
+          "cif": {
+            "path": "D:/Project/XRD/test_xrd/5/5-2#1##20260126-164127_100/5Entry_96-901-6707.cif",
+            "size": 5862
+          },
+          "jip": {
+            "path": "D:/Project/XRD/test_xrd/5/5-2#1##20260126-164127_100/5-2#1##20260126-164127_100.jip",
+            "size": 1701
+          },
+          "mtd": {
+            "path": "D:/Project/XRD/test_xrd/5/5-2#1##20260126-164127_100/5-2#1##20260126-164127_100.mtd",
+            "size": 5123798
+          },
+          "txt": {
+            "path": "D:/Project/XRD/test_xrd/5/5-2#1##20260126-164127_100/5-2#1##20260126-164127_100.txt",
+            "size": 133443
+          },
+          "par": {
+            "path": "D:/Project/XRD/test_xrd/5/5-2#1##20260126-164127_100/5-2.par",
+            "size": 354307
+          },
+          "lst": {
+            "path": "D:/Project/XRD/test_xrd/5/5-2#1##20260126-164127_100/5-2.par.lst",
+            "size": 181790
+          }
+        },
+        "notes": "含 .mtd/.par/.lst 仪器文件与匹配 .cif (精修起点); 5-2b=5-2 无择优取向"
+      },
+      {
+        "id": "5-2b#1##20260202-133922_100",
+        "category": "原始仪器导出目录(5-2b)",
+        "truth": [
+          [
+            "SiO2(α-石英)",
+            null
+          ],
+          [
+            "SiO2(方石英)",
+            null
+          ],
+          [
+            "CaCO3",
+            null
+          ],
+          [
+            "Fe2O3",
+            null
+          ],
+          [
+            "K{Al2[AlSi3O10](OH)2}（白云母）",
+            null
+          ]
+        ],
+        "formats": {
+          "cif": {
+            "path": "D:/Project/XRD/test_xrd/5/5-2b#1##20260202-133922_100/5-muscovite-Entry_96-900-0838.cif",
+            "size": 11619
+          },
+          "par": {
+            "path": "D:/Project/XRD/test_xrd/5/5-2b#1##20260202-133922_100/5-2b#.par",
+            "size": 337975
+          },
+          "lst": {
+            "path": "D:/Project/XRD/test_xrd/5/5-2b#1##20260202-133922_100/5-2b#.par.lst",
+            "size": 386255
+          },
+          "jip": {
+            "path": "D:/Project/XRD/test_xrd/5/5-2b#1##20260202-133922_100/5-2b#1##20260202-133922_100.jip",
+            "size": 1633
+          },
+          "mdi": {
+            "path": "D:/Project/XRD/test_xrd/5/5-2b#1##20260202-133922_100/5-2b#1##20260202-133922_100.mdi",
+            "size": 51682
+          },
+          "txt": {
+            "path": "D:/Project/XRD/test_xrd/5/5-2b#1##20260202-133922_100/5-2b#1##20260202-133922_100.txt",
+            "size": 133445
+          }
+        },
+        "notes": "含 .mtd/.par/.lst 仪器文件与匹配 .cif (精修起点); 5-2b=5-2 无择优取向"
+      },
+      {
+        "id": "5-3#1##20260127-163731_100",
+        "category": "原始仪器导出目录(5-3)",
+        "truth": [
+          [
+            "SiO2",
+            null
+          ],
+          [
+            "Ca2Al2SiO7",
+            null
+          ],
+          [
+            "Ca5[PO4]3F",
+            null
+          ],
+          [
+            "α-FeO（OH）",
+            null
+          ],
+          [
+            "Al2[(OH)4/Si2O5] （高岭土）",
+            null
+          ]
+        ],
+        "formats": {
+          "cif": {
+            "path": "D:/Project/XRD/test_xrd/5/5-3#1##20260127-163731_100/5Entry_96-710-3015.cif",
+            "size": 4401
+          },
+          "par": {
+            "path": "D:/Project/XRD/test_xrd/5/5-3#1##20260127-163731_100/5#.par",
+            "size": 409609
+          },
+          "lst": {
+            "path": "D:/Project/XRD/test_xrd/5/5-3#1##20260127-163731_100/5#.par.lst",
+            "size": 332832
+          },
+          "mtd": {
+            "path": "D:/Project/XRD/test_xrd/5/5-3#1##20260127-163731_100/5-3#1##20260127-163731_100.mtd",
+            "size": 3724482
+          },
+          "txt": {
+            "path": "D:/Project/XRD/test_xrd/5/5-3#1##20260127-163731_100/5-3#1##20260127-163731_100.txt",
+            "size": 133443
+          }
+        },
+        "notes": "含 .mtd/.par/.lst 仪器文件与匹配 .cif (精修起点); 5-2b=5-2 无择优取向"
+      }
+    ]
+  },
+  "unattributed": {
+    "xrdata_iucr": [
+      "(IUCr) Standard data sets_files/IUCr-logo-White.png",
+      "(IUCr) Standard data sets_files/analytics.js.下载",
+      "(IUCr) Standard data sets_files/band.js.下载",
+      "(IUCr) Standard data sets_files/college-font.css",
+      "(IUCr) Standard data sets_files/compact-painter.js.下载",
+      "(IUCr) Standard data sets_files/decorators.js.下载",
+      "(IUCr) Standard data sets_files/detailed-painter.js.下载",
+      "(IUCr) Standard data sets_files/ether-painters.js.下载",
+      "(IUCr) Standard data sets_files/ethers.css",
+      "(IUCr) Standard data sets_files/ethers.js.下载",
+      "(IUCr) Standard data sets_files/event-utils.js.下载",
+      "(IUCr) Standard data sets_files/events.css",
+      "(IUCr) Standard data sets_files/fontawesome-4.4.0.min.css",
+      "(IUCr) Standard data sets_files/framework.css",
+      "(IUCr) Standard data sets_files/graphics.css",
+      "(IUCr) Standard data sets_files/iuccpd2(1).gif",
+      "(IUCr) Standard data sets_files/iuccpd2.gif",
+      "(IUCr) Standard data sets_files/iucr.css",
+      "(IUCr) Standard data sets_files/iucr.js.下载",
+      "(IUCr) Standard data sets_files/iucr_journals_white.png",
+      "(IUCr) Standard data sets_files/jquery-ui.min.js.下载",
+      "(IUCr) Standard data sets_files/jquery.backtotop.js.下载",
+      "(IUCr) Standard data sets_files/jquery.min.js.下载",
+      "(IUCr) Standard data sets_files/jquery.mobilemenu.js.下载",
+      "(IUCr) Standard data sets_files/jquery.placeholder.min.js.下载",
+      "(IUCr) Standard data sets_files/js",
+      "(IUCr) Standard data sets_files/labellers(1).js.下载",
+      "(IUCr) Standard data sets_files/labellers(2).js.下载",
+      "(IUCr) Standard data sets_files/labellers.js.下载",
+      "(IUCr) Standard data sets_files/layout.css",
+      "(IUCr) Standard data sets_files/newsletter.css",
+      "(IUCr) Standard data sets_files/original-painter.js.下载",
+      "(IUCr) Standard data sets_files/overview-painter.js.下载",
+      "(IUCr) Standard data sets_files/saved_resource.html",
+      "(IUCr) Standard data sets_files/search-icon.png",
+      "(IUCr) Standard data sets_files/simile-ajax-api.js.下载",
+      "(IUCr) Standard data sets_files/simile-ajax-bundle.js.下载",
+      "(IUCr) Standard data sets_files/slimbox2.css",
+      "(IUCr) Standard data sets_files/slimbox2.js.下载",
+      "(IUCr) Standard data sets_files/sources.js.下载",
+      "(IUCr) Standard data sets_files/tabber.js.下载",
+      "(IUCr) Standard data sets_files/themes.js.下载",
+      "(IUCr) Standard data sets_files/timeline(1).js.下载",
+      "(IUCr) Standard data sets_files/timeline(2).js.下载",
+      "(IUCr) Standard data sets_files/timeline-api.js.下载",
+      "(IUCr) Standard data sets_files/timeline.css",
+      "(IUCr) Standard data sets_files/timeline.js.下载",
+      "(IUCr) Standard data sets_files/units.js.下载",
+      "(IUCr) Standard data sets_files/v8c78df7c7c0f484497ecbca7046644da1771523124516",
+      "IUCr物相说明.txt",
+      "Must do/IUCr物相说明.txt",
+      "Must do/Rietveld.zip",
+      "Must do/Rietveld/1a.txt",
+      "Must do/Rietveld/1b.txt",
+      "Must do/Rietveld/1c.txt",
+      "Must do/Rietveld/1g.txt",
+      "Must do/Rietveld/2.mtd",
+      "Must do/Rietveld/2.txt",
+      "Must do/Rietveld/3.txt",
+      "Must do/Rietveld/4.txt",
+      "Must do/Rietveld/5.txt",
+      "Must do/Rietveld/6.txt",
+      "Must do/Rietveld/Entry_01-074-2220-MgOH)2.cif",
+      "Must do/Rietveld/Entry_96-230-0113-ZnO.cif",
+      "Must do/Rietveld/Entry_96-230-0450-CaF2.cif",
+      "Must do/Rietveld/Entry_96-900-0967-CaCO3.cif",
+      "Must do/Rietveld/IUCr物相说明.txt",
+      "Must do/col.zip",
+      "tar.gz/bruker.tar.gz",
+      "tar.gz/col.tar.gz",
+      "tar.gz/cpi.tar.gz",
+      "tar.gz/dbws.tar.gz",
+      "tar.gz/gsas.tar.gz",
+      "tar.gz/lhpm.tar.gz",
+      "tar.gz/philips.tar.gz",
+      "tar.gz/rietan.tar.gz",
+      "tar.gz/rietan2.tar.gz",
+      "tar.gz/xda.tar.gz"
+    ],
+    "xrdata_csuhjw": [
+      "Data041/CaCO3.cif",
+      "Data041/Data041.XLS",
+      "Data041/Data041.lst",
+      "Data041/Data041.par",
+      "Data041/Data041：ZnO+CaCO3.mdi",
+      "Data041/Data041：ZnO+CaCO3.raw",
+      "Data041/Data041：ZnO+CaCO3.txt",
+      "Data041/ZnO.cif",
+      "Data042/Cristobalite.cif",
+      "Data042/Data042：1：陶瓷ZrSiO-1180 部分晶化.lst",
+      "Data042/Data042：1：陶瓷ZrSiO-1180 部分晶化.par",
+      "Data042/Data042：1：陶瓷ZrSiO-1180 部分晶化.txt",
+      "Data042/ZrO2.cif",
+      "Data042/ZrSiO4.cif",
+      "Data043/(Ni Co Mn)(OH)2.apf",
+      "Data043/(Ni Co Mn)(OH)2.spf",
+      "Data043/(Ni,Co,Mn)(OH)2.cif",
+      "Data043/07009：3：Ni(OH)2.raw",
+      "Data043/Data043：Ni(OH)2.lst",
+      "Data043/Data043：Ni(OH)2.par",
+      "Data043/Data043：Ni(OH)2.txt",
+      "Data044/Al.cif",
+      "Data044/Data044：Al-MgZn2过时效态.par",
+      "Data044/Data044：Al-MgZn2过时效态.txt",
+      "Data044/MgZn2.cif"
+    ],
+    "test_xrd": [
+      "mdi/物相结果+wt%.txt",
+      "mdi/物相结果.txt",
+      "raw/物相结果+wt%.txt",
+      "raw/物相结果.txt",
+      "xy/物相结果+wt%.txt",
+      "xy/物相结果.txt",
+      "物相结果+wt%.txt",
+      "物相结果.txt"
+    ]
+  },
+  "pitfalls": [
+    "csuHJW 的 .raw = Rigaku RINT-2000 二进制(魔数 FI\\0\\0) → data_loader._load_rigaku_raw 已支持 (2026-10-08 #55); 更早版本会落入启发式兜底返回垃圾。",
+    "data001：TiO2双相.txt / .rpt = JADE Phase ID Report → data_loader 会防御性报错; 谱图请用 .raw 或 .mdi。",
+    "IUCr 的 .RAW = Philips RAW2 二进制 → data_loader._load_raw2 支持。",
+    "IUCr/Must do/ 下 .PRN/.txt 为同批谱图文本副本 (PRN 解析未接入, 仅 txt 已被 harness 用过 CPD 系列)。",
+    "IUCr/(IUCr) Standard data sets_files/ = 网页资源缓存, 非谱图; gsas/*.gss 与 *.tar.gz 为 GSAS/归档, 未接入。",
+    ".sav(Bruker)/.is0-2/.abc/.mtd/.par/.lst/.pdf 为专有参数/报告文件, 不作谱图解析。",
+    "IUCr CPD-1D/1E/1F/1H 及 Must do 全套当前 validate_xrdata.py 未覆盖 → 扩展验收可用样本。",
+    "test_xrd/geshi = 4-1 同谱图五格式 (dat/mdi/raw/txt/xy) → 格式转换一致性验收。",
+    "test_xrd/txt/元素限定.txt = 13 试样元素过滤真值; tests/test_xrd_samples.py 已内置。",
+    "近非晶样本 (STARCH/data024/高聚物系列/CPD-3 玻璃) 不出尖锐峰, 召回漏检属预期内, 不算算法失败。",
+    "MANNITOL/VALINE 同时是有机库 (organic_reference_database.json) 的 exp 来源谱 — 改检索算法时勿破坏 #57 依赖。"
+  ],
+  "harness_map": [
+    {
+      "entry": "tests/validate_xrdata.py",
+      "covers": "XRData 37 样本检索召回 (MANIFEST) + pdf2 兜底 + builtin 精修",
+      "outputs": "tests/xrdata_validation_results.{json,csv}"
+    },
+    {
+      "entry": "tests/make_xrdata_checklist.py",
+      "covers": "重算召回(元素多重集匹配)并出最终清单",
+      "outputs": "tests/xrdata_checklist.{md,csv}"
+    },
+    {
+      "entry": "tests/test_xrd_samples.py",
+      "covers": "test_xrd 13 试样端到端 (元素限定三态过滤 + Rietveld 定量)",
+      "outputs": "tests/ 下 PolyXRD_测试报告*.txt"
+    },
+    {
+      "entry": "scripts/build_organic_db.py",
+      "covers": "有机库构建 (依赖 IUCr MANNITOL/VALINE.RAW 作 exp 来源)",
+      "outputs": "src/polyxrd/resources/database/organic_reference_database.json"
+    },
+    {
+      "entry": "tests/probe_organic_id.py / probe_xrdata_load.py",
+      "covers": "快速探针 (有机命中 / 各格式加载)",
+      "outputs": "stdout"
+    }
+  ]
+}

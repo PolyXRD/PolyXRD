@@ -280,19 +280,26 @@ class PhaseIdentifier:
         self._load_reference_database()
 
     def _load_reference_database(self) -> None:
-        db_path = get_resource_path("database/xrd_reference_database.json")
-        if db_path and Path(db_path).exists():
-            try:
-                with open(db_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                self._reference_data = data.get("phases", [])
-                self._phase_database = self._build_phases_from_db(self._reference_data)
-                _logger.info("PhaseIdentifier: loaded %d reference phases", len(self._phase_database))
-            except Exception as e:
-                _logger.warning("PhaseIdentifier: failed to load reference database: %s", e)
-                self._load_default_phases()
+        # 无机/合金小库 + 有机/药物相库 合并进同一可检索列表
+        db_paths = [
+            get_resource_path("database/xrd_reference_database.json"),
+            get_resource_path("database/organic_reference_database.json"),
+        ]
+        self._reference_data = []
+        self._phase_database = []
+        for db_path in db_paths:
+            if db_path and Path(db_path).exists():
+                try:
+                    with open(db_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    self._reference_data.extend(data.get("phases", []))
+                except Exception as e:
+                    _logger.warning("PhaseIdentifier: failed to load %s: %s", db_path, e)
+        if self._reference_data:
+            self._phase_database = self._build_phases_from_db(self._reference_data)
+            _logger.info("PhaseIdentifier: loaded %d reference phases", len(self._phase_database))
         else:
-            _logger.warning("PhaseIdentifier: reference database missing, using default phases")
+            _logger.warning("PhaseIdentifier: reference databases missing, using default phases")
             self._load_default_phases()
 
     def _build_phases_from_db(self, ref_data: list[dict]) -> list[Phase]:
@@ -305,16 +312,20 @@ class PhaseIdentifier:
                 intensity = p.get("intensity", 50)
                 peaks.append((hkl, two_theta, intensity))
 
-            lattice_data = entry.get("lattice", {})
+            lattice_data = entry.get("lattice") or {}
             from polyxrd.models.phase import LatticeParams
-            lattice = LatticeParams(
-                a=lattice_data.get("a", 1.0),
-                b=lattice_data.get("b", 1.0),
-                c=lattice_data.get("c", 1.0),
-                alpha=lattice_data.get("alpha", 90.0),
-                beta=lattice_data.get("beta", 90.0),
-                gamma=lattice_data.get("gamma", 90.0),
-            )
+            if lattice_data:
+                lattice = LatticeParams(
+                    a=lattice_data.get("a", 1.0),
+                    b=lattice_data.get("b", 1.0),
+                    c=lattice_data.get("c", 1.0),
+                    alpha=lattice_data.get("alpha", 90.0),
+                    beta=lattice_data.get("beta", 90.0),
+                    gamma=lattice_data.get("gamma", 90.0),
+                )
+            else:
+                # 实验谱提取的相没有晶胞 (无 Rietveld 精修能力, 仅用于检索匹配)
+                lattice = None
 
             formula = entry.get("formula", "")
             elements = parse_formula(formula) if formula else set()
@@ -1611,6 +1622,7 @@ class PhaseIdentifier:
                 tolerance_rel=prefilter_tolerance_rel,
                 min_match=prefilter_min_match,
                 max_ref_peaks=prefilter_max_ref_peaks,
+                main_peak_topk=3,
                 limit=prefilter_limit,
                 elements_allowed=elements_allowed,
             )

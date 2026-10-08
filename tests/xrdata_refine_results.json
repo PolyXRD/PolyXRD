@@ -1,0 +1,155 @@
+[
+  {
+    "label": "CORUNDUM",
+    "path": "D:/Project/XRD/XRData/IUCr/CORUNDUM.RAW",
+    "refine_key": "corundum",
+    "two_theta_range": [
+      5.0,
+      150.0
+    ],
+    "n_peaks": 67,
+    "phase_source_db": "pdf2",
+    "status": "ok",
+    "phase": "Corundum, syn (PDF2 431484)",
+    "formula": "Al2 O3",
+    "Rwp": 17.287,
+    "GOF": 2.242,
+    "quality": "差",
+    "converged": true,
+    "cycles": 15,
+    "time_s": 0.8,
+    "window": [
+      10.0,
+      80.0
+    ],
+    "weight_fraction": [
+      100.0
+    ],
+    "elapsed_s": 41.9
+  },
+  {
+    "label": "FLUORITE",
+    "path": "D:/Project/XRD/XRData/IUCr/FLUORITE.RAW",
+    "refine_key": "fluorite",
+    "two_theta_range": [
+      5.0,
+      150.0
+    ],
+    "n_peaks": 106,
+    "phase_source_db": "pdf2",
+    "status": "ok",
+    "phase": "Calcium Fluoride (PDF2 650535)",
+    "formula": "Ca F2",
+    "Rwp": 24.486,
+    "GOF": 2.342,
+    "quality": "差",
+    "converged": true,
+    "cycles": 20,
+    "time_s": 0.6,
+    "window": [
+      10.0,
+      80.0
+    ],
+    "weight_fraction": [
+      100.0
+    ],
+    "elapsed_s": 38.7
+  },
+  {
+    "label": "ZINCITE",
+    "path": "D:/Project/XRD/XRData/IUCr/ZINCITE.RAW",
+    "refine_key": "zincite",
+    "two_theta_range": [
+      5.0,
+      150.0
+    ],
+    "n_peaks": 55,
+    "phase_source_db": "pdf2",
+    "status": "ok",
+    "phase": "Zincite, syn (PDF2 361451)",
+    "formula": "O Zn",
+    "Rwp": 21.901,
+    "GOF": 3.897,
+    "quality": "差",
+    "converged": true,
+    "cycles": 21,
+    "time_s": 0.8,
+    "window": [
+      10.0,
+      80.0
+    ],
+    "weight_fraction": [
+      100.0
+    ],
+    "elapsed_s": 36.0
+  },
+  {
+    "label": "SILICA",
+    "path": "D:/Project/XRD/XRData/IUCr/SILICA.RAW",
+    "refine_key": "quartz",
+    "two_theta_range": [
+      5.0,
+      150.0
+    ],
+    "n_peaks": 236,
+    "status": "no_lattice_phase",
+    "note": "未找到带晶胞的匹配相",
+    "elapsed_s": 142.8
+  },
+  {
+    "label": "Y2O3",
+    "path": "D:/Project/XRD/XRData/IUCr/CPD-Y2O3.RAW",
+    "refine_key": "y2o3",
+    "two_theta_range": [
+      5.0,
+      150.0
+    ],
+    "n_peaks": 115,
+    "phase_source_db": "pdf2",
+    "status": "ok",
+    "phase": "Yttrium Oxide (PDF2 431036)",
+    "formula": "O3 Y2",
+    "Rwp": 26.068,
+    "GOF": 6.868,
+    "quality": "很差",
+    "converged": true,
+    "cycles": 18,
+    "time_s": 1.9,
+    "window": [
+      10.0,
+      80.0
+    ],
+    "weight_fraction": [
+      100.0
+    ],
+    "elapsed_s": 32.9
+  },
+  {
+    "label": "Cu-007",
+    "path": "D:/Project/XRD/XRData/csuHJW/Data007：铜衍射谱系列.TXT",
+    "refine_key": "copper",
+    "two_theta_range": [
+      35.0,
+      100.0
+    ],
+    "n_peaks": 5,
+    "phase_source_db": "pdf2",
+    "status": "ok",
+    "phase": "Copper (PDF2 892838)",
+    "formula": "Cu",
+    "Rwp": 98.251,
+    "GOF": 6.145,
+    "quality": "很差",
+    "converged": true,
+    "cycles": 40,
+    "time_s": 11.6,
+    "window": [
+      37.0,
+      80.0
+    ],
+    "weight_fraction": [
+      100.0
+    ],
+    "elapsed_s": 29.3
+  }
+]

@@ -48,6 +48,8 @@ class PhaseViewModel(QObject):
         self._fitted_peaks: Optional[PeakList] = None
         self._matched_phases: list[PhaseMatchResult] = []
         self._selected_phases: list[Phase] = []
+        # P2-2: 非晶/近非晶诊断 (只用于解释"没匹配上", 不参与也不抑制检索)
+        self._amorphous_info: Optional[dict] = None
 
     @property
     def peaks(self) -> Optional[PeakList]:
@@ -64,6 +66,15 @@ class PhaseViewModel(QObject):
     @property
     def selected_phases(self) -> list[Phase]:
         return self._selected_phases
+
+    @property
+    def amorphous_info(self) -> Optional[dict]:
+        """P2-2: 最近一次检索后的非晶/近非晶诊断 (未检索 → None)。
+
+        只用于向用户解释"为什么没匹配上", 绝不用于抢先抑制检索:
+        判定 = 谱图弥散 AND 未获可接受匹配, 二者缺一不可。
+        """
+        return self._amorphous_info
 
     def reload_databases(self) -> None:
         """外挂数据库被导入/取消挂载后, 丢掉持有旧路径的缓存。
@@ -253,9 +264,25 @@ class PhaseViewModel(QObject):
                     tolerance=tolerance,
                 )
             self._matched_phases = results
+            self._amorphous_info = self._assess_amorphous(data, use_peaks, results)
             self.phase_identified.emit(results)
         except Exception as e:
             self.error.emit(tr("error.identify_failed", error=e))
+
+    @staticmethod
+    def _assess_amorphous(data, peaks, results) -> Optional[dict]:
+        """P2-2: 检索后评估非晶度 (纯附加信息, 失败一律返回 None 不影响主流程)。
+
+        仅在"谱图弥散且没匹配上"时标 ``amorphous``; 已拿到可接受结晶相匹配的
+        低对比度结晶谱 (如石英标样 SILICA、NCM811) 会被 veto, 不会误标。
+        """
+        try:
+            from polyxrd.services.amorphous import assess_amorphous
+
+            return assess_amorphous(data, peaks=peaks,
+                                    top_match=results[0] if results else None)
+        except Exception:
+            return None
 
     def select_phase(self, phase: Phase) -> None:
         """选中物相"""
@@ -276,6 +303,7 @@ class PhaseViewModel(QObject):
         self._fitted_peaks = None
         self._matched_phases = []
         self._selected_phases = []
+        self._amorphous_info = None
 
     def restore_state(
         self,

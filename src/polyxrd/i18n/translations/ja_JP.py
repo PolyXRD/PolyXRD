@@ -825,6 +825,8 @@ translations = {
             "db_user_empty_hint": "ユーザーデータベースに項目がありません。メニュー「データベース ▸ ユーザーデータベース管理…」からご自身の CIF を取り込んでください。",
             "db_user": "ユーザーデータベース",
             "no_match": "一致する物相が見つかりません",
+            "no_match_amorphous": "一致する物相なし —— パターンは拡散ハロー (非晶質に近い) で、結晶相検索は適用外です",
+            "amorphous_partial": " · 非晶質/拡散背景を含む",
             "result_profile": "Profile Fitting 結果 [{db_src}] (相関が100%に近いほど良好)",
             "result_search": "Search/Match 結果 [{db_src}] (FOMが小さいほど良好)",
             "cand_profile": "{name} - 一致度: {score:.1f}% (R={rfactor:.3f}){sg}{elem}",

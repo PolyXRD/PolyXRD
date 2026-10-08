@@ -105,6 +105,14 @@ class MainViewModel(QObject):
         return self._phase_vm.matched_phases
 
     @property
+    def amorphous_info(self):
+        """P2-2: 最近一次检索后的非晶/近非晶诊断 (dict 或 None)。
+
+        只读附加信息, 供视图在"没匹配上"时解释原因; 不参与检索决策。
+        """
+        return self._phase_vm.amorphous_info
+
+    @property
     def project_file(self):
         """当前项目文件路径 (保存过/打开过则非 None)。"""
         return self._project_file
