@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -227,6 +228,38 @@ def cod_rank_score(item: tuple[dict, PhaseMatchResult]) -> float:
          + 0.10 * float(c.get("top_recall", 0.0)))
     fom_good = float(np.exp(-max(float(r.score), 0.0) / _COD_RANK_FOM_TAU))
     return (1.0 - _COD_RANK_H_WEIGHT) * fom_good + _COD_RANK_H_WEIGHT * h
+
+
+# ── COD/用户库候选去重 (0.9.12) ────────────────────────────────
+# COD 无机库对同一物相常存在多条近等价记录 (占位/计量/数据来源差异), 例如
+# 14× "O Zn"、15× "Fe Li O4 P"。这些记录在 d-I 预筛与 FoM 重排后名次相邻,
+# 直接取前 top_n 条会把名额浪费在同相复本上, 真实异相被挤出 top-N。
+# 去重键 = 元素集合 + 归一化空间群: 同成分同 SG 的占位/计量变体折叠为 1 条
+# (保留打分最优代表); 真正多形体 (成分同但 SG 不同, 如石英/方石英、
+# 锐钛/金红) 保持分立 —— 不误合并真物相。
+# 该步骤对真值召回严格非回退: 每条相的最佳代表在原排序中的位置 ≤ 其原始
+# 名次, 去重后只会前移或不变, 永不会把已在 top-N 的真物相挤出。
+_COD_COLLAPSE_CANDIDATES = True
+
+
+def _cod_comp_key(formula: str, space_group: str = "") -> tuple:
+    els = elements_from_db_formula(formula or "", space_group=space_group or "")
+    return (frozenset(els) if els else frozenset(("__EMPTY__",)),
+            re.sub(r"\s", "", (space_group or "").lower()))
+
+
+def _collapse_distinct(results: list, max_per_phase: int = 1) -> list:
+    seen: dict[tuple, int] = {}
+    out: list = []
+    for item in results:  # 已按 cod_rank_score 降序
+        c, _ = item
+        key = _cod_comp_key(c.get("formula", ""), c.get("space_group", ""))
+        n = seen.get(key, 0)
+        if n >= max_per_phase:
+            continue
+        seen[key] = n + 1
+        out.append(item)
+    return out
 
 
 def _is_pure_metal(phase: Phase) -> bool:
@@ -1545,6 +1578,12 @@ class PhaseIdentifier:
         # 里几乎所有候选的 FoM 都 > 1.2 → fom_good 饱和为 0 → 退化成 0.3·h,
         # FoM 信息被整体丢弃 (Top-10 15→12)。改用 w=0.10 + exp(-fom/0.8)。
         results.sort(key=lambda it: -cod_rank_score(it))
+
+        # 0.9.12: 成分+空间群去重后取前 top_n 条**不同相**。在全量排序结果
+        # 上折叠同相复本 (保留打分最优 1 条), 让出名额给真实异相; 对真值
+        # 召回严格非回退 (见 _collapse_distinct 注释)。默认开启。
+        if _COD_COLLAPSE_CANDIDATES:
+            results = _collapse_distinct(results)
         return [r for _, r in results[:top_n]]
 
     def identify_with_cod_inorganics(
