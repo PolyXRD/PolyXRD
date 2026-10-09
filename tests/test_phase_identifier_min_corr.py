@@ -1,6 +1,6 @@
 """B-7: 最小关联峰数惩罚回归测试。
 
-仿 Match! "Min. no. of corr. peaks" (默认 2): 只匹配 1 条峰的候选
+仿商用软件 "Min. no. of corr. peaks" (默认 2): 只匹配 1 条峰的候选
 score ×2 惩罚, 抑制窄窗口偶然匹配的伪阳性; ≥2 峰不惩罚。
 """
 from __future__ import annotations

@@ -48,7 +48,7 @@ PolyXRD 不是某一个专业软件的替代品，而是"工作流整合器"：�
 - **算法可控 + 结果可复现**：每一步参数可保存、可回放，项目文件全序列化。
 - **UI 与算法分层**：`services/` 层是纯算法、不依赖 Qt，可独立测试与复现。
 
-> 与 Match!、JADE、FullProf Suite、MAUD、GSAS-II 等专业软件可互相配合使用——PolyXRD 负责把它们串成一条流畅的流水线。
+> 与 JADE、FullProf Suite、MAUD、GSAS-II 等专业软件可互相配合使用——PolyXRD 负责把它们串成一条流畅的流水线。
 
 ---
 
@@ -260,7 +260,7 @@ FoM = w₁·(峰位漏检率) + w₂·(强度不一致) + w₃·(强峰命中率
 
 #### B-6：逐候选零点自适应校正（默认关闭）
 
-对每条候选在小网格上扫描 2θ 零点偏移，取最优 FoM。借鉴 Match! 的 Automatic zero point adaptation。
+对每条候选在小网格上扫描 2θ 零点偏移，取最优 FoM。借鉴成熟商用软件的 Automatic zero point adaptation。
 
 **两道护栏**：
 - 幅度限制：|dz| ≤ 0.15°（超过 = 数据质量问题而非零点问题）

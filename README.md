@@ -7,7 +7,7 @@
     峰检测 &nbsp;·&nbsp; 多物相定性检索 &nbsp;·&nbsp; Rietveld 结构精修 &nbsp;·&nbsp; Le Bail 晶胞精修 &nbsp;·&nbsp; 指标化 &nbsp;·&nbsp; 3D 结构可视化 &nbsp;·&nbsp; 三库外挂检索 (COD 无机物 / COD 全库 / PDF2-2004)
   </p>
   <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v2.7.0-blue?style=flat-square" /></a>
+    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v2.8.0-blue?style=flat-square" /></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
     &nbsp;
@@ -15,7 +15,7 @@
     &nbsp;
     <img src="https://img.shields.io/badge/UI-PySide6%20(Qt6)-41cd52?style=flat-square" />
     &nbsp;
-    <img src="https://img.shields.io/badge/Tests-1250%2B%20collected-brightgreen?style=flat-square" />
+    <img src="https://img.shields.io/badge/Tests-1290%2B%20collected-brightgreen?style=flat-square" />
   </p>
   <p><i>🌐 English documentation: [README-EN.md](README-EN.md)</i></p>
 </div>
@@ -38,30 +38,25 @@
 
 ---
 
-## 🆕 最新版本 v2.7.0（2026-10-07）
+## 🆕 最新版本 v2.8.0（2026-10-09）
 
-**物相检索 FoM：判据解耦 + 数据驱动标定**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §2.7.0 与 [docs/v2.7.0-物相检索改进计划.md](docs/v2.7.0-物相检索改进计划.md)）：
+**COD-Inorg 检索质量修复：候选去重 + 候选列表扩展**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §2.8.0）：
 
-- **判据解耦（C-1）**：把原先混在一起的 `bad` 拆成独立加权的「峰位项 / 漏检项」（`_FOM_MISS_WEIGHT`），并对齐参考实现「峰位吻合与参考峰覆盖是两项不等权判据」的结构；默认权重 1.0 与旧版数值完全一致。
-- **判据可观测**：`FoMResult` 新增 `position_dev` / `miss_penalty` / `spec_penalty` 三个分项字段，排序结果第一次可解释、可逐项标定。
-- **特异性权重标定**：经 13 试样消融由 0.30 → **0.50** —— 这是本版**唯一的评分变更**，对应 XinMatch 反解结论「解释实验谱的能力与峰位吻合同等重要」。
-- **可复现消融仪**：新增 `scripts/bench_fom_ablation.py`（kwargs + 常量双通道打补丁、自动还原），一次输出检索 A/B 级 + 组合双指标，补齐此前「只有总分、无逐项消融」的缺口。
-- **4 项内联魔法数**提升为模块常量（值不变），为后续标定留出接口。
+- **候选去重（排名层修复）**：COD 无机库内容完整无缺（每条真值相均在库、主相预筛恒为 #1），问题在结果展示层——同相在库中有 10–15 条近相同条目（如 14× `O Zn`）挤占 top-N 槽位。新增 `_collapse_distinct`，按「元素集 + 归一化空间群」折叠同相、只保留 FoM 最优代表，严格非回退且多形体（石英/方石英、锐钛/金红）保持分立。
+- **候选列表扩至 20**：物相检索默认返回前 20 条不同相（同相去重后不再重复占位），默认模式召回 24→26。
+- **检索基准提升**：13 试样 A 级 top10 由 24→36/48、MISS 24→12、MRR 0.314→0.407；B 级 top10 22→24/48。91 项定向回归全绿。
+- 算法未改 FoM 评分口径；剩余多相样品漏检属单峰列表法固有上限（需全谱拟合，走 GSAS-II/MAUD 集成路径）。
 
 **基准（13 试样实测）**
 
-| 指标 | v2.6.0 | v2.7.0 |
+| 指标 | v2.7.0 | v2.8.0 |
 |---|---|---|
-| 检索 A 级 top10 / MISS / MRR | 47/49 / 0 / 0.499 | 47/49 / 0 / 0.499 |
-| 检索 B 级 top10 / MISS / MRR | 44/49 / 2 / 0.488 | **45/49** / 2 / **0.490** |
-| 组合相级 / 试样级完全 | 45/49 / 10 of 13 | 45/49 / 10 of 13 |
+| 检索 A 级 top10 / MISS / MRR | 24/48 / 24 / 0.314 | **36/48** / **12** / **0.407** |
+| 检索 B 级 top10（top20 候选列表） | 22/48 | **26/48** |
 
-> 📦 安装包与 SHA-256 校验值见 [v2.7.0 Release](https://github.com/PolyXRD/PolyXRD/releases/tag/v2.7.0)（只含 Setup + SHA256；数据库与 PDF2 外挂，不随分发）。
+> 📦 安装包与 SHA-256 校验值见 [v2.8.0 Release](https://github.com/PolyXRD/PolyXRD/releases/tag/v2.8.0)（只含 Setup + SHA256；数据库与 PDF2 外挂，不随分发）。
 
-> 另有 5 项「看起来很对」的改动被消融实测否决并留档（尺度感知可观测性、抬高可观测门槛、
-> 降低漏检惩罚、PFSM 参与排序等），详见计划文档 §三 —— 留档以避免后续重复踩坑。
-
-**上一版 v2.6.0**（用户自建数据库 + 数据页谱图主导布局 + 精修页重排）：👉 [下载 v2.6.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v2.6.0)
+**上一版 v2.7.0**（物相检索 FoM 判据解耦 + 数据驱动标定，B 级 top10 45/49 · MRR 0.490）：👉 [下载 v2.7.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v2.7.0)
 
 ---
 

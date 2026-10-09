@@ -126,7 +126,7 @@ _FOM_PO_IMPROVE_FRAC = 0.10
 _FOM_PFSM_TOP_N = 50
 _FOM_PFSM_WEIGHT = 0.0
 
-# B-5 PFSM 双过滤 (仿 Match! "Minimum Rwp reduction required" +
+# B-5 PFSM 双过滤 (仿商用软件 "Minimum Rwp reduction required" +
 # "Minimum intensity scale factor"):
 #   - delta_rwp < _FOM_PFSM_MIN_RWP_REDUCTION (%) 的候选视为伪阳性, 不进重排;
 #   - scale < _FOM_PFSM_MIN_SCALE 的候选视为微量/噪声, 不进重排。
@@ -136,7 +136,7 @@ _FOM_PFSM_WEIGHT = 0.0
 _FOM_PFSM_MIN_RWP_REDUCTION = 0.5
 _FOM_PFSM_MIN_SCALE = 0.02
 
-# B-6: per-entry 零点偏移网格搜索 (仿 Match! Automatic zero point adaptation)。
+# B-6: per-entry 零点偏移网格搜索 (仿商用软件 Automatic zero point adaptation)。
 # 样品位移 / 仪器零点残差会使峰位整体偏移, 全局校正只能修一个平均偏移;
 # per-entry 在小网格上扫 dz 取最优 FoM, 让真值相"对得更准"。
 # 两道护栏 (借鉴 B-4 PO 经验):
@@ -153,7 +153,7 @@ _FOM_PFSM_MIN_SCALE = 0.02
 _FOM_ZERO_GRID: Optional[tuple] = None
 _FOM_ZERO_IMPROVE_FRAC = 0.10
 
-# B-7: 最小关联峰数惩罚 (仿 Match! "Min. no. of corr. peaks" 默认 2)。
+# B-7: 最小关联峰数惩罚 (仿商用软件 "Min. no. of corr. peaks" 默认 2)。
 # 窄 2θ 窗口内只有 1 条参考峰能对上实测峰时, 偶然匹配概率高 → 伪阳性。
 # 用 ×2 惩罚而非直接淘汰, 避免误杀高对称少峰相 (Zircon 等)。
 # **v2.5 验收消融: 本版组合改善 (42→44 相级 / 8→10 试样级) 与检索 B top10
@@ -1099,7 +1099,7 @@ class PhaseIdentifier:
         # (实测谱 vs 单相合成谱), 按综合分 (1-w)·FoM_rank + w·PFSM_rank 重排。
         # v2.5 起 PFSM 排序指标改用 ΔRwp (替代旧的 corr): corr 对背景/峰形整体
         # 形状敏感, 微量相弱贡献被主相淹没; ΔRwp 直接度量"该相对解释残差的贡献"。
-        # 双过滤 (仿 Match!): delta_rwp < 0.5% 或 scale < 0.02 的候选不进重排。
+        # 双过滤 : delta_rwp < 0.5% 或 scale < 0.02 的候选不进重排。
         if (fom_pfsm_top_n > 0 and fom_pfsm_weight > 0
                 and len(results) > 1
                 and data is not None and getattr(data, "two_theta", None) is not None):
@@ -1240,7 +1240,7 @@ class PhaseIdentifier:
         的候选跳过 PO 搜索 (用原参考峰表)。
 
         B-6: ``zero_grid`` 非空时, 对 (PO 校正后的) 参考峰在 dz 网格上做
-        per-entry 零点偏移搜索 (仿 Match! 自动零点校正), 取最优 dz 的 FoM。
+        per-entry 零点偏移搜索 (仿商用软件自动零点校正), 取最优 dz 的 FoM。
         默认 None = 不启用 (13 试样消融实测净负, 见 ``_FOM_ZERO_GRID`` 注释)。
         护栏: |dz| ≤ 0.15° 且改善 > ``_FOM_ZERO_IMPROVE_FRAC`` (0.10) 才采用。
 
@@ -1893,7 +1893,7 @@ class PhaseIdentifier:
                 continue
 
             formula = detail.get("formula", "") or ""
-            # 名称优先级: 矿物名 (Match! 习惯) > PDF2 主名称 > 化学式。
+            # 名称优先级: 矿物名 (行业习惯) > PDF2 主名称 > 化学式。
             # 主名称常见 "Calcium Carbonate Oxide" 这类冗长写法, 矿物名
             # "Calcite" 更贴近检索习惯。
             disp_name = (

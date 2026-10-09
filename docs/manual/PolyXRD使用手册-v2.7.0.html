@@ -113,7 +113,7 @@ em { color: #555; }
 <li><strong>UI 与算法分层</strong>：<code>services/</code> 层是纯算法、不依赖 Qt，可独立测试与复现。</li>
 </ul>
 <blockquote>
-<p>与 Match!、JADE、FullProf Suite、MAUD、GSAS-II 等专业软件可互相配合使用——PolyXRD 负责把它们串成一条流畅的流水线。</p>
+<p>与 JADE、FullProf Suite、MAUD、GSAS-II 等专业软件可互相配合使用——PolyXRD 负责把它们串成一条流畅的流水线。</p>
 </blockquote>
 <hr />
 </div>
@@ -487,7 +487,7 @@ bad_miss  = Σ(权重·漏检)   / Σ权重(可见参考峰)    # 未被解释�
 <p>窄 2θ 窗口内只有 1 条参考峰能对上实测峰时，偶然匹配概率高 → 假阳性。v2.5 对匹配峰数 &lt; 2 的候选施加 <strong>FoM ×2</strong> 惩罚（而非直接淘汰，避免误杀高对称少峰相如 Zircon）。</p>
 <p><strong>这是 v2.5 全部收益的来源</strong>：组合相级 +3、试样级 +2、检索 B 级 top10 +2。</p>
 <h4>B-6：逐候选零点自适应校正（默认关闭）</h4>
-<p>对每条候选在小网格上扫描 2θ 零点偏移，取最优 FoM。借鉴 Match! 的 Automatic zero point adaptation。</p>
+<p>对每条候选在小网格上扫描 2θ 零点偏移，取最优 FoM。借鉴成熟商用软件的 Automatic zero point adaptation。</p>
 <p><strong>两道护栏</strong>：<br />
 - 幅度限制：|dz| ≤ 0.15°（超过 = 数据质量问题而非零点问题）<br />
 - 改善阈值：dz≠0 的 FoM 须比 dz=0 好 &gt; 10% 才采用（避免虚假优化挤掉真相）</p>

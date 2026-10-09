@@ -1,6 +1,6 @@
 """C1: profile_fitting_score baseline_rwp / delta_rwp 回归测试。
 
-delta_rwp = baseline_rwp - rwp, 即加入该相后的 Rwp 降幅 (Match! 口径)。
+delta_rwp = baseline_rwp - rwp, 即加入该相后的 Rwp 降幅 (ΔRwp 口径)。
 """
 from __future__ import annotations
 
