@@ -50,7 +50,7 @@ class DataLoader:
     - .txt: 通用文本格式
     - .xrdml: XML格式 (Bruker)
     - .xml: 通用XRD XML
-    - .raw: 二进制格式 (RAW2: 定长头 + float32 强度; 其它变体走启发式兜底)
+    - .raw: 二进制格式 (岛津 Shimadzu ``Shimadzu XRD`` / Rigaku ``RAW2`` / Rigaku RINT-2000 ``FI``; 其它变体走启发式兜底)
     - .brml: Bruker专用格式
     - .mdi: MDI 文本格式 (定宽整数强度, 头含 start/step/stop)
     """
@@ -423,12 +423,15 @@ class DataLoader:
         """加载二进制 RAW 格式。
 
         按魔数分流:
+          - ``b"Shimadzu XRD"`` → 岛津 PCXRD 导出二进制 (见 ``_load_shimadzu_raw``)
           - ``b"RAW2"``  → Rigaku/通用 RAW2 定长头 (见 ``_load_raw2``)
           - ``b"FI\\x00\\x00"`` → Rigaku RINT-2000 二进制 (见 ``_load_rigaku_raw``)
           - 其它未识别变体 (Bruker 等) 仍走旧的"前半 2θ / 后半强度"启发式,
             保持既有行为不回归。
         """
         raw = file_path.read_bytes()
+        if raw[:12] == self._SHIMADZU_MAGIC:
+            return self._load_shimadzu_raw(raw, file_path, **kwargs)
         if raw[:4] == b"FI\x00\x00":
             return self._load_rigaku_raw(raw, file_path)
         if raw[:4] == b"RAW2":
@@ -442,6 +445,99 @@ class DataLoader:
         # 前半2theta，后半intensity
         n = len(values) // 2
         return values[:n], values[n:n * 2], {}
+
+    # ------------------------------------------------------------------
+    # 岛津(Shimadzu)二进制 .RAW 加载器  (PCXRD 软件导出, 魔数 b"Shimadzu XRD")
+    # ------------------------------------------------------------------
+    # 实测结构 (smz geshi 13 对 raw/txt 逐点交叉验证 + XRData 全量 106 个 .RAW 复扫):
+    #   - 0x000 (0)   : 12 字节 ASCII 魔数 b"Shimadzu XRD"
+    #   - 0x12C (300) : int32 LE 起始角 ×10000 (度)
+    #   - 0x130 (304) : int32 LE 终止角 ×10000
+    #   - 0x134 (308) : int32 LE 步长   ×10000  (跨校验用, 不与轴参数冲突时优先用轴参数推导)
+    #   - 0x270 (624) : int32 LE 点数 N
+    #   - 0x3C8 (968) : N 个 int32 LE 强度计数; 文件大小 = 968 + 4*N 精确成立
+    # 轴: 2θ_i = start + i*step, step = (stop - start) / (N - 1)。
+    # 说明: 岛津 "drive axis = Theta" 单轴(摇摆/rocking)模式记录的轴是 θ, 需 ×2 才是
+    # 2θ; 该模式在二进制里无独立标志位, 由调用方用配对 txt 的列头 (<Theta> vs <2Theta>)
+    # 判定后, 经 theta_mode=True 传入。默认按 2θ (Theta-2Theta / Theta-Theta 主导场景)。
+    _SHIMADZU_MAGIC = b"Shimadzu XRD"
+    _SHIMADZU_START_OFF = 300     # int32 LE: 起始角 ×10000
+    _SHIMADZU_STOP_OFF = 304      # int32 LE: 终止角 ×10000
+    _SHIMADZU_STEP_OFF = 308      # int32 LE: 步长   ×10000
+    _SHIMADZU_N_OFF = 624         # int32 LE: 点数 N
+    # 强度计数块位于文件末尾 (前面是变长 header), 偏移 = 文件大小 - 4*N。
+    # 实测覆盖 XRData 全部 106 个岛津 RAW (header 长度 968 / 976 / 1608 三种子类型均成立),
+    # 故不写死 968, 改用文件尾部推断。
+    _SHIMADZU_DATA_OFF = 968      # 标准子类型的主偏移 (作退化回退/文档参考)
+
+    def _load_shimadzu_raw(
+        self, raw: bytes, file_path: Path, fmt: str = "raw", theta_mode: bool = False, **kwargs
+    ) -> tuple[np.ndarray, np.ndarray, dict]:
+        """岛津二进制 ``.raw`` (魔数 ``Shimadzu XRD``)。
+
+        Args:
+            theta_mode: 二进制记录的轴是 θ (单轴摇摆模式) 时为 True, 折算成 2θ。
+        """
+        import math
+        import struct
+
+        if raw[:12] != self._SHIMADZU_MAGIC:
+            raise ValueError(f"不是岛津二进制 RAW (魔数不符): {file_path}")
+
+        n = struct.unpack_from("<i", raw, self._SHIMADZU_N_OFF)[0]
+        start = struct.unpack_from("<i", raw, self._SHIMADZU_START_OFF)[0] / 10000.0
+        stop = struct.unpack_from("<i", raw, self._SHIMADZU_STOP_OFF)[0] / 10000.0
+        if n <= 1 or not (math.isfinite(start) and math.isfinite(stop)):
+            raise ValueError(
+                f"岛津 RAW 轴参数异常 (N={n}, start={start}, stop={stop}): {file_path}"
+            )
+        # 岛津二进制也存摇摆/织构扫描 (如 rocking θ=-1..1、极图方位角 0..360),
+        # 其记录轴不是 2θ, 不该当作粉晶谱送进相分析。明确跳过, 交由调用方记录。
+        if not (0.0 <= start < stop <= 180.0):
+            raise ValueError(
+                f"岛津 RAW 记录轴非标准 2θ 扫描 (start={start}, stop={stop}), "
+                f"疑似摇摆/织构扫描, 跳过: {file_path}"
+            )
+
+        # 数据段 = N 个 int32, 位于文件末尾 (变长 header 在前)。
+        # 偏移 = 文件大小 - 4*N (比写死 968 更稳健, 兼容 968/976/1608 等 header 长度)。
+        data_off = len(raw) - 4 * n
+        if data_off < 0 or data_off + 4 * n != len(raw):
+            # 退化: 头里 N 与文件大小不自洽时, 回退到标准主偏移
+            data_off = self._SHIMADZU_DATA_OFF
+        if data_off < 0 or data_off + 4 * n > len(raw):
+            raise ValueError(f"岛津 RAW 数据段越界 (N={n}, 文件={len(raw)}): {file_path}")
+        if n < 2:
+            raise ValueError(f"岛津 RAW 数据段过短: {file_path}")
+
+        intensity = np.frombuffer(
+            raw[data_off: data_off + n * 4],
+            dtype="<i4",
+        ).astype(float)
+        # 合理性护栏: 强度不应出现负数或 NaN, 否则说明偏移/类型判定有误, 明确报错而非吐垃圾
+        if not np.all(np.isfinite(intensity)) or float(intensity.min()) < 0:
+            raise ValueError(
+                f"岛津 RAW 强度段异常 (min={float(intensity.min()):.0f}), "
+                f"疑似子类型不支持: {file_path}"
+            )
+
+        step = (stop - start) / (n - 1)
+        two_theta = start + step * np.arange(n, dtype=float)
+        if theta_mode:
+            # 记录轴是 θ (单轴摇摆模式) → 折算 2θ
+            two_theta = 2.0 * two_theta
+
+        meta: dict = {
+            "shimadzu_raw": True,
+            "raw_header_len": data_off,
+            "theta_mode": bool(theta_mode),
+        }
+        wl = wavelength_from_anode(
+            raw[:data_off].decode("latin-1", errors="ignore")
+        )
+        if wl is not None:
+            meta["wavelength"] = wl
+        return two_theta, intensity, meta
 
     # RAW2 头内固定偏移 (实测)
     _RAW2_COUNT_OFF = 0x102   # int16 LE: 点数
