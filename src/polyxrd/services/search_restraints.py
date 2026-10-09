@@ -167,7 +167,7 @@ def find_phases_direct(
     phases: Iterable[Phase],
     max_results: Optional[int] = None,
 ) -> list[Phase]:
-    """名称/化学式模糊直搜 (等价 Match! 的 Find phases/entries)。
+    """名称/化学式模糊直搜 (等价 Find phases/entries 直搜)。
 
     规则 (不区分大小写):
       - query 含通配符 (* ?) 时按 fnmatch 匹配名称与化学式

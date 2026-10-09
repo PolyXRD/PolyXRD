@@ -1,7 +1,7 @@
 """B-6: compute_fom zero_shift 参数回归测试。
 
 zero_shift 对参考峰 2θ 做整体偏移, 用于 per-entry 零点校正
-(仿 Match! Automatic zero point adaptation)。
+(仿商用软件 Automatic zero point adaptation)。
 默认 0.0 = 与历史行为完全一致; 非零时应能改善错位峰表的 FoM。
 """
 from __future__ import annotations

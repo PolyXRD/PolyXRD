@@ -194,7 +194,7 @@ def compute_fom(
             强度也不计入总强度 (位置项/漏峰项不受影响)。None = 不过滤
             (默认行为与 v2.3 一致)。常用 :func:`local_mad_threshold` 计算。
         zero_shift: 参考峰 2θ 整体偏移 (度, B-6)。正值 = 参考峰右移,
-            负值 = 左移。用于 per-entry 零点校正 (仿 Match! 自动零点校正):
+            负值 = 左移。用于 per-entry 零点校正 (仿商用软件自动零点校正):
             对每个候选在小网格上扫 dz, 取最优 FoM。默认 0.0 = 不偏移
             (与历史行为完全一致)。
     Returns:
@@ -470,7 +470,7 @@ def profile_fitting_score(
 
     Args:
         baseline_rwp: 无该相时的基线 Rwp (%)。提供时返回 ``delta_rwp``
-            = baseline_rwp - rwp, 即加入该相后的 Rwp 降幅 (Match! 口径)。
+            = baseline_rwp - rwp, 即加入该相后的 Rwp 降幅 (ΔRwp 口径)。
             None 时不返回 delta_rwp。
 
     Returns:

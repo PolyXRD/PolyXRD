@@ -34,7 +34,7 @@ class PhaseViewModel(QObject):
     phase_selected = Signal(object)
     error = Signal(str)
     info = Signal(str)
-    # M21: 勾选集合变更 (Match! 式多相叠加)
+    # M21: 勾选集合变更 (多相叠加)
     selection_changed = Signal(list)
     assignment_changed = Signal(object, object)   # (assignments, ref_hit)
 
@@ -324,7 +324,7 @@ class PhaseViewModel(QObject):
         self.phase_identified.emit(list(self._matched_phases))
         self.selection_changed.emit(list(self._selected_phases))
 
-    # ── M21: 多选集合管理 (Match! 式勾选叠加) ───────────────
+    # ── M21: 多选集合管理 (勾选叠加) ───────────────
     MAX_SELECTED = 8
 
     def update_selection(self, phase: Phase, checked: bool) -> None:

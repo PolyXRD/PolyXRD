@@ -79,7 +79,7 @@ class PhaseView(QWidget):
         main_layout.setContentsMargins(4, 4, 4, 4)
         main_layout.setSpacing(4)
 
-        # ====== 上部: 衍射谱图 (Match! 式双区: 主谱 + 参考棒) ======
+        # ====== 上部: 衍射谱图 (双区式: 主谱 + 参考棒) ======
         self._plot = PatternDisplayWidget()
         self._plot.setMinimumHeight(350)
         main_layout.addWidget(self._plot, stretch=3)
@@ -217,7 +217,7 @@ class PhaseView(QWidget):
         self._candidate_list = QListWidget()
         self._candidate_list.setMaximumHeight(150)
         self._candidate_list.itemClicked.connect(self._on_candidate_clicked)
-        # M21 v2: 支持勾选多选叠加 (Match! 式), itemChanged 驱动归属刷新
+        # M21 v2: 支持勾选多选叠加 (多相叠加式), itemChanged 驱动归属刷新
         self._candidate_list.itemChanged.connect(self._on_candidate_toggled)
         # M23: 右键导出 CIF
         self._candidate_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -681,7 +681,7 @@ class PhaseView(QWidget):
         return "\n".join(lines)
 
     def _on_candidate_clicked(self, item: QListWidgetItem) -> None:
-        """单击候选 (非勾选框): 若未勾选则单选叠加该相 (Match! 浏览习惯)。"""
+        """单击候选 (非勾选框): 若未勾选则单选叠加该相 (候选浏览习惯)。"""
         if item.checkState() != Qt.CheckState.Checked:
             result = item.data(Qt.ItemDataRole.UserRole)
             phase = (result.phase if hasattr(result, 'phase') else result) if result else None
