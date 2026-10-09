@@ -381,7 +381,7 @@ class PhaseView(QWidget):
             self._current_method = "profile_fitting"
             self._vm.identify_phases_profile_fitting(
                 element_filter=self._filter_dict if self._filter_dict else None,
-                top_n=10,
+                top_n=20,
                 fwhm=self._fwhm_spin.value(),
             )
 
@@ -520,7 +520,7 @@ class PhaseView(QWidget):
             self._current_method = "fom"
             self._vm.identify_phases(
                 element_filter=self._filter_dict if self._filter_dict else None,
-                top_n=10,
+                top_n=20,
                 db_source=self._current_db_source(),
             )
 
@@ -534,7 +534,7 @@ class PhaseView(QWidget):
             self._current_method = "fom"
             self._vm.identify_phases(
                 element_filter=self._filter_dict if self._filter_dict else None,
-                top_n=10,
+                top_n=20,
                 db_source=self._current_db_source(),
                 marked_peaks=list(marked),
             )
@@ -547,7 +547,7 @@ class PhaseView(QWidget):
             self._current_method = "fom"
             self._vm.search_residual_peaks(
                 element_filter=self._filter_dict if self._filter_dict else None,
-                top_n=10,
+                top_n=20,
             )
 
     def _on_quick_identify(self) -> None:
@@ -557,7 +557,7 @@ class PhaseView(QWidget):
                 return
             self._current_method = "fom"
             self._vm.identify_phases(
-                element_filter=None, top_n=10,
+                element_filter=None, top_n=20,
                 db_source=self._current_db_source(),
             )
 
