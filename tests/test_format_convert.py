@@ -102,6 +102,40 @@ def test_convert_dat_to_xy_is_byte_identical(tmp_path):
     assert out.read_bytes() == (GESHI / "4-1.xy").read_bytes()
 
 
+def test_two_column_export_survives_high_intensity(tmp_path):
+    """强度占满写出场宽时, 两列之间仍须保有分隔符。
+
+    ``_fmt_pair`` 靠 y 场宽内的前导空格分隔两列 (与原厂 ``"   5.000       207"``
+    同构)。强度大到占满场宽时该空格消失, 会写出 ``"  38.420126727.648"``
+    这样的单列行 —— 下游 ``np.loadtxt`` 报 "columns changed" 读不出来,
+    属静默的数据损坏。故溢出时必须补显式分隔符, 且正常量级不受影响。
+    """
+    from polyxrd.models.xrd_data import XRDData
+    from polyxrd.services.pattern_convert import _fmt_pair
+
+    for x, y in [
+        (5.0, 207.0),                  # 正常量级 (原厂样例同构)
+        (28.4, 325.0),
+        (38.40, 98086.0),              # 临界: 尚有一位前导空格
+        (38.42, 126727.6484375),       # 占满 10 字符 → 原本会粘连
+        (38.44, 150838.75),
+        (10.0, 1e9 + 0.5),             # 远超场宽
+    ]:
+        row = _fmt_pair(x, y)
+        assert len(row.split()) == 2, f"两列粘连成不可解析的一列: {row!r}"
+
+    # 端到端: 含高强度点的谱图写出后要能被 np.loadtxt 原样读回
+    data = XRDData(
+        two_theta=np.array([38.40, 38.42, 38.44]),
+        intensity=np.array([98086.0, 126727.6484375, 150838.75]),
+    )
+    out = tmp_path / "big.txt"
+    write_pattern(data, out, "txt")
+    arr = np.loadtxt(out)  # 粘连的话这里会抛 "columns changed"
+    assert arr.shape == (3, 2)
+    np.testing.assert_allclose(arr[:, 1], data.intensity, rtol=0, atol=1e-3)
+
+
 # ----------------------------------------------------------------------
 # 往返: 每种目标格式写出后都要能读回, 且与源一致
 # ----------------------------------------------------------------------

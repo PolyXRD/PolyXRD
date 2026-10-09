@@ -136,6 +136,7 @@ def load_auto(
     wavelength: Optional[float] = None,
     x_col: Optional[int] = None,
     y_col: Optional[int] = None,
+    **kwargs,
 ) -> XRDData:
     """全自动加载: 文本/CSV 多列列序识别; 其它格式委托 DataLoader。
 
@@ -164,4 +165,4 @@ def load_auto(
 
     # 非文本: 委托现有 DataLoader (xrdml/raw/brml/shimadzu/...)
     from polyxrd.services.data_loader import DataLoader
-    return DataLoader().load(p, wavelength=wavelength)
+    return DataLoader().load(p, wavelength=wavelength, **kwargs)

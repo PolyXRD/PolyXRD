@@ -56,18 +56,20 @@ _RAW2_BANNER = b"PolyXRD pattern export"
 # 读
 # ----------------------------------------------------------------------
 
-def load_pattern(path: Union[str, Path]) -> XRDData:
+def load_pattern(path: Union[str, Path], **kwargs) -> XRDData:
     """读取任意受支持的谱图文件。
 
     与 ``load_auto`` 的差别: 这里额外认得**本程序自己导出的 .json**
     (load_auto 不认识 json, 否则会把项目/库的 json 也卷进来)。
+
+    ``**kwargs`` 透传给底层加载器 (如岛津二进制 .raw 的 ``theta_mode``)。
     """
     p = Path(path)
     if not p.exists():
         raise FileNotFoundError(f"文件不存在: {p}")
     if p.suffix.lower() == ".json":
         return _read_json(p)
-    return load_auto(p)
+    return load_auto(p, **kwargs)
 
 
 def _read_json(path: Path) -> XRDData:
@@ -113,6 +115,7 @@ def convert_pattern_file(
     src: Union[str, Path],
     dst: Union[str, Path, None] = None,
     fmt: Optional[str] = None,
+    **kwargs,
 ) -> Path:
     """把 ``src`` 转成 ``dst`` (或同目录同名的另一个扩展名)。
 
@@ -120,12 +123,13 @@ def convert_pattern_file(
         src: 源文件 (任意受支持的可读格式)
         dst: 目标路径; None → 与源同目录、同主名、扩展名换成 ``fmt``
         fmt: 目标格式 key; dst 给了且 fmt 为 None 时按 dst 扩展名推断
+        **kwargs: 透传给底层加载器 (如岛津二进制 .raw 的 ``theta_mode``)
 
     Returns:
         实际写出的路径
     """
     src = Path(src)
-    data = load_pattern(src)
+    data = load_pattern(src, **kwargs)
     if dst is None:
         key = (fmt or "xy").lower()
         if key not in TARGET_EXTS:
@@ -165,12 +169,22 @@ def _uniform_step(two_theta: np.ndarray) -> float:
 def _fmt_pair(x: float, y: float) -> str:
     """两列文本的一行。
 
-    整数强度按整数列写 (与原厂 .dat/.txt/.xy 导出同构, 便于与原文件逐字节比对);
+    整数强度按整数列写 (与原厂 .dat/.txt/.xy 导出同构, 便于与原文件比对);
     含小数时改保留 3 位小数, 不丢信息。
+
+    两列之间靠 y 场宽内的**前导空格**充当分隔符 (与原厂 ``"   5.000       207"``
+    逐字节一致)。但当场宽被占满时 (如 y=126727.648 正好 10 字符), 该空格消失,
+    两列会粘连成 ``"  38.420126727.648"`` 一行 —— 下游 ``np.loadtxt`` 会报
+    "columns changed" 而读不出来, 属静默的数据损坏。故溢出时补显式分隔符。
     """
-    if abs(y - round(y)) < 1e-9:
-        return f"{x:8.3f}{int(round(y)):10d}"
-    return f"{x:8.3f}{y:10.3f}"
+    xs = f"{x:8.3f}"
+    ys = f"{int(round(y)):10d}" if abs(y - round(y)) < 1e-9 else f"{y:10.3f}"
+    if ys[:1].isspace():
+        return xs + ys
+    # 场宽被占满 → 原本充作分隔符的前导空格消失, 两列会粘连成
+    # "  38.420126727.648" 这样的一列, 下游 loadtxt 因"columns changed"读不出来,
+    # 属静默数据损坏。此时补一个显式分隔符; 正常量级下输出仍与原厂逐字节一致。
+    return xs + " " + ys
 
 
 def _write_two_column(data: XRDData, path: Path) -> None:
