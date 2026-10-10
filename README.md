@@ -7,7 +7,7 @@
     峰检测 &nbsp;·&nbsp; 多物相定性检索 &nbsp;·&nbsp; Rietveld 结构精修 &nbsp;·&nbsp; Le Bail 晶胞精修 &nbsp;·&nbsp; 指标化 &nbsp;·&nbsp; 3D 结构可视化 &nbsp;·&nbsp; 三库外挂检索 (COD 无机物 / COD 全库 / PDF2-2004)
   </p>
   <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v2.8.0-blue?style=flat-square" /></a>
+    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v2.9.0-blue?style=flat-square" /></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
     &nbsp;
@@ -38,25 +38,18 @@
 
 ---
 
-## 🆕 最新版本 v2.8.0（2026-10-09）
+## 🆕 最新版本 v2.9.0（2026-10-10）
 
-**COD-Inorg 检索质量修复：候选去重 + 候选列表扩展**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §2.8.0）：
+**格式支持扩展：岛津 .RAW 二进制解析 + 导出损坏修复**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §2.9.0）：
 
-- **候选去重（排名层修复）**：COD 无机库内容完整无缺（每条真值相均在库、主相预筛恒为 #1），问题在结果展示层——同相在库中有 10–15 条近相同条目（如 14× `O Zn`）挤占 top-N 槽位。新增 `_collapse_distinct`，按「元素集 + 归一化空间群」折叠同相、只保留 FoM 最优代表，严格非回退且多形体（石英/方石英、锐钛/金红）保持分立。
-- **候选列表扩至 20**：物相检索默认返回前 20 条不同相（同相去重后不再重复占位），默认模式召回 24→26。
-- **检索基准提升**：13 试样 A 级 top10 由 24→36/48、MISS 24→12、MRR 0.314→0.407；B 级 top10 22→24/48。91 项定向回归全绿。
-- 算法未改 FoM 评分口径；剩余多相样品漏检属单峰列表法固有上限（需全谱拟合，走 GSAS-II/MAUD 集成路径）。
+- **新增岛津 XRD .RAW 二进制格式**：支持 PCXRD 导出的私有容器，968/976/1608 三种变长头子类型自动适配；θ 轴记录模式自动折算 2θ；摇摆曲线/极图等非 2θ 扫描明确拒绝、不污染相分析。106 个真机样本 103 正确解析 + 3 个按非 2θ 正确跳过，与官方导出 .txt 逐数值 18/18 完全一致（maxΔ2θ = 0.0000°）。
+- **修复两列文本导出的静默数据损坏**：强度量级大到占满场宽时两列粘连成单列、下游 `np.loadtxt` 读不出；改为仅在溢出时补显式分隔符，正常输出与原厂格式逐字节一致。
+- **批量转换脚本** `scripts/convert_xrdata_to_txt.py`：幂等 + 陈旧自检（解析器修复后自动重写脏输出）+ 同名冲突消歧。
+- 本版无检索/精修算法改动，基准与 v2.8.0 一致（A 级 top10 36/48 · MRR 0.407；B 级 top20 26/48）。
 
-**基准（13 试样实测）**
+> 📦 安装包与 SHA-256 校验值见 [v2.9.0 Release](https://github.com/PolyXRD/PolyXRD/releases/tag/v2.9.0)（只含 Setup + SHA256；数据库与 PDF2 外挂，不随分发）。
 
-| 指标 | v2.7.0 | v2.8.0 |
-|---|---|---|
-| 检索 A 级 top10 / MISS / MRR | 24/48 / 24 / 0.314 | **36/48** / **12** / **0.407** |
-| 检索 B 级 top10（top20 候选列表） | 22/48 | **26/48** |
-
-> 📦 安装包与 SHA-256 校验值见 [v2.8.0 Release](https://github.com/PolyXRD/PolyXRD/releases/tag/v2.8.0)（只含 Setup + SHA256；数据库与 PDF2 外挂，不随分发）。
-
-**上一版 v2.7.0**（物相检索 FoM 判据解耦 + 数据驱动标定，B 级 top10 45/49 · MRR 0.490）：👉 [下载 v2.7.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v2.7.0)
+**上一版 v2.8.0**（COD-Inorg 检索质量修复：候选去重 + 候选列表扩至 20，A 级 top10 24→36/48 · MRR 0.407）：👉 [下载 v2.8.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v2.8.0)
 
 ---
 
