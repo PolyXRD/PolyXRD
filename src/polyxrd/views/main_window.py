@@ -54,6 +54,8 @@ from PySide6.QtWidgets import (
 
 from polyxrd.config import AppConfig
 from polyxrd.i18n import tr, I18nManager, Language
+from polyxrd.utils import registration as _registration
+from polyxrd.utils.build_flavor import INTERNAL_BUILD_LABEL, is_internal
 from polyxrd.utils.resources import get_app_icon_path, get_icon_path
 from polyxrd.viewmodels.main_vm import MainViewModel
 from polyxrd.views.data_view import DataView
@@ -572,6 +574,16 @@ class MainWindow(QMainWindow):
         self._language_actions: dict[str, QAction] = {}
         self._menus: dict[str, QMenu] = {}
 
+        # 注册机制 —— 仅正式发布版装配；内部评估版不出现任何注册 UI / 提示,
+        # 状态栏最右侧改为固定显示 INTERNAL_BUILD_LABEL。
+        self._edition_label: Optional[QLabel] = None
+        self._reg: Optional[_registration.RegistrationManager] = None
+        if not is_internal():
+            self._reg = _registration.RegistrationManager(
+                getattr(config, "app_name", "") or tr("app.name"),
+                _registration.default_state_path("PolyXRD"),
+            )
+
         # ⚠️ 必须在建界面**之前**套用持久化语言。
         # 四个标签页 (Data/Phase/Refinement/Report) 里的文案都是构造期调 tr()
         # 写死的, 页内没有 retranslate 通路时, 一旦构造发生在切换语言之前,
@@ -584,8 +596,21 @@ class MainWindow(QMainWindow):
         self._setup_connections()
         self._load_settings()
 
-        # 0.10.0: 数据库外挂 —— 首次启动若一个库都没挂载, 延迟到窗口显形后再提示
-        QTimer.singleShot(400, self._maybe_first_run_db_hint)
+        # 延迟到窗口显形之后再做「注册检查 + 数据库外挂指引」:
+        # 过早弹模态框会打断窗口绘制, 甚至在离屏/冒烟里被判为卡死。
+        QTimer.singleShot(400, self._deferred_startup_tasks)
+
+    def _deferred_startup_tasks(self) -> None:
+        """窗口显形后的延后任务。
+
+        顺序有讲究:**先注册检查、再数据库指引**。注册提示是模态框, 必须单独立住;
+        两者若用各自的 singleShot, 第二个会在用户还没处理第一个时压上来。
+        """
+        if self._reg is not None:
+            # 已注册 -> 静默返回; 未注册 -> 弹版权提示
+            # ([确定] 继续使用 / [输入注册码] 直接注册)
+            self._reg.startup_check(self)
+        self._maybe_first_run_db_hint()
 
     def _maybe_first_run_db_hint(self) -> None:
         """一个库都没挂载时给出明确指引 (仅首次弹窗, 之后只留状态栏常驻提示)。"""
@@ -599,6 +624,26 @@ class MainWindow(QMainWindow):
         QMessageBox.information(
             self, tr("db_manager.first_run_title"), tr("db_manager.first_run_body")
         )
+
+    def _setup_edition_status_label(self) -> None:
+        """状态栏**最右侧**（右对齐）的版本/注册标识。
+
+        * 内部评估版 —— 固定显示 ``内部评估版本``，全程无注册 UI、无启动提示；
+        * 正式发布版 —— 显示注册状态 ``已注册：<单位部门名称>`` / ``未注册``。
+
+        ``stretch=1`` 让标签吃掉中间空白，使文案始终贴着状态栏右端，
+        窗口拉宽也不会漂到中间（沿用 Qt 状态栏 permanent widget 的排布语义）。
+        """
+        if is_internal():
+            label = QLabel(INTERNAL_BUILD_LABEL)
+            label.setObjectName("editionStatusLabel")
+            label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            label.setToolTip(INTERNAL_BUILD_LABEL)
+            self._edition_label = label
+            self.statusBar().addPermanentWidget(label, 1)
+            return
+        if self._reg is not None:
+            self._reg.attach_status_label(self.statusBar(), self)
 
     # ------------------------------------------------------------------
     # UI 初始化
@@ -629,6 +674,7 @@ class MainWindow(QMainWindow):
         self._status_wl_label = QLabel()
         self.statusBar().addPermanentWidget(self._status_lang_label)
         self.statusBar().addPermanentWidget(self._status_wl_label)
+        self._setup_edition_status_label()
         self.statusBar().showMessage(tr("status.ready"))
 
         # M20 v2: 接受数据文件拖放 (替代点击 "打开" 的快捷交互)
@@ -1151,6 +1197,22 @@ class MainWindow(QMainWindow):
         self._actions["about_qt"].triggered.connect(self._on_about_qt)
         help_menu.addAction(self._actions["about_qt"])
 
+        # 注册入口 —— 仅正式发布版装配；内部评估版帮助菜单里看不到这一项。
+        if self._reg is not None:
+            self._actions["enter_reg_code"] = QAction(tr("registration.enter_code"), self)
+            self._actions["enter_reg_code"].triggered.connect(self._on_enter_reg_code)
+            help_menu.addAction(self._actions["enter_reg_code"])
+
+    def _on_enter_reg_code(self) -> None:
+        """帮助 → 输入注册码：校验通过即落盘，之后启动不再弹提示。"""
+        if self._reg is None:
+            return
+        state = _registration.prompt_for_code(
+            self, self._reg.state_path, self._reg.app_name
+        )
+        if state is not None and state.registered:
+            self._reg.refresh()
+
     # ------------------------------------------------------------------
     # 信号连接
     # ------------------------------------------------------------------
@@ -1181,7 +1243,16 @@ class MainWindow(QMainWindow):
                 self._i18n.set_language(lang)
 
     def _on_language_changed(self, language: str) -> None:
+        # 注册模块自带 zh/en/ja 三语文案（有自己的 tr()，独立于本项目 i18n）。
+        # 不同步的话会出现「界面切英文、注册弹窗还是中文」的割裂；
+        # 本项目还有 de/fr/es/ko/ru 等槽位，注册模块不认 -> 落到英文（比落中文好）。
+        _registration.set_language(
+            {"zh_CN": "zh", "zh_TW": "zh", "ja_JP": "ja"}.get(language, "en")
+        )
         self._retranslate_ui()
+        # 重新刷一遍注册状态文案（未注册 / 已注册：XXX 各自有译文）
+        if self._reg is not None:
+            self._reg.refresh()
         self._save_settings()
 
     def _retranslate_ui(self) -> None:
@@ -1295,6 +1366,7 @@ class MainWindow(QMainWindow):
             "export_report": "menu.report.export",
             "about": "menu.help.about",
             "about_qt": "menu.help.about_qt",
+            "enter_reg_code": "registration.enter_code",
             "cod_search": "toolbar.cod_search",
             "strip_kalpha2": "action.strip_kalpha2",
             "reset": "toolbar.reset",

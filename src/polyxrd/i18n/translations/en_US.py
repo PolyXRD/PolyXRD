@@ -1089,6 +1089,9 @@ translations = {
             "cu_target": "Conventional Cu-target data"
         }
     },
+    "registration": {
+        "enter_code": "Enter Registration &Code…"
+    },
     "diag": {
         "engine_fallback": "Requested engine {requested} → actually used {used} (reason: {reason})",
         "ka2_detected": "Kα2 doublet detected but not stripped (strongest peak {center:.2f}°, Δ≈{delta:.3f}°, high-angle residual ≈{ratio:.0f}% of peak height): strip Kα2 first (Data processing → Kα2 stripping) or enable Kα2 modeling later",

@@ -1089,6 +1089,9 @@ translations = {
             "cu_target": "常规Cu靶数据"
         }
     },
+    "registration": {
+        "enter_code": "输入注册码(&R)…"
+    },
     "diag": {
         "engine_fallback": "请求引擎 {requested} → 实际使用 {used} (原因: {reason})",
         "ka2_detected": "检测到 Kα2 双线未剥离 (最强峰 {center:.2f}°, Δ≈{delta:.3f}°, 高角侧残差 ≈{ratio:.0f}% 峰高): 建议先剥离 Kα2 (数据处理 → Kα2 剥离) 或后续启用 Kα2 建模",

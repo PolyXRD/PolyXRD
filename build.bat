@@ -13,7 +13,7 @@ echo.
 
 cd /d "%~dp0"
 
-set APPVER=2.9.0
+set APPVER=2.10.0
 
 REM ── Python 定位 ──────────────────────────────────────
 if exist "venv\Scripts\python.exe" (
@@ -24,6 +24,20 @@ if exist "venv\Scripts\python.exe" (
     set PIP=pip
 )
 echo [信息] 使用 Python: %PYTHON%
+
+REM -- 构建变体 flavor (v2.10.0) -----------------------------------------
+REM   release  (默认) = 正式发布版: 启用注册机制, 未注册时每次启动提示版权信息
+REM   internal        = 内部评估版: 不含任何注册 UI/提示, 状态栏右端显示「内部评估版本」
+REM flavor 以 src/polyxrd/_build_flavor.py 的形式在 PyInstaller 之前烧入包中,
+REM 运行时不可切换; 该文件被 .gitignore 的 _*.py 规则覆盖, 永不入库。
+if "%POLYXRD_FLAVOR%"=="" set POLYXRD_FLAVOR=release
+"%PYTHON%" scripts\set_build_flavor.py %POLYXRD_FLAVOR%
+if errorlevel 1 (
+    echo [错误] 构建变体设置失败!
+    pause
+    exit /b 1
+)
+"%PYTHON%" scripts\set_build_flavor.py show
 
 "%PYTHON%" -c "import PyInstaller" >nul 2>&1
 if %errorlevel% neq 0 (

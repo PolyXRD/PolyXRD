@@ -7,7 +7,7 @@
     峰检测 &nbsp;·&nbsp; 多物相定性检索 &nbsp;·&nbsp; Rietveld 结构精修 &nbsp;·&nbsp; Le Bail 晶胞精修 &nbsp;·&nbsp; 指标化 &nbsp;·&nbsp; 3D 结构可视化 &nbsp;·&nbsp; 三库外挂检索 (COD 无机物 / COD 全库 / PDF2-2004)
   </p>
   <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v2.9.0-blue?style=flat-square" /></a>
+    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v2.10.0-blue?style=flat-square" /></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
     &nbsp;
@@ -15,7 +15,7 @@
     &nbsp;
     <img src="https://img.shields.io/badge/UI-PySide6%20(Qt6)-41cd52?style=flat-square" />
     &nbsp;
-    <img src="https://img.shields.io/badge/Tests-1290%2B%20collected-brightgreen?style=flat-square" />
+    <img src="https://img.shields.io/badge/Tests-1336%2B%20collected-brightgreen?style=flat-square" />
   </p>
   <p><i>🌐 English documentation: [README-EN.md](README-EN.md)</i></p>
 </div>
@@ -38,18 +38,49 @@
 
 ---
 
-## 🆕 最新版本 v2.9.0（2026-10-10）
+## 🆕 最新版本 v2.10.0（2026-10-16）
 
-**格式支持扩展：岛津 .RAW 二进制解析 + 导出损坏修复**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §2.9.0）：
+**注册机制 + 双版本分发**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §2.10.0）：
 
-- **新增岛津 XRD .RAW 二进制格式**：支持 PCXRD 导出的私有容器，968/976/1608 三种变长头子类型自动适配；θ 轴记录模式自动折算 2θ；摇摆曲线/极图等非 2θ 扫描明确拒绝、不污染相分析。106 个真机样本 103 正确解析 + 3 个按非 2θ 正确跳过，与官方导出 .txt 逐数值 18/18 完全一致（maxΔ2θ = 0.0000°）。
-- **修复两列文本导出的静默数据损坏**：强度量级大到占满场宽时两列粘连成单列、下游 `np.loadtxt` 读不出；改为仅在溢出时补显式分隔符，正常输出与原厂格式逐字节一致。
-- **批量转换脚本** `scripts/convert_xrdata_to_txt.py`：幂等 + 陈旧自检（解析器修复后自动重写脏输出）+ 同名冲突消歧。
-- 本版无检索/精修算法改动，基准与 v2.8.0 一致（A 级 top10 36/48 · MRR 0.407；B 级 top20 26/48）。
+自本版起按**两种二进制变体**分发，注册相关的 UI 与行为由**构建期**决定、运行时不可切换：
 
-> 📦 安装包与 SHA-256 校验值见 [v2.9.0 Release](https://github.com/PolyXRD/PolyXRD/releases/tag/v2.9.0)（只含 Setup + SHA256；数据库与 PDF2 外挂，不随分发）。
+| 变体 | 产物 | 注册机制 | 状态栏最右侧 |
+|---|---|---|---|
+| **正式发布版**（release） | Inno Setup 安装包 | ✅ 每次启动检查注册；未注册弹出版权提示（选「确定」仍可正常使用，选「输入注册码」即刻注册）；帮助菜单提供「输入注册码」 | `未注册` / 注册后显示 **`已注册：<单位部门名称>`** |
+| **内部评估版**（internal） | 便携 ZIP | ❌ 完全不含注册 UI、不弹任何提示 | 固定显示 **`内部评估版本`** |
 
-**上一版 v2.8.0**（COD-Inorg 检索质量修复：候选去重 + 候选列表扩至 20，A 级 top10 24→36/48 · MRR 0.407）：👉 [下载 v2.8.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v2.8.0)
+- **注册码算法**：`PXRD1-<Base32>`，内容为 `UTF8(单位部门名称) + 0x00 + HMAC-SHA256(…)[:8]`。**纯离线校验、无需联网、无需机器码**，同一单位多台电脑通用；软件端重新计算 HMAC 即可验真并**还原出单位部门名称**用于展示。
+- **防手改**：注册状态存在 `%APPDATA%\PolyXRD\Registration\PolyXRD.json`（明文），每次启动都用注册码重新算一遍单位名来兜底 —— 直接改 JSON 伪造「已注册」无效。
+- 签发给用户：`python scripts/make_reg_code.py "某某大学材料学院"`（详见下文「注册与授权」一节）。
+- 本版**无检索/精修算法改动**，基准与 v2.9.0 一致；回归 **1336 passed / 6 skipped**（新增 51 项注册机制测试）。
+
+> 📦 安装包与 SHA-256 校验值见 [v2.10.0 Release](https://github.com/PolyXRD/PolyXRD/releases/tag/v2.10.0)（数据库仍为外挂，不随分发；PDF2-2004 为 ICDD 版权库，永不出现在 Release 里）。
+
+**上一版 v2.9.0**（岛津 .RAW 二进制解析 + 两列导出损坏修复）：👉 [下载 v2.9.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v2.9.0)
+
+---
+
+## 🔑 注册与授权
+
+**用户怎么注册**（正式发布版）
+
+1. 把贵单位/部门的名称发给 `sshztx@outlook.com`；
+2. 收到注册码后在软件里点菜单 **帮助 ▸ 输入注册码…** 粘贴并确定；
+3. 注册成功后主窗口底部**状态栏最右侧**会常驻显示 `已注册：<单位部门名称>`，此后启动不再提示。
+
+未注册时每次启动会弹出提示框：**「本软件未注册，版权所有，禁止用于商业用途。如需注册请联系 sshztx@outlook.com」** —— 点「确定」可继续正常使用（仅提示，不限功能），点「输入注册码」则直接注册。
+
+**开发方怎么签发**（不随软件分发）
+
+```bash
+python scripts/make_reg_code.py "某某大学材料学院"        # 单个
+python scripts/make_reg_code.py -f units.txt             # 批量（每行一个单位名）
+python scripts/make_reg_code.py --verify PXRD1-XXXX-...  # 校验并回显单位名
+```
+
+**安全级别**：离线混淆级 —— 密钥随软件分发、可被逆向提取，定位是「告知版权 + 自助注册」，而非强反盗版。同一注册码可在同一单位的多台电脑使用（不绑机器码、不需要联网）。需要按机器/按应用强绑定时请联系作者。
+
+**内部评估版**：`scripts/set_build_flavor.py internal` 之后再打包即可产出；该变体不含任何注册 UI，状态栏显示 `内部评估版本`，仅供内部自用，**请勿对外分发**。
 
 ---
 

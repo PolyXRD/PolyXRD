@@ -52,6 +52,21 @@ else:
 datas = _datas_base
 binaries = []
 hiddenimports = ['polyxrd', 'polyxrd.i18n', 'polyxrd.i18n.translations.zh_CN', 'polyxrd.i18n.translations.en_US', 'polyxrd.i18n.translations.ja_JP', 'polyxrd.services.project_service', 'polyxrd.services.structure_simulator', 'polyxrd.services.phase_identifier', 'polyxrd.services.profile_fitting', 'polyxrd.services.db_import', 'polyxrd.services.cod_local', 'polyxrd.views.widgets.database_dialog', 'polyxrd.views.widgets.element_periodic_table', 'polyxrd.views.widgets.element_filter_dialog']
+
+# ── 构建变体 flavor (v2.10.0): 存在 src/polyxrd/_build_flavor.py -> 内部评估版 ──
+# build_flavor._detect() 是在 try/except 里动态 import 该模块的, PyInstaller 的
+# 静态依赖分析可能不把它算进图里。一旦漏收集, 内部版会【静默退化成正式版】——
+# "内部版不弹注册提示"这个承诺失效, 反而开始每次启动骚扰内部用户, 且极难察觉。
+# 所以这里显式把它挂进依赖图, 并用 print 让构建日志可核对。
+_SPEC_DIR = globals().get('SPECPATH', os.getcwd())
+_BUILD_FLAVOR_SRC = os.path.join(_SPEC_DIR, 'src', 'polyxrd', '_build_flavor.py')
+if os.path.exists(_BUILD_FLAVOR_SRC):
+    hiddenimports.append('polyxrd._build_flavor')
+    print('[PolyXRD.spec] flavor module FOUND -> internal edition '
+          '(no registration prompts)')
+else:
+    print('[PolyXRD.spec] flavor module absent -> release edition '
+          '(registration enabled)')
 # ── ICU 修复: PySide6 6.11 不再自带 ICU, Qt6 启动需 icuuc/icudt/icuin 系列 ──
 # 从系统已知位置 (mamba/conda 通用 ICU 78) 收集, 避免 Qt6 找不到 ICU 而 LoadLibrary 失败
 import os as _os

@@ -1089,6 +1089,9 @@ translations = {
             "cu_target": "通常Cuターゲットデータ"
         }
     },
+    "registration": {
+        "enter_code": "登録コード入力(&R)…"
+    },
     "diag": {
         "engine_fallback": "要求エンジン {requested} → 実際に使用 {used} (理由: {reason})",
         "ka2_detected": "Kα2 二重線が未除去と検出 (最強ピーク {center:.2f}°, Δ≈{delta:.3f}°, 高角側の残差 ≈{ratio:.0f}% ピーク高): 先に Kα2 を除去 (データ処理 → Kα2 除去) するか、後続の Kα2 モデリングを有効にしてください",
