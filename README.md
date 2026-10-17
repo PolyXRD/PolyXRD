@@ -7,7 +7,7 @@
     峰检测 &nbsp;·&nbsp; 多物相定性检索 &nbsp;·&nbsp; Rietveld 结构精修 &nbsp;·&nbsp; Le Bail 晶胞精修 &nbsp;·&nbsp; 指标化 &nbsp;·&nbsp; 3D 结构可视化 &nbsp;·&nbsp; 三库外挂检索 (COD 无机物 / COD 全库 / PDF2-2004)
   </p>
   <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v2.10.0-blue?style=flat-square" /></a>
+    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v3.0.0-blue?style=flat-square" /></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
     &nbsp;
@@ -15,7 +15,7 @@
     &nbsp;
     <img src="https://img.shields.io/badge/UI-PySide6%20(Qt6)-41cd52?style=flat-square" />
     &nbsp;
-    <img src="https://img.shields.io/badge/Tests-1336%2B%20collected-brightgreen?style=flat-square" />
+    <img src="https://img.shields.io/badge/Tests-1377%2B%20collected-brightgreen?style=flat-square" />
   </p>
   <p><i>🌐 English documentation: [README-EN.md](README-EN.md)</i></p>
 </div>
@@ -38,25 +38,20 @@
 
 ---
 
-## 🆕 最新版本 v2.10.0（2026-10-16）
+## 🆕 最新版本 v3.0.0（2026-10-17）
 
-**注册机制 + 双版本分发**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §2.10.0）：
+**WPSM 全谱拟合检索（Whole Pattern Search Match）**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §3.0.0 与 [docs/v3.0.0-WPSM-全谱拟合检索评估与落地方案.md](docs/v3.0.0-WPSM-全谱拟合检索评估与落地方案.md)）：
 
-自本版起按**两种二进制变体**分发，注册相关的 UI 与行为由**构建期**决定、运行时不可切换：
+参考 XinMatch 的 FPFM（Full Pattern Fitting Match）算法与优化因子完成评估与迭代，在 PolyXRD 中落地为 WPSM：
 
-| 变体 | 产物 | 注册机制 | 状态栏最右侧 |
-|---|---|---|---|
-| **正式发布版**（release） | Inno Setup 安装包 | ✅ 每次启动检查注册；未注册弹出版权提示（选「确定」仍可正常使用，选「输入注册码」即刻注册）；帮助菜单提供「输入注册码」 | `未注册` / 注册后显示 **`已注册：<单位部门名称>`** |
-| **内部评估版**（internal） | 便携 ZIP | ❌ 完全不含注册 UI、不弹任何提示 | 固定显示 **`内部评估版本`** |
+- **新判据**：对每条候选做**受限全谱拟合**（只放开 scale、2θ 零点位移、Caglioti U/V/W、pV 混合比 η、二次背底三系数、全局相对晶胞缩放 cell_delta，不碰原子坐标），按 Poisson 加权 `Rwp → FoM = exp(−Rwp/σ)` 排序；理论谱**复用精修引擎的谱合成**，与 Rietveld 精修逐位同源。
+- **背底吸收进拟合内部**（不预扣）、**峰宽随 2θ 变化**、**cell_delta 与零点位移可辨识分离** —— 三条 FPFM 实证结论全部落实；这也解释了早前 B-5 PFSM 为何被证伪（它缺了其中三条）。
+- **实测结论**（13 试样基准，49 真值相）：纯 WPSM **零调参即与 FoM 的 top1 打平（13/49）**——全谱信息通道真实有效；但全局 Rwp 存在**丰度偏置**（主相 Rwp 37% vs 1.4% 微量相 81.5%），微量相排名被系统性埋掉（top3 26 vs 33）；与 FoM 混合排序仅 +1/49 top10，代价 ~45 s/样本，性价比不合格。
+- **落地方式**：算法入库（`services/wpsm.py`）+ 41 项单测 + 基准仪（`scripts/bench_wpsm.py`），通过 `identify_with_element_filter(wpsm_weight=…)` 按需启用；**默认关闭（`_WPSM_WEIGHT = 0.0`），本版检索/精修行为与 v2.10.0 完全一致**。多相联合拟合列为 v3.x 方向。
 
-- **注册码算法**：`PXRD1-<Base32>`，内容为 `UTF8(单位部门名称) + 0x00 + HMAC-SHA256(…)[:8]`。**纯离线校验、无需联网、无需机器码**，同一单位多台电脑通用；软件端重新计算 HMAC 即可验真并**还原出单位部门名称**用于展示。
-- **防手改**：注册状态存在 `%APPDATA%\PolyXRD\Registration\PolyXRD.json`（明文），每次启动都用注册码重新算一遍单位名来兜底 —— 直接改 JSON 伪造「已注册」无效。
-- 签发给用户：`python scripts/make_reg_code.py "某某大学材料学院"`（详见下文「注册与授权」一节）。
-- 本版**无检索/精修算法改动**，基准与 v2.9.0 一致；回归 **1336 passed / 6 skipped**（新增 51 项注册机制测试）。
+> 📦 数据库仍为外挂，不随分发；PDF2-2004 为 ICDD 版权库，永不出现在 Release 里。
 
-> 📦 安装包与 SHA-256 校验值见 [v2.10.0 Release](https://github.com/PolyXRD/PolyXRD/releases/tag/v2.10.0)（数据库仍为外挂，不随分发；PDF2-2004 为 ICDD 版权库，永不出现在 Release 里）。
-
-**上一版 v2.9.0**（岛津 .RAW 二进制解析 + 两列导出损坏修复）：👉 [下载 v2.9.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v2.9.0)
+**上一版 v2.10.0**（注册机制 + 双版本分发）：👉 [下载 v2.10.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v2.10.0)
 
 ---
 

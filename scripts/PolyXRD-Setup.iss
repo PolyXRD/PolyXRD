@@ -9,7 +9,7 @@
 ; ============================================================
 
 #ifndef AppVersion
-  #define AppVersion "2.10.0"
+  #define AppVersion "3.0.0"
 #endif
 
 #define AppName "PolyXRD"

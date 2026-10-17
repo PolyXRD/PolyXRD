@@ -136,6 +136,29 @@ _FOM_PFSM_WEIGHT = 0.0
 _FOM_PFSM_MIN_RWP_REDUCTION = 0.5
 _FOM_PFSM_MIN_SCALE = 0.02
 
+# ── WPSM (Whole Pattern Search Match, v3.0.0) —— 全谱拟合重排 (opt-in) ──
+# 对 FoM 排序后的 top wpsm_prescreen 候选做受限全谱拟合 (services/wpsm.py),
+# 按 (1−w)·FoM_rank + w·WPSM_rank 重排。判据 = exp(−Rwp/σ), Rwp 由
+# Poisson 加权最小二乘 (scale/shift/Caglioti U,V,W/η/二次背底/cell_delta)
+# 得到 —— 与早前被证伪的 B-5 PFSM 的本质区别: PFSM 无背底模型、固定峰宽、
+# 无位移 (见 docs/v3.0.0-WPSM-全谱拟合检索评估与落地方案.md §三)。
+#
+# **13 试样实测 (预筛 100, σ=0.25, B 级)**:
+#   FoM 基线     top1 13/49 · top3 33 · top10 45 · MRR 0.490 · MISS 2
+#   纯 WPSM      top1 13/49 · top3 26 · top10 42 · MRR 0.454 · MISS 3
+#   混合 w=0.45  top1 13/49 · top3 33 · top10 46 · MRR 0.494 · MISS 2
+# 读法: ①纯 WPSM 零调参即与 FoM top1 打平 (13/49) → 全谱信息通道真实有效;
+#       ②输在深排名 (top3 26 vs 33) → 全局 Rwp 的**丰度偏置**把微量相埋掉
+#         (3-1 实测: 主相 Rwp 37% / 1.4% Corundum 81.5% / 0.6% Fluorite
+#         81.8%, 真值从第 2、3 名掉到 7、16 名);
+#       ③混合仅 +1/49 top10, 代价 ~45 s/样本 → 对比 v2.7.0 _FOM_SPEC_WEIGHT
+#         零成本拿 +1, 性价比不合格 → **默认关闭, 基础设施保留** (与 B-5 同款
+#         处置)。窗口域计分 (score_domain="window") 实测更差 (Corundum
+#         7→76, 局部残差被他相峰污染), 勿再试。
+_WPSM_WEIGHT = 0.0
+_WPSM_PRESCREEN = 100
+_WPSM_SIGMA = 0.25
+
 # B-6: per-entry 零点偏移网格搜索 (仿商用软件 Automatic zero point adaptation)。
 # 样品位移 / 仪器零点残差会使峰位整体偏移, 全局校正只能修一个平均偏移;
 # per-entry 在小网格上扫 dz 取最优 FoM, 让真值相"对得更准"。
@@ -1037,6 +1060,9 @@ class PhaseIdentifier:
         fom_pfsm_top_n: int = _FOM_PFSM_TOP_N,
         fom_pfsm_weight: float = _FOM_PFSM_WEIGHT,
         fom_zero_grid: Optional[tuple] = _FOM_ZERO_GRID,
+        wpsm_weight: float = _WPSM_WEIGHT,
+        wpsm_prescreen: int = _WPSM_PRESCREEN,
+        wpsm_sigma: float = _WPSM_SIGMA,
     ) -> list[PhaseMatchResult]:
         """执行物相识别（支持三态元素过滤）
 
@@ -1060,6 +1086,12 @@ class PhaseIdentifier:
             fom_zero_grid: B-6 per-entry 零点偏移网格 (默认 ``_FOM_ZERO_GRID``
                 = None, 即默认关闭 —— 13 试样消融实测净负, 见常量注释);
                 传入如 (-0.05, 0.0, 0.05) 可按需启用零点搜索。
+            wpsm_weight: WPSM 全谱拟合重排权重 w ∈ [0, 1] (默认
+                ``_WPSM_WEIGHT`` = 0.0, 即默认关闭; >0 才启用, 见常量注释的
+                13 试样实测与性价比结论)。综合分 = (1−w)·FoM_rank +
+                w·WPSM_rank, 按升序重排。
+            wpsm_prescreen: 参与 WPSM 精排的候选数 (FoM 序前 N, 默认 100)。
+            wpsm_sigma: WPSM 的 FoM = exp(−Rwp/σ) 中的 σ (默认 0.25)。
 
         Returns:
             匹配结果列表，按FOM升序排列 (FOM越低越好)
@@ -1136,6 +1168,33 @@ class PhaseIdentifier:
                     ]
                     combined.sort(key=lambda x: x[1])
                     results = [top[i] for i, _ in combined] + results[n_pfsm:]
+
+        # ── WPSM: 全谱拟合重排 top N 候选 (v3.0.0, opt-in, 默认关闭) ──
+        # 对 FoM 排序后的前 wpsm_prescreen 候选做受限全谱拟合, 按
+        # (1−w)·FoM_rank + w·WPSM_rank 重排。实测与性价比见 _WPSM_WEIGHT 注释。
+        if (wpsm_weight > 0 and wpsm_prescreen > 0 and len(results) > 1
+                and data is not None
+                and getattr(data, "two_theta", None) is not None):
+            from polyxrd.services.wpsm import WpsmConfig, wpsm_rerank
+            n_pre = min(int(wpsm_prescreen), len(results))
+            top = results[:n_pre]
+            try:
+                cfg = WpsmConfig(prescreen_top_n=n_pre, top_n=n_pre,
+                                 fom_sigma=float(wpsm_sigma))
+                items = [(i, r.phase.get_reference_peaks())
+                         for i, r in enumerate(top)]
+                fits = wpsm_rerank(data.two_theta, data.intensity, items,
+                                   cfg=cfg)
+            except Exception:  # noqa: BLE001 — 重排失败不得影响原排序
+                fits = None
+            if fits:
+                wpsm_rank = {f.key: r for r, f in enumerate(fits)}
+                nr = len(fits)
+                w = float(wpsm_weight)
+                combined = sorted(
+                    range(n_pre),
+                    key=lambda i: (1.0 - w) * i + w * wpsm_rank.get(i, nr))
+                results = [top[i] for i in combined] + results[n_pre:]
 
         # ── 组合重排: 纯金属比例限制在 20% 以内, 避免过多纯金属挤占前 top_n ──
         if len(results) > 0:
