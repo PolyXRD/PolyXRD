@@ -51,6 +51,8 @@
 
 > 📦 数据库仍为外挂，不随分发；PDF2-2004 为 ICDD 版权库，永不出现在 Release 里。
 
+👉 [下载 v3.0.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v3.0.0)（正式版安装包 + 内部评估版便携包 + SHA256）
+
 **上一版 v2.10.0**（注册机制 + 双版本分发）：👉 [下载 v2.10.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v2.10.0)
 
 ---
