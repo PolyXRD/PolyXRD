@@ -7,7 +7,7 @@
     峰检测 &nbsp;·&nbsp; 多物相定性检索 &nbsp;·&nbsp; Rietveld 结构精修 &nbsp;·&nbsp; Le Bail 晶胞精修 &nbsp;·&nbsp; 指标化 &nbsp;·&nbsp; 3D 结构可视化 &nbsp;·&nbsp; 多库外挂检索 (COD 无机物 / COD 全库 / PDF2-2004 / XinMatch 格式)
   </p>
   <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v3.0.0-blue?style=flat-square" /></a>
+    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v3.1.0-blue?style=flat-square" /></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
     &nbsp;
@@ -15,7 +15,7 @@
     &nbsp;
     <img src="https://img.shields.io/badge/UI-PySide6%20(Qt6)-41cd52?style=flat-square" />
     &nbsp;
-    <img src="https://img.shields.io/badge/Tests-1377%2B%20collected-brightgreen?style=flat-square" />
+    <img src="https://img.shields.io/badge/Tests-1475%2B%20collected-brightgreen?style=flat-square" />
   </p>
   <p><i>🌐 English documentation: [README-EN.md](README-EN.md)</i></p>
 </div>
@@ -38,22 +38,21 @@
 
 ---
 
-## 🆕 最新版本 v3.0.0（2026-10-17）
+## 🆕 最新版本 v3.1.0（2026-10-18）
 
-**WPSM 全谱拟合检索（Whole Pattern Search Match）**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §3.0.0 与 [docs/v3.0.0-WPSM-全谱拟合检索评估与落地方案.md](docs/v3.0.0-WPSM-全谱拟合检索评估与落地方案.md)）：
+**XinMatch 格式库支持 + 任意位置挂载 + 全量 review 修正**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §3.1.0 与 [docs/code-review-2026-10-18.md](docs/code-review-2026-10-18.md)）：
 
-参考 XinMatch 的 FPFM（Full Pattern Fitting Match）算法与优化因子完成评估与迭代，在 PolyXRD 中落地为 WPSM：
-
-- **新判据**：对每条候选做**受限全谱拟合**（只放开 scale、2θ 零点位移、Caglioti U/V/W、pV 混合比 η、二次背底三系数、全局相对晶胞缩放 cell_delta，不碰原子坐标），按 Poisson 加权 `Rwp → FoM = exp(−Rwp/σ)` 排序；理论谱**复用精修引擎的谱合成**，与 Rietveld 精修逐位同源。
-- **背底吸收进拟合内部**（不预扣）、**峰宽随 2θ 变化**、**cell_delta 与零点位移可辨识分离** —— 三条 FPFM 实证结论全部落实；这也解释了早前 B-5 PFSM 为何被证伪（它缺了其中三条）。
-- **实测结论**（13 试样基准，49 真值相）：纯 WPSM **零调参即与 FoM 的 top1 打平（13/49）**——全谱信息通道真实有效；但全局 Rwp 存在**丰度偏置**（主相 Rwp 37% vs 1.4% 微量相 81.5%），微量相排名被系统性埋掉（top3 26 vs 33）；与 FoM 混合排序仅 +1/49 top10，代价 ~45 s/样本，性价比不合格。
-- **落地方式**：算法入库（`services/wpsm.py`）+ 41 项单测 + 基准仪（`scripts/bench_wpsm.py`），通过 `identify_with_element_filter(wpsm_weight=…)` 按需启用；**默认关闭（`_WPSM_WEIGHT = 0.0`），本版检索/精修行为与 v2.10.0 完全一致**。多相联合拟合列为 v3.x 方向。
+- **XinMatch 格式库**：Data source 下拉新增第 7 项，可直接挂载第三方 `entries` / `peaks` / `elements` / `element_combo` 四表结构的库文件（实测 71,206 / 112,734 条目），**无需转换**。检索口径与 COD 无机物库逐项一致 —— 同一套 Hanawalt 度量 + 同一套 FOM 排序；单测用同数据造 PolyXRD `phases` 库做双实现比对，14 个度量字段（`abs=1e-12`）与排序完全一致。
+- **速度**：没有照直觉在 `peaks.d` 上做 SQL 区间扫描 —— 该库 d 轴极密，±0.02 Å 窗口约 2.5 万条峰，20 个测量峰实测 **9 s**，比现有链路还慢。改为一次建「每相最强 12 峰」索引（约 3 秒，缓存到 `~/.polyxrd/cache/`，键 = 路径 + size + mtime），之后**每次检索 0.37~0.57 s**（COD 无机库链路 0.8~5.5 s）。
+- **能力边界**：该库不含 CIF，候选只有晶胞没有原子坐标 —— 可检索 / 核对，**不能直接进结构精修**（UI 提示与三语文案已写明）。
+- **任意位置挂载**：库文件放哪个文件夹都行，不必再搬进程序目录。「外挂数据库管理…」新增「挂载数据库文件…」「挂载文件夹…」，后者会把该目录下所有合格的库**一次全挂上**（只扫本层，`.bak` 备份自动跳过，同类多份按优先序挑）。
+- **修掉 6 个会出错结果的缺陷**（本轮全量 review 的 P0 项，每项都有前后实测）：背景扣除把"像素半窗 w"当数值阈值算（峰心背景 898 → **103.8**，真值 100；扣背景后峰高保真 2.2% → **99.5%**）；高斯平滑未归一（常数谱 100 → 459.21 修为 **100.000**）；Kα2 剥离移位方向反了（卫星峰 520 → **15.2**）；4 条检索链不读数据自身波长（Co/Fe/Cr/Mo 靶原先连前 5 都进不去，现**全部 Top-1**）；GUI 预处理下拉 label↔key 错位致 9 个入口全抛错；四方/六方指标化量纲错。另加精修向导「快速档」（1.97 s → **0.34 s**，wR 不变）。
 
 > 📦 数据库仍为外挂，不随分发；PDF2-2004 为 ICDD 版权库，永不出现在 Release 里。
 
-👉 [下载 v3.0.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v3.0.0)（正式版安装包 + 内部评估版便携包 + SHA256）
+👉 [下载 v3.1.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v3.1.0)（正式版安装包 + 内部评估版便携包 + SHA256）
 
-**上一版 v2.10.0**（注册机制 + 双版本分发）：👉 [下载 v2.10.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v2.10.0)
+**上一版 v3.0.0**（WPSM 全谱拟合检索，默认关闭）：👉 [下载 v3.0.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v3.0.0)
 
 ---
 
