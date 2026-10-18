@@ -125,6 +125,7 @@ translations = {
         "clear_confirm": "Unmount “{name}”?\nIt will fall back to the default location; if that has no database either, this data source becomes unavailable.",
         "status_ok": "Mounted",
         "status_bad": "Unusable",
+        "status_unmounted": "Not mounted",
         "status_missing": "Not found",
         "no_path": "(not mounted — click “Import…” and pick the extracted database file)",
         "has_top_peaks": "includes pre-truncated strong-peak columns (faster search)",
@@ -133,11 +134,24 @@ translations = {
         "kind": {
             "cod_inorganics": "COD Inorganics Database",
             "pdf2": "PDF2-2004 Database",
-            "cod_index": "COD Full Index"
+            "cod_index": "COD Full Index",
+            "xinmatch": "XinMatch-format Database"
         },
         "notice": {
-            "pdf2": "[Please confirm you hold a valid licence] PDF2-2004 is a commercial database from ICDD. This software only provides format conversion and an offline index, and conveys no licence of any kind - please make sure you are properly licensed before use."
+            "pdf2": "[Please confirm you hold a valid licence] PDF2-2004 is a commercial database from ICDD. This software only provides format conversion and an offline index, and conveys no licence of any kind - please make sure you are properly licensed before use.",
+            "xinmatch": "[Please confirm your data source is properly licensed] Databases in this format are published by the XinMatch project. This software only adapts the format and searches offline — it neither bundles nor redistributes the database itself. The first search builds a strong-peak index on this machine (about 3 s; fast afterwards). The database contains no CIF: entries carry a unit cell but no atomic coordinates, so they support phase search and cross-checking but cannot be used as refinement starting structures."
         },
+        "mount_any_group": "Mount from any location (recommended)",
+        "mount_any_hint": "The database file may live in any folder — no need to copy it into the program directory. Just point at the file and the path is remembered. Pointing at a folder mounts every valid database in it at once (top level only, no recursion).",
+        "mount_any_file": "Mount database file…",
+        "mount_any_dir": "Mount folder…",
+        "mount_any_title": "Select Database File (any location)",
+        "mount_dir_title": "Select a Folder Containing Databases",
+        "mount_any_filter": "SQLite databases (*.sqlite *.sqlite3 *.db *.db3);;All files (*)",
+        "mount_any_ok": "Mounted",
+        "mount_any_ok_body": "Mounted {n} database(s):\n{detail}",
+        "mount_any_failed": "Cannot Mount",
+        "mount_any_failed_body": "No usable database was found at this path.\n\nPath: {path}\nReason: {error}",
         "first_run_title": "No Database Imported Yet",
         "first_run_body": "Starting with 0.10.0 the installer no longer bundles any database.\n\nEach database ships as its own archive — download only what you need:\n  · COD Inorganics    …-Databases-COD-inorg.zip\n  · COD Full Index    …-Databases-COD-full.zip\n  · PDF2-2004         not downloadable (ICDD licensed; supply your own)\n\nAfter extracting, import each one via \"Database ▸ Manage External Databases…\".\nWithout imported databases only the 118 built-in reference phases are available."
     },
@@ -254,6 +268,8 @@ translations = {
         "progress": "Working… ({done}/{total})",
         "peak_search": "Searching for peaks, please wait…",
         "peak_search_hi": "High-precision peak search (background removal + sub-step refinement), please wait…",
+        "background": "Removing background, please wait…",
+        "smooth": "Smoothing, please wait…",
         "peak_fit": "Fitting peaks, please wait…",
         "identify": "Identifying phases, please wait…",
         "identify_profile": "Identifying phases by profile fitting, please wait…",
@@ -356,6 +372,7 @@ translations = {
         "layout_reset": "Layout reset",
         "language_info": "Language: {lang}",
         "wavelength_info": "Wavelength: {wl} Å",
+        "wavelength_dirty_suffix": " (changed — re-run identification)",
         "data_loaded_count": "Data loaded: {count} points",
         "data_cleared": "Current data cleared",
         "finding_peaks_hi": "High-precision peak detection (background subtraction + sub-step refinement)",
@@ -561,6 +578,15 @@ translations = {
         "engine_maud_missing_cif": "MAUD engine requires cif_path or cod_id for each phase; currently not satisfied. Fall back to builtin engine?",
         "strategy_label": "Strategy",
         "max_cycles_label": "Max Cycles",
+        "perf_profile_fast": "Fast profile (performance first)",
+        "perf_profile_fast_tip": (
+            "Enables the built-in engine's performance profile: peak cutoff "
+            "window 100→25×FWHM, catastrophic-start pruning, polish early "
+            "stop. Measured on a 5-phase synthetic pattern: 1.97 s → 0.34 s "
+            "(5.8×) with an identical wR. Uncheck for final numbers. "
+            "Built-in engine only — external engines (GSAS-II / MAUD / "
+            "PowerXRD) ignore this option."
+        ),
         "bgm_snip": "SNIP",
         "bgm_als": "ALS",
         "bgm_polyfit": "Polynomial Fit",
@@ -818,12 +844,13 @@ translations = {
             "db_pdf2": "PDF2-2004",
             "db_label_count": "{base} ({count:,})",
             "db_unmounted": " (not mounted)",
-            "db_combo_tip_main": "Select the database used for phase search (applies to Traditional Search/Match and Quick identification):\n· Built-in: 118 common phases bundled with the app (fastest)\n· COD Inorganics: 71,199 externally mounted phases (precomputed d-I peaks, Hanawalt pre-screen)\n· COD Full: 113,223 external CIF indexes (local search)\n· Merged: Built-in + COD Full results merged and ranked\n· PDF2-2004: ICDD PDF-2 2004 edition, 163,834 phases with space groups and cells\n  (cell 81.8% / space group 72.8%); hits can be used directly as refinement starting structures.\n",
+            "db_combo_tip_main": "Select the database used for phase search (applies to Traditional Search/Match and Quick identification):\n· Built-in: 118 common phases bundled with the app (fastest)\n· COD Inorganics: 71,199 externally mounted phases (precomputed d-I peaks, Hanawalt pre-screen)\n· COD Full: 113,223 external CIF indexes (local search)\n· Merged: Built-in + COD Full results merged and ranked\n· PDF2-2004: ICDD PDF-2 2004 edition, 163,834 phases with space groups and cells\n  (cell 81.8% / space group 72.8%); hits can be used directly as refinement starting structures.\n· XinMatch-format: a third-party database you mount yourself (entries/peaks\n  structure); usable for search and cross-checking. It contains no CIF, so hits\n  cannot be used directly as refinement starting structures.\n",
             "db_combo_tip_import": "Databases are not bundled with the installer; download and unzip separately, then import via\nMenu “Database ▸ External Database Manager…”.",
             "pdf2_coverage": "  Local library: {total} phases, space group {sg}%, cell {cell}%.\n",
             "db_unmounted_hint": "This database is not mounted. Import the unzipped library file via Menu “Database ▸ External Database Manager…”.",
             "db_user_empty_hint": "The user database has no entries yet. Import your own CIF files via “Database ▸ Manage User Database…”.",
             "db_user": "User Database",
+            "db_xinmatch": "XinMatch-format DB",
             "no_match": "No matching phases found",
             "no_match_amorphous": "No matching phases — the pattern is a diffuse halo (near-amorphous); crystalline search does not apply",
             "amorphous_partial": " · contains amorphous/diffuse background",
@@ -1060,6 +1087,9 @@ translations = {
         "converged": "Converged: yes",
         "not_converged": "Converged: no",
         "time": "Time: {time} s",
+        "perf_profile_line": "Perf profile: {value}",
+        "perf_profile_fast": "fast",
+        "perf_profile_precise": "precise",
         "quality_section": "Refinement Quality Metrics",
         "phase_section": "Phase Analysis",
         "rwp_line": "  Rwp (weighted profile R): {value} %",

@@ -89,7 +89,10 @@ class Phase:
     # 来源库条目 ID (v2.6.0)。COD/PDF2 为库内 cod_id; 用户库为 9 亿段 ID
     # (services.user_db.USER_ID_BASE 起)。有它才能稳定回溯 CIF / 原子坐标,
     # 不必再从展示名里猜数字。
-    db_id: Optional[int] = None
+    # v3.1.0: XinMatch 格式库的条目编号是**字符串**(``96-100-0005``), 故类型
+    # 放宽到 int|str。消费方 (phase_cif_export) 本来就用 ``isinstance(.., int)``
+    # 判别, 非 int 会退回按名字解析, 因此放宽不改变既有行为。
+    db_id: Optional[int | str] = None
 
     def get_reference_peaks(self) -> list[tuple[tuple[int, int, int], float, float]]:
         """获取参考峰的 (hkl, 2θ, 强度) 列表

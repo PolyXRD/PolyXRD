@@ -1,18 +1,22 @@
-"""外挂数据库导入 (0.10.0)
-========================
+"""外挂数据库导入 (0.10.0; 3.1.0 起支持任意位置挂载)
+==================================================
+
 0.10.0 起发布包**不再内置任何数据库**：数据库单独下载、解压后经 GUI
 导入, 路径持久化到 ``~/.polyxrd/user_db_paths.json``。
 
-本模块只做三件事, 全部不依赖 Qt (可单测):
+本模块只做四件事, 全部不依赖 Qt (可单测):
   · **探测** ``inspect_db_file``  —— 打开候选 .sqlite, 判断它属于哪一类库、
     相数多少、是否带预截断强峰列, 以及不合格时缺了什么
   · **落地** ``apply_import``     —— 把通过校验的路径写进配置
-  · **呈现** ``slot_states``      —— 列出三个库槽位当前的挂载状态
+  · **呈现** ``slot_states``      —— 列出各库槽位当前的挂载状态
+  · **任意位置挂载** ``mount_databases`` —— 3.1.0 新增: 用户把库文件放在
+    **任何文件夹**都行, 指过去即可; 自动判别库类型, 一个目录里有多类库
+    时一次全挂上 (详见该函数上方注释)
 
-为什么需要"探测"而不是直接接受任意 .sqlite: 三类库的表名都不同
-(``phases`` / ``cod_entries``), 而 COD 无机物库与 PDF2 库**表名相同都是
-``phases``** —— 拿 PDF2 库去当 COD 无机物库用不会立刻报错, 只会静默
-检索不到东西。所以按"必需列 + 特征列 + 排除列"三者联合判别。
+为什么需要"探测"而不是直接接受任意 .sqlite: 各库的表名都不同
+(``phases`` / ``cod_entries`` / ``entries``), 而 COD 无机物库与 PDF2 库
+**表名相同都是 ``phases``** —— 拿 PDF2 库去当 COD 无机物库用不会立刻报错,
+只会静默检索不到东西。所以按"必需列 + 特征列 + 排除列"三者联合判别。
 """
 from __future__ import annotations
 
@@ -38,6 +42,15 @@ class DBKind:
     excludes: tuple[str, ...]     # 命中任一即**排除** (用于区分同表名)
     min_rows: int = 1
     count_column: str = "cod_id"
+    #: 可选: 除 ``table`` 之外**必须同时存在**的表 (v3.1.0)。
+    #: XinMatch 格式的判别力主要来自"四表齐全", 而不是主表有多少行 ——
+    #: 一个只有 ``entries`` 的半成品库比小库更危险 (索引建起来照样能查,
+    #: 只是结果缺相), 所以这里按表集判, 不按行数判。
+    extra_tables: tuple[str, ...] = ()
+    #: 可选: 目录扫描时同类多份的**文件名优先序** (v3.1.0)。
+    #: 指到文件夹时若同时存在 ``cod_inorganics.db`` 与 ``cod_full.db``,
+    #: 按"库里声明的优先名"挑, 而不是按体积随机赢 —— 行为必须可预期。
+    preferred_names: tuple[str, ...] = ()
     # 发布用独立下载包的文件名后缀 —— 三个库各自打包, 用户按槽位挑一个下即可。
     # 存"后缀"而不是完整文件名, 是为了不把版本号硬编码进源码。
     pkg_suffix: str = ""
@@ -86,6 +99,30 @@ DB_KINDS: tuple[DBKind, ...] = (
         min_rows=1000,
         pkg_suffix="Databases-COD-full-index.zip",
     ),
+    # v3.1.0: XinMatch 格式库 (entries / peaks / elements / element_combo)
+    # 表名与另外三类库**毫无交集**, 所以放最后也不会被误判, 而放在这里可以
+    # 保证"先按 PolyXRD 自家库判, 判不出才落到兼容库"。
+    # 该库不含 CIF (无原子坐标), 因此只用于检索, 不能直接进精修。
+    DBKind(
+        key="xinmatch",
+        config_key="xinmatch_db_path",
+        label_key="db_manager.kind.xinmatch",
+        table="entries",
+        required=("entry_id", "formula", "elements"),
+        signature=("mineral_name", "crystal_system", "space_group"),
+        excludes=("cod_id", "pearson", "cif_gz"),
+        # 行数门槛刻意取 1: XinMatch 格式的判别力来自"表集 + 列集"而不是
+        # 条目数 —— 用户完全可能导出一个几百相的子集自用, 不该因此被判不合格。
+        # 真正的残缺风险 (只建了 entries 没建 peaks) 由 extra_tables 拦住。
+        min_rows=1,
+        count_column="entry_id",
+        extra_tables=("peaks", "elements"),
+        # XinMatch 的 data 目录里通常无机物子集与全库并存; 默认取无机物子集,
+        # 与 PolyXRD 自家 COD 无机物库的默认口径一致。要全库就直接选那个文件。
+        preferred_names=("cod_inorganics.db", "cod_full.db"),
+        pkg_suffix="",
+        notice_key="db_manager.notice.xinmatch",
+    ),
 )
 
 KIND_BY_KEY: dict[str, DBKind] = {k.key: k for k in DB_KINDS}
@@ -96,13 +133,16 @@ PKG_FILENAME: dict[str, str] = {
     "cod_inorganics": "COD_inorganics_index.sqlite",
     "cod_index": "cod_index.sqlite",
     "pdf2": "PDF2_2004.sqlite",
+    # 用户自备文件 (不随本项目发布): 说明该去对方的发布包/数据目录里找哪个文件
+    "xinmatch": "cod_inorganics.db 或 cod_full.db",
 }
 
 
 def release_package_name(kind_key: str, version: str) -> str:
     """某槽位对应的独立下载包文件名, 如 ``PolyXRD-v0.10.0-Databases-COD-inorg.zip``。
 
-    `pkg_suffix` 为空的槽位**没有发布包** (PDF2-2004 属 ICDD 版权库, 永不上传),
+    `pkg_suffix` 为空的槽位**没有发布包** (PDF2-2004 属 ICDD 版权库, 永不上传;
+    XinMatch 格式库是第三方库文件, 同理不随本项目的发布包分发),
     返回空串, 由界面改显示"本库不随发布包分发"。
     """
     spec = KIND_BY_KEY[kind_key]
@@ -175,6 +215,13 @@ def inspect_db_file(path: str | Path) -> DBInspect:
         for kind in DB_KINDS:
             if kind.table not in tables:
                 continue
+            if any(t not in tables for t in kind.extra_tables):
+                # 主表在但配套表缺 → 半成品库, 不能当合格库挂上
+                matched_table = True
+                if not res.hint:
+                    missing_t = [t for t in kind.extra_tables if t not in tables]
+                    res.hint = "missing_tables:" + ",".join(missing_t)
+                continue
             matched_table = True
             cols = [r[1] for r in conn.execute(
                 f"PRAGMA table_info({kind.table})")]
@@ -235,6 +282,7 @@ _PATH_SETTERS = {
     "cod_db_path": "set_cod_db_path",
     "pdf2_db_path": "set_pdf2_db_path",
     "cod_index_db_path": "set_cod_index_db_path",
+    "xinmatch_db_path": "set_xinmatch_db_path",
 }
 
 
@@ -249,20 +297,23 @@ def _setter(config_key: str):
     return getattr(cfg, _PATH_SETTERS[config_key])
 
 
-def _default_paths() -> dict[str, Path]:
+def _default_paths() -> dict[str, Optional[Path]]:
+    """各槽位的"当前生效路径"; 无默认位置的库 (XinMatch) 返回 None。"""
     cfg = get_config()
     # cod_index 用 cod_local 的**只读**解析器: 不能走 _index_db_path(),
     # 那会在开发模式下触发一次 ~400 MB 的 bundled 部署复制。
     try:
         from polyxrd.services.cod_local import existing_index_db_path
-        index_path = (existing_index_db_path()
-                      or cfg.get_cif_db_path() / "cod_index.sqlite")
+        index_path: Optional[Path] = (existing_index_db_path()
+                                      or cfg.get_cif_db_path() / "cod_index.sqlite")
     except Exception:  # noqa: BLE001 - 状态显示不该因服务异常而崩
         index_path = cfg.get_cif_db_path() / "cod_index.sqlite"
     return {
         "cod_inorganics": cfg.get_cod_db_path(),
         "pdf2": cfg.get_pdf2_db_path(),
         "cod_index": index_path,
+        # XinMatch 格式库没有默认位置: 只在用户显式挂载后才有路径
+        "xinmatch": cfg.get_xinmatch_db_path(),
     }
 
 
@@ -273,7 +324,7 @@ def is_user_imported(kind_key: str) -> bool:
 
 
 def slot_states(validate: bool = True) -> list[dict]:
-    """三个库槽位的当前状态, 供 GUI 列表显示。
+    """各库槽位的当前状态, 供 GUI 列表显示。
 
     Args:
         validate: 是否对每个槽位做一次探测 (会打开库读相数)。大库上
@@ -284,23 +335,24 @@ def slot_states(validate: bool = True) -> list[dict]:
     version = get_config().app_version
     for kind in DB_KINDS:
         path = defaults[kind.key]
+        exists = bool(path is not None and path.exists())
         state = {
             "kind": kind.key,
             "label_key": kind.label_key,
-            "path": str(path),
-            "exists": path.exists(),
+            "path": str(path) if path is not None else "",
+            "exists": exists,
             "imported": is_user_imported(kind.key),
             "rows": 0,
             "has_top_peaks": False,
             "ok": False,
             "error": "",
             "hint": "",
-            "size_mb": _size_mb(path),
+            "size_mb": _size_mb(path) if path is not None else 0.0,
             # 该槽位对应哪个独立下载包 / 解压后是哪个文件
             "pkg_name": release_package_name(kind.key, version),
             "pkg_filename": PKG_FILENAME.get(kind.key, ""),
         }
-        if validate and path.exists():
+        if validate and exists:
             ins = inspect_db_file(path)
             state.update({
                 "ok": ins.ok,
@@ -333,7 +385,7 @@ def _count_rows_cached(path: str, mtime: float, table: str) -> int:
 
 
 def live_counts() -> dict[str, int]:
-    """三类库当前的记录数 (不可用/未挂载 → 0), 供 UI 显示 ``(71,199)`` 这类文案。
+    """各库当前的记录数 (不可用/未挂载 → 0), 供 UI 显示 ``(71,199)`` 这类文案。
 
     带 mtime 缓存: 大库上 ``COUNT(*)`` 仍有毫秒级开销, 而下拉文案会被反复
     重建 (切语言、切视图都会触发), 不该每次都去查库。
@@ -342,6 +394,9 @@ def live_counts() -> dict[str, int]:
     defaults = _default_paths()
     for kind in DB_KINDS:
         p = defaults[kind.key]
+        if p is None:
+            out[kind.key] = 0
+            continue
         try:
             mt = p.stat().st_mtime
         except OSError:
@@ -356,6 +411,10 @@ def reload_caches() -> None:
 
     `cod_local` 每次查询都新开连接, 无需处理; 需要清的是持有长连接的服务
     实例 (主窗口的 `_cif_db`, 以及任何已构造的 PDF2Database)。
+
+    XinMatch 适配器不必在这里处理: 它每次检索都按当前配置现建实例, 强峰
+    索引缓存又以"库绝对路径 + size + mtime"为键, 换库/覆盖文件都会自然
+    落到另一份缓存上。`_count_rows_cached` 同理 (键里带 mtime)。
     """
     try:
         from polyxrd.services.pdf2_database import PDF2Database
@@ -377,3 +436,129 @@ def make_validator() -> Callable[[str], tuple[bool, str]]:
         return True, f"{ins.kind} / {ins.rows:,} 行 / {ins.size_mb} MB{extra}"
 
     return _v
+
+
+# ── 任意位置挂载 (v3.1.0) ────────────────────────────────────
+#
+# 需求原话: "挂载数据库时不必放到具体的文件夹, 只要指定合格的数据库文件
+# 给它（文件放到其他文件夹中）"。
+#
+# 所以挂载的唯一判据是**内容合格**(表名+必需列+特征列), 而不是"放对了目录"。
+# 这里提供"把用户指到的路径展开成合格库"的一层, 顺带支持指到**文件夹**:
+# 目录里若有多套库 (COD 无机物 + 全库索引 + PDF2 放在同一个 data 目录是
+# 常见布局), 一次全挂上, 不必让用户逐个文件点。
+
+#: 目录扫描时认的数据库后缀。``.bak`` 之类刻意不收 —— XinMatch 的 data
+#: 目录里常年躺着 ``cod_inorganics.db.bak-20261011`` 这种备份, 收进来只会
+#: 让用户挂错库。
+_DB_SUFFIXES = (".sqlite", ".sqlite3", ".db", ".db3", ".sqlite2")
+
+
+def _iter_candidates(path: Path) -> list[Path]:
+    """把用户指到的路径展开成候选文件列表 (不递归子目录)。"""
+    if path.is_file():
+        return [path]
+    if not path.is_dir():
+        return []
+    out: list[Path] = []
+    try:
+        for p in sorted(path.iterdir()):
+            if not p.is_file():
+                continue
+            name = p.name.lower()
+            # 只比"末段后缀": ``x.db.bak-2026`` 的 suffix 是 ``.bak-2026``,
+            # 天然被排除。但 ``x.bak-2026.db`` 的 suffix 仍是 ``.db``, 所以
+            # 还要按名字挡掉备份 —— XinMatch 的 data 目录里就常年躺着
+            # ``cod_inorganics.bak-20261011-095744.db``。
+            if ".bak" in name or name.endswith("~") or name.endswith(".tmp"):
+                continue
+            if p.suffix.lower() in _DB_SUFFIXES:
+                out.append(p)
+    except OSError:
+        return []
+    return out
+
+
+def discover_databases(path: str | Path) -> list[DBInspect]:
+    """探测一个路径 (文件或文件夹) 下的**全部**合格数据库。
+
+    返回按优先级排序的结果, 顺序**完全可预期**:
+      1. ``DB_KINDS`` 的声明顺序 (PolyXRD 自家库优先于兼容库)
+      2. 同类多份时按 ``DBKind.preferred_names`` 的文件名序
+      3. 仍未分出来时按记录数降序 (挑完整版而不是子集)
+      4. 最后按路径排序, 保证同一目录多次扫描结果一致
+
+    这是"任意位置挂载"的核心: 调用方只需把结果里 ``ok`` 的项挂上即可,
+    完全不必关心文件叫什么、放在哪。
+    """
+    p = Path(path)
+    found: list[DBInspect] = []
+    for cand in _iter_candidates(p):
+        ins = inspect_db_file(cand)
+        if ins.ok:
+            found.append(ins)
+
+    prio = {k.key: i for i, k in enumerate(DB_KINDS)}
+
+    def _pref_rank(ins: DBInspect) -> int:
+        names = ins.kind_spec.preferred_names if ins.kind_spec else ()
+        low = ins.path.name.lower()
+        for i, n in enumerate(names):
+            if low == n.lower():
+                return i
+        return len(names)
+
+    found.sort(key=lambda r: (prio.get(r.kind or "", 99), _pref_rank(r),
+                              -r.rows, str(r.path).lower()))
+    return found
+
+
+def mount_databases(path: str | Path) -> list[DBInspect]:
+    """挂载一个路径下的合格数据库 (**每类库取一份**), 并立即生效。
+
+    与 :func:`apply_import` 的区别只有两点, 都是为了"指过去就能用":
+
+      · 不需要调用方事先知道库类型 —— 自动判别;
+      · 一个目录里有多类库时**全部挂上** (每类一份), 而不是报错要求重选。
+
+    Args:
+        path: 数据库文件, 或包含数据库文件的文件夹。
+
+    Returns:
+        实际挂载成功的项列表 (可能为空)。
+
+    Raises:
+        ValueError: 该路径下没有任何合格数据库, 消息里带人工可读的原因。
+    """
+    found = discover_databases(path)
+    if not found:
+        raise ValueError(_why_not_mounted(Path(path)))
+    mounted: list[DBInspect] = []
+    seen: set[str] = set()
+    for ins in found:
+        key = ins.kind or ""
+        if key in seen:      # 同类库只挂第一份 (已按记录数降序)
+            continue
+        seen.add(key)
+        apply_import(ins)
+        mounted.append(ins)
+    reload_caches()
+    return mounted
+
+
+def _why_not_mounted(path: Path) -> str:
+    """给"一个合格库都没有"的情况拼一句能指向下一步的说明。"""
+    if not path.exists():
+        return f"路径不存在：{path}"
+    if path.is_file():
+        ins = inspect_db_file(path)
+        detail = ins.error + (f" ({ins.hint})" if ins.hint else "")
+        return f"不是可用的数据库文件：{detail}"
+    if not path.is_dir():
+        return f"既不是文件也不是文件夹：{path}"
+    cands = _iter_candidates(path)
+    if not cands:
+        return "该文件夹下没有 .sqlite / .db 文件（只扫本层，不递归子目录）。"
+    names = "、".join(p.name for p in cands[:5])
+    more = "" if len(cands) <= 5 else f" 等 {len(cands)} 个"
+    return f"该文件夹下的数据库都不合格：{names}{more}。"

@@ -141,11 +141,18 @@ class DataViewModel(QObject):
 
     def strip_ka_alpha2(
         self,
-        wavelength_alpha1: float = 1.5406,
-        wavelength_alpha2: float = 1.5444,
+        wavelength_alpha1: Optional[float] = None,
+        wavelength_alpha2: Optional[float] = None,
         ratio: float = 0.5,
     ) -> None:
-        """Kα2峰剥离"""
+        """Kα2峰剥离
+
+        v3.0.1: 波长默认 ``None`` → 由 ``data.wavelength`` 推导，不再固定 Cu。
+        剥离的**移位几何只依赖 λ2/λ1 比值**（绝对波长会被约掉），所以绝对波长
+        的实际影响只有一个: 结果数据的 ``wavelength`` 字段。此前写死 Cu 会把
+        Co/Fe/Mo 靶的结果标成 Cu 波长，下游所有 ``d = λ/(2sinθ)`` 换算随之错位。
+        需要显式覆盖时再传参。
+        """
         data = self.current_data
         if data is None:
             self.error.emit(tr("error.no_data"))

@@ -118,6 +118,12 @@ class RefinementResult:
             tr("report.converged") if self.converged else tr("report.not_converged")
         )
         lines.append(tr("report.time", time=f"{self.time_seconds:.1f}"))
+        # v3.0.1: 回显实际生效的性能档。只在 fast 档追加 —— 精确档是默认，
+        # 加了反而给每份报告增噪（也保证旧报告文本逐字不变）。
+        _perf = (self.fit_params or {}).get("perf_profile", "")
+        if str(_perf).lower() == "fast":
+            lines.append(tr("report.perf_profile_line",
+                            value=tr("report.perf_profile_fast")))
         lines.append("")
         lines.append("-" * 40)
         lines.append(tr("report.quality_section"))

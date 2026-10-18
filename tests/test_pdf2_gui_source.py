@@ -40,8 +40,10 @@ class TestDbSourceCombo:
         keys = view._db_source_keys
         # v2.6.0: 末尾追加 "user" (用户自建库) —— 前 5 项索引一律不动,
         # 免得历史持久化的 db_source 索引错位 (选 A 跑 B)。
+        # v3.1.0: 再追加 "xinmatch" (用户挂载的 XinMatch 格式库), 同样只往后加。
         assert keys == [
             "builtin", "cod_inorganics", "cod_full", "merged", "pdf2", "user",
+            "xinmatch",
         ]
         # 文案条数必须与 key 一一对应 (错位会让选 A 跑 B)
         assert view._db_combo.count() == len(keys)
@@ -123,6 +125,39 @@ class TestDbSourceCombo:
         tip = view._db_combo.model().item(1).toolTip()
         assert "外挂数据库管理" in tip
 
+    def test_xinmatch_item_present(self, pv):
+        """v3.1.0: 下拉里必须能看到「XinMatch 格式库」, 且 key/文案对齐。"""
+        view, _vm = pv
+        idx = view._db_source_keys.index("xinmatch")
+        assert view._db_combo.count() == len(view._db_source_keys)
+        assert view._db_combo.itemText(idx).startswith("XinMatch")
+
+    def test_xinmatch_disabled_when_not_mounted(self, pv, monkeypatch):
+        """未挂载的 XinMatch 库要置灰, 否则用户选中后静默返回空结果。"""
+        from polyxrd.services import db_import
+
+        monkeypatch.setattr(db_import, "live_counts",
+                            lambda: {"cod_inorganics": 0, "pdf2": 0,
+                                     "cod_index": 0, "xinmatch": 0})
+        view, _vm = pv
+        view.refresh_db_sources()
+        idx = view._db_source_keys.index("xinmatch")
+        item = view._db_combo.model().item(idx)
+        assert item is not None and not item.isEnabled()
+        assert "未挂载" in view._db_source_labels()[idx]
+
+    def test_xinmatch_enabled_when_mounted(self, pv, monkeypatch):
+        from polyxrd.services import db_import
+
+        monkeypatch.setattr(db_import, "live_counts",
+                            lambda: {"cod_inorganics": 0, "pdf2": 0,
+                                     "cod_index": 0, "xinmatch": 71206})
+        view, _vm = pv
+        view.refresh_db_sources()
+        idx = view._db_source_keys.index("xinmatch")
+        assert view._db_combo.model().item(idx).isEnabled()
+        assert "71,206" in view._db_source_labels()[idx]
+
 
 # ── 2. 识别分支 ──────────────────────────────────────────────
 
@@ -149,6 +184,28 @@ class TestIdentifyRouting:
         assert calls[0]["top_n"] == 5
         # 元素过滤必须透传 (PDF2 与 COD 共用四态过滤)
         assert calls[0]["element_filter"] == {"must_have": ["Ca"]}
+
+    def test_vm_routes_xinmatch_to_identify_with_xinmatch(self, pv, monkeypatch):
+        """v3.1.0: db_source="xinmatch" 必须落到 identify_with_xinmatch。"""
+        view, vm = pv
+        calls: list[dict] = []
+
+        def _spy(data, **kwargs):
+            calls.append(kwargs)
+            return []
+
+        monkeypatch.setattr(vm._phase_vm._identifier,
+                            "identify_with_xinmatch", _spy)
+        from polyxrd.models.peak import Peak, PeakList
+        vm._phase_vm._peaks = PeakList(peaks=[
+            Peak(two_theta=29.4, intensity=100.0, fwhm=0.1, d_spacing=3.03),
+        ])
+        vm._phase_vm.identify_phases(
+            data=object(), top_n=5, db_source="xinmatch",
+            element_filter={"must_have": ["Zn"]},
+        )
+        assert len(calls) == 1, "未走 XinMatch 分支"
+        assert calls[0]["element_filter"] == {"must_have": ["Zn"]}
 
     def test_button_path_passes_pdf2(self, pv, monkeypatch):
         """点「传统 Search/Match」时下拉选中的 PDF2 必须传到 VM。"""

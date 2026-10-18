@@ -219,6 +219,22 @@ class AppConfig:
         """设置用户导入的 COD 全库索引路径并持久化 (空值 = 清除)。"""
         self._update_user_db_path("cod_index_db_path", path)
 
+    # ── XinMatch 格式数据库路径 (v3.1.0) ────────────────────
+
+    def get_xinmatch_db_path(self) -> Optional[Path]:
+        """用户挂载的 XinMatch 格式库路径; 未挂载返回 None。
+
+        XinMatch 库（``entries`` / ``peaks`` / ``elements`` / ``element_combo``
+        四表）**没有默认位置** —— 它不在我们的发布包里, 也不该要求用户把文件
+        拷到某个固定目录。所以这里只认"用户显式挂载的那一个路径", 文件被挪走
+        后 ``user_db_path`` 自动返回 None, 检索入口据此优雅退出而不是抱死路径。
+        """
+        return self.user_db_path("xinmatch_db_path")
+
+    def set_xinmatch_db_path(self, path: str | Path | None) -> None:
+        """记录 XinMatch 库的挂载路径并持久化 (空值 = 取消挂载)。"""
+        self._update_user_db_path("xinmatch_db_path", path)
+
     # ── 外部精修程序路径 (v0.15 M25) ────────────────────────
 
     #: 合法的外部工具配置 key (GSAS-II / MAUD / FullProf)

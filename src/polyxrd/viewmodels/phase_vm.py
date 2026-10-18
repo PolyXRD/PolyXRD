@@ -190,6 +190,8 @@ class PhaseViewModel(QObject):
                 - "merged": 内置库 + COD 全库合并检索
                 - "pdf2": ICDD PDF-2 2004 库 (163,834 物相, 带空间群/晶胞)
                 - "user": 用户自建库 (v2.6.0, 导入的 CIF 带晶胞/原子坐标)
+                - "xinmatch": 用户挂载的 XinMatch 格式库 (v3.1.0, 只有晶胞
+                  没有原子坐标, 可用于检索/核对但不宜直接精修)
             marked_peaks: 标记峰 2θ 序列 (v2.2 S13)。None → 全部实测峰;
                 传入时仅保留与标记位最近 (≤0.30°) 的实测峰参与检索,
                 用于残差相/微量相追查 (候选列表右键"仅对标记峰再匹配")。
@@ -230,6 +232,17 @@ class PhaseViewModel(QObject):
                 # v2.6.0: 用户自建库 (同构 sqlite)。与 COD 无机库同一套
                 # 预筛/评分, 但返回的 Phase 自带晶胞+原子坐标, 可直接精修。
                 results = self._identifier.identify_with_user_db(
+                    data,
+                    peaks=use_peaks,
+                    element_filter=element_filter,
+                    top_n=top_n,
+                    tolerance=tolerance,
+                )
+            elif db_source == "xinmatch":
+                # v3.1.0: 用户挂载的 XinMatch 格式库 (entries/peaks/elements)。
+                # 与 COD 无机库共用 _rank_candidates 的 FOM 口径, 差别只在
+                # 预筛走 XinMatch 适配器; 该库无 CIF → 候选不能直接精修。
+                results = self._identifier.identify_with_xinmatch(
                     data,
                     peaks=use_peaks,
                     element_filter=element_filter,

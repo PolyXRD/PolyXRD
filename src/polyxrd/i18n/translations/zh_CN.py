@@ -125,6 +125,7 @@ translations = {
         "clear_confirm": "确定要取消挂载「{name}」吗？\n取消后将回退到默认位置；若默认位置也没有库，该数据源将不可用。",
         "status_ok": "已挂载",
         "status_bad": "无法使用",
+        "status_unmounted": "未挂载",
         "status_missing": "未找到",
         "no_path": "（尚未挂载，请点「导入…」选择已解压的数据库文件）",
         "has_top_peaks": "含预截断强峰列（检索更快）",
@@ -133,11 +134,24 @@ translations = {
         "kind": {
             "cod_inorganics": "COD 无机物库",
             "pdf2": "PDF2-2004 库",
-            "cod_index": "COD 全库索引"
+            "cod_index": "COD 全库索引",
+            "xinmatch": "XinMatch 格式库"
         },
         "notice": {
-            "pdf2": "【请确认您有正版授权】PDF2-2004 是 ICDD 的商业数据库。本软件只提供格式转换与离线索引，不附带任何授权；使用前请确认您已获得合法授权。"
+            "pdf2": "【请确认您有正版授权】PDF2-2004 是 ICDD 的商业数据库。本软件只提供格式转换与离线索引，不附带任何授权；使用前请确认您已获得合法授权。",
+            "xinmatch": "【请自行确认数据来源合规】该格式的库由 XinMatch 项目提供，本软件只做格式适配与离线检索，不附带、也不分发库数据本身。首次检索会在本机建一份强峰索引（约 3 秒，之后很快）。该库不含 CIF：条目只有晶胞、没有原子坐标，可用于物相检索与核对，但不能直接进结构精修。"
         },
+        "mount_any_group": "任意位置挂载（推荐）",
+        "mount_any_hint": "数据库文件放在哪个文件夹都行，不必搬进程序目录 —— 直接指到文件即可，路径会被记住。选文件夹时，该目录下所有合格的库会一次全挂上（只扫本层，不递归）。",
+        "mount_any_file": "挂载数据库文件…",
+        "mount_any_dir": "挂载文件夹…",
+        "mount_any_title": "选择数据库文件（任意位置）",
+        "mount_dir_title": "选择包含数据库文件的文件夹",
+        "mount_any_filter": "SQLite 数据库 (*.sqlite *.sqlite3 *.db *.db3);;所有文件 (*)",
+        "mount_any_ok": "挂载成功",
+        "mount_any_ok_body": "已挂载 {n} 个数据库：\n{detail}",
+        "mount_any_failed": "无法挂载",
+        "mount_any_failed_body": "这个路径上没有可用的数据库。\n\n路径：{path}\n原因：{error}",
         "first_run_title": "尚未导入数据库",
         "first_run_body": "从 0.10.0 起，安装包不再内置数据库。\n\n数据库各自独立打包，需要哪个下哪个：\n　· COD 无机物库　…-Databases-COD-inorg.zip\n　· COD 全库索引　…-Databases-COD-full.zip\n　· PDF2-2004 库　不提供下载（ICDD 版权库，需自行准备）\n\n解压后从菜单「数据库 ▸ 外挂数据库管理…」逐个导入。\n未导入数据库时，程序仍可使用内置的 118 种参考物相。"
     },
@@ -254,6 +268,8 @@ translations = {
         "progress": "正在执行…（{done}/{total}）",
         "peak_search": "正在进行峰检测，请稍后…",
         "peak_search_hi": "正在进行高精度峰检测（背景扣除 + 亚步长精修），请稍后…",
+        "background": "正在扣背景，请稍后…",
+        "smooth": "正在平滑，请稍后…",
         "peak_fit": "正在进行峰拟合，请稍后…",
         "identify": "正在进行物相检索，请稍后…",
         "identify_profile": "正在进行 Profile Fitting 物相检索，请稍后…",
@@ -356,6 +372,7 @@ translations = {
         "layout_reset": "布局已重置",
         "language_info": "语言: {lang}",
         "wavelength_info": "波长: {wl} Å",
+        "wavelength_dirty_suffix": "（已修改，请重新检索）",
         "data_loaded_count": "数据加载完成: {count} 个数据点",
         "data_cleared": "已清除当前数据",
         "finding_peaks_hi": "执行高精度峰检测 (背景扣除+亚步长精修)",
@@ -561,6 +578,13 @@ translations = {
         "engine_maud_missing_cif": "MAUD 引擎要求每个物相提供 cif_path 或 cod_id; 当前未满足。是否回退内置引擎?",
         "strategy_label": "精修策略",
         "max_cycles_label": "最大循环次数",
+        "perf_profile_fast": "快速档（性能优先）",
+        "perf_profile_fast_tip": (
+            "启用内置引擎的性能档: 峰截断窗 100→25×FWHM、灾难起点剪枝、"
+            "抛光早停。实测 5 相合成谱 1.97 s → 0.34 s（5.8×），wR 完全一致。"
+            "追求最终数值时可取消勾选回到精确档。仅内置引擎生效，"
+            "外部引擎（GSAS-II / MAUD / PowerXRD）忽略此项。"
+        ),
         "bgm_snip": "SNIP",
         "bgm_als": "ALS",
         "bgm_polyfit": "多项式拟合",
@@ -817,9 +841,10 @@ translations = {
             "db_merged": "内置+COD全库合并",
             "db_pdf2": "PDF2-2004 库",
             "db_user": "用户数据库",
+            "db_xinmatch": "XinMatch 格式库",
             "db_label_count": "{base} ({count:,})",
             "db_unmounted": " (未挂载)",
-            "db_combo_tip_main": "选择物相检索使用的数据库 (作用于传统 Search/Match 与快速识别):\n· 内置库: 程序自带 118 种常见物相 (最快)\n· COD 无机物库: 外挂 71,199 物相 (预计算 d-I 峰, Hanawalt 预筛)\n· COD 全库: 外挂 113,223 条 CIF 索引 (本地检索)\n· 合并: 内置库 + COD 全库结果合并排序\n· PDF2-2004: ICDD PDF-2 2004 版 163,834 物相, 自带空间群与晶胞\n  (晶胞 81.8% / 空间群 72.8%), 命中相可直接作为精修起始结构。\n",
+            "db_combo_tip_main": "选择物相检索使用的数据库 (作用于传统 Search/Match 与快速识别):\n· 内置库: 程序自带 118 种常见物相 (最快)\n· COD 无机物库: 外挂 71,199 物相 (预计算 d-I 峰, Hanawalt 预筛)\n· COD 全库: 外挂 113,223 条 CIF 索引 (本地检索)\n· 合并: 内置库 + COD 全库结果合并排序\n· PDF2-2004: ICDD PDF-2 2004 版 163,834 物相, 自带空间群与晶胞\n  (晶胞 81.8% / 空间群 72.8%), 命中相可直接作为精修起始结构。\n· XinMatch 格式库: 你自行挂载的第三方库 (entries/peaks 结构),\n  可用于检索与核对; 该库不含 CIF, 命中相不能直接精修。\n",
             "db_combo_tip_import": "数据库不随安装包分发, 请单独下载解压后在\n菜单「数据库 ▸ 外挂数据库管理…」中导入。",
             "pdf2_coverage": "  本机库: {total} 相, 空间群 {sg}%, 晶胞 {cell}%。\n",
             "db_unmounted_hint": "该数据库未挂载。请从菜单「数据库 ▸ 外挂数据库管理…」导入已解压的库文件。",
@@ -1060,6 +1085,9 @@ translations = {
         "converged": "收敛状态: 是",
         "not_converged": "收敛状态: 否",
         "time": "耗时: {time} 秒",
+        "perf_profile_line": "性能档: {value}",
+        "perf_profile_fast": "快速",
+        "perf_profile_precise": "精确",
         "quality_section": "精修质量指标",
         "phase_section": "物相分析",
         "rwp_line": "  Rwp (加权轮廓R): {value} %",

@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
+from dataclasses import replace as _dc_replace
 from pathlib import Path
 from typing import Optional
 
@@ -398,7 +400,9 @@ class PhaseIdentifier:
         return phases
 
     def _load_default_phases(self) -> None:
-        wavelength = self._config.default_wavelength
+        # 注意: 下面 reference_peaks 的 2θ 全部是 **Cu Kα1 (1.5406 Å) 基准**。
+        # 非 Cu 靶数据在检索时由 _phases_at_wavelength() 按 d 值不变换算，
+        # 因此这里不读 config.default_wavelength（此前是无用赋值）。
         phases = []
 
         si = Phase(
@@ -444,6 +448,65 @@ class PhaseIdentifier:
         phases.append(al2o3)
 
         self._phase_database = phases
+
+    # ── 波长收口 (v3.0.1) ────────────────────────────────────────
+    #: 参考库 JSON 里 ``two_theta`` 的基准波长（Cu Kα1）。
+    #: 非 Cu 靶数据必须按 d 值不变把它换算到实际波长。
+    REFERENCE_WAVELENGTH: float = 1.5406
+
+    def _effective_wavelength(self, data=None) -> float:
+        """检索用波长：**优先用数据自带波长**，缺失/非法才回落配置默认值。
+
+        v3.0.1 修复: 此前四条检索链一律用 ``config.default_wavelength``（Cu），
+        而 ``data_loader`` 早已从文件头/靶材解析出 ``XRDData.wavelength``（Co、
+        Fe、Mo 靶各不相同）—— 两者脱钩会让 ``d = λ/(2sinθ)`` 整体错位，
+        真物相被判不匹配、假相排到前面。此处统一收口。
+        """
+        wl = getattr(data, "wavelength", None) if data is not None else None
+        try:
+            wl = float(wl) if wl else 0.0
+        except (TypeError, ValueError):
+            wl = 0.0
+        if wl <= 0.0:
+            return float(self._config.default_wavelength)
+        return wl
+
+    def _phases_at_wavelength(self, wavelength: float) -> list:
+        """把内置参考库的峰表换算到指定波长（按波长缓存）。
+
+        换算依据 d 值不变: ``sinθ_new = sinθ_ref · (λ_new / λ_ref)``。
+        波长与基准一致（Cu）时**直接返回原列表**（零开销、零行为改变），
+        因此所有 Cu 基准结果逐位不变。当前波长下不可达的峰（``sinθ>1``）被丢弃。
+        """
+        base = float(self.REFERENCE_WAVELENGTH)
+        lam = float(wavelength or 0.0)
+        if lam <= 0 or abs(lam / base - 1.0) <= 1e-4:
+            return self._phase_database
+
+        cache = getattr(self, "_phase_wl_cache", None)
+        if cache is None:
+            cache = {}
+            self._phase_wl_cache = cache
+        key = (round(lam, 6), len(self._phase_database))
+        if key in cache:
+            return cache[key]
+
+        ratio = lam / base
+        out = []
+        for phase in self._phase_database:
+            peaks = []
+            for hkl, tt, inten in (phase.reference_peaks or []):
+                try:
+                    s = math.sin(math.radians(float(tt) / 2.0)) * ratio
+                except (TypeError, ValueError):
+                    continue
+                if not (0.0 < s <= 1.0):
+                    continue      # 当前波长下该峰不可达 → 丢弃
+                peaks.append((hkl, 2.0 * math.degrees(math.asin(s)), inten))
+            if peaks:
+                out.append(_dc_replace(phase, reference_peaks=peaks))
+        cache[key] = out
+        return out
 
     def identify(
         self,
@@ -1101,8 +1164,12 @@ class PhaseIdentifier:
 
         ef = normalize_element_filter(element_filter) if element_filter else None
 
+        # v3.0.1: 参考库峰表按实际波长换算（Cu 时原样返回，行为逐位不变）
+        wavelength = self._effective_wavelength(data)
+        ref_phases = self._phases_at_wavelength(wavelength)
+
         results = []
-        for phase in self._phase_database:
+        for phase in ref_phases:
             if ef and not elements_match_filter(
                 phase.elements,
                 has=ef["has"], maybe=ef["maybe"], exclude=ef["exclude"],
@@ -1550,7 +1617,7 @@ class PhaseIdentifier:
         if peaks is None:
             peaks = default_peak_list(data)
 
-        wavelength = self._config.default_wavelength
+        wavelength = self._effective_wavelength(data)
         t_min, t_max = self._config.default_two_theta_range
         t_range = (max(t_min, 5.0), min(t_max, 90.0))
 
@@ -1695,7 +1762,7 @@ class PhaseIdentifier:
         if not cdb.cod_db_available():
             return []
 
-        wavelength = self._config.default_wavelength
+        wavelength = self._effective_wavelength(data)
 
         # 1. 实验峰 2θ → d 值
         d_list: list[float] = []
@@ -1779,7 +1846,7 @@ class PhaseIdentifier:
 
         try:
             cdb = CIFDatabase(enable_cod_local=False)
-            wavelength = self._config.default_wavelength
+            wavelength = self._effective_wavelength(data)
 
             # 1. 实验峰 2θ → d 值
             d_list: list[float] = []
@@ -1822,6 +1889,133 @@ class PhaseIdentifier:
             return []
         finally:
             conn.close()
+
+    def identify_with_xinmatch(
+        self,
+        data: XRDData,
+        peaks: Optional[PeakList] = None,
+        element_filter: Optional[dict] = None,
+        top_n: int = 5,
+        tolerance: float = 0.15,
+        prefilter_limit: int = 100,
+        prefilter_tolerance: float = 0.02,
+        prefilter_tolerance_rel: float = 0.0,
+        prefilter_min_match: int = 3,
+        prefilter_max_ref_peaks: int = 40,
+        db=None,
+    ) -> list[PhaseMatchResult]:
+        """物相识别: XinMatch 格式数据库 (v3.1.0)。
+
+        XinMatch 的库 (``entries``/``peaks``/``elements``/``element_combo``)
+        与 PolyXRD 自家的库表结构完全不同 —— ``entry_id`` 是字符串、峰存成
+        规范化表。适配细节见 :mod:`polyxrd.services.xinmatch_db`。
+
+        流程与 ``identify_with_cod_inorganics`` 一致:
+        1. 实验峰 2θ → d 值
+        2. XinMatch 适配器做 Hanawalt d-I 预筛 (内部: 向量化强峰索引 +
+           逐相精确度量)
+        3. 候选转 Phase 后交给同一个 ``_rank_candidates`` 走统一 FOM 打分
+
+        唯一的能力差异: 该库**不含 CIF**, 条目只有晶胞没有原子坐标, 因此
+        候选 Phase 不能直接进 Rietveld 精修 (精修仍需 CIF / 用户自建库)。
+
+        Args:
+            data: XRD 数据
+            peaks: 可选峰列表 (自动检测)
+            element_filter: 三态元素过滤 (预筛层 + 判定层都会用)
+            top_n: 返回候选数
+            tolerance: 2θ 容差 (FOM 匹配用)
+            prefilter_*: d-I 预筛参数, 语义与 ``identify_with_cod_inorganics``
+                逐项相同
+            db: 可选的既有适配器实例 (测试/复用连接用); 默认按配置现建
+        """
+        if peaks is None:
+            peaks = default_peak_list(data)
+
+        try:
+            from polyxrd.services.xinmatch_db import XinMatchDatabase
+        except Exception:  # noqa: BLE001 - 适配器缺失 (裁剪安装) 不该崩 UI
+            return []
+
+        if db is None:
+            db = XinMatchDatabase()
+        if not db.is_ready():
+            return []
+
+        wavelength = self._effective_wavelength(data)
+
+        # 1. 实验峰 2θ → d 值
+        d_list: list[float] = []
+        i_list: list[float] = []
+        for p in peaks.peaks:
+            sin_theta = np.sin(np.radians(p.two_theta / 2.0))
+            if sin_theta <= 1e-6:
+                continue
+            d_list.append(wavelength / (2.0 * sin_theta))
+            i_list.append(float(p.intensity))
+        if not d_list:
+            return []
+
+        # 2. Hanawalt d-I 预筛 (元素约束下推到扫描层)
+        ef = normalize_element_filter(element_filter) if element_filter else None
+        allowed_pool = (set(ef["must_have"]) | set(ef["has"]) | set(ef["maybe"])
+                        if ef else set())
+        elements_allowed = allowed_pool if allowed_pool else None
+        try:
+            cands = db.search_by_d_peaks(
+                d_list, i_list, tolerance=prefilter_tolerance,
+                tolerance_rel=prefilter_tolerance_rel,
+                min_match=prefilter_min_match,
+                max_ref_peaks=prefilter_max_ref_peaks,
+                main_peak_topk=3,
+                limit=prefilter_limit,
+                elements_allowed=elements_allowed,
+            )
+        except Exception:  # noqa: BLE001 - 检索失败按"无候选"处理
+            return []
+        if not cands:
+            return []
+
+        # 3. 候选 → Phase → 统一 FOM 评分
+        return self._rank_candidates(
+            cands,
+            fetch=db.get_phase,
+            make_phase=self._make_xinmatch_phase,
+            ef=ef, data=data, peaks=peaks, top_n=top_n,
+            tolerance=tolerance, wavelength=wavelength,
+        )
+
+    @staticmethod
+    def _make_xinmatch_phase(detail: dict, cand: dict, ref_peaks: list) -> Phase:
+        """XinMatch 候选 → Phase (带晶胞, 无原子坐标)。"""
+        from polyxrd.models.phase import LatticeParams
+
+        eid = str(cand["cod_id"])
+        formula = detail.get("formula", "") or ""
+        mineral = (detail.get("mineral_name") or "").strip()
+        # 名称语言中立 (与 "(COD 1234567)" 同构): Phase 名会被写进项目文件,
+        # 存进随语言变化的术语以后就读不回来了。矿物名 (若有) 是库内数据,
+        # 不随界面语言变化, 可以带上。
+        label = f"{mineral} - {formula}" if mineral and mineral != formula else formula
+        lattice = LatticeParams(
+            a=float(detail.get("cell_a") or 0.0),
+            b=float(detail.get("cell_b") or 0.0),
+            c=float(detail.get("cell_c") or 0.0),
+            alpha=float(detail.get("cell_alpha") or 90.0),
+            beta=float(detail.get("cell_beta") or 90.0),
+            gamma=float(detail.get("cell_gamma") or 90.0),
+        )
+        # 元素优先用库内 elements 列 (权威); 缺失才退回解析化学式
+        els = {e for e in detail.get("elements_list") or [] if e}
+        return Phase(
+            name=f"{label} (XinMatch {eid})",
+            formula=formula,
+            space_group=detail.get("space_group", "") or "",
+            lattice=lattice if lattice.a else None,
+            reference_peaks=ref_peaks,
+            elements=els or elements_from_db_formula(formula),
+            db_id=eid,
+        )
 
     @staticmethod
     def _make_user_phase(detail: dict, cand: dict, ref_peaks: list) -> Phase:
@@ -1897,7 +2091,7 @@ class PhaseIdentifier:
         if not pdb.is_available():
             return []
 
-        wavelength = self._config.default_wavelength
+        wavelength = self._effective_wavelength(data)
 
         # 1. 实验峰 2θ → d 值
         d_list: list[float] = []

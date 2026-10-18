@@ -75,9 +75,11 @@ PDF2_ROW = ("00-046-1045", "SiO2", "Quartz", "hP9", 2, "3.34,4.26", "100,22", 4.
 PDF2_INS = "INSERT INTO phases VALUES (?,?,?,?,?,?,?,?)"
 
 
-def test_three_rows_present(qapp, tmp_cfg):
+def test_every_kind_has_a_row(qapp, tmp_cfg):
+    """每种库一行 (3.1.0 起多了 XinMatch 格式库)。"""
     dlg = DatabaseManagerDialog()
-    assert set(dlg._rows) == {"cod_inorganics", "pdf2", "cod_index"}
+    assert set(dlg._rows) == {k.key for k in db_import.DB_KINDS}
+    assert "xinmatch" in dlg._rows
 
 
 def test_each_row_shows_its_own_package(qapp, tmp_cfg):
@@ -101,8 +103,14 @@ def test_each_row_shows_its_own_package(qapp, tmp_cfg):
     )
     # 仍需告诉用户"这个槽位要的是哪个文件"
     assert "PDF2_2004.sqlite" in texts["pdf2"]
-    # 三行文案不能雷同 (否则用户看不出区别)
-    assert len(set(texts.values())) == 3
+
+    # v3.1.0: XinMatch 格式库同样不随本项目发布, 且要写清该去对方那找哪个文件
+    assert "cod_inorganics.db" in texts["xinmatch"]
+    assert "cod_full.db" in texts["xinmatch"]
+    assert "Databases-" not in texts["xinmatch"]
+
+    # 各行文案不能雷同 (否则用户看不出区别)
+    assert len(set(texts.values())) == len(texts)
 
 
 def test_mounting_one_slot_leaves_others_untouched(qapp, tmp_cfg, tmp_path, monkeypatch):
@@ -178,10 +186,14 @@ def test_pdf2_row_shows_licence_notice(qapp, tmp_cfg):
     assert "正版授权" in _resolve(zh_CN.translations, key)
 
 
-def test_licence_notice_only_on_commercial_db(qapp, tmp_cfg):
-    """只有商业库带提示; COD 是开放数据, 加提示会误导用户以为也要授权。"""
+def test_licence_notice_only_on_non_free_db(qapp, tmp_cfg):
+    """只有"数据本身要用户自己负责授权"的库带提示。
+
+    COD 是开放数据, 加提示会误导用户以为也要授权; PDF2-2004 是 ICDD 商业库,
+    XinMatch 格式库是本项目不掌握来源的第三方数据载体 —— 这两个必须提示。
+    """
     kinds_with_notice = {k.key for k in db_import.DB_KINDS if k.notice_key}
-    assert kinds_with_notice == {"pdf2"}
+    assert kinds_with_notice == {"pdf2", "xinmatch"}
 
 
 def test_notice_keys_resolve_in_all_languages(qapp, tmp_cfg):
@@ -193,3 +205,90 @@ def test_notice_keys_resolve_in_all_languages(qapp, tmp_cfg):
             assert _resolve(mod.translations, kind.notice_key), (
                 f"{kind.key}: {kind.notice_key} 在 {mod.__name__} 中缺失"
             )
+
+
+# ── 任意位置挂载 (v3.1.0) ────────────────────────────────────────
+
+XM_DDL = (
+    "CREATE TABLE entries (entry_id TEXT PRIMARY KEY, formula TEXT,"
+    " mineral_name TEXT, space_group TEXT, crystal_system TEXT, a REAL, b REAL,"
+    " c REAL, alpha REAL, beta REAL, gamma REAL, volume REAL, density REAL,"
+    " color TEXT, year INTEGER, author TEXT, journal TEXT, quality TEXT,"
+    " elements TEXT)",
+    "CREATE TABLE peaks (entry_id TEXT NOT NULL, d REAL NOT NULL,"
+    " intensity REAL, h INTEGER, k INTEGER, l INTEGER)",
+    "CREATE TABLE elements (entry_id TEXT NOT NULL, element TEXT NOT NULL,"
+    " PRIMARY KEY (entry_id, element))",
+    "CREATE TABLE element_combo (element_set_hash TEXT PRIMARY KEY,"
+    " entry_ids TEXT NOT NULL)",
+)
+
+
+def _make_xinmatch_db(path: Path, rows: int = 3) -> Path:
+    """最小合法 XinMatch 格式库 (v3.1.0 挂载入口用)。"""
+    import sqlite3
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(path)
+    for ddl in XM_DDL:
+        conn.execute(ddl)
+    for i in range(rows):
+        eid = f"XM-{i:03d}"
+        conn.execute(
+            "INSERT INTO entries (entry_id, formula, space_group, crystal_system,"
+            " a, b, c, alpha, beta, gamma, elements)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (eid, "O Zn", "P 63 m c", "hexagonal", 3.2495, 3.2495, 5.2069,
+             90.0, 90.0, 120.0, "O,Zn"))
+        conn.execute("INSERT INTO peaks VALUES (?,?,?,?,?,?)",
+                     (eid, 2.4759 + i * 0.01, 570.0, 1, 0, 1))
+        conn.execute("INSERT INTO elements VALUES (?,?)", (eid, "Zn"))
+        conn.execute("INSERT INTO element_combo VALUES (?,?)", (f"h{i}", eid))
+    conn.commit()
+    conn.close()
+    return path
+
+
+def test_mount_any_path_from_foreign_folder(qapp, tmp_cfg, tmp_path, monkeypatch):
+    """需求核心: 库文件放在别的文件夹里, 在界面上指过去就能挂上。"""
+    monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: None)
+    monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: None)
+    db = _make_xinmatch_db(tmp_path / "elsewhere" / "deep" / "cod_inorganics.db")
+
+    dlg = DatabaseManagerDialog()
+    seen = []
+    dlg.databases_changed.connect(lambda: seen.append(1))
+
+    assert dlg.mount_path(str(db)) is True
+    assert db_import.is_user_imported("xinmatch") is True
+    assert seen, "自动挂载成功后必须发 databases_changed (下拉才会刷新)"
+    # 行内状态同步刷新到"已挂载"
+    assert "已挂载" in dlg._rows["xinmatch"]["status"].text()
+
+
+def test_mount_any_path_accepts_folder(qapp, tmp_cfg, tmp_path, monkeypatch):
+    """指到文件夹时, 该目录下多类库要一次全挂上。"""
+    monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: None)
+    folder = tmp_path / "data"
+    _make_xinmatch_db(folder / "cod_inorganics.db")
+    _make_db(folder / "c.sqlite", COD_DDL, COD_ROW, COD_INS)
+
+    dlg = DatabaseManagerDialog()
+    assert dlg.mount_path(str(folder)) is True
+    assert db_import.is_user_imported("xinmatch") is True
+    assert db_import.is_user_imported("cod_inorganics") is True
+
+
+def test_mount_any_path_reports_failure(qapp, tmp_cfg, tmp_path, monkeypatch):
+    """不合格的路径要弹提示且不改动任何已挂载配置。"""
+    seen = []
+    monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: None)
+    monkeypatch.setattr(QMessageBox, "warning",
+                        lambda *a, **k: seen.append(a[2]) or None)
+    junk = tmp_path / "junk.sqlite"
+    junk.write_bytes(b"not a db")
+
+    dlg = DatabaseManagerDialog()
+    assert dlg.mount_path(str(junk)) is False
+    assert seen, "失败时必须提示原因"
+    assert db_import.is_user_imported("xinmatch") is False

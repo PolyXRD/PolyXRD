@@ -34,6 +34,10 @@ from polyxrd.i18n import tr
 from polyxrd.services import db_import, user_db
 from polyxrd.services.db_import import DB_KINDS, inspect_db_file
 
+#: kind key → DBKind, 供"自动挂载"结果回显库名 (DB_KINDS 的顺序即优先级,
+#: 这里要按 key 查, 不能按下标)。
+DB_KINDS_BY_KEY = db_import.KIND_BY_KEY
+
 _FILE_FILTER = "vw.database_dialog.file_filter"
 
 
@@ -74,6 +78,7 @@ class DatabaseManagerDialog(QDialog):
         for i, kind in enumerate(DB_KINDS):
             self._build_row(grid, i, kind)
 
+        root.addWidget(self._build_mount_any_group())
         root.addWidget(self._build_user_group())
 
         root.addStretch(1)
@@ -146,6 +151,78 @@ class DatabaseManagerDialog(QDialog):
             "status": status, "path": path_lbl, "clear": btn_clear,
             "pkg": pkg_lbl,
         }
+
+    # ── 任意位置挂载 (v3.1.0) ──────────────────────────────
+    def _build_mount_any_group(self) -> QWidget:
+        """「指过去就能用」的挂载入口。
+
+        逐行的「导入…」要求用户先判断"这个文件属于哪个槽位", 而我们早就
+        能自动判别库类型了 —— 这一组把这一步省掉: 用户只需指到一个合格的
+        数据库文件 (放在哪个文件夹都行) 或一个装着库的文件夹, 剩下的由
+        ``db_import.mount_databases`` 处理。
+        """
+        box = QFrame()
+        box.setFrameShape(QFrame.Shape.StyledPanel)
+        lay = QVBoxLayout(box)
+        lay.setSpacing(4)
+
+        title = QLabel(f"<b>{tr('db_manager.mount_any_group')}</b>")
+        lay.addWidget(title)
+
+        hint = QLabel(tr("db_manager.mount_any_hint"))
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: palette(mid);")
+        lay.addWidget(hint)
+
+        row = QHBoxLayout()
+        row.setSpacing(6)
+        self._btn_mount_file = QPushButton(tr("db_manager.mount_any_file"))
+        self._btn_mount_file.clicked.connect(self._on_mount_file)
+        self._btn_mount_dir = QPushButton(tr("db_manager.mount_any_dir"))
+        self._btn_mount_dir.clicked.connect(self._on_mount_dir)
+        row.addWidget(self._btn_mount_file)
+        row.addWidget(self._btn_mount_dir)
+        row.addStretch(1)
+        lay.addLayout(row)
+        return box
+
+    def _on_mount_file(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, tr("db_manager.mount_any_title"), str(Path.home()),
+            tr("db_manager.mount_any_filter"))
+        if not path:
+            return
+        self.mount_path(path)
+
+    def _on_mount_dir(self) -> None:
+        path = QFileDialog.getExistingDirectory(
+            self, tr("db_manager.mount_dir_title"), str(Path.home()))
+        if not path:
+            return
+        self.mount_path(path)
+
+    def mount_path(self, path: str) -> bool:
+        """对任意路径执行"自动判别 + 挂载"。
+
+        与选文件对话框解耦, 便于单测直接喂路径 (含文件夹路径)。
+        """
+        try:
+            mounted = db_import.mount_databases(path)
+        except Exception as e:  # noqa: BLE001 - 失败原因要如实展示
+            QMessageBox.warning(
+                self, tr("db_manager.mount_any_failed"),
+                tr("db_manager.mount_any_failed_body", path=path, error=str(e)))
+            return False
+        self._refresh()
+        self.databases_changed.emit()
+        detail = "\n".join(
+            f"· {tr(DB_KINDS_BY_KEY[m.kind].label_key)} — {m.rows:,}"
+            for m in mounted
+        )
+        QMessageBox.information(
+            self, tr("db_manager.mount_any_ok"),
+            tr("db_manager.mount_any_ok_body", n=len(mounted), detail=detail))
+        return True
 
     # ── 用户自建库分组 (v2.6.0) ────────────────────────────
     def _build_user_group(self) -> QWidget:
@@ -257,6 +334,12 @@ class DatabaseManagerDialog(QDialog):
                     tr("db_manager.pkg_hint_local", file=st["pkg_filename"])
                 )
             if not st["exists"]:
+                if not st["path"]:
+                    # 压根没有默认位置的槽位 (XinMatch 格式库): 这是"还没挂载",
+                    # 不是"找不到库"。红色"未找到"会让人以为库坏了。
+                    row["status"].setText(tr("db_manager.status_unmounted"))
+                    row["path"].setText(tr("db_manager.no_path"))
+                    continue
                 row["status"].setText(f"<span style='color:#c0392b'>"
                                       f"{tr('db_manager.status_missing')}</span>")
                 row["path"].setText(tr("db_manager.no_path"))

@@ -67,6 +67,25 @@ from polyxrd.views.widgets.database_dialog import DatabaseManagerDialog
 from polyxrd.services import CIFDatabase, CODSearcher
 
 
+#: 背景扣除下拉: (i18n key, 服务层方法名)。
+#: ★ 服务层只认第二个元素；显示文本永远走 tr()，两者用 setItemData 绑定。
+_BG_COMBO_ITEMS: tuple = (
+    ("params.bgm_snip", "snip"),
+    ("params.bgm_als", "als"),
+    ("params.bgm_polyfit", "polyfit"),
+    ("params.bgm_median", "median"),
+    ("params.bgm_rolling", "rolling"),
+)
+
+#: 平滑下拉: (i18n key, 服务层方法名)
+_SMOOTH_COMBO_ITEMS: tuple = (
+    ("params.smt_savgol", "savgol"),
+    ("params.smt_gaussian", "gaussian"),
+    ("params.smt_moving", "moving"),
+    ("params.smt_median", "median"),
+)
+
+
 class RefinementWizardDialog(QDialog):
     """精修向导对话框"""
 
@@ -110,6 +129,15 @@ class RefinementWizardDialog(QDialog):
         self._max_cycles.setRange(1, 100)
         self._max_cycles.setValue(20)
         form.addRow(tr("params.max_cycles_label"), self._max_cycles)
+
+        # 性能档 (v3.0.1): 引擎侧早有 perf_profile="fast"（cutoff 100→25 +
+        # 起点剪枝 + 抛光早停），但全仓除引擎自身外零调用点 —— 用户永远跑精确档。
+        # 这里提供一个勾选（默认开），并受 P3「结果回显档位」约束:
+        # 引擎已把实际档位写进 fit_params["perf_profile"]。
+        self._perf_fast_check = QCheckBox(tr("params.perf_profile_fast"))
+        self._perf_fast_check.setChecked(True)
+        self._perf_fast_check.setToolTip(tr("params.perf_profile_fast_tip"))
+        form.addRow("", self._perf_fast_check)
 
         self._wavelength_spin = QDoubleSpinBox()
         self._wavelength_spin.setRange(0.1, 10.0)
@@ -202,6 +230,8 @@ class RefinementWizardDialog(QDialog):
             "wavelength": self._wavelength_spin.value(),
             "two_theta_min": self._two_theta_min.value(),
             "two_theta_max": self._two_theta_max.value(),
+            # "" = 精确档 (引擎按 falsy 处理); "fast" = 性能档
+            "perf_profile": "fast" if self._perf_fast_check.isChecked() else "",
         }
 
 
@@ -574,6 +604,9 @@ class MainWindow(QMainWindow):
         self._language_actions: dict[str, QAction] = {}
         self._menus: dict[str, QMenu] = {}
 
+        #: 用户改过波长但还没重新检索 → 状态栏加提示后缀（v3.0.1）
+        self._wavelength_dirty: bool = False
+
         # 注册机制 —— 仅正式发布版装配；内部评估版不出现任何注册 UI / 提示,
         # 状态栏最右侧改为固定显示 INTERNAL_BUILD_LABEL。
         self._edition_label: Optional[QLabel] = None
@@ -831,22 +864,11 @@ class MainWindow(QMainWindow):
         params_layout.addRow(self._label_bg_method)
 
         self._bg_method_combo = QComboBox()
-        self._bg_method_combo.addItems([
-            tr("params.bgm_snip"),
-            tr("params.bgm_als"),
-            tr("params.bgm_polyfit"),
-            tr("params.bgm_median"),
-            tr("params.bgm_rolling"),
-        ])
+        self._refill_combo(self._bg_method_combo, _BG_COMBO_ITEMS)
         params_layout.addRow(tr("params.bg_method"), self._bg_method_combo)
 
         self._smooth_method_combo = QComboBox()
-        self._smooth_method_combo.addItems([
-            tr("params.smt_savgol"),
-            tr("params.smt_gaussian"),
-            tr("params.smt_moving"),
-            tr("params.smt_median"),
-        ])
+        self._refill_combo(self._smooth_method_combo, _SMOOTH_COMBO_ITEMS)
         params_layout.addRow(tr("params.smooth_method"), self._smooth_method_combo)
 
         self._smooth_window_spin = QSpinBox()
@@ -1429,16 +1451,8 @@ class MainWindow(QMainWindow):
             self._label_peak_detect.setText(tr("params.peak_detect"))
 
         # 两个下拉的条目名是本地化的 → 保住当前选择后整表重建
-        self._refill_combo(
-            self._bg_method_combo,
-            ["params.bgm_snip", "params.bgm_als", "params.bgm_polyfit",
-             "params.bgm_median", "params.bgm_rolling"],
-        )
-        self._refill_combo(
-            self._smooth_method_combo,
-            ["params.smt_savgol", "params.smt_gaussian",
-             "params.smt_moving", "params.smt_median"],
-        )
+        self._refill_combo(self._bg_method_combo, _BG_COMBO_ITEMS)
+        self._refill_combo(self._smooth_method_combo, _SMOOTH_COMBO_ITEMS)
 
         self._peak_hi_check.setText(tr("params.peak_hi_precision"))
         self._peak_hi_check.setToolTip(tr("params.peak_hi_precision_tip"))
@@ -1451,17 +1465,35 @@ class MainWindow(QMainWindow):
             self._btn_clear_phases.setText(tr("common.clear"))
 
     @staticmethod
-    def _refill_combo(combo: QComboBox, keys: list) -> None:
-        """按当前语言重建下拉条目, 并尽量保留原选中项 (按索引)。"""
+    def _refill_combo(combo: QComboBox, items: tuple) -> None:
+        """按当前语言重建下拉条目, 并尽量保留原选中项 (按索引)。
+
+        v3.0.1: ``items`` 是 ``((tr_key, service_value), …)``。显示文本走 tr(),
+        但**服务层要的 key 用 setItemData 挂到每条上** —— 原来直接把译文
+        (``"SNIP"``/``"多项式拟合"``) 当方法名传给服务, 与 ``bg_methods`` 的
+        ``"snip"/"polyfit"`` 对不上, 导致扣背景/平滑在工具栏入口必然抛
+        ``ValueError``。现在读取一律走 ``currentData()``。
+        """
         if combo is None:
             return
         index = combo.currentIndex()
         combo.blockSignals(True)
         combo.clear()
-        combo.addItems([tr(k) for k in keys])
+        for key, value in items:
+            combo.addItem(tr(key), value)
         if 0 <= index < combo.count():
             combo.setCurrentIndex(index)
         combo.blockSignals(False)
+
+    @staticmethod
+    def _combo_value(combo: QComboBox) -> str:
+        """取下拉框的**服务层 key**（兼容没有 itemData 的旧构造路径）。"""
+        if combo is None:
+            return ""
+        value = combo.currentData()
+        if value:
+            return str(value)
+        return str(combo.currentText() or "").strip().lower()
 
     # ------------------------------------------------------------------
     # 状态栏
@@ -1476,6 +1508,8 @@ class MainWindow(QMainWindow):
         )
         self._status_wl_label.setText(
             tr("status.wavelength_info", wl=self._wl_spin.value())
+            + (tr("status.wavelength_dirty_suffix")
+               if getattr(self, "_wavelength_dirty", False) else "")
         )
 
     def _update_window_title(self) -> None:
@@ -1484,6 +1518,26 @@ class MainWindow(QMainWindow):
         )
 
     def _on_wavelength_changed(self, value: float) -> None:
+        """波长变更 → **回写当前数据**。
+
+        v3.0.1 修复: 此前只调 ``_update_status_bar()``，波长只改了状态栏文字，
+        任何计算都不变（检索链一律读 ``config.default_wavelength``）。现在
+        ① 回写 ``data.wavelength``（检索/精修/Sherrer 等全部以它为准）；
+        ② 已算出的物相结果是按旧波长生成的 → 在状态栏提示"需重新检索"。
+        """
+        try:
+            wl = float(value)
+        except (TypeError, ValueError):
+            return
+        if wl <= 0:
+            return
+        data = getattr(self._vm, "current_data", None)
+        if data is not None and abs(float(getattr(data, "wavelength", 0.0)) - wl) > 1e-9:
+            try:
+                data.wavelength = wl
+                self._wavelength_dirty = True
+            except Exception:  # noqa: BLE001 —— 只读数据不应阻断 UI
+                pass
         self._update_status_bar()
 
     # ------------------------------------------------------------------
@@ -1522,6 +1576,25 @@ class MainWindow(QMainWindow):
         """加载数据文件并加入最近列表。菜单打开与拖放共用。"""
         self._vm.load_file(file_path)
         self._add_recent_file(file_path)
+        self._sync_wavelength_from_data()
+
+    def _sync_wavelength_from_data(self) -> None:
+        """把当前数据的波长同步到参数面板（v3.0.1）。
+
+        加载器会从文件头/靶材解析波长（``data_loader`` 的 ``wavelength_from_anode``
+        等路径）。此前参数面板恒为 config 默认值且不回写 data，导致"界面显示 Cu、
+        计算用 Cu"双重固定；现在界面显示与计算口径统一到 ``data.wavelength``。
+        """
+        data = getattr(self._vm, "current_data", None)
+        wl = float(getattr(data, "wavelength", 0.0) or 0.0) if data is not None else 0.0
+        self._wavelength_dirty = False
+        if wl > 0:
+            spin = getattr(self, "_wl_spin", None)
+            if spin is not None:
+                spin.blockSignals(True)
+                spin.setValue(wl)
+                spin.blockSignals(False)
+        self._update_status_bar()
 
     @staticmethod
     def _first_local_path(paths: list) -> Optional[str]:
@@ -1612,15 +1685,21 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _on_background_subtract(self) -> None:
-        self._vm.subtract_background(
-            method=self._bg_method_combo.currentText()
-        )
+        with busy(self, tr("busy.background")) as acquired:
+            if not acquired:
+                return
+            self._vm.subtract_background(
+                method=self._combo_value(self._bg_method_combo)
+            )
 
     def _on_smooth(self) -> None:
-        self._vm.smooth_data(
-            method=self._smooth_method_combo.currentText(),
-            window=self._smooth_window_spin.value(),
-        )
+        with busy(self, tr("busy.smooth")) as acquired:
+            if not acquired:
+                return
+            self._vm.smooth_data(
+                method=self._combo_value(self._smooth_method_combo),
+                window=self._smooth_window_spin.value(),
+            )
 
     def _on_strip_kalpha2(self) -> None:
         # M20: 接真实 Kα2 剥离管线 (此前仅为状态提示)
@@ -1675,6 +1754,9 @@ class MainWindow(QMainWindow):
             if not acquired:
                 return
             self._vm.identify_phases()
+        # 检索已按当前数据波长完成 → 清掉"请重新检索"提示
+        self._wavelength_dirty = False
+        self._update_status_bar()
 
     def _on_profile_fitting(self) -> None:
         self._tab_widget.setCurrentWidget(self._phase_view)
@@ -1783,6 +1865,7 @@ class MainWindow(QMainWindow):
                     max_cycles=params["max_cycles"],
                     wavelength=params["wavelength"],
                     two_theta_range=(params["two_theta_min"], params["two_theta_max"]),
+                    perf_profile=params["perf_profile"],
                     progress_cb=BusyIndicator.progress_tick,
                 )
 

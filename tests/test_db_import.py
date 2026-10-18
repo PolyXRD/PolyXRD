@@ -234,7 +234,9 @@ def test_user_path_ignored_when_file_vanished(tmp_cfg, tmp_path):
 
 def test_slot_states_shape(tmp_cfg):
     states = db_import.slot_states()
-    assert [s["kind"] for s in states] == ["cod_inorganics", "pdf2", "cod_index"]
+    # 顺序即 DB_KINDS 的声明顺序 (v3.1.0 追加 xinmatch 到末尾)
+    assert [s["kind"] for s in states] == [
+        "cod_inorganics", "pdf2", "cod_index", "xinmatch"]
     for s in states:
         for key in ("label_key", "path", "exists", "imported", "rows",
                     "has_top_peaks", "ok", "error", "hint", "size_mb"):
@@ -264,11 +266,14 @@ def test_live_counts_reads_new_file_after_replacement(tmp_cfg, tmp_path, monkeyp
     monkeypatch.setattr(db_import, "_default_paths",
                         lambda: {"cod_inorganics": tmp_path / "c.sqlite",
                                  "pdf2": tmp_path / "p.sqlite",
-                                 "cod_index": tmp_path / "i.sqlite"})
+                                 "cod_index": tmp_path / "i.sqlite",
+                                 # XinMatch 无默认位置 → None (未挂载)
+                                 "xinmatch": None})
     db_import._count_rows_cached.cache_clear()
 
     c = _make_db(tmp_path / "c.sqlite", f"CREATE TABLE phases ({COD_COLS})")
-    assert db_import.live_counts() == {"cod_inorganics": 0, "pdf2": 0, "cod_index": 0}
+    assert db_import.live_counts() == {"cod_inorganics": 0, "pdf2": 0,
+                                       "cod_index": 0, "xinmatch": 0}
 
     c.unlink()
     _make_cod_db(tmp_path / "c.sqlite")
@@ -298,19 +303,21 @@ def test_clear_import_unknown_key(tmp_cfg):
 # ── 三库独立下载包 (0.10.0: 拆包) ────────────────────────────
 
 def test_pkg_suffixes_present_and_distinct():
-    """能发布的槽位各自对应一个独立下载包, 后缀不能重复; PDF2 必须无包。
+    """能发布的槽位各自对应一个独立下载包, 后缀不能重复; 其余槽位必须无包。
 
-    PDF2-2004 是 ICDD 版权商品库, 政策上**永不随 Release 分发** —— 所以这里
-    反过来断言它的 `pkg_suffix` 为空。哪天有人手滑给它加回后缀, 这条会红。
+    PDF2-2004 是 ICDD 版权商品库、XinMatch 格式库是本项目不掌握来源的第三方
+    数据 —— 两者政策上**永不随 Release 分发**, 所以这段反过来断言它们的
+    `pkg_suffix` 为空。哪天有人手滑加回后缀, 这条会红。
     """
-    suffixes = [k.pkg_suffix for k in db_import.DB_KINDS if k.key != "pdf2"]
+    no_pkg = {"pdf2", "xinmatch"}
+    suffixes = [k.pkg_suffix for k in db_import.DB_KINDS if k.key not in no_pkg]
     assert all(suffixes), f"有槽位缺 pkg_suffix: {suffixes}"
     assert len(set(suffixes)) == len(suffixes), f"下载包后缀重复: {suffixes}"
 
-    pdf2 = db_import.KIND_BY_KEY["pdf2"]
-    assert pdf2.pkg_suffix == "", (
-        "PDF2 不得有发布包 —— 该库受 ICDD 版权保护, 只本地保留"
-    )
+    for key in no_pkg:
+        assert db_import.KIND_BY_KEY[key].pkg_suffix == "", (
+            f"{key} 不得有发布包 —— 该库不由本项目分发"
+        )
 
 
 def test_release_package_name_shape():
@@ -346,6 +353,8 @@ def test_slot_states_expose_package_info(tmp_cfg):
         "cod_index": db_import.release_package_name("cod_index", version),
         # PDF2 无发布包 (ICDD 版权) → 空串, 界面改显示"自行准备"
         "pdf2": "",
+        # XinMatch 格式库不在本项目发布包里 → 同样空串
+        "xinmatch": "",
     }
     # 顺带钉死: 包名必须带当前版本号, 且两个 COD 包名确实不同
     assert expected["cod_inorganics"] == f"PolyXRD-v{version}-Databases-COD-inorg-index.zip"
@@ -355,7 +364,7 @@ def test_slot_states_expose_package_info(tmp_cfg):
     for kind, want in expected.items():
         assert states[kind]["pkg_name"] == want, states[kind]["pkg_name"]
         assert states[kind]["pkg_filename"] == db_import.PKG_FILENAME[kind]
-    # 两个 COD 包名不同; 空串只允许出现一次 (只有 PDF2)
+    # 两个 COD 包名不同; 空串只允许出现在"不由本项目分发的库"上
     names = [s["pkg_name"] for s in states.values()]
     assert len({n for n in names if n}) == 2
-    assert names.count("") == 1
+    assert names.count("") == len(expected) - 2

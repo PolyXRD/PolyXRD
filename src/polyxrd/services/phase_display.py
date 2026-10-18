@@ -267,21 +267,22 @@ def spectrum_from_refs(
         fw_lo_p = fw_p * (1.0 + _fac)
         fw_hi_p = fw_p * (1.0 - _fac)
 
-    sigma_all = fw_p / (2.0 * np.sqrt(2.0 * np.log(2.0)))
-    gamma2_all = (fw_p / 2.0) ** 2
+    # v3.0.1 清理: 这里原有 5 个算完就丢的变量 (inv_gauss_norm /
+    # inv_lorentz_norm / one_minus_eta / sigma_p / gamma2_p) —— 面积归一的
+    # 归一化常数已收进 _area_normalized_profile, 外层不再需要; 其中
+    # ``np.sqrt(gamma2_all)`` 还会为整条峰表分配一次数组。一并删除,
+    # 并把每峰内重复计算的 ``_kind`` 提到循环外。
+    n_points = len(two_theta)
+    basis = np.zeros((n_points, n_phases))
+    _kind = ("gaussian" if peak_shape == "gaussian"
+             else ("lorentzian" if peak_shape == "lorentzian"
+                   else "pseudo-voigt"))
     # v1.1.2 (W11 面积归一): Rietveld 要求峰**积分强度** ∝ m·LP·|F|²·S, 与峰宽/η 无关。
     # 旧实现的高斯/洛伦兹都是"峰高=1"的写法 → 积分面积 ∝ FWHM, 且 η 从 0→1 让面积
     # 变化 ~47% (η 不再是混合比); Caglioti 一开, 峰宽参数就会被拟合到错误数值。
     # 面积归一后: ∫G = ∫L = 1, ∫PV = η + (1-η) = 1。
     #   G = exp(-Δ²/2σ²)/(σ√(2π));  L = (γ/π)/(Δ²+γ²),  γ = FWHM/2
     #   ∫L = 1 要求 L = (1/π)·γ/(Δ²+γ²) = (1/(π·γ))·(γ²/(Δ²+γ²))
-    inv_gauss_norm = 1.0 / (sigma_all * np.sqrt(2.0 * np.pi))
-    inv_lorentz_norm = 1.0 / (np.pi * np.sqrt(gamma2_all))
-    n_points = len(two_theta)
-    basis = np.zeros((n_points, n_phases))
-    is_gauss = peak_shape == "gaussian"
-    is_lorentz = peak_shape == "lorentzian"
-    one_minus_eta = 1.0 - eta
 
     if cutoff_fwhm is None:
         # 全矩阵路径 (旧行为, 分块向量化), 供一致性验证/兜底
@@ -297,14 +298,10 @@ def spectrum_from_refs(
                 continue
             sl = slice(offset, offset + n_i)
             pts_p = peak_tt[sl]
-            sigma_p = sigma_all[sl]
-            gamma2_p = gamma2_all[sl]
             inten_p = peak_int[sl]
             for s in range(0, n_i, chunk):
                 e = min(s + chunk, n_i)
                 delta = two_theta[:, None] - pts_p[None, s:e]
-                _kind = ("gaussian" if is_gauss
-                         else ("lorentzian" if is_lorentz else "pseudo-voigt"))
                 prof = _area_normalized_profile(
                     delta, fw_p[sl][None, s:e], eta, _kind,
                     None if fw_lo_p is None else fw_lo_p[sl][None, s:e],
@@ -325,8 +322,6 @@ def spectrum_from_refs(
         if hi <= lo:
             continue
         delta = two_theta[lo:hi] - t0
-        _kind = ("gaussian" if is_gauss
-                 else ("lorentzian" if is_lorentz else "pseudo-voigt"))
         prof = _area_normalized_profile(
             delta, fw_p[j], eta, _kind,
             None if fw_lo_p is None else fw_lo_p[j],
@@ -345,11 +340,17 @@ def combined_pattern(
     peak_shape: str = "pseudo-voigt",
     scale_to_exp: bool = True,
     y_exp: Optional[np.ndarray] = None,
+    cutoff_fwhm: float = 25.0,
 ) -> np.ndarray:
     """选中相的联合计算谱。
 
     weights None → 等权 1/n。scale_to_exp=True → 峰高对齐 y_exp 最强峰
     (仅显示用; y_exp 缺省时 scale_to_exp 忽略)。
+
+    v3.0.1: ``cutoff_fwhm`` 默认取 **25**（原先是隐式走 100）。显示/残差路径
+    对精度要求低，25×FWHM 的截断在视觉上无差别，实测快 3.6×
+    （75.2 ms → 20.8 ms，5 相 × 120 峰 / 7001 点）；精修路径已由
+    ``perf_profile="fast"`` 证明同档截断不影响 wR。
 
     边界:
       - phases 空 → 全 0
@@ -363,7 +364,8 @@ def combined_pattern(
         weights = [1.0 / n] * n
     phase_peaks = [_ref_peak_list(ph) for ph in phases]
     y = spectrum_from_refs(two_theta, phase_peaks, weights,
-                           fwhm, eta, 1.0, peak_shape)
+                           fwhm, eta, 1.0, peak_shape,
+                           cutoff_fwhm=cutoff_fwhm)
     if scale_to_exp and y_exp is not None and len(y_exp) == len(y):
         my = float(np.max(y)) if y.size else 0.0
         me = float(np.max(y_exp)) if y_exp.size else 0.0

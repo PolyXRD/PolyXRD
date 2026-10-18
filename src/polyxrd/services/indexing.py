@@ -65,6 +65,27 @@ _TET_M = [0, 1, 2, 4, 5, 8, 9, 10, 13, 16]   # h²+k²
 _HEX_M = [0, 1, 3, 4, 7, 9, 12, 13, 16, 19]  # h²+hk+k²
 _L2 = [0, 1, 4, 9, 16]                        # l²
 
+#: 四方/六方双峰方程组枚举时，参与配对的前 N 条强峰数量。
+#: 取 2 时（旧行为）若头两条峰同属 00l 则方程退化、真解丢失；
+#: 取 4 覆盖所有 C(4,2)=6 个峰对，候选数约 6 倍、耗时仍 < 0.5 s。
+_PAIR_PEAKS = 4
+
+#: 同解释峰数时的"高对称优先"体积带（相对最小候选体积的倍数）。
+#:
+#: 纯几何指标化存在**固有歧义**：高对称晶胞总能被某个低对称子胞以更小
+#: 体积精确复现同一组 d 值 —— Si 金刚石 (立方 a=5.4309, V=160.2 Å³) 实测
+#: 可被六方 a=4.4343 c=5.4309 (V=92.5 Å³) 完整解释，NaCl 面心立方
+#: (V=179.4) 亦可被六方 V=73.3 解释。若只按"体积越小越好"排序，立方样品的
+#: 真解永远排不到第一。真实指标化软件靠消光规律（空间群）区分，本模块没有
+#: 消光信息，故用一条经验规则代替：**解释峰数相同时，若高对称解的晶胞体积
+#: 落在最小候选的 2.5 倍以内，则视为同一胞的不同描述 → 优先高对称**；
+#: 体积相差 2.5 倍以上（真·不同晶胞，如同一样品的最小胞 vs 超胞）不受此规则
+#: 影响，仍按解释率/体积排。
+_SYM_BAND = 2.5
+
+#: 晶系对称性优先级（数值越小越对称）。
+_SYSTEM_RANK = {"cubic": 0, "tetragonal": 1, "hexagonal": 2}
+
 
 # (v2.1 P3: 已删除未调用的 _sum3_squares —— _CUBIC_N2 预计算覆盖同逻辑)
 
@@ -141,73 +162,92 @@ def _hkl_for_hex(m: int, l2: int):
 def _index_ab(d_list, system, tol_rel=0.005):
     """四方 (q = m/a² + l²/c²) / 六方 (q = 4m/(3a²) + l²/c²)。
 
-    用最大 d 峰与次大 d 峰的低指数假设对生成候选 (a, c), 全峰验证。
+    v3.0.1 修复两处（此前四方/六方分支实际不可用）：
+      1. 残差式漏乘 A（量纲与判据不一致）→ 候选全错（详见下方注释）；
+      2. 只用前两条强峰解方程组 —— 若它们同属 00l（层状/长 c 轴样品极常见），
+         方程组退化或解出错误 A，**真解根本不进候选表**。改为在前
+         ``_PAIR_PEAKS`` 条强峰里枚举所有峰对。
     """
     prefac = 1.0 if system == "tetragonal" else 4.0 / 3.0
     mvals = _TET_M if system == "tetragonal" else _HEX_M
     hkl_fun = _hkl_for_tet if system == "tetragonal" else _hkl_for_hex
     results = []
-    d0, d1 = d_list[0], d_list[1] if len(d_list) > 1 else d_list[0]
-    q0, q1 = 1.0 / d0**2, 1.0 / d1**2
+    qs = [1.0 / float(d) ** 2 for d in d_list]
+    n_pair = min(_PAIR_PEAKS, len(qs))
+    pair_idx = [(i, j) for i in range(n_pair) for j in range(i + 1, n_pair)]
     seen = set()
     # 双峰低指数假设枚举: 两方程 prefac·m·(1/a²) + l²·(1/c²) = q 解出
-    # (1/a², 1/c²), 再对全部峰验证 (多余的中间草稿已删除)。
-    for m0 in mvals:
-        for l20 in _L2:
-            if m0 == 0 and l20 == 0:
-                continue
-            for m1 in mvals:
-                for l21 in _L2:
-                    if m1 == 0 and l21 == 0:
-                        continue
-                    # 两方程解 (1/a², 1/c²):
-                    # prefac·m0·A + l20·C = q0 ; prefac·m1·A + l21·C = q1
-                    det = (prefac * m0) * l21 - (prefac * m1) * l20
-                    if abs(det) < 1e-12:
-                        continue
-                    A = (q0 * l21 - q1 * l20) / det
-                    C = (prefac * m0 * q1 - prefac * m1 * q0) / det
-                    if A <= 0:
-                        continue
-                    a = 1.0 / math.sqrt(A)
-                    c = 1.0 / math.sqrt(C) if C > 0 else 0.0
-                    if not (1.0 < a < 50.0) or (C > 0 and not (1.0 < c < 80.0)):
-                        continue
-                    if C <= 0:  # 峰表未约束 c → 无效
-                        continue
-                    key = (round(a, 3), round(c, 3))
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    hkl_map = []
-                    n_ok = 0
-                    for d in d_list:
-                        q = 1.0 / d**2
-                        m_best = l_best = None
-                        err_best = None
-                        for m in mvals:
-                            rem = q - prefac * m
-                            if rem < 0:
-                                continue
-                            l2c = _closest_valid(rem / max(C, 1e-12), _L2,
-                                                 tol=0.06)
-                            if l2c is None:
-                                continue
-                            err = abs(prefac * m * A + l2c * C - q)
-                            if err_best is None or err < err_best:
-                                err_best = err
-                                m_best, l_best = m, l2c
-                        if err_best is not None and \
-                                err_best <= tol_rel * 2 * q:
-                            n_ok += 1
-                            hkl_map.append(hkl_fun(m_best, l_best))
-                        else:
-                            hkl_map.append(None)
-                    if n_ok < max(3, int(0.6 * len(d_list))):
-                        continue
-                    vol = a * a * c if system == "tetragonal" \
-                        else a * a * c * math.sin(math.radians(120.0))
-                    results.append((system, a, c, vol, n_ok, hkl_map))
+    # (1/a², 1/c²), 再对全部峰验证。
+    for i0, i1 in pair_idx:
+        q0, q1 = qs[i0], qs[i1]
+        for m0 in mvals:
+            for l20 in _L2:
+                if m0 == 0 and l20 == 0:
+                    continue
+                for m1 in mvals:
+                    for l21 in _L2:
+                        if m1 == 0 and l21 == 0:
+                            continue
+                        # 两方程解 (1/a², 1/c²):
+                        # prefac·m0·A + l20·C = q0 ; prefac·m1·A + l21·C = q1
+                        det = (prefac * m0) * l21 - (prefac * m1) * l20
+                        if abs(det) < 1e-12:
+                            continue
+                        A = (q0 * l21 - q1 * l20) / det
+                        C = (prefac * m0 * q1 - prefac * m1 * q0) / det
+                        if A <= 0:
+                            continue
+                        a = 1.0 / math.sqrt(A)
+                        c = 1.0 / math.sqrt(C) if C > 0 else 0.0
+                        if not (1.0 < a < 50.0) or (C > 0 and not (1.0 < c < 80.0)):
+                            continue
+                        if C <= 0:  # 峰表未约束 c → 无效
+                            continue
+                        key = (round(a, 3), round(c, 3))
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        hkl_map = []
+                        n_ok = 0
+                        for d in d_list:
+                            q = 1.0 / d**2
+                            m_best = l_best = None
+                            err_best = None
+                            for m in mvals:
+                                # q = prefac·m·A + l²·C  →  l² = (q − prefac·m·A)/C
+                                # v3.0.1 修复: 原先写成 ``q - prefac * m``（漏乘 A），
+                                # 与下面判据 ``prefac*m*A + l2c*C`` 量纲不一致 →
+                                # 搜索用的假设永远错位，四方/六方候选全被淘汰，
+                                # 只剩"碰巧"落进立方分支的结果。
+                                rem = q - prefac * m * A
+                                if rem < 0.0:
+                                    # 理论上等于 0 的残差（该峰恰由 (m,l) 解释）会因
+                                    # A = 1/a² 的舍入变成极小负数。绝对阈值不可用:
+                                    # 候选 a 自身有 ~1e-8 相对误差 → 残差可达 1e-7·q。
+                                    # 这里按 q 的比例取 1e-5（比下面判据 tol_rel*2 小
+                                    # 三个量级，只吸收舍入，不放过真实失配）。
+                                    if rem < -1e-5 * q:
+                                        continue
+                                    rem = 0.0
+                                l2c = _closest_valid(rem / max(C, 1e-12), _L2,
+                                                     tol=0.06)
+                                if l2c is None:
+                                    continue
+                                err = abs(prefac * m * A + l2c * C - q)
+                                if err_best is None or err < err_best:
+                                    err_best = err
+                                    m_best, l_best = m, l2c
+                            if err_best is not None and \
+                                    err_best <= tol_rel * 2 * q:
+                                n_ok += 1
+                                hkl_map.append(hkl_fun(m_best, l_best))
+                            else:
+                                hkl_map.append(None)
+                        if n_ok < max(3, int(0.6 * len(d_list))):
+                            continue
+                        vol = a * a * c if system == "tetragonal" \
+                            else a * a * c * math.sin(math.radians(120.0))
+                        results.append((system, a, c, vol, n_ok, hkl_map))
     return results
 
 
@@ -238,8 +278,40 @@ def index_builtin(d_list, *, tol_rel: float = 0.005) -> list[IndexedCell]:
 
 
 def rank_cells(cells: list[IndexedCell]) -> list[IndexedCell]:
-    """排序: 解释峰数多 → FOM 高 (解释率 × 体积惩罚); 同级保持稳定。"""
-    return sorted(cells, key=lambda c: (-c.n_indexed, -c.fom, c.volume))
+    """排序: 解释峰数多 → 高对称优先 → FOM 高（解释率 × 体积惩罚）。
+
+    v3.0.1: 增加"同解释峰数下的高对称优先"归并 —— 否则立方样品会被
+    体积更小的低对称子胞压掉（Si / NaCl 实测，见 ``_SYM_BAND`` 注释）。
+    只对同一 ``n_indexed`` 分组生效，且受 ``_SYM_BAND`` 体积带限制。
+    """
+    ordered = sorted(cells, key=lambda c: (-c.n_indexed, -c.fom, c.volume))
+    out: list[IndexedCell] = []
+    i = 0
+    while i < len(ordered):
+        j = i
+        while j < len(ordered) and ordered[j].n_indexed == ordered[i].n_indexed:
+            j += 1
+        group = ordered[i:j]
+        vols = [c.volume for c in group if c.volume > 0]
+        if len(group) > 1 and vols:
+            vmin = min(vols)
+            inband = [c for c in group if 0 < c.volume <= vmin * _SYM_BAND]
+            if len(inband) > 1:
+                best = min(_SYSTEM_RANK.get(c.system, 9) for c in inband)
+                head = [c for c in inband
+                        if _SYSTEM_RANK.get(c.system, 9) == best]
+                if len(head) < len(group):
+                    keep = {id(c) for c in head}
+                    out.extend(head)
+                    out.extend([c for c in group if id(c) not in keep])
+                else:
+                    out.extend(group)
+            else:
+                out.extend(group)
+        else:
+            out.extend(group)
+        i = j
+    return out
 
 
 def index_treor(d_list, treor_exe=None) -> list[IndexedCell]:

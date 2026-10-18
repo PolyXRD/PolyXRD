@@ -10,9 +10,18 @@ from typing import Optional
 import numpy as np
 from scipy import signal
 from scipy.ndimage import median_filter
-from scipy.interpolate import interp1d
 
 from polyxrd.models.xrd_data import XRDData, BackgroundResult
+
+#: Kα2/Kα1 波长比（物理常数，2θ 轴上表现为约 0.25% 的位移）
+KA2_ALPHA2_RATIO = 1.00249
+
+#: 背景扣除方法名（**唯一真源**）——
+#: UI 下拉框必须用 setItemData 携带这些 key，不能用译文当 key。
+BG_METHODS: tuple[str, ...] = ("snip", "als", "polyfit", "median", "rolling")
+
+#: 平滑方法名（同上）
+SMOOTH_METHODS: tuple[str, ...] = ("savgol", "gaussian", "moving", "median")
 
 
 class DataPreprocessor:
@@ -45,8 +54,12 @@ class DataPreprocessor:
             "rolling": self._rolling_background,
         }
 
+        # 方法名归一: UI 侧历史上直接把译文/大小写混写传进来（P0-1）。
+        # 空值/None → 回落文档声明的默认方法，未知名字才报错（带可选项）。
+        method = str(method or "").strip().lower() or "snip"
         if method not in methods:
-            raise ValueError(f"未知的背景扣除方法: {method}")
+            raise ValueError(
+                f"未知的背景扣除方法: {method}（可选: {', '.join(BG_METHODS)}）")
 
         bg_func = methods[method]
         background = bg_func(data.intensity, **kwargs)
@@ -84,6 +97,7 @@ class DataPreprocessor:
         Returns:
             平滑后的XRDData
         """
+        method = str(method or "").strip().lower() or "savgol"
         if method == "savgol":
             smooth_func = self._savgol_smooth
         elif method == "gaussian":
@@ -93,7 +107,8 @@ class DataPreprocessor:
         elif method == "median":
             smooth_func = self._median_smooth
         else:
-            raise ValueError(f"未知的平滑方法: {method}")
+            raise ValueError(
+                f"未知的平滑方法: {method}（可选: {', '.join(SMOOTH_METHODS)}）")
 
         smoothed_intensity = smooth_func(data.intensity, window=window, **kwargs)
 
@@ -107,54 +122,90 @@ class DataPreprocessor:
     def strip_ka_alpha2(
         self,
         data: XRDData,
-        wavelength_alpha1: float = 1.5406,
-        wavelength_alpha2: float = 1.5444,
+        wavelength_alpha1: Optional[float] = None,
+        wavelength_alpha2: Optional[float] = None,
         ratio: float = 0.5,
+        *,
+        iterations: int = 2,
+        skip_on_mismatch: bool = True,
     ) -> XRDData:
-        """Kα2峰剥离
+        """Kα2峰剥离 (Rachinger 移位相减法)
 
         Args:
             data: 输入数据 (含Kα1+Kα2)
-            wavelength_alpha1: Kα1波长
-            wavelength_alpha2: Kα2波长
+            wavelength_alpha1: Kα1 波长；``None`` → 取 ``data.wavelength``
+                （v3.0.1 起不再把 Cu 1.5406 写死）
+            wavelength_alpha2: Kα2 波长；``None`` → ``α1 × 1.00249``
+
+            .. note:: 剥离**几何本身与绝对波长无关** —— 角度映射
+               ``sin(x/2) = (λ2/λ1)·sin(u/2)`` 只用到比值（已实测 Cu/Co/Fe/Mo
+               四种靶的移位量在固定 d 值下仅随 2θ 变化，与 λ1 的具体数值无关）。
+               绝对波长的作用只有一个：它是写回结果 ``XRDData.wavelength``
+               的值。此前写死 Cu，会把 Co/Fe/Mo 靶数据的结果标成 Cu 波长，
+               下游所有 ``d = λ/(2sinθ)`` 换算随之整体错位。
             ratio: Kα2/Kα1强度比
+            iterations: Rachinger 递推次数 (1 次即经典单遍，2 次可把残余
+                α2 的 α2 (≈ r² = 25%) 也扣掉; 不宜过多，会放大高频噪声)
+            skip_on_mismatch: 剥离后若出现**显著负值**（超过谱最大值 1%），
+                说明数据不符合 Kα1+Kα2 双线模型（单色器/仅 Kα1/已剥离过），
+                此时不剥离、原样返回并在 metadata 标记，避免系统性削峰。
 
         Returns:
             Kα1数据
         """
-        # 将2θ转换为d-spacing
-        theta_rad = np.radians(data.two_theta / 2.0)
-        d = wavelength_alpha1 / (2.0 * np.sin(theta_rad))
+        lam1 = float(wavelength_alpha1) if wavelength_alpha1 else float(
+            getattr(data, "wavelength", 0.0) or 0.0)
+        if lam1 <= 0.0:
+            lam1 = 1.5406
+        lam2 = float(wavelength_alpha2) if wavelength_alpha2 else (
+            lam1 * KA2_ALPHA2_RATIO)
 
-        # 计算Kα2对应的2θ
-        sin_theta_alpha2 = wavelength_alpha2 / (2.0 * d)
-        sin_theta_alpha2 = np.clip(sin_theta_alpha2, 0, 1)
-        two_theta_alpha2 = 2.0 * np.degrees(np.arcsin(sin_theta_alpha2))
+        ratio = float(ratio)
+        x = np.asarray(data.two_theta, dtype=float)
+        y = np.asarray(data.intensity, dtype=float)
+        if x.size < 3 or y.size != x.size:
+            return data
 
-        # 计算Kα2强度
-        intensity_alpha2 = ratio * data.intensity
+        # 角度映射: α1 角 u 与其 α2 伴线角 x 满足
+        #   sin(x/2) = (λ2/λ1) · sin(u/2)        (同一 d 值: 2d·sinθ = λ)
+        # 反解出 u, 再按 Rachinger 递推  K_{n+1}(x) = I(x) − r·K_n(u)。
+        #
+        # v3.0.1 修复: 原实现把 ``d = λ1/(2sin(x/2))`` 当成"x 处 α1 峰的 d"，
+        # 再**正算** α2 位置（即查 x+Δ）—— 移位方向相反，减掉的是更高角处的
+        # 强度：卫星峰原封不动留在原位（合成双线实测 844 → 824，本应降到
+        # 背景 20），主峰肩部反被削出负坑（最小残差 −27.5%·Imax）。
+        sin_half = np.clip((lam1 / lam2) * np.sin(np.radians(x / 2.0)), 0.0, 1.0)
+        alpha1_angle = 2.0 * np.degrees(np.arcsin(sin_half))
 
-        # 用插值获取Kα2在原始2θ位置的强度
-        try:
-            interp_func = interp1d(
-                data.two_theta,
-                intensity_alpha2,
-                kind="linear",
-                bounds_error=False,
-                fill_value=0,
-            )
-            alpha2_at_data = interp_func(two_theta_alpha2)
-        except Exception:
-            alpha2_at_data = np.zeros_like(data.intensity)
+        raw = y.astype(float, copy=True)
+        for _ in range(max(1, int(iterations))):
+            prev = np.interp(alpha1_angle, x, raw, left=0.0, right=0.0)
+            raw = y - ratio * prev
 
-        # 减去Kα2贡献
-        corrected_intensity = np.maximum(data.intensity - alpha2_at_data, 0)
+        # 模型自检: 负偏移超过谱最大值 1% → 该数据不是 Kα1+Kα2 双线
+        peak_max = float(np.max(data.intensity)) if data.intensity.size else 0.0
+        if skip_on_mismatch and peak_max > 0:
+            overshoot = -float(np.min(raw)) / peak_max
+            if overshoot > 0.01:
+                return XRDData(
+                    two_theta=data.two_theta.copy(),
+                    intensity=data.intensity.copy(),
+                    wavelength=lam1,
+                    metadata={
+                        **data.metadata,
+                        "ka2_stripped": False,
+                        "ka2_skipped": f"negative_overshoot={overshoot:.3f}",
+                    },
+                )
+
+        corrected_intensity = np.maximum(raw, 0)
 
         return XRDData(
             two_theta=data.two_theta.copy(),
             intensity=corrected_intensity,
-            wavelength=wavelength_alpha1,
-            metadata={**data.metadata, "ka2_stripped": True},
+            wavelength=lam1,
+            metadata={**data.metadata, "ka2_stripped": True,
+                      "ka2_alpha1": lam1, "ka2_alpha2": lam2},
         )
 
     # ------------------------------------------------------------------
@@ -165,26 +216,33 @@ class DataPreprocessor:
         self,
         intensity: np.ndarray,
         iterations: int = 40,
+        max_window: Optional[int] = None,
         **kwargs,
     ) -> np.ndarray:
-        """SNIP (Statistics-sensitive Non-linear Iterative Peak-clipping) 背景扣除
+        """SNIP (Statistics-sensitive Non-linear Iterative Peak-clipping) 背景估计
 
         引用: Ryan & Vinall, "An algorithm for absolute background
-               estimation and elimination"
+              estimation and elimination"
+
+        v3.0.1 修复: 原实现把 SNIP 的"像素半窗 w"写成了"数值阈值
+        ``(y_max-y_min)*i/iterations``"，且用原地邻点均值替换 —— 阈值随迭代
+        涨到整个动态范围，峰顶被逐点削平并扩散，**峰几乎被整体当成背景**。
+        实测 (7001 点, 真背景 115, 峰高 800): 峰心背景估成 898, 扣后峰高仅 17.5。
+
+        现改为委托 ``BackgroundEstimator.snip_background``（同仓库已有的正确
+        向量化实现: 半窗按像素递增、``y←min(y, 0.5(y[i-w]+y[i+w]))``），
+        同时把 40×N 的 Python 双层循环换成 numpy 向量化（实测 92 ms → 2.9 ms）。
         """
-        y = np.log(np.log(np.sqrt(intensity + 1) + 1) + 1)
+        from polyxrd.services.background import BackgroundEstimator
 
-        for i in range(iterations):
-            y_max = y.max()
-            y_min = y.min()
-            window = (y_max - y_min) * i / iterations
-            # 将高于此阈值的点替换为左右相邻点的平均值
-            for j in range(1, len(y) - 1):
-                if y[j] > (y[j - 1] + y[j + 1]) / 2 + window:
-                    y[j] = (y[j - 1] + y[j + 1]) / 2
-
-        background = (np.exp(np.exp(y) - 1) - 1) ** 2 - 1
-        return background
+        y = np.asarray(intensity, dtype=float)
+        if y.size < 5:
+            return np.zeros_like(y)
+        return BackgroundEstimator.snip_background(
+            y,
+            iterations=int(iterations),
+            max_window=max_window,
+        )
 
     def _als_background(
         self,
@@ -298,14 +356,30 @@ class DataPreprocessor:
         sigma: Optional[float] = None,
         **kwargs,
     ) -> np.ndarray:
-        """高斯平滑"""
+        """高斯平滑
+
+        v3.0.1 修复两处缺陷:
+        1. 卷积核长度误用 ``len(intensity)``（σ 只有约 1.8 个采样点，几乎不平滑）
+           → 改用 ``window`` 长度；
+        2. **未除以核和** → 强度被整体放大。实测常数谱 100 平滑后变 459.21
+           （增益 = σ·√(2π) ≈ 4.59），后续归一化/定量/精修强度标度全被污染。
+           现除 ``win.sum()``，保证常数谱平滑后仍是原常数。
+        """
+        window = max(3, int(window if window % 2 == 1 else window + 1))
         if sigma is None:
             sigma = window / 6.0
-        return signal.fftconvolve(
-            intensity,
-            signal.windows.gaussian(len(intensity), sigma),
-            mode="same",
-        )
+        win = signal.windows.gaussian(window, max(float(sigma), 1e-6))
+        total = float(win.sum())
+        y = np.asarray(intensity, dtype=float)
+        if total <= 0:
+            return y.copy()
+        win = win / total
+        # 边界须按边缘值延拓（零填充会让谱两端强度塌陷：常数谱 100 的
+        # 首末各 window//2 点会掉到 52~76，扣背景/归一化后造成假低端)。
+        half = window // 2
+        padded = np.pad(y, half, mode="edge")
+        out = signal.fftconvolve(padded, win, mode="same")
+        return out[half:half + y.size]
 
     @staticmethod
     def _moving_average(

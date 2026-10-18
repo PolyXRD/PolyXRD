@@ -4,7 +4,7 @@
   <p>
     <b>多晶 X 射线衍射 (XRD) 图谱综合分析套件</b>
     <br />
-    峰检测 &nbsp;·&nbsp; 多物相定性检索 &nbsp;·&nbsp; Rietveld 结构精修 &nbsp;·&nbsp; Le Bail 晶胞精修 &nbsp;·&nbsp; 指标化 &nbsp;·&nbsp; 3D 结构可视化 &nbsp;·&nbsp; 三库外挂检索 (COD 无机物 / COD 全库 / PDF2-2004)
+    峰检测 &nbsp;·&nbsp; 多物相定性检索 &nbsp;·&nbsp; Rietveld 结构精修 &nbsp;·&nbsp; Le Bail 晶胞精修 &nbsp;·&nbsp; 指标化 &nbsp;·&nbsp; 3D 结构可视化 &nbsp;·&nbsp; 多库外挂检索 (COD 无机物 / COD 全库 / PDF2-2004 / XinMatch 格式)
   </p>
   <p>
     <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v3.0.0-blue?style=flat-square" /></a>
@@ -137,17 +137,19 @@ python scripts/make_reg_code.py --verify PXRD1-XXXX-...  # 校验并回显单位
 - **单实例运行**：重复双击不会开出多个窗口，而是把已在运行的窗口切到前台
 - **数据库管理对话框**：三个槽位各自显示「已挂载/未挂载」、记录数、体积，并直接标明该槽位对应哪个下载包
 
-### ⑥ 三库外挂检索服务
+### ⑥ 外挂检索服务（三库 + XinMatch 格式兼容库）
 | 库 | 规模 | 作用 |
 |---|---|---|
 | COD 无机物库 | 71,199 物相 | 预计算 d-I 峰 + 预截断强峰列 + Hanawalt 预筛，**主检索库**，速度最快。默认发布**瘦身索引式**（362 MB，`COD_inorganics_index.sqlite`）：原子位点完整保留，CIF 由本地 `cod/cif` 目录按需读取，缺失时自动回退 COD 在线接口下载。完整内嵌版（1.19 GB）仍可导入，两者数据逐行一致 |
 | COD 全库索引 | 113,223 条目 | COD 全量 CIF 索引（432 MB，不内嵌 CIF），用于「COD 全库」与「内置+全库合并」两个检索源 |
 | PDF2-2004 库 | 163,834 物相 | ICDD PDF-2 2004，自带空间群与晶胞，用于与商品库对照 |
+| XinMatch 格式库 | 自备（71,206 / 112,734 条目） | **第三方格式兼容**：直接挂载 `entries`/`peaks`/`elements`/`element_combo` 四表的库文件，无需转换。检索口径与 COD 无机物库逐项一致（同一套 Hanawalt 度量 + 同一套 FOM 排序），首次检索自动建强峰索引（约 3 秒，之后每次 ~0.4 秒）。该库**不含 CIF**：候选只有晶胞没有原子坐标，可用于检索与核对，不能直接进结构精修 |
 
-- 路径优先级：**GUI 导入的持久化路径 (`~/.polyxrd/user_db_paths.json`) > 默认位置（存在才用）> `~/.polyxrd/cif_db/` 兜底**
-- 导入时自动**校验库类型**：三库表名有重合（COD 无机物与 PDF2 都叫 `phases`），选错槽位会提示而非静默失败
+- **任意位置挂载**（v3.1.0）：库文件放在哪个文件夹都行，不必搬进程序目录 —— 在「外挂数据库管理…」里点「挂载数据库文件…」直接指过去即可，路径记进 `~/.polyxrd/user_db_paths.json`，下次启动自动加载；点「挂载文件夹…」时会自动把该目录下所有合格的库**一次全挂上**（只扫本层，`.bak` 备份文件会被跳过）
+- 路径优先级：**GUI 挂载的持久化路径 (`~/.polyxrd/user_db_paths.json`) > 默认位置（存在才用）> `~/.polyxrd/cif_db/` 兜底**
+- 导入时自动**校验库类型**：COD 无机物与 PDF2 都叫 `phases` 表，选错槽位会提示而非静默失败；XinMatch 格式库按"四表齐全 + 特征列"判别，半成品库（只有 `entries` 没有 `peaks`）会被拒绝
 - 导入后立即生效，**无需重启**；物相分析面板的「数据库源」下拉同步刷新，未挂载的源自动置灰
-- 三个库完全独立，可只装其中一个；一个都不装也能用内置的 **106 种参考物相**
+- 各库完全独立，可只装其中一个；一个都不装也能用内置的 **106 种参考物相**
 
 ---
 

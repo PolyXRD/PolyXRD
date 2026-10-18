@@ -70,6 +70,8 @@ class PhaseView(QWidget):
         # (顺序即下拉索引, 末尾追加新源可保持既有索引不变)
         self._db_source_keys = [
             "builtin", "cod_inorganics", "cod_full", "merged", "pdf2", "user",
+            # v3.1.0: 用户挂载的 XinMatch 格式库
+            "xinmatch",
         ]
         self._setup_ui()
         self._setup_connections()
@@ -420,6 +422,7 @@ class PhaseView(QWidget):
             tr("vw.phase_view.db_merged"),
             self._db_label("vw.phase_view.db_pdf2", _n("pdf2")),
             self._db_label("vw.phase_view.db_user", self._user_phase_count()),
+            self._db_label("vw.phase_view.db_xinmatch", _n("xinmatch")),
         ]
 
     @staticmethod
@@ -488,6 +491,8 @@ class PhaseView(QWidget):
             _disable(4, hint)
         if self._user_phase_count() <= 0:
             _disable(5, tr("vw.phase_view.db_user_empty_hint"))
+        if counts.get("xinmatch", 0) <= 0:
+            _disable(6, hint)
 
         # 当前选中项若刚被置灰 → 退回内置库 (否则用户按"识别"会一无所获)
         idx = self._db_combo.currentIndex()
@@ -808,14 +813,19 @@ class PhaseView(QWidget):
         self._plot.set_peak_assignments(assignments)
 
         # 4) 计算谱 (可选) 与残差 (可选) — 用等权合成作显示参考
-        if self._btn_toggle_calc.isChecked():
-            y_calc = combined_pattern(two_theta, phases, y_exp=y_exp)
+        # v3.0.1: 两个勾选框此前各算一次 combined_pattern —— 同时勾选时
+        # 同一份合成谱在 UI 线程里被算两遍 (~0.4 s/次, 5 相)。改为算一次复用。
+        show_calc = self._btn_toggle_calc.isChecked()
+        show_resid = self._btn_toggle_resid.isChecked()
+        y_calc = (combined_pattern(two_theta, phases, y_exp=y_exp)
+                  if (show_calc or show_resid) else None)
+
+        if show_calc:
             self._plot.set_calculated(two_theta, y_calc)
         else:
             self._plot.set_calculated(None, None)
 
-        if self._btn_toggle_resid.isChecked():
-            y_calc = combined_pattern(two_theta, phases, y_exp=y_exp)
+        if show_resid:
             from polyxrd.services.phase_display import residual
             self._plot.set_residual_curve(two_theta, residual(y_exp, y_calc))
         else:
