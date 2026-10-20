@@ -7,7 +7,7 @@
     峰检测 &nbsp;·&nbsp; 多物相定性检索 &nbsp;·&nbsp; Rietveld 结构精修 &nbsp;·&nbsp; Le Bail 晶胞精修 &nbsp;·&nbsp; 指标化 &nbsp;·&nbsp; 3D 结构可视化 &nbsp;·&nbsp; 多库外挂检索 (COD 无机物 / COD 全库 / PDF2-2004 / XinMatch 格式)
   </p>
   <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v3.1.0-blue?style=flat-square" /></a>
+    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v3.2.0-blue?style=flat-square" /></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
     &nbsp;
@@ -15,7 +15,7 @@
     &nbsp;
     <img src="https://img.shields.io/badge/UI-PySide6%20(Qt6)-41cd52?style=flat-square" />
     &nbsp;
-    <img src="https://img.shields.io/badge/Tests-1475%2B%20collected-brightgreen?style=flat-square" />
+    <img src="https://img.shields.io/badge/Tests-1489%2B%20collected-brightgreen?style=flat-square" />
   </p>
   <p><i>🌐 English documentation: [README-EN.md](README-EN.md)</i></p>
 </div>
@@ -38,7 +38,21 @@
 
 ---
 
-## 🆕 最新版本 v3.1.0（2026-10-18）
+## 🆕 最新版本 v3.2.0（2026-10-20）
+
+**大库可用性修复：让 20~30 GB 级的外挂物相库真正能用**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §3.2.0 与 [docs/3COD数据库验收报告-20261020.md](docs/3COD数据库验收报告-20261020.md)）：
+
+- **修掉「挂了库却用不上」**：全库索引的路径解析一度只认"索引就在 COD 目录旁边"，**从不看**用户导入的路径 —— 「外挂数据库管理…」显示已挂载，检索却还在读旧库、或恒定判为不可用。现在读路径优先用户导入，写路径（重建索引）则明确不认，避免把外挂库当自家索引写。
+- **检索改用只读连接**：旧实现每次查询都以**可写**方式打开索引并跑一遍建表/迁移 DDL。在 28 GB 的库上，`is_ready()` 要 **65 s** 且返回 False，`stats()` 直接报 `database is locked`。修后分别是 **0.013 s / 0.125 s**，连接复用且异常不再泄漏（"第一次超时、第二次报锁"的根因）。
+- **建索引进度反馈**：百万相级的外挂库首次挂载要建 5~10 min 的强峰索引，此前界面只有一句静态提示、看起来像死机。现在按 **清点相数 → 建强峰索引 → 读元数据** 三阶段在状态栏实时报进度。
+- **实机复测**（3COD-Full，28.17 GiB / 195.9 万相）：`identify_with_cod_local` 8~13 s，top1 与真值一致；库文件 size/mtime **零变化**。
+- **一个使用提醒**：库不是越大越好。实测把 118.6 万相的库挂成 COD 无机物库后，4-1 试样的 CaF₂ 从第 2 名掉出 top20 —— 这是候选池放大 16.7× 的**排序稀释**，不是检索缺陷。日常用与体系规模匹配的库，超大库留给"怀疑含罕见相"的兜底。
+
+> 📦 数据库仍为外挂，不随分发；PDF2-2004 为 ICDD 版权库，永不出现在 Release 里。
+
+👉 [下载 v3.2.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v3.2.0)（正式版安装包 + 内部评估版便携包 + SHA256）
+
+## 📚 上一版 v3.1.0（2026-10-18）
 
 **XinMatch 格式库支持 + 任意位置挂载 + 全量 review 修正**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §3.1.0 与 [docs/code-review-2026-10-18.md](docs/code-review-2026-10-18.md)）：
 

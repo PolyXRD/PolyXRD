@@ -4,10 +4,10 @@
   <p>
     <b>Comprehensive Analysis Suite for Polycrystalline X-ray Diffraction (XRD) Patterns</b>
     <br />
-    Peak detection &nbsp;·&nbsp; Multi-phase qualitative search &nbsp;·&nbsp; Rietveld structure refinement &nbsp;·&nbsp; Le Bail cell refinement &nbsp;·&nbsp; Indexing &nbsp;·&nbsp; 3D structure visualization &nbsp;·&nbsp; Three external databases (COD Inorganics / COD Full / PDF2-2004)
+    Peak detection &nbsp;·&nbsp; Multi-phase qualitative search &nbsp;·&nbsp; Rietveld structure refinement &nbsp;·&nbsp; Le Bail cell refinement &nbsp;·&nbsp; Indexing &nbsp;·&nbsp; 3D structure visualization &nbsp;·&nbsp; Three external databases (COD Inorganics / COD Full / PDF2-2004) plus XinMatch-format libraries
   </p>
   <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v2.5.0-blue?style=flat-square" /></a>
+    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v3.2.0-blue?style=flat-square" /></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
     &nbsp;
@@ -38,7 +38,19 @@ Core design philosophy:
 
 ---
 
-## 🆕 Latest Release v2.5.0 (2026-10-01)
+## 🆕 Latest Release v3.2.0 (2026-10-20)
+
+**Large-database usability fixes** — makes 20-30 GB external phase databases actually usable. Full details (Chinese): [docs/CHANGELOG.md](docs/CHANGELOG.md) §3.2.0 and [docs/3COD数据库验收报告-20261020.md](docs/3COD数据库验收报告-20261020.md).
+
+- **A mounted database was silently ignored**: index-path resolution assumed the index always sat next to the COD directory and never looked at the path the user had imported — the manager showed "mounted" while searches kept reading the old database (or reported "not ready"). Read paths now prefer the user-imported file; the index builder deliberately does not, so an external library can never become a write target.
+- **Read-only connections for retrieval**: every query used to open the index writable and re-run schema/DDL. On a 28 GB library that took **65 s** for `is_ready()` (returning False) and made `stats()` raise `database is locked`. Now **0.013 s / 0.125 s**, with the connection reused and no leak on error.
+- **Index-build progress**: a million-phase library needs 5-10 min to build its strong-peak index on first mount, previously with no feedback at all. Three stages (count phases → build peak index → read metadata) are now reported in the status bar.
+- **Measured on 3COD-Full** (28.17 GiB / 1.96 M phases): `identify_with_cod_local` 8-13 s, top-1 matches ground truth, database file size/mtime unchanged.
+- **Usage note**: bigger is not better. Mounting a 1.19 M-phase library as the COD-inorganics slot pushed CaF2 out of the top-20 on sample 4-1 (rank 2 before) — ranking dilution from a 16.7x larger candidate pool, not a retrieval defect.
+
+👉 [Download v3.2.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v3.2.0) (installer + internal evaluation portable + SHA256)
+
+## 📚 Previous Release v2.5.0 (2026-10-01)
 
 **Search-chain enhancements + combination-strategy tuning + residual-peak search** (validated on a 13-sample benchmark; see [docs/基准报告-物相检索-v1.md](docs/基准报告-物相检索-v1.md) and [docs/基准报告-物相组合-v1.md](docs/基准报告-物相组合-v1.md), Chinese):
 
