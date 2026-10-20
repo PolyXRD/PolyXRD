@@ -561,3 +561,63 @@ class TestConfigSlot:
         cfg.set_xinmatch_db_path(db)
         db.unlink()
         assert cfg.get_xinmatch_db_path() is None
+
+
+# ── 4. 建索引进度反馈 (v3.2.0) ──────────────────────────────
+#
+# 3COD 级别 (119 万 / 194 万相) 首次挂载要建 339~552 s 的强峰索引。
+# 之前这段时间既不回报进度也没有任何输出, 界面上只有一句静态提示,
+# 用户会以为程序死了 —— 验收报告 §5.3 P2-6。
+
+class TestIndexProgress:
+    def test_reports_three_stages_in_order(self, xm_db):
+        seen: list[tuple[int, int, str]] = []
+        db = XinMatchDatabase(xm_db)
+        db.progress_cb = lambda d, t, s: seen.append((d, t, s))
+        assert db._index() is not None
+
+        stages = [s for _d, _t, s in seen]
+        assert stages[0] == "count"
+        assert "peaks" in stages and "entries" in stages
+        # 阶段顺序: 清点 → 建强峰 → 读元数据
+        assert stages.index("count") < stages.index("peaks")
+        assert stages.index("peaks") < stages.index("entries")
+
+    def test_peaks_stage_is_monotonic_and_completes(self, xm_db):
+        seen: list[tuple[int, int, str]] = []
+        db = XinMatchDatabase(xm_db)
+        db.progress_cb = lambda d, t, s: seen.append((d, t, s))
+        db._index()
+
+        peaks = [(d, t) for d, t, s in seen if s == "peaks"]
+        assert peaks, "peaks 阶段一条进度都没报"
+        # 总数恒定且非零 (否则界面上的 x/y 没法读)
+        assert len({t for _d, t in peaks}) == 1
+        total = peaks[0][1]
+        assert total > 0
+        assert [d for d, _t in peaks] == sorted(d for d, _t in peaks)
+        assert peaks[-1][0] == total          # 必须报到 100%
+
+    def test_callback_exception_does_not_break_search(self, xm_db):
+        def boom(_d, _t, _s):
+            raise RuntimeError("UI 线程死了")
+
+        db = XinMatchDatabase(xm_db)
+        db.progress_cb = boom
+        # 回调炸了也只是没有进度条, 索引与检索必须照常
+        assert db._index() is not None
+        hits = db.search_by_d_peaks([2.60, 2.47, 2.81], [100.0, 60.0, 45.0],
+                                    min_match=2, limit=5)
+        assert hits
+
+    def test_cached_index_does_not_rebuild(self, xm_db):
+        """第二次挂载直接读 .npz 缓存, 不该再报建索引进度。"""
+        first = XinMatchDatabase(xm_db)
+        assert first._index() is not None
+        first.reload()
+
+        calls: list[str] = []
+        second = XinMatchDatabase(xm_db)
+        second.progress_cb = lambda d, t, s: calls.append(s)
+        assert second._index() is not None
+        assert calls == []          # 命中缓存 → 零进度回调

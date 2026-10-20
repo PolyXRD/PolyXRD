@@ -13,7 +13,7 @@ echo.
 
 cd /d "%~dp0"
 
-set APPVER=3.1.0
+set APPVER=3.2.0
 
 REM ── Python 定位 ──────────────────────────────────────
 if exist "venv\Scripts\python.exe" (

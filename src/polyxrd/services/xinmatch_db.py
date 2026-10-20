@@ -58,7 +58,7 @@ import sqlite3
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 import numpy as np
 
@@ -168,6 +168,10 @@ class XinMatchDatabase:
         self._lock = threading.Lock()
         # 元素集合 → 候选掩码 (同一组 allowed 元素在一轮检索里会被复用)
         self._element_mask_cache: dict[frozenset, np.ndarray] = {}
+        # v3.2.0: 建索引进度回调 ``cb(done, total, stage)``。
+        # 建索引在 3COD 那种百万相库上要 339~552 s, 不给反馈界面就是假死。
+        # 约定同 CODLocalIndexer.build_index: total<=0 表示总量未知。
+        self.progress_cb: Optional[Callable[[int, int, str], None]] = None
 
     # ── 基础状态 ──────────────────────────────────────────
     @property
@@ -331,12 +335,27 @@ class XinMatchDatabase:
         except (OSError, ValueError):
             pass
 
+    def _emit(self, done: int, total: int, stage: str) -> None:
+        """安全地回报进度 —— 回调里抛异常绝不能把建索引搞挂。"""
+        cb = self.progress_cb
+        if cb is None:
+            return
+        try:
+            cb(done, total, stage)
+        except Exception:  # noqa: BLE001 - 进度反馈是纯装饰, 不影响正确性
+            pass
+
     def _build_index(self, sig: dict) -> Optional[dict]:
-        """扫库建强峰索引 (实测 ~3.2 s / 71k 相 / 620 万峰)。"""
+        """扫库建强峰索引 (实测 ~3.2 s / 71k 相 / 620 万峰)。
+
+        v3.2.0: 通过 :attr:`progress_cb` 回报三阶段进度。3COD 规模
+        (119 万 / 194 万相) 建一次要 339~552 s, 没有反馈界面等同假死。
+        """
         conn = self._get_conn()
         if conn is None:
             return None
         try:
+            self._emit(0, 0, "count")
             # 1) 每相峰数: 走 (entry_id, intensity) 索引, 实测 0.45 s
             rows = conn.execute(
                 "SELECT entry_id, COUNT(*) FROM peaks GROUP BY entry_id "
@@ -353,7 +372,13 @@ class XinMatchDatabase:
             #    (实测 3.19 s vs 5.04 s —— 后者要把 620 万行搬进 Python)
             dtop = np.zeros((n, _S1_TOP_COLS), dtype=np.float32)
             itop = np.zeros((n, _S1_TOP_COLS), dtype=np.float32)
+            # 至少每 1% 报一次, 相数少时则是每 200 相 —— 避免小库刷屏、
+            # 大库又太久没动静
+            step = max(1, min(200, n // 100))
+            self._emit(0, n, "peaks")
             for r, eid in enumerate(ids):
+                if r % step == 0:
+                    self._emit(r, n, "peaks")
                 pk = conn.execute(
                     "SELECT d, intensity FROM peaks WHERE entry_id=? "
                     "ORDER BY intensity DESC LIMIT ?",
@@ -366,8 +391,10 @@ class XinMatchDatabase:
                 dtop[r, :m] = arr[:m, 0]
                 # 强度缺失 (NULL) 一律按 0 处理, 保证 argsort 稳定
                 itop[r, :m] = np.nan_to_num(arr[:m, 1], nan=0.0)
+            self._emit(n, n, "peaks")
 
             # 3) 条目元数据
+            self._emit(0, 0, "entries")
             formula = [""] * n
             sg = [""] * n
             elements = [""] * n
@@ -378,7 +405,9 @@ class XinMatchDatabase:
                 "mineral_name, a, b, c, alpha, beta, gamma FROM entries"
             )
             pos = {e: i for i, e in enumerate(ids)}
-            for row in cur:
+            for row_n, row in enumerate(cur, 1):
+                if row_n % 50000 == 0:
+                    self._emit(row_n, n, "entries")
                 r = pos.get(row[0])
                 if r is None:      # peaks 有而 entries 没有的脏数据 → 跳过
                     continue
@@ -390,6 +419,7 @@ class XinMatchDatabase:
                     v = row[5 + k]
                     cell[r, k] = float(v) if v is not None else 0.0
 
+            self._emit(n, n, "entries")
             return {
                 "meta": dict(sig, entries=n),
                 "ids": ids,

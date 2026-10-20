@@ -272,3 +272,187 @@ def test_cli_stats(cod_index):
     assert callable(cm._cli)
     assert callable(cm.connect)
     assert callable(cm.parse_cif_light)
+
+
+# ── v3.2.0: 只读连接复用 + 用户导入路径优先 ──────────────────
+#
+# 3COD 验收 (docs/3COD数据库验收报告-20261020.md §5.3) 暴露的两类缺陷:
+#   P0-1  `CODLocalDatabase(cod_root=...)` 会绕过用户在 GUI 里导入的全库
+#         索引路径 → 28 GB 的库挂上去却检索不到 (或误判 is_ready=False)
+#   P0-2/3 + P1  每次查询都 `connect()` 重跑一遍 DDL (可写!), 在 28 GB 库上
+#         要 65 s; 且 `is_ready()` 异常路径不 close → 自锁 database is locked
+# 这里逐条钉死, 免得以后又把检索路径改回 `connect()`。
+
+class _StubConfig:
+    """只提供 `_index_db_path` 需要的那一个方法。"""
+
+    def __init__(self, user_path):
+        self._user_path = user_path
+
+    def get_cod_index_sqlite_path(self):
+        return self._user_path
+
+
+def test_index_db_path_prefers_user_import_in_project_layout(tmp_path, monkeypatch):
+    """cod_root = <项目>/cod 时也必须先认用户导入的全库索引 (P0-1)。"""
+    import polyxrd.services.cod_local as cm
+
+    user_db = tmp_path / "elsewhere" / "3COD-Full.sqlite"
+    user_db.parent.mkdir(parents=True)
+    user_db.write_bytes(b"SQLite format 3\x00placeholder")
+
+    monkeypatch.setattr(cm, "get_config",
+                        lambda: _StubConfig(user_db))
+    project_like = tmp_path / "proj"
+    (project_like / "cod").mkdir(parents=True)
+
+    assert cm._index_db_path(project_like / "cod") == user_db
+
+
+def test_index_db_path_prefers_user_import_in_libdir_layout(tmp_path, monkeypatch):
+    """cod_root = <库目录>/COD 时同样先认用户路径。
+
+    修正前这条会返回 ``<库目录>/cod_index.sqlite`` —— 一个并不存在的
+    幽灵路径, 于是 28 GB 的库挂载后 ``is_ready()`` 恒为 False。
+    """
+    import polyxrd.services.cod_local as cm
+
+    user_db = tmp_path / "lib" / "3COD-Inorg.sqlite"
+    user_db.parent.mkdir(parents=True)
+    user_db.write_bytes(b"SQLite format 3\x00placeholder")
+
+    monkeypatch.setattr(cm, "get_config", lambda: _StubConfig(user_db))
+    libdir = tmp_path / "lib" / "COD"
+    libdir.mkdir(parents=True)
+
+    got = cm._index_db_path(libdir)
+    assert got == user_db
+    assert got.exists()
+
+
+def test_index_db_path_falls_back_when_no_user_import(tmp_path, monkeypatch):
+    """没导入时保持原行为: 照样在 cod_root 旁边取 cand, 不能被改坏。"""
+    import polyxrd.services.cod_local as cm
+
+    monkeypatch.setattr(cm, "get_config", lambda: _StubConfig(None))
+    project_like = tmp_path / "proj2"
+    cod_root = project_like / "cod"
+    cod_root.mkdir(parents=True)
+
+    assert cm._index_db_path(cod_root) == project_like / "cod_index.sqlite"
+
+
+def test_connect_ro_does_not_touch_the_file(cod_index):
+    """只读连接绝不改文件: 字节、size、mtime 全不变 (P0-2)。"""
+    import hashlib
+
+    from polyxrd.services.cod_local import connect_ro
+
+    db_path, _root = cod_index
+    before = (db_path.stat().st_size,
+              db_path.stat().st_mtime_ns,
+              hashlib.sha256(db_path.read_bytes()).hexdigest())
+
+    conn = connect_ro(db_path)
+    try:
+        n = conn.execute("SELECT COUNT(*) FROM cod_entries").fetchone()[0]
+        assert n > 0
+    finally:
+        conn.close()
+
+    after = (db_path.stat().st_size,
+             db_path.stat().st_mtime_ns,
+             hashlib.sha256(db_path.read_bytes()).hexdigest())
+    assert after == before
+
+
+def test_connect_ro_creates_nothing_when_missing(tmp_path):
+    """路径不存在时报错而不是凭空造一个 0 条目空库。"""
+    from polyxrd.services.cod_local import connect_ro
+
+    ghost = tmp_path / "nope.sqlite"
+    with pytest.raises(FileNotFoundError):
+        connect_ro(ghost)
+    assert not ghost.exists()
+
+
+def test_connect_ro_rejects_writes(cod_index):
+    """只读连接上写操作必须被 SQLite 挡住 —— 这是"不污染用户库"的底线。"""
+    import sqlite3
+
+    from polyxrd.services.cod_local import connect_ro
+
+    db_path, _root = cod_index
+    conn = connect_ro(db_path)
+    try:
+        with pytest.raises(sqlite3.OperationalError):
+            conn.execute("DELETE FROM cod_entries")
+    finally:
+        conn.close()
+
+
+def test_database_reuses_one_ro_connection(cod_index):
+    """连续查询复用同一条只读连接 (P1), 不再每次 connect + DDL。"""
+    from polyxrd.services.cod_local import CODLocalDatabase
+
+    db_path, root = cod_index
+    db = CODLocalDatabase(cod_root=root, db_path=db_path)
+    try:
+        assert db.is_ready()
+        first = db._conn()
+        assert first is not None
+        db.search(formula="SiO2", parse_ok_only=False)
+        db.stats()
+        db.get_atomic_sites(1)
+        # 三次不同入口走下来的必须是同一个对象
+        assert db._conn() is first
+        assert db._ro_conn is first
+    finally:
+        db.close()
+
+
+def test_close_is_idempotent_and_reopens(cod_index):
+    """close() 可重复调用; 关掉后下次取用要能重新打开 (不能留下半死状态)。"""
+    from polyxrd.services.cod_local import CODLocalDatabase
+
+    db_path, root = cod_index
+    db = CODLocalDatabase(cod_root=root, db_path=db_path)
+    assert db.is_ready()
+    old = db._conn()
+    db.close()
+    db.close()                      # 第二次必须是彻底的 no-op
+    assert db._ro_conn is None
+    new = db._conn()
+    assert new is not None
+    assert new is not old
+    db.close()
+
+
+def test_is_ready_does_not_leak_connection_on_corrupt_db(tmp_path):
+    """损坏的库上反复 is_ready() 不能把自己锁死 (P0-3)。
+
+    修正前的异常路径直接 return False 不 close, 于是写连接一直握着
+    排他锁 —— 第二次调用就 `database is locked`。
+    """
+    from polyxrd.services.cod_local import CODLocalDatabase
+
+    broken = tmp_path / "broken.sqlite"
+    broken.write_bytes(b"this is not a sqlite file at all" * 100)
+
+    db = CODLocalDatabase(cod_root=tmp_path / "cod", db_path=broken)
+    for _ in range(5):
+        assert db.is_ready() is False
+        assert db.stats() == {"ready": False}
+    assert db._ro_conn is None      # 失败后不留缓存连接
+    db.close()
+
+
+def test_context_manager_closes_connection(cod_index):
+    """with 用法: 退出时释放只读连接。"""
+    from polyxrd.services.cod_local import CODLocalDatabase
+
+    db_path, root = cod_index
+    with CODLocalDatabase(cod_root=root, db_path=db_path) as db:
+        assert db.is_ready()
+        assert db._ro_conn is not None
+    assert db._ro_conn is None

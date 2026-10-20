@@ -25,6 +25,24 @@ from polyxrd.services import cod_local
 # ── 安装目录识别 ─────────────────────────────────────────────
 
 @pytest.fixture()
+def no_user_index(monkeypatch):
+    """把「用户导入的全库索引」钉成 None。
+
+    v3.2.0 起 `_index_db_path()` 在 cod_root 分支里**先**看用户导入的路径
+    (修 3COD 验收的 P0-1)。开发机上真挂了 28 GB 外挂库时, 下面的布局用例
+    就会被那条真实配置顶掉 —— 这类用例测的是布局解析, 必须与机器状态解耦。
+    """
+    monkeypatch.setattr(
+        cod_local, "get_config",
+        lambda: type("C", (), {
+            "get_cod_index_sqlite_path": lambda self: None,
+            "get_cif_db_path": lambda self: Path.home() / ".polyxrd" / "cif_db",
+            "user_db_dir": lambda self: Path.home() / ".polyxrd",
+        })(),
+    )
+
+
+@pytest.fixture()
 def fake_install(tmp_path, monkeypatch):
     """伪造"打包运行": sys.frozen=True + exe 在 tmp/<install>/PolyXRD.exe。"""
     install = tmp_path / "install"
@@ -80,18 +98,18 @@ def no_cod_data_candidates(monkeypatch):
 
 
 def test_index_db_path_avoids_install_dir(fake_install, monkeypatch,
-                                          no_cod_data_candidates):
+                                          no_cod_data_candidates, no_user_index):
     """cod_root 在安装目录且无索引 → 退回 resolved_index_db_path(), 不在原地建库。"""
     cod_root = fake_install / "cod"
     sentinel = fake_install.parent / "user_cod_index.sqlite"
     monkeypatch.setattr(cod_local, "resolved_index_db_path",
-                        lambda deploy=True: sentinel)
+                        lambda deploy=True, prefer_user=True: sentinel)
     got = cod_local._index_db_path(cod_root)
     assert got == sentinel
     assert not (fake_install / "cod_index.sqlite").exists()
 
 
-def test_index_db_path_keeps_existing_index(fake_install):
+def test_index_db_path_keeps_existing_index(fake_install, no_user_index):
     """随包/便携布局: 安装目录里**确实存在**的索引要继续用 (可移植性)。"""
     cod_root = fake_install / "cod"
     cod_root.mkdir()
@@ -101,7 +119,8 @@ def test_index_db_path_keeps_existing_index(fake_install):
 
 
 def test_index_db_path_outside_install_unchanged(tmp_path, fake_install,
-                                                 no_cod_data_candidates):
+                                                 no_cod_data_candidates,
+                                                 no_user_index):
     """安装目录之外的 cod_root 行为保持不变 (源码树的 <root>/cod)。"""
     other = tmp_path / "tree" / "cod"
     other.mkdir(parents=True)
@@ -118,7 +137,7 @@ def test_cod_data_candidates_include_project_layout():
 
 
 def test_index_db_path_falls_back_to_cod_data(fake_install, monkeypatch,
-                                              tmp_path):
+                                              tmp_path, no_user_index):
     """项目根没有索引、但 cod_data/ 里有 → 返回 cod_data 的那个,
     而不是返回一个不存在的路径 (否则调用方 connect() 会在那里凭空建空库)。"""
     monkeypatch.setattr(cod_local.AppConfig, "_PROJECT_ROOT", tmp_path / "root")

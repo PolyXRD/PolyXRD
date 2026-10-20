@@ -1903,6 +1903,7 @@ class PhaseIdentifier:
         prefilter_min_match: int = 3,
         prefilter_max_ref_peaks: int = 40,
         db=None,
+        progress_cb=None,
     ) -> list[PhaseMatchResult]:
         """物相识别: XinMatch 格式数据库 (v3.1.0)。
 
@@ -1928,6 +1929,9 @@ class PhaseIdentifier:
             prefilter_*: d-I 预筛参数, 语义与 ``identify_with_cod_inorganics``
                 逐项相同
             db: 可选的既有适配器实例 (测试/复用连接用); 默认按配置现建
+            progress_cb: 建强峰索引时的进度回调 ``cb(done, total, stage)``。
+                首次挂一个大库 (百万相级) 要建 5~10 min 的索引, 不回报进度
+                界面上就是彻底假死。已有缓存时不触发。
         """
         if peaks is None:
             peaks = default_peak_list(data)
@@ -1941,6 +1945,8 @@ class PhaseIdentifier:
             db = XinMatchDatabase()
         if not db.is_ready():
             return []
+        if progress_cb is not None:
+            db.progress_cb = progress_cb
 
         wavelength = self._effective_wavelength(data)
 

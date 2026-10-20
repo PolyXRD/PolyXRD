@@ -751,10 +751,14 @@ def _cod_data_index_candidates() -> list[Path]:
     return out
 
 
-def resolved_index_db_path(deploy: bool = True) -> Path:
+def resolved_index_db_path(deploy: bool = True, prefer_user: bool = True) -> Path:
     """解析 COD 全库索引的**预期**路径。
 
     用户导入的外挂库 > 用户库目录 ``cif_db/cod_index.sqlite``。
+
+    ``prefer_user=False`` 时**完全忽略**用户导入的那一个 (连兜底也不认) ——
+    只给写路径用: ``CODLocalIndexer`` 若认了用户库, 会拿它当写入目标,
+    把 28 GB 的外挂库当自家索引去重建/插条目。
 
     ``deploy=False`` 时**不做** bundled 部署 —— 这一点很关键: 开发模式下
     ``_bundled_cod_db_source()`` 会指向项目根的 cod_index.sqlite, 一旦
@@ -765,9 +769,10 @@ def resolved_index_db_path(deploy: bool = True) -> Path:
     否则一个 0 条目的空库会把真正的索引永久遮蔽, 且部署永远不再触发。
     """
     cfg = get_config()
-    user_path = cfg.get_cod_index_sqlite_path()
-    if user_path is not None:
-        return user_path
+    if prefer_user:
+        user_path = cfg.get_cod_index_sqlite_path()
+        if user_path is not None:
+            return user_path
     target = cfg.get_cif_db_path() / "cod_index.sqlite"
     if _is_usable_index_file(target):
         return target
@@ -814,7 +819,8 @@ def existing_index_db_path() -> Optional[Path]:
     return _bundled_cod_db_source()
 
 
-def _index_db_path(cod_root: Optional[Path] = None) -> Path:
+def _index_db_path(cod_root: Optional[Path] = None,
+                   prefer_user: bool = True) -> Path:
     """Return path for cod_index.sqlite.
 
     - If COD root is given, place the db alongside it for portability.
@@ -829,6 +835,22 @@ def _index_db_path(cod_root: Optional[Path] = None) -> Path:
     这种情况一律退回 `resolved_index_db_path()` (用户目录/外挂库)。
     """
     if cod_root is not None:
+        # ★ v3.2.0 修复: 用户显式导入的路径必须**最先**看。
+        #
+        # v3.1.0 及之前这里直接算 cand, 只有一路落到 resolved_index_db_path()
+        # 才会去读 user_db_paths.json —— 实测两种布局都被绕过:
+        #   · cod_root = <项目>/cod        → 返回 <项目>/cod_data/cod_index.sqlite
+        #   · cod_root = <库目录>/COD      → 返回 <库目录>/cod_index.sqlite (不存在!)
+        # 后果是「数据库 ▸ 外挂数据库管理…」里挂上的全库索引被**静默忽略**:
+        # 对话框显示已挂载, 检索却仍走旧库(或恒判定 is_ready=False)。
+        #
+        # ⚠️ 只有**读路径**认这条 (prefer_user=True)。写路径 CODLocalIndexer
+        #    必须传 prefer_user=False —— 否则它会把自己当成"用户的索引",
+        #    拿一个 28 GB 的外挂库当写入目标去重建。
+        if prefer_user:
+            user_path = get_config().get_cod_index_sqlite_path()
+            if user_path is not None:
+                return user_path
         cand = Path(cod_root).parent / "cod_index.sqlite"
         if _is_usable_index_file(cand):
             return cand
@@ -847,8 +869,8 @@ def _index_db_path(cod_root: Optional[Path] = None) -> Path:
                     return alt
         if cand.exists() or not is_inside_app_dir(cand):
             return cand
-        return resolved_index_db_path(deploy=True)
-    return resolved_index_db_path(deploy=True)
+        return resolved_index_db_path(deploy=True, prefer_user=prefer_user)
+    return resolved_index_db_path(deploy=True, prefer_user=prefer_user)
 
 
 def get_cod_root(default: Optional[Path] = None) -> Path:
@@ -948,6 +970,18 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
 
 
 def connect(db_path: Path) -> sqlite3.Connection:
+    """**可写**打开索引库并确保 schema 就绪 —— 只给"建库/迁移/写入"路径用。
+
+    ⚠️ 检索路径**不要**用它（v3.2.0 起改用 :func:`connect_ro`）。这个函数会:
+      1. 以可写模式打开（``sqlite3.connect(str(path))``）;
+      2. 跑一遍 ``_SCHEMA_SQL``（``CREATE TABLE IF NOT EXISTS`` ...）;
+      3. 跑 ``_migrate_schema``（对旧库做 ``ALTER TABLE``）;
+      4. 缺 ``meta.schema_version`` 时 INSERT 一行。
+
+    对 71k 相的小索引这些几乎无感; 但拿到 3COD 那种 28 GB 的库上, 光是这份
+    DDL 就要 65 s, 而且在结构陌生的库上是**真会改文件**的。所以检索一律走
+    :func:`connect_ro`。
+    """
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(db_path), timeout=60.0)
     conn.row_factory = sqlite3.Row
@@ -962,6 +996,24 @@ def connect(db_path: Path) -> sqlite3.Connection:
             (str(SCHEMA_VERSION),),
         )
         conn.commit()
+    return conn
+
+
+def connect_ro(db_path: Path) -> sqlite3.Connection:
+    """**只读**打开一个索引库 —— 检索路径专用（v3.2.0）。
+
+    与 :func:`connect` 的关键区别:
+      * ``mode=ro`` URI: 内核层就禁止写入, 因此**绝不会改动用户的库文件**
+        （不建表、不 ALTER、不写 ``meta``）;
+      * 不跑 DDL: 大库上省掉几十秒, 也避免"只是查一下就把库锁住"。
+
+    调用方负责关闭; :class:`CODLocalDatabase` 会复用它缓存的那一条连接。
+    """
+    if not db_path.exists():
+        raise FileNotFoundError(str(db_path))
+    uri = "file:" + Path(db_path).as_posix() + "?mode=ro"
+    conn = sqlite3.connect(uri, uri=True, timeout=60.0, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
     return conn
 
 
@@ -1003,7 +1055,11 @@ class CODLocalIndexer:
 
     def __init__(self, cod_root: Optional[Path] = None, db_path: Optional[Path] = None):
         self.cod_root = Path(cod_root) if cod_root else get_cod_root()
-        self.db_path = Path(db_path) if db_path else _index_db_path(self.cod_root)
+        # v3.2.0: 写路径**不认**用户导入的外挂库 (prefer_user=False) ——
+        # 索引器要的是"我自己的索引该放哪", 而不是"用户挂的是哪个库"。
+        # 认了就会往 28 GB 的外挂库上做增量重建。
+        self.db_path = Path(db_path) if db_path else _index_db_path(
+            self.cod_root, prefer_user=False)
         self._lock = threading.Lock()
 
     # ── 工具: 已有索引查询 ──────────────────────────────────
@@ -1304,6 +1360,9 @@ class CODLocalDatabase:
         # None = 还没探测; False = 探测过、不可用; Connection = 可用。
         self._inorg_conn: Optional[sqlite3.Connection] = None
         self._inorg_probed = False
+        # v3.2.0: 检索用的**只读**连接缓存 (见 _conn())。旧写法每次 search()
+        # 都新建连接并跑一遍 DDL, 在大库上既慢又会漏关连接。
+        self._ro_conn: Optional[sqlite3.Connection] = None
         try:
             self.cod_root = Path(cod_root) if cod_root else get_cod_root()
             self.db_path = Path(db_path) if db_path else _index_db_path(self.cod_root)
@@ -1398,39 +1457,85 @@ class CODLocalDatabase:
         return "(1)" if self._inorg_is_slim() else "(cif_gz IS NOT NULL)"
 
     # ── 基础设施 ────────────────────────────────────────────
+    def _conn(self) -> Optional[sqlite3.Connection]:
+        """复用的**只读**连接（检索路径专用，v3.2.0）。
+
+        旧写法是每个 ``search()`` / ``get_entry()`` / ``is_ready()`` 都调一次
+        :func:`connect` —— 那意味着**每次查询**都要跑一遍 ``CREATE TABLE IF NOT
+        EXISTS`` + ``_migrate_schema``。71k 相的小库上感觉不到, 但:
+          · 3COD 全库 (28 GB) 实测一次 DDL 要 65 s;
+          · ``is_ready()`` 抛异常时不关连接, 泄漏的写连接会把后续所有连接锁死
+            (``database is locked``, timeout 60 s 后报错)。
+
+        改成"一个实例一条只读连接": 首次取用时建立, 之后全部复用, 由
+        :meth:`close` 释放。库被替换 (路径变了) 请新建实例, 或先 close()。
+        """
+        if self._ro_conn is None:
+            if not self.db_path.exists():
+                return None
+            try:
+                self._ro_conn = connect_ro(self.db_path)
+            except Exception:
+                self._ro_conn = None
+                return None
+        return self._ro_conn
+
+    def close(self) -> None:
+        """释放缓存的只读连接（可重复调用）。"""
+        conn, self._ro_conn = self._ro_conn, None
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:  # noqa: BLE001 - 关闭失败不该影响调用方
+                pass
+
+    def __enter__(self) -> "CODLocalDatabase":
+        return self
+
+    def __exit__(self, *exc_info) -> None:
+        self.close()
+
     def is_ready(self) -> bool:
         """索引数据库存在且有至少 1 条记录"""
         if self._init_error:
             return False
         if not self.db_path.exists():
             return False
+        conn = self._conn()
+        if conn is None:
+            return False
         try:
-            conn = connect(self.db_path)
             cur = conn.execute("SELECT COUNT(*) as n FROM cod_entries")
             n = cur.fetchone()["n"]
-            conn.close()
             return n > 0
         except Exception:
+            # 库被替换/损坏时丢掉缓存连接, 下次重新打开
+            self.close()
             return False
 
     def stats(self) -> dict:
         if not self.db_path.exists():
             return {"ready": False}
-        conn = connect(self.db_path)
-        cur = conn.execute(
-            "SELECT COUNT(*) n, "
-            "SUM(CASE WHEN parse_ok=1 THEN 1 ELSE 0 END) ok, "
-            "SUM(CASE WHEN parse_ok=0 THEN 1 ELSE 0 END) bad "
-            "FROM cod_entries"
-        )
-        row = cur.fetchone()
-        n = row["n"]
-        ok = row["ok"] or 0
-        bad = row["bad"] or 0
-        meta = {}
-        for r in conn.execute("SELECT key,value FROM meta"):
-            meta[r["key"]] = r["value"]
-        conn.close()
+        conn = self._conn()
+        if conn is None:
+            return {"ready": False}
+        try:
+            cur = conn.execute(
+                "SELECT COUNT(*) n, "
+                "SUM(CASE WHEN parse_ok=1 THEN 1 ELSE 0 END) ok, "
+                "SUM(CASE WHEN parse_ok=0 THEN 1 ELSE 0 END) bad "
+                "FROM cod_entries"
+            )
+            row = cur.fetchone()
+            n = row["n"]
+            ok = row["ok"] or 0
+            bad = row["bad"] or 0
+            meta = {}
+            for r in conn.execute("SELECT key,value FROM meta"):
+                meta[r["key"]] = r["value"]
+        except Exception:
+            self.close()
+            return {"ready": False}
         return {
             "ready": True,
             "total": n,
@@ -1452,9 +1557,9 @@ class CODLocalDatabase:
                limit: int = 100,
                parse_ok_only: bool = True) -> list[CODLocalEntry]:
         """组合查询；参数为 AND 关系。"""
-        if not self.db_path.exists():
+        conn = self._conn()
+        if conn is None:
             return []
-        conn = connect(self.db_path)
         clauses: list[str] = []
         args: list[Any] = []
         if parse_ok_only:
@@ -1489,7 +1594,6 @@ class CODLocalDatabase:
         sql = f"SELECT * FROM cod_entries {where} ORDER BY formula_red, cod_id LIMIT ?"
         args.append(int(limit))
         results = [_entry_from_row(r) for r in conn.execute(sql, args).fetchall()]
-        conn.close()
         return results
 
     def get_entry(self, cod_id: int) -> Optional[CODLocalEntry]:
@@ -1621,9 +1725,9 @@ class CODLocalDatabase:
         # 通道 2: 全库索引 (formula_red 精确 + mineral_name 模糊)
         if len(out) < int(limit):
             try:
-                if not self.db_path.exists():
+                conn = self._conn()
+                if conn is None:
                     return list(out.values())
-                conn = connect(self.db_path)
                 clauses: list[str] = ["parse_ok = 1"]
                 args: list[Any] = []
                 if formula_norm:
@@ -1658,7 +1762,6 @@ class CODLocalDatabase:
                         "has_cif": bool(r["file"]),
                         "mineral_name": r["mineral_name"] or "",
                     }
-                conn.close()
             except Exception as e:
                 log.debug("find_structure_candidates full-index query failed: %s", e)
 
@@ -1750,15 +1853,14 @@ class CODLocalDatabase:
         except Exception as e:
             log.debug("_structure_by_id inorg failed: %s", e)
         try:
-            if not self.db_path.exists():
+            conn = self._conn()
+            if conn is None:
                 return None
-            conn = connect(self.db_path)
             r = conn.execute(
                 "SELECT cod_id, formula, space_group, a, b, c, alpha, beta, "
                 "gamma, file, mineral_name FROM cod_entries WHERE cod_id = ?",
                 (int(cod_id),),
             ).fetchone()
-            conn.close()
             if r:
                 return {
                     "cod_id": int(r["cod_id"]),
@@ -1807,9 +1909,9 @@ class CODLocalDatabase:
         except Exception as e:
             log.debug("_structure_like inorg failed: %s", e)
         try:
-            if not self.db_path.exists():
+            conn = self._conn()
+            if conn is None:
                 return out
-            conn = connect(self.db_path)
             col = {"mineral_name": "mineral_name",
                    "space_group": "space_group",
                    "formula": "formula"}[like_field]
@@ -1820,7 +1922,6 @@ class CODLocalDatabase:
                 f"ORDER BY cod_id LIMIT ?",
                 (like, int(limit)),
             ).fetchall()
-            conn.close()
             for r in rows:
                 out.append({
                     "cod_id": int(r["cod_id"]),
@@ -1859,12 +1960,11 @@ class CODLocalDatabase:
     def _get_tar_source(self) -> Optional[Path]:
         """If index was built from a .tar file, return its path."""
         try:
-            if not self.db_path.exists():
+            conn = self._conn()          # v3.2.0: 复用只读连接
+            if conn is None:
                 return None
-            conn = connect(self.db_path)
             cur = conn.execute("SELECT value FROM meta WHERE key='tar_source'")
             row = cur.fetchone()
-            conn.close()
             return Path(row["value"]) if row else None
         except Exception:
             return None
@@ -1941,13 +2041,13 @@ class CODLocalDatabase:
             return None
         # Level 2: cif_gz BLOB (精简模式下可能为 NULL, 跳过)
         try:
-            conn = connect(self.db_path)
-            cur = conn.execute("SELECT cif_gz FROM cod_entries WHERE cod_id = ?", (cod_id,))
-            row = cur.fetchone()
-            conn.close()
-            if row and row["cif_gz"]:
-                raw = gzip.decompress(row["cif_gz"])
-                return raw.decode("utf-8", errors="replace")
+            conn = self._conn()          # v3.2.0: 复用只读连接
+            if conn is not None:
+                cur = conn.execute("SELECT cif_gz FROM cod_entries WHERE cod_id = ?", (cod_id,))
+                row = cur.fetchone()
+                if row and row["cif_gz"]:
+                    raw = gzip.decompress(row["cif_gz"])
+                    return raw.decode("utf-8", errors="replace")
         except Exception:
             pass
         # Level 2b: 无机物库内嵌 CIF (v0.11.0) —— 两库 COD 编号体系不重合,
@@ -1996,9 +2096,9 @@ class CODLocalDatabase:
 
         rows = []
         try:
-            conn = connect(self.db_path)
-            rows = _fetch(conn, _sel_u)
-            conn.close()
+            conn = self._conn()          # v3.2.0: 复用只读连接
+            if conn is not None:
+                rows = _fetch(conn, _sel_u)
         except Exception:
             rows = []
         if not rows:

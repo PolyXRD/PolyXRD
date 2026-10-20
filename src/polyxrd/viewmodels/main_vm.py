@@ -42,6 +42,8 @@ class MainViewModel(QObject):
     phase_identified = Signal(list)
     refinement_completed = Signal(object)
     refinement_log = Signal(str)
+    # v3.2.0: 外挂库建索引进度 (done, total, stage) —— 原样转发给视图
+    index_progress = Signal(int, int, str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -63,6 +65,7 @@ class MainViewModel(QObject):
         self._phase_vm.error.connect(self._on_error)
         self._phase_vm.info.connect(self.status_changed.emit)
         self._phase_vm.phase_identified.connect(self._on_phase_identified)
+        self._phase_vm.index_progress.connect(self.index_progress.emit)
         self._refinement_vm.refinement_completed.connect(self._on_refinement_completed)
         self._refinement_vm.refinement_log.connect(self.refinement_log.emit)
         self._refinement_vm.error.connect(self._on_error)

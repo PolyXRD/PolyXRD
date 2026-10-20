@@ -1246,6 +1246,8 @@ class MainWindow(QMainWindow):
         self._vm.peaks_changed.connect(self._on_peaks_changed)
         self._vm.phase_identified.connect(self._on_phases_updated)
         self._vm.refinement_completed.connect(self._on_refinement_completed)
+        # v3.2.0: 外挂库首次建索引可能耗时数分钟 → 状态栏持续回报进度
+        self._vm.index_progress.connect(self._on_index_progress)
         # M23: 勾选集合 → 右侧物相列表 (默认空, 勾选驱动)
         self._vm._phase_vm.selection_changed.connect(
             self._on_phase_selection_changed
@@ -2096,6 +2098,21 @@ class MainWindow(QMainWindow):
 
     def _on_status_changed(self, message: str) -> None:
         self.statusBar().showMessage(message, 5000)
+
+    def _on_index_progress(self, done: int, total: int, stage: str) -> None:
+        """外挂数据库建索引进度 → 状态栏 (v3.2.0)。
+
+        3COD 级别的库 (百万相) 首次挂载要建 339~552 s 的强峰索引，此前
+        这段时间界面上只有「正在进行物相检索」一句静态提示，用户会以为
+        程序卡死。这里按阶段给出可感知的推进，0 超时 = 常驻到下一条消息。
+        """
+        if stage == "peaks":
+            text = tr("busy.index_peaks", done=done, total=total)
+        elif stage == "entries":
+            text = tr("busy.index_entries", done=done, total=total)
+        else:
+            text = tr("busy.index_count")
+        self.statusBar().showMessage(text)
 
     def _on_error(self, message: str) -> None:
         QMessageBox.warning(self, tr("dialog.error"), message)

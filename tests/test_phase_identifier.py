@@ -156,6 +156,26 @@ class TestCodInorganicsIdentify:
         cdb = CIFDatabase(enable_cod_local=False)
         return cdb.cod_db_available()
 
+    @pytest.fixture()
+    def stock_cod_db(self, monkeypatch):
+        """把 COD 无机物库钉回**项目自带**的那一份。
+
+        下面的 Fluorite 断言的是"基线排序"（71,199 相上 CaF2 进前列）。
+        开发机上若挂了大库（如 3COD-Inorg，1,185,866 相），候选池完全变了
+        —— 实测 4-1 上 CaF2 掉出 top20、ZnO 升到第一 —— 那是**库换了**，
+        不是检索变差，不该让这条基线用例跟着机器状态漂。
+        """
+        from polyxrd.config import get_config
+
+        base = Path(__file__).resolve().parents[1] / "cod_data"
+        for name in ("COD_inorganics_index.sqlite", "COD_inorganics.sqlite"):
+            cand = base / name
+            if cand.exists():
+                monkeypatch.setattr(get_config(), "get_cod_db_path",
+                                    lambda: cand)
+                return cand
+        pytest.skip("项目自带 COD 无机库不存在")
+
     def test_element_filter_restricts_to_allowed(self, cod_ready):
         """元素过滤必须生效: 所有候选元素 ⊆ must∪maybe"""
         if not cod_ready:
@@ -180,7 +200,7 @@ class TestCodInorganicsIdentify:
                 f"{r.phase.name} 含过滤范围外元素: {r.phase.elements}"
             )
 
-    def test_fluorite_found_in_top_candidates(self, cod_ready):
+    def test_fluorite_found_in_top_candidates(self, cod_ready, stock_cod_db):
         """4-1 试样含 CaF2 (Fluorite), 应出现在前列"""
         if not cod_ready:
             pytest.skip("COD 无机物库未挂载")

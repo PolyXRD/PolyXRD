@@ -37,6 +37,9 @@ class PhaseViewModel(QObject):
     # M21: 勾选集合变更 (多相叠加)
     selection_changed = Signal(list)
     assignment_changed = Signal(object, object)   # (assignments, ref_hit)
+    # v3.2.0: 外挂库建索引进度 (done, total, stage)。首次挂百万相级的
+    # XinMatch 库要建 5~10 min 索引, 界面必须知道它还活着。
+    index_progress = Signal(int, int, str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -248,6 +251,7 @@ class PhaseViewModel(QObject):
                     element_filter=element_filter,
                     top_n=top_n,
                     tolerance=tolerance,
+                    progress_cb=self.index_progress.emit,
                 )
             elif db_source in ("cod_full", "merged"):
                 if not getattr(self._identifier, "_cod_ready", False):
