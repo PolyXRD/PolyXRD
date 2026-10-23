@@ -194,7 +194,7 @@ python scripts/make_reg_code.py --verify PXRD1-XXXX-...  # 校验并回显单位
 - 导入时自动**校验库类型**：COD 无机物与 PDF2 都叫 `phases` 表，选错槽位会提示而非静默失败；XinMatch 格式库按"四表齐全 + 特征列"判别，半成品库（只有 `entries` 没有 `peaks`）会被拒绝
 - 导入后立即生效，**无需重启**；物相分析面板的「数据库源」下拉同步刷新，未挂载的源自动置灰
 - 各库完全独立，可只装其中一个；一个都不装也能用内置的 **106 种参考物相**
-- **数据库从哪下载**（v4.0.0 起）：程序仓库与 Release **只发程序**；两个 polyDB 库包统一在 [PolyXRD-DataBase 的 Releases](https://github.com/PolyXRD/PolyXRD-DataBase/releases) 发布（当前 tag `20261021`），构建工具与格式规范也在这个仓库。
+- **数据库从哪下载**（v4.0.0 起）：程序仓库与 Release **只发程序**；两个 polyDB 库包统一在 [PolyXRD-DataBase 的 Releases](https://github.com/PolyXRD/PolyXRD-DataBase/releases) 发布（当前 tag `20261021`，**以该仓库 Releases 页面为准**），构建工具与格式规范也在这个仓库。
 
 ---
 

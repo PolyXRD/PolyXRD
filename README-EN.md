@@ -154,7 +154,7 @@ Core design philosophy:
 - **Database-type validation on import**: the three databases share table names (COD Inorganics and PDF2 both use `phases`), so picking the wrong slot raises a prompt instead of failing silently
 - Effective immediately after import, **no restart**; the "database source" dropdown in the phase-analysis panel refreshes in sync; unmounted sources are greyed out
 - The databases are fully independent — you can mount just one; with none mounted, the built-in **106 reference phases** still work
-- **Where to download databases** (since v4.0.0): this repository and its Releases ship **program artifacts only**; the two polyDB libraries are published in [PolyXRD-DataBase Releases](https://github.com/PolyXRD/PolyXRD-DataBase/releases) (current tag `20261021`), together with the builder tools and format spec
+- **Where to download databases** (since v4.0.0): this repository and its Releases ship **program artifacts only**; the two polyDB libraries are published in [PolyXRD-DataBase Releases](https://github.com/PolyXRD/PolyXRD-DataBase/releases) (current tag `20261021`; **see that repository's Releases page for what is currently uploaded**), together with the builder tools and format spec
 
 ---
 
