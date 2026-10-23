@@ -92,7 +92,7 @@ if %errorlevel% neq 0 (
 
 REM v4.1.0: 默认库**内置** —— 把 COD-Inorg polyDB 复制进 dist\PolyXRD\databasesREM (只要是无机物库; 解压即可检索, 无需先下载外挂库)。跳过用 set POLYXRD_NO_BUNDLE_DB=1
 echo.
-echo [步骤 2.5/6] 内置默认库 COD-Inorg (polyDB) -> dist\PolyXRD\databases...
+echo [步骤 2.5/6] 内置默认库 COD-Inorg (polyDB) 复制到 dist\PolyXRD\databases ...
 echo.
 "%PYTHON%" scripts\_build_post.py bundle-polydb
 
