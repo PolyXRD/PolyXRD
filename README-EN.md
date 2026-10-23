@@ -29,7 +29,7 @@
 Core design philosophy:
 
 - **No Python environment required** — the installer bundles a complete Python 3.10 + PySide6 + pymatgen + scipy stack; target machines work out of the box.
-- **Strict separation of program and databases** — the main program (installer / portable package) ships with no database; all three databases are packaged, downloaded, and mounted independently. The inorganic database is published by default in a **slim index form** (362 MB, no embedded CIFs); CIFs are supplied on demand from a local `cod/cif` archive or the COD online API.
+- **Strict separation of program and databases** — the main program (installer / portable package) ships with no database. Database bodies, builder tools and the format specification live in a **separate repository**, [PolyXRD-DataBase](https://github.com/PolyXRD/PolyXRD-DataBase), and are distributed through its Releases (since v4.0.0 in the **polyDB** format: COD-Inorg 77,500 phases / 48.1 MB, COD-Full 521,361 phases / 710.3 MB). **This repository releases program artifacts only.**
 - **Controllable algorithms + reproducible results** — every preprocessing/fitting step is parameterized, saveable, and replayable; project files (`.polyxrd` JSON) are fully serialized.
 - **UI / algorithm layering** — MVVM architecture; the `services/` layer is pure algorithm code with no Qt dependency and can be unit-tested independently.
 
@@ -50,9 +50,9 @@ Core design philosophy:
 - **Explicit `db_path` on every retrieval entry point** (`polydb` / `cod_inorganics` / `cod_index` / `pdf2` / `xinmatch`), so several libraries of one kind are queried independently; fixes a state leak where an explicit path poisoned the shared identifier instance and later switches kept querying the old library.
 - **Plus a full code assessment** (9 P0/P1 items + a batch of P2, all with regression tests): default peak detection silently ran a joint curve fit (14.2 s → 11 ms), savgol/median windows larger than the pattern crashed, moving-average endpoints lost 45%, European decimals parsed as thousands separators (10x silent error), PDF2 coverage recomputed on every refresh (0.23 s → 0.014 s cached), SVG export NaN/degenerate axes, missing i18n keys, MAUD temp-directory leak, and silent structure loss when the CIF cache directory was not writable.
 
-> 📦 Databases remain external and are not distributed; PDF2-2004 is a commercial ICDD library and never appears in a Release.
+> 📦 Databases are not distributed from this repository; download them from [PolyXRD-DataBase Releases](https://github.com/PolyXRD/PolyXRD-DataBase/releases). PDF2-2004 is a commercial ICDD library and never appears in any Release.
 
-👉 **Release artifacts not built yet** (v4.0.0 is in development; documentation is being brought up to date first).
+👉 **Released**: [Release v4.0.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v4.0.0) — 3 assets (Setup 249.1 MB / Portable 389.0 MB / SHA256), uploaded and verified (remote digests match the local checksums). Databases live in [PolyXRD-DataBase](https://github.com/PolyXRD/PolyXRD-DataBase).
 
 ## 📚 Previous Release v3.2.0 (2026-10-20)
 
@@ -142,17 +142,19 @@ Core design philosophy:
 - **Single-instance operation**: double-clicking again does not spawn another window — it brings the running window to the foreground
 - **Database manager dialog**: three slots each showing "mounted/not mounted", record count, size, and which download package the slot expects
 
-### ⑥ Three external database services
+### ⑥ External database services (polyDB / COD / PDF2 / XinMatch)
 | Database | Scale | Purpose |
 |---|---|---|
 | COD Inorganics | 71,199 phases | Precomputed d-I peaks + pre-truncated strong-peak lists + Hanawalt pre-screening — the **primary search database**, fastest. Published by default in **slim index form** (362 MB, `COD_inorganics_index.sqlite`): atomic sites fully retained, CIFs read on demand from a local `cod/cif` archive, with automatic fallback to the COD online API. The full embedded edition (1.19 GB) can still be imported; the two are row-for-row identical |
 | COD Full Index | 113,223 entries | Index of the complete COD CIF collection (432 MB, no embedded CIFs), serving the "COD Full" and "Built-in + Full merged" search sources |
 | PDF2-2004 | 163,834 phases | ICDD PDF-2 2004, with space groups and cell parameters, for comparison against the commercial library |
+| **polyDB** (v4.0.0) | 77,500 / 521,361 phases | PolyXRD's own columnar container (`meta.json` + `index.sqlite` + peak matrices + d-bin bitmap + element bitmaps + atomic-site sidecar). Read-only mmap, zero parse on open, candidates decoded per row; candidates carry asymmetric-unit atomic sites and can go straight into refinement. Mount a `.polyDB` directory from any folder |
 
 - Path priority: **persistent path imported via GUI (`~/.polyxrd/user_db_paths.json`) > default location (used only if it exists) > `~/.polyxrd/cif_db/` fallback**
 - **Database-type validation on import**: the three databases share table names (COD Inorganics and PDF2 both use `phases`), so picking the wrong slot raises a prompt instead of failing silently
 - Effective immediately after import, **no restart**; the "database source" dropdown in the phase-analysis panel refreshes in sync; unmounted sources are greyed out
-- The three databases are fully independent — you can mount just one; with none mounted, the built-in **106 reference phases** still work
+- The databases are fully independent — you can mount just one; with none mounted, the built-in **106 reference phases** still work
+- **Where to download databases** (since v4.0.0): this repository and its Releases ship **program artifacts only**; the two polyDB libraries are published in [PolyXRD-DataBase Releases](https://github.com/PolyXRD/PolyXRD-DataBase/releases) (current tag `20261021`), together with the builder tools and format spec
 
 ---
 
@@ -278,7 +280,7 @@ PolyXRD is built on many high-quality open-source projects — Python / PySide6 
 
 ## 📦 Release
 
-For the latest version and the full changelog, see [docs/CHANGELOG.md](docs/CHANGELOG.md) (Chinese). Binary artifacts (Setup installer + Portable package + two COD index database packages) are available on the [👉 Releases page](https://github.com/PolyXRD/PolyXRD/releases). SHA-256 checksums are published alongside the release assets; verifying after downloading a database package is recommended (a truncated database may still open in SQLite, but errors only surface when reading tail records).
+For the latest version and the full changelog, see [docs/CHANGELOG.md](docs/CHANGELOG.md) (Chinese). **Program artifacts** (Setup installer + Portable package + SHA256) are available on the [👉 Releases page](https://github.com/PolyXRD/PolyXRD/releases/tag/v4.0.0); **database packages** are published separately in [PolyXRD-DataBase Releases](https://github.com/PolyXRD/PolyXRD-DataBase/releases). SHA-256 checksums are published alongside each release.
 
 ---
 

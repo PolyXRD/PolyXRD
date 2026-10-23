@@ -5,6 +5,10 @@
 v4.0.0 之前这两个工具只存在于开发机的 `PolyXRD-DataBase/tools/`（仓库外），
 导致"库是怎么建的"无法追溯、格式演进没有对照物。本次按发布准备要求入库。
 
+> **发布政策（2026-10-23）**：**数据库不在本仓库上传/发布**。库包统一由独立仓库
+> [PolyXRD-DataBase](https://github.com/PolyXRD/PolyXRD-DataBase) 的 Releases 分发；
+> 本仓库只在本地构建与校验（`scripts/polydb_verify.py` 等），Release 恒 3 个程序附件。
+
 | 文件 | 作用 |
 |---|---|
 | `build_polydb.py` | COD CIF → `*.polyDB` 目录容器（两阶段并行 + 断点续跑 + 条数守恒检查） |

@@ -29,7 +29,7 @@
 核心设计哲学：
 
 - **无需 Python 环境** — 安装包内置完整 Python 3.10 + PySide6 + pymatgen + scipy，目标机器开箱即用。
-- **程序与数据库彻底分离** — 主程序（安装包 / 便携包）不内置任何数据库，三个数据库各自独立打包、独立下载、独立挂载。无机物库默认发布**瘦身索引式**（362 MB，不内嵌 CIF），CIF 由本地 `cod/cif` 目录或 COD 在线接口按需提供。
+- **程序与数据库彻底分离** — 主程序（安装包 / 便携包）不内置任何数据库；**数据库本体、构建工具与格式规范统一在独立仓库 [PolyXRD-DataBase](https://github.com/PolyXRD/PolyXRD-DataBase) 维护**，并以该仓库的 Releases 分发（v4.0.0 起为 polyDB：COD-Inorg 77,500 相 / 48.1 MB、COD-Full 521,361 相 / 710.3 MB）。本仓库与 Release **只发程序**。
 - **算法可控 + 结果可复现** — 预处理/拟合的每一步参数可保存、可回放，项目文件 (`.polyxrd` JSON) 全序列化。
 - **UI 与算法分层** — MVVM 架构，`services/` 层是纯算法、不依赖 Qt，可独立单元测试。
 
@@ -53,7 +53,7 @@
 
 > 📦 数据库仍为外挂，不随分发；PDF2-2004 为 ICDD 版权库，永不出现在 Release 里。
 
-👉 **已发布**：[Release v4.0.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v4.0.0) —— 3 个附件（Setup 249.1 MB / Portable 389.0 MB / SHA256）已上传并核验（远端 digest 与本地逐件一致）；两个 polyDB 库包作为独立下载项分发。
+👉 **已发布**：[Release v4.0.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v4.0.0) —— 3 个附件（Setup 249.1 MB / Portable 389.0 MB / SHA256）已上传并核验（远端 digest 与本地逐件一致）；**数据库不在本仓库发布**，统一由 [PolyXRD-DataBase](https://github.com/PolyXRD/PolyXRD-DataBase) 仓库的 Releases 分发。
 > 完整构建/产物/验收记录：[docs/发布检查清单-v4.0.0.md](docs/发布检查清单-v4.0.0.md)。
 
 | 产物 | 体积 | SHA-256（前 16 位） |
@@ -194,6 +194,7 @@ python scripts/make_reg_code.py --verify PXRD1-XXXX-...  # 校验并回显单位
 - 导入时自动**校验库类型**：COD 无机物与 PDF2 都叫 `phases` 表，选错槽位会提示而非静默失败；XinMatch 格式库按"四表齐全 + 特征列"判别，半成品库（只有 `entries` 没有 `peaks`）会被拒绝
 - 导入后立即生效，**无需重启**；物相分析面板的「数据库源」下拉同步刷新，未挂载的源自动置灰
 - 各库完全独立，可只装其中一个；一个都不装也能用内置的 **106 种参考物相**
+- **数据库从哪下载**（v4.0.0 起）：程序仓库与 Release **只发程序**；两个 polyDB 库包统一在 [PolyXRD-DataBase 的 Releases](https://github.com/PolyXRD/PolyXRD-DataBase/releases) 发布（当前 tag `20261021`），构建工具与格式规范也在这个仓库。
 
 ---
 
@@ -206,25 +207,25 @@ python scripts/make_reg_code.py --verify PXRD1-XXXX-...  # 校验并回显单位
    ↓
 ② 安装 (默认 C:\Program Files\PolyXRD\) 后直接运行 PolyXRD.exe
    ↓
-③ 按需下载数据库包 —— 各库独立，需要哪个下哪个
+③ 按需下载数据库包 —— 到 PolyXRD-DataBase 仓库的 Releases 下载（各库独立）
+   https://github.com/PolyXRD/PolyXRD-DataBase/releases
    解压到任意目录（必须真正解压到磁盘，不要直接在压缩包里打开）
    ↓
-④ 启动 PolyXRD → 菜单「数据库 ▸ 外挂数据库管理…」
-   对话框每个槽位上都写着「下载包：… → 解压出 …」，照对上即可，在该行点「导入…」
+④ 启动 PolyXRD → 菜单「数据库 ▸ 外挂数据库管理…」→「挂载文件夹…」指向解压出的
+   `.polyDB` 目录 → 选中该行点「设为当前」
    → 立即生效，无需重启
    ↓
 ⑤ 开始使用!
 ```
 
-> **发布口径**（v4.0.0 实测，已发布）：Release 3 附件 = **Setup 安装包（249.1 MB）+ Portable 便携包（389.0 MB）+ SHA256**；
-> 数据库作为**独立下载项**：`COD-inorg-polyDB.zip`（48.1 MB / 77,500 相）与
-> `COD-full-polyDB.zip`（710.3 MB / 521,361 相）。PDF2-2004 不在任何发布物中。
-> PDF2-2004 包为 ICDD 版权库，**不随 Release 分发**，需要时自行准备库文件。
+> **发布口径**（v4.0.0，已发布）：本仓库 Release 3 附件 = **Setup 安装包（249.1 MB）+ Portable 便携包（389.0 MB）+ SHA256**，
+> **不含任何数据库**。数据库统一在 [PolyXRD-DataBase](https://github.com/PolyXRD/PolyXRD-DataBase) 仓库的 Releases 分发：
+> COD-Inorg（48.1 MB / 77,500 相）与 COD-Full（710.3 MB / 521,361 相）。
+> PDF2-2004 为 ICDD 版权库，**任何仓库都不分发**，需要时自行准备库文件。
 
-> **瘦身无机库说明**：索引式无机库不含内嵌 CIF。本机若有 COD 原始
-> `cod/cif/` 归档（四级分片目录）则直接按需读取；没有时会自动回退到 COD
-> 官网接口按编号下载 CIF 并缓存（需要联网）。若希望完全离线且单文件自包含，
-> 可改用完整内嵌版 `COD_inorganics.sqlite`（1.19 GB），两者数据一致。
+> **polyDB 库说明**：`.polyDB` 是**目录容器**（列存峰矩阵 + 位图倒排 + 原子位点侧车），
+> 下载后解压即用、离线可跑，原子位点在库内（命中相可直接进精修），不依赖 `cod/cif` 目录
+> 或联网取 CIF。旧 sqlite 库（瘦身索引式 / 完整内嵌版 / PDF2 / XinMatch）仍可照旧挂载。
 
 > **关于 PDF2-2004 库**：该库为 ICDD 商品数据库，**受版权保护，本仓库不分发、Release 不提供下载**。
 > 持有正版授权的用户可自行准备 `PDF2_2004.sqlite` 并在「外挂数据库管理…」中作为 PDF2 槽位导入；
@@ -274,7 +275,7 @@ build.bat
 ```
 
 `build.bat` 会依次完成：生成图标 → PyInstaller 打包 → **自检 dist 内无业务数据库** →
-Inno Setup 编译安装包 → 打便携包 → 生成三个独立数据库包 → 计算 SHA-256。
+Inno Setup 编译安装包 → 打便携包 → **本地**生成并校验两个 polyDB 库包（对外发布在 PolyXRD-DataBase 仓库，不在本仓库 Release）→ 计算 SHA-256。
 
 > **注意**：默认**不**打包任何数据库。如需把库内嵌进二进制，用 `POLYXRD_WITH_DB=1`。
 >
@@ -320,7 +321,7 @@ PolyXRD 基于众多高质量开源项目构建 —— Python / PySide6 (Qt6) / 
 
 ## 📦 Release
 
-最新版本与全部变更记录见 [docs/CHANGELOG.md](docs/CHANGELOG.md)；二进制产物（Setup 安装包 + 两个 COD 索引库包）前往 [👉 Releases 页面](https://github.com/PolyXRD/PolyXRD/releases) 下载。SHA-256 校验值随 Release 附件发布，下载数据库包后建议核对（截断的库能被 SQLite 打开，但读到尾部记录才会报错）。
+最新版本与全部变更记录见 [docs/CHANGELOG.md](docs/CHANGELOG.md)；**程序产物**（Setup 安装包 + Portable + SHA256）前往 [👉 Releases 页面](https://github.com/PolyXRD/PolyXRD/releases/tag/v4.0.0) 下载。**数据库产物统一在独立仓库** [PolyXRD-DataBase Releases](https://github.com/PolyXRD/PolyXRD-DataBase/releases) 发布（本仓库 Release 不含数据库）。SHA-256 校验值随各自 Release 发布，下载后建议核对。
 
 ---
 

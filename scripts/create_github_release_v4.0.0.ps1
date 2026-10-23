@@ -7,11 +7,10 @@
 #   PolyXRD-v4.0.0-Portable.zip  正式发布版便携包 —— 解压即用
 # ★ 硬性政策: PDF2-2004 是 ICDD 版权商品库, **永不随 Release 分发**。
 #   底部有 $BANNED 守卫, 任何含 PDF2 的路径一旦混进来会直接抛错终止。
-# ★ 数据库包不进 Release 附件 (与"恒 3 附件"口径一致):
-#   `PolyXRD-v4.0.0-Databases-COD-inorg-polyDB.zip` /
-#   `PolyXRD-v4.0.0-Databases-COD-full-polyDB.zip` 由构建产出并列入 SHA256,
-#   作为**独立下载项**分发 (README「方式 A」第 ③ 步)。若要改成直接挂 Release,
-#   把两个文件加进末尾 Upload-Asset 列表即可 —— PDF2 守卫会照常拦截 PDF2。
+# ★ 数据库**不在本仓库上传/发布** (政策 2026-10-23):
+#   本脚本只传程序 3 附件; 两个 polyDB 库包统一在独立仓库
+#   https://github.com/PolyXRD/PolyXRD-DataBase 的 Releases 分发。
+#   PDF2 守卫仍对任何误加附件生效。
 param()
 $ErrorActionPreference = 'Stop'
 Set-Location 'D:/Project/XRD/PolyXRD'
@@ -106,10 +105,10 @@ $body = @"
 | PolyXRD-v$version-Portable.zip | **正式发布版**便携包（解压即用，同样不含数据库） |
 | SHA256-v$version.txt | 上述产物与两个 polyDB 库包的 SHA-256 校验值 |
 
-> **数据库包不进 Release 附件**（恒 3 附件口径）。需要的用户从发布页同目录下载：
-> `PolyXRD-v$version-Databases-COD-inorg-polyDB.zip`（约 90 MB，主检索库）与
-> `PolyXRD-v$version-Databases-COD-full-polyDB.zip`（约 1.1 GB，扩展库），解压后
-> 在「数据库 ▸ 外挂数据库管理… ▸ 挂载文件夹…」指过去即可，**无需重启**。
+> **数据库不在本仓库/本 Release 发布**：两个 polyDB 库包统一在独立仓库
+> [PolyXRD-DataBase](https://github.com/PolyXRD/PolyXRD-DataBase/releases) 的 Releases 分发
+> （当前 tag `20261021`：COD-Inorg 48.1 MB / 77,500 相、COD-Full 710.3 MB / 521,361 相）。
+> 解压后在「数据库 ▸ 外挂数据库管理… ▸ 挂载文件夹…」指过去即可，**无需重启**。
 > **PDF2-2004 不在附件中**：ICDD 版权数据库，本仓库只提供挂载能力。
 > **旧 sqlite 库仍受支持**：v4 保留对 COD 无机物 / COD 全库索引 / PDF2 /
 > XinMatch 四类旧格式的挂载与检索（`db_import` 兼容路径未改动）。

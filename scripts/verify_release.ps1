@@ -11,6 +11,10 @@
 #      PDF2-2004 为 ICDD 版权库, 任何情况下都**不**进 Release 上传清单。
 #   3. 打印所有产物的 SHA-256 到 installer_output\SHA256-v<ver>.txt
 #
+# ★ 政策（2026-10-23）：**数据库不在本仓库上传/发布**。本脚本只在本地生成并校验
+#   polyDB 库包（供 SHA256 记录与发布前检查）；对外分发统一在独立仓库
+#   https://github.com/PolyXRD/PolyXRD-DataBase 的 Releases。主仓库 Release 恒 3 附件。
+#
 # 为什么把"含不含 .sqlite"当成断言: 0.10.0 的核心约束就是数据库外挂,
 # 一旦 spec 的 datas 被谁改回去, 便携包会悄悄胖 700 MB —— 必须让构建自己喊出来。
 #
@@ -194,7 +198,7 @@ foreach ($k in $dbKinds) {
 
 if ($builtPkgs.Count -eq 0) { Fail '没有生成任何数据库包' }
 if ($polyBuilt) {
-    Write-Output '      注意: PDF2-2004 不进 Release; polyDB 库解压后在外挂数据库管理里指向目录即可。'
+    Write-Output '      注意: 库包仅本地生成/校验; 对外发布在 PolyXRD-DataBase 仓库的 Releases (本仓库 Release 不含数据库)。'
 }
 
 # ── 3. SHA-256 ───────────────────────────────────────────────
