@@ -39,7 +39,7 @@
 
 ---
 
-## 🆕 最新版本 v4.0.0（2026-10-23 · 发布就绪，本地产物已构建）
+## 🆕 最新版本 v4.0.0（2026-10-23 · 已发布）
 
 **自研外挂物相库格式 polyDB —— 更小、更快、候选剪枝可证**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.0.0 与 [docs/外挂库格式规范-polyDB-v1.md](docs/外挂库格式规范-polyDB-v1.md)）：
 
@@ -53,7 +53,8 @@
 
 > 📦 数据库仍为外挂，不随分发；PDF2-2004 为 ICDD 版权库，永不出现在 Release 里。
 
-👉 **本地产物已构建并通过自动化验收**（2026-10-23，详见 [docs/发布检查清单-v4.0.0.md](docs/发布检查清单-v4.0.0.md)）；待打 tag / 上传 Release。
+👉 **已发布**：[Release v4.0.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v4.0.0) —— 3 个附件（Setup 249.1 MB / Portable 389.0 MB / SHA256）已上传并核验（远端 digest 与本地逐件一致）；两个 polyDB 库包作为独立下载项分发。
+> 完整构建/产物/验收记录：[docs/发布检查清单-v4.0.0.md](docs/发布检查清单-v4.0.0.md)。
 
 | 产物 | 体积 | SHA-256（前 16 位） |
 |---|---|---|
@@ -215,7 +216,7 @@ python scripts/make_reg_code.py --verify PXRD1-XXXX-...  # 校验并回显单位
 ⑤ 开始使用!
 ```
 
-> **发布口径**（v4.0.0 实测）：Release 3 附件 = **Setup 安装包（249.1 MB）+ Portable 便携包（389.0 MB）+ SHA256**；
+> **发布口径**（v4.0.0 实测，已发布）：Release 3 附件 = **Setup 安装包（249.1 MB）+ Portable 便携包（389.0 MB）+ SHA256**；
 > 数据库作为**独立下载项**：`COD-inorg-polyDB.zip`（48.1 MB / 77,500 相）与
 > `COD-full-polyDB.zip`（710.3 MB / 521,361 相）。PDF2-2004 不在任何发布物中。
 > PDF2-2004 包为 ICDD 版权库，**不随 Release 分发**，需要时自行准备库文件。
