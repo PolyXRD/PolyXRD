@@ -51,12 +51,14 @@
   挂在控件自身 stylesheet 上，换主题不掉色）。
 - **回归**：全量 **1565 passed / 6 skipped**（8m20s）。
 
-| 产物 | 说明 |
-|---|---|
-| `PolyXRD-Setup-v4.1.0.exe` | 正式版安装包（带注册），**内置 COD-Inorg 库** |
-| `PolyXRD-v4.1.0-Portable.zip` | 便携包（**内部评估版**：状态栏红字「内部评估版本」），内置 COD-Inorg 库 |
-| `PolyXRD-v4.1.0-Databases-COD-inorg-polyDB.zip` | COD 无机物库独立包（给已有主程序换库/补库） |
-| `SHA256-v4.1.0.txt` | 以上产物的 SHA-256 |
+| 产物 | 体积 | SHA-256（前 16 位） | 说明 |
+|---|---|---|---|
+| `PolyXRD-Setup-v4.1.0.exe` | 288.3 MiB | `2a5ff034850e3574…` | 正式版安装包（带注册），**内置 COD-Inorg 库** |
+| `PolyXRD-v4.1.0-Portable.zip` | 430.7 MiB | `fa6be55174df08f7…` | 便携包（**内部评估版**：状态栏红字「内部评估版本」），内置 COD-Inorg 库 |
+| `PolyXRD-v4.1.0-Databases-COD-inorg-polyDB.zip` | 48.1 MiB | `d9e57d11ced3082e…` | COD 无机物库独立包（给已有主程序换库/补库） |
+| `SHA256-v4.1.0.txt` | — | — | 以上产物的 SHA-256 |
+
+👉 **已发布**：[Release v4.1.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v4.1.0)
 
 > PDF2-2004 为 ICDD 版权库，永不出现在 Release 里；COD-Full 等扩展库在 [PolyXRD-DataBase](https://github.com/PolyXRD/PolyXRD-DataBase) 的 Releases 分发。
 
