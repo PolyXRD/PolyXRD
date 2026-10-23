@@ -27,7 +27,11 @@ param(
     [string]$Root = (Split-Path -Parent $PSScriptRoot),
     # polyDB 库所在目录; 默认取仓库同级 PolyXRD-DataBase\polydb
     [string]$PolyDbRoot = '',
-    [switch]$SkipHash
+    [switch]$SkipHash,
+    # v4.1.0: Setup(正式安装包) 与便携包是**两个不同变体**的两个产物, 由两次
+    #   独立构建分别产出。release 那次构建里便携包尚不存在, 属正常 —— 用
+    #   -SkipPortable 跳过该项, 不要误报 FAIL。
+    [switch]$SkipPortable
 )
 
 $ErrorActionPreference = 'Stop'
@@ -62,7 +66,9 @@ $dbKinds = @(
 
 # ── 1. 便携包校验 ────────────────────────────────────────────
 Write-Output "[1/3] 便携包校验: $([IO.Path]::GetFileName($portable))"
-if (-not (Test-Path -LiteralPath $portable)) {
+if ($SkipPortable) {
+    Write-Output '      (本次为 release 构建, 便携包由 internal 变体那次构建产出 —— 本次跳过)'
+} elseif (-not (Test-Path -LiteralPath $portable)) {
     Fail '便携包不存在'
 } else {
     Write-Output ('      体积 ' + (MiB (Get-Item -LiteralPath $portable).Length))

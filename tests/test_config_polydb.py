@@ -176,6 +176,52 @@ def test_mount_path_must_be_a_directory(cfg, tmp_path):
     assert config.get_polydb_path("cod-inorg") is None
 
 
+def test_stale_mount_path_falls_back_to_default(cfg, tmp_path):
+    """用户挂载的库**被挪走**后要回退到自动发现的默认库。
+
+    这是 v4.1.0「解压便携版就能检索」的核心承诺: 便携版把库放在
+    ``<exe>/databases/``, 但用户配置里可能还留着上一份外挂库的路径
+    (换了机器 / 挪了目录 / 删了旧库)。那条路径失效时若直接报"没有库",
+    用户看到的就是"解压了却检索不了" —— 必须回退到内置库。
+    """
+    config, libs = cfg
+    _polydb(libs, "COD-Inorg-20261021.polyDB")
+    gone = tmp_path / "moved_away.polyDB"
+    config.set_polydb_path(gone, "cod-inorg")
+    # 目录此刻还不存在 —— 模拟"用户把外挂库挪走了"
+    assert config.get_polydb_path("cod-inorg") == libs / "COD-Inorg-20261021.polyDB"
+
+
+def test_stale_mount_path_falls_back_even_if_it_existed_once(cfg, tmp_path):
+    """路径曾经有效、现在被删掉 —— 同样要回退, 不能抱住死路径。"""
+    config, libs = cfg
+    _polydb(libs, "COD-Inorg-20261021.polyDB")
+    mine = _polydb(tmp_path / "mine", "My.polyDB", variant="cod-inorg")
+    config.set_polydb_path(mine, "cod-inorg")
+    assert config.get_polydb_path("cod-inorg") == mine
+
+    # 用户删掉了自己的库
+    for child in mine.iterdir():
+        child.unlink()
+    mine.rmdir()
+    assert config.get_polydb_path("cod-inorg") == libs / "COD-Inorg-20261021.polyDB"
+
+
+def test_stale_mount_path_does_not_resurrect_disabled_flag(cfg, tmp_path):
+    """路径失效 ≠ 用户取消挂载: 回退到默认库时不得顺手清掉 disabled 标记。
+
+    反过来也成立: 用户显式取消挂载后, 即使配置里还留着旧路径,
+    也不能被自动发现顶回来 (否则界面上表现为"卸载不掉")。
+    """
+    config, libs = cfg
+    _polydb(libs, "COD-Inorg-20261021.polyDB")
+    gone = tmp_path / "moved_away.polyDB"
+    config.set_polydb_path(gone, "cod-inorg")
+    config.set_polydb_path(None, "cod-inorg")
+    assert config.get_polydb_path("cod-inorg") is None
+    assert config._load_user_db_paths().get("polydb_disabled") == ["cod-inorg"]
+
+
 def test_set_unknown_variant_raises(cfg):
     config, _libs = cfg
     with pytest.raises(ValueError):
