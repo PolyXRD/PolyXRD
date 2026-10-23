@@ -16,13 +16,15 @@ PDF2-2004、XinMatch 格式库各占一个固定槽位, 每个槽位只能挂一
 
 设计要点
 --------
-1. **零迁移**: 老的四类槽位 (以及两个 polyDB 变体) 由配置现算成"内置挂载项"
+1. **零迁移**: 内置挂载项 (polyDB 两个变体、PDF2、用户自建库) 由配置现算
    (:func:`default_mounts`), 不写进 json。用户升级后打开界面, 原来挂着的库
    仍然在列表里, 位置不变; 卸载内置项 = 清对应配置槽位 (与旧行为一致)。
    只有**用户额外加的**挂载项才落盘到 ``~/.polyxrd/db_mounts.json``。
-2. **id 稳定**: 内置项 id 就取类型名 (``pdf2`` / ``cod_index`` / ...), 这样
+2. **id 稳定**: 内置项 id 取固定名 (``polydb:cod-inorg`` / ``pdf2`` / ...), 这样
    历史代码与历史测试里的 ``db_source="pdf2"`` 一类字面量继续有效; 用户加的
    项 id 取 ``<kind>:<路径摘要>``, 同一路径反复添加得到同一个 id (幂等)。
+   已删除的旧槽位字面量 (``cod_inorganics`` / ``cod_index`` / ``xinmatch``)
+   经 :data:`_LEGACY_ALIASES` 映射到语义等价的新库, 老配置不会报"库不存在"。
 3. **探测与展示分离**: :func:`probe` 只读库、不写配置; 失败原因原样返回给
    UI, 由界面决定显示成"未挂载"还是"无法使用"。
 4. **不碰打分**: 本模块只回答"用哪份库", 不参与候选生成/打分/FOM 口径 ——
@@ -41,31 +43,37 @@ from typing import Iterable, Optional
 
 #: 支持的挂载类型 → 检索引擎。
 #: 引擎名即 ``PhaseIdentifier.identify_with_*`` 的后缀, 便于按 kind 分发。
+#:
+#: v4.1.0 起**只有三种**: 默认参考库是 polyDB（COD-Inorg / COD-Full 两个变体），
+#: PDF2 是用户自备的 ICDD 商业库，``user`` 是用户自建库。旧 sqlite 槽位
+#: ``cod_inorganics`` / ``cod_index`` / ``xinmatch`` 连同对应检索引擎一起删除。
 KIND_ENGINE: dict[str, str] = {
-    "cod_inorganics": "cod_inorganics",
-    "cod_index": "cod_index",
     "pdf2": "pdf2",
-    "xinmatch": "xinmatch",
     "polydb": "polydb",
     "user": "user",
 }
 
 #: 类型 → i18n 键 (内置项显示名)。用户自己加的多份库用"类型名 · 目录名"区分。
 KIND_LABEL_KEY: dict[str, str] = {
-    "cod_inorganics": "db_manager.kind.cod_inorganics",
-    "cod_index": "db_manager.kind.cod_index",
     "pdf2": "db_manager.kind.pdf2",
-    "xinmatch": "db_manager.kind.xinmatch",
     "polydb": "db_mounts.kind.polydb_inorg",
     "user": "db_mounts.kind.user",
 }
 
-#: 老代码/老测试里用过的字面量 → 挂载 id。``db_source`` 兼容层靠它。
+#: 老代码/老测试/老配置里用过的字面量 → 挂载 id。``db_source`` 兼容层靠它。
+#:
+#: ``cod_inorganics`` 一类是 v4.1.0 删掉的旧槽位: 老用户存的
+#: ``db_source="cod_inorganics"`` 现在应落到**默认的 polyDB 无机库**上
+#: （同一批 COD 无机物的新格式），而不是报"库不存在"。
 _LEGACY_ALIASES: dict[str, str] = {
-    "cod_full": "cod_index",
-    "cod_local": "cod_index",
     "polydb_inorg": "polydb:cod-inorg",
     "polydb_full": "polydb:cod-full",
+    # 已删除的旧槽位 → 语义等价的新库
+    "cod_inorganics": "polydb:cod-inorg",
+    "xinmatch": "polydb:cod-inorg",
+    "cod_index": "polydb:cod-full",
+    "cod_full": "polydb:cod-full",
+    "cod_local": "polydb:cod-full",
 }
 
 #: 「内置」挂载项 id → polyDB 变体。空串表示不是 polyDB。
@@ -169,29 +177,15 @@ def _now() -> str:
 
 # ── 内置挂载项 (由配置现算) ────────────────────────────────────
 
-def _cod_index_path() -> Optional[Path]:
-    """COD 全库索引位置: 用户导入优先, 否则走 cod_local 的只读解析器。
-
-    刻意用 ``existing_index_db_path()`` 而不是 ``_index_db_path()`` ——
-    后者在开发模式下会触发一次 ~400 MB 的 bundled 部署复制。
-    """
-    try:
-        from polyxrd.config import get_config
-        from polyxrd.services.cod_local import existing_index_db_path
-
-        p = existing_index_db_path()
-        if p is not None:
-            return Path(p)
-        return get_config().get_cif_db_path() / "cod_index.sqlite"
-    except Exception:  # noqa: BLE001 - 状态展示不该因服务异常而崩
-        return None
-
-
 def default_mounts() -> list[Mount]:
     """由配置派生的内置挂载项 (零迁移: 老用户升级后列表不空)。
 
     只返回**当前确实有路径**的项; 路径不存在也照样返回 (``exists=False``),
     这样界面能显示"未挂载"而不是让整行凭空消失。
+
+    v4.1.0: 默认库 = polyDB 的 ``cod-inorg`` 变体。它的路径可能来自用户挂载,
+    也可能来自**自动发现**（便携版 ``<exe>/databases``、源码模式的构库产物
+    目录），所以干净安装后第一行就是可用的 COD-Inorg。
     """
     from polyxrd.config import get_config
 
@@ -203,16 +197,11 @@ def default_mounts() -> list[Mount]:
         out.append(Mount(id=mid, kind=kind, path=Path(path) if path else None,
                          label_key=label_key, builtin=True, variant=variant))
 
-    _add("cod_inorganics", "cod_inorganics", cfg.get_cod_db_path(),
-         KIND_LABEL_KEY["cod_inorganics"])
-    _add("cod_index", "cod_index", _cod_index_path(),
-         KIND_LABEL_KEY["cod_index"])
-    _add("pdf2", "pdf2", cfg.get_pdf2_db_path(), KIND_LABEL_KEY["pdf2"])
-    _add("xinmatch", "xinmatch", cfg.get_xinmatch_db_path(),
-         KIND_LABEL_KEY["xinmatch"])
+    # 顺序即界面默认顺序: 默认参考库排第一, 可选库在后
     for mid, variant in _POLYDB_DEFAULT_IDS.items():
         _add(mid, "polydb", cfg.get_polydb_path(variant),
              _POLYDB_LABEL_KEY[variant], variant)
+    _add("pdf2", "pdf2", cfg.get_pdf2_db_path(), KIND_LABEL_KEY["pdf2"])
     # 用户自建库: 位置由 user_db 固定管理, 这里只作为"可检索的一行"出现
     try:
         from polyxrd.services import user_db
@@ -456,8 +445,6 @@ def probe(mount: Mount, use_cache: bool = True) -> dict:
     res = dict(base)
     if mount.kind == "polydb":
         res.update(_probe_polydb(p))
-    elif mount.kind == "xinmatch":
-        res.update(_probe_xinmatch(p))
     elif mount.kind == "user":
         res.update(_probe_user(p))
     else:
@@ -491,20 +478,6 @@ def _probe_polydb(p: Path) -> dict:
                 "detail": f"variant={st.variant or '?'}"}
     except Exception as e:  # noqa: BLE001 - 探测失败原因原样给 UI
         return {"error": "polydb_error", "detail": f"{e}"}
-
-
-def _probe_xinmatch(p: Path) -> dict:
-    try:
-        from polyxrd.services.xinmatch_db import XinMatchDatabase
-
-        db = XinMatchDatabase(p)
-        if not db.is_ready():
-            return {"error": "xinmatch_not_ready", "detail": str(p)}
-        st = db.stats()
-        return {"ok": True, "rows": int(getattr(st, "entries", 0)),
-                "size_mb": round(p.stat().st_size / 1e6, 1)}
-    except Exception as e:  # noqa: BLE001
-        return {"error": "xinmatch_error", "detail": f"{e}"}
 
 
 def _probe_user(p: Path) -> dict:
@@ -613,17 +586,20 @@ def _why_not_mounted(path: Path, reasons: list[str] | None = None) -> str:
     return f"这个路径上没有可用的数据库：{path}"
 
 
+#: 目录扫描时认的 sqlite 后缀（v4.1.0 起只剩 PDF2 一类 sqlite 库）。
+_DB_SUFFIXES = (".sqlite", ".sqlite3", ".db", ".db3", ".sqlite2")
+
+
 def _iter_db_files(path: Path) -> list[Path]:
     """目录本层的候选数据库文件 (排除 .bak / ~ / .tmp 备份)。"""
-    from polyxrd.services.db_import import _DB_SUFFIXES
-
     out: list[Path] = []
     try:
         for p in sorted(path.iterdir()):
             if not p.is_file():
                 continue
             name = p.name.lower()
-            if ".bak" in name or name.endswith("~") or name.endswith(".tmp"):
+            # 备份命名有两种写法: `x.sqlite~` 与 `x~.sqlite`, 一律按"名字里带 ~"排除
+            if ".bak" in name or "~" in name or name.endswith(".tmp"):
                 continue
             if p.suffix.lower() in _DB_SUFFIXES:
                 out.append(p)

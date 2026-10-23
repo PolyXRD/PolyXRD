@@ -21,7 +21,8 @@ import sys
 import time
 from datetime import datetime
 
-DEFAULT_BASE = r"D:/Project/XRD/PolyXRD-DataBase"
+#: 共享数据根（2026-10-23 起在仓库外，PolyXRD / XinMatch 两库共用）。
+DEFAULT_BASE = os.environ.get("XRD_DATA_ROOT") or r"D:/Project/XRD/sync-COD"
 DEFAULT_MANIFEST = os.path.join(DEFAULT_BASE, "inorg_manifest.sqlite")
 DEFAULT_COD = os.path.join(DEFAULT_BASE, "COD")
 

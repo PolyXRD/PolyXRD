@@ -212,9 +212,10 @@ def test_cod_rank_hanawalt_is_only_a_tiebreaker():
     assert cod_rank_score(weak_h_good_fom) > cod_rank_score(strong_h_bad_fom)
 
 
-def test_cod_inorganics_exposes_prefilter_knobs():
+def test_default_backend_exposes_prefilter_knobs():
+    """默认参考库（v4.1.0 起是 polyDB）必须暴露同一套 d-I 预筛旋钮。"""
     import polyxrd.services.phase_identifier as pim
-    p = inspect.signature(pim.PhaseIdentifier.identify_with_cod_inorganics).parameters
+    p = inspect.signature(pim.PhaseIdentifier.identify_with_polydb).parameters
     for name in ("prefilter_limit", "prefilter_tolerance",
                  "prefilter_tolerance_rel", "prefilter_min_match",
                  "prefilter_max_ref_peaks"):

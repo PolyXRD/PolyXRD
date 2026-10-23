@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar, Optional
@@ -158,19 +159,23 @@ class AppConfig:
             return {}
         return data if isinstance(data, dict) else {}
 
-    def _update_user_db_path(self, key: str, path: str | Path | None) -> None:
-        """按 key 增量更新 user_db_paths.json (不触碰其它 key)。"""
+    def _save_user_db_paths(self, data: dict) -> None:
+        """整体写回 ``user_db_paths.json`` (调用方负责先读-改-合并)。"""
         cfg_file = self._user_db_paths_file()
         cfg_file.parent.mkdir(parents=True, exist_ok=True)
+        cfg_file.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+    def _update_user_db_path(self, key: str, path: str | Path | None) -> None:
+        """按 key 增量更新 user_db_paths.json (不触碰其它 key)。"""
         data = self._load_user_db_paths()
         if not path:
             data.pop(key, None)
         else:
             data[key] = str(Path(path).resolve())
-        cfg_file.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        self._save_user_db_paths(data)
 
     def user_db_path(self, key: str) -> Optional[Path]:
         """读取某个数据库槽位的用户导入路径。
@@ -220,22 +225,6 @@ class AppConfig:
         """设置用户导入的 COD 全库索引路径并持久化 (空值 = 清除)。"""
         self._update_user_db_path("cod_index_db_path", path)
 
-    # ── XinMatch 格式数据库路径 (v3.1.0) ────────────────────
-
-    def get_xinmatch_db_path(self) -> Optional[Path]:
-        """用户挂载的 XinMatch 格式库路径; 未挂载返回 None。
-
-        XinMatch 库（``entries`` / ``peaks`` / ``elements`` / ``element_combo``
-        四表）**没有默认位置** —— 它不在我们的发布包里, 也不该要求用户把文件
-        拷到某个固定目录。所以这里只认"用户显式挂载的那一个路径", 文件被挪走
-        后 ``user_db_path`` 自动返回 None, 检索入口据此优雅退出而不是抱死路径。
-        """
-        return self.user_db_path("xinmatch_db_path")
-
-    def set_xinmatch_db_path(self, path: str | Path | None) -> None:
-        """记录 XinMatch 库的挂载路径并持久化 (空值 = 取消挂载)。"""
-        self._update_user_db_path("xinmatch_db_path", path)
-
     # ── polyDB 外挂库路径 (v4.0.0) ──────────────────────────
 
     #: polyDB 变体 → user_db_paths.json 里的槽位 key。
@@ -246,28 +235,137 @@ class AppConfig:
         "cod-full": "polydb_full_path",
     }
 
-    def get_polydb_path(self, variant: str = "cod-inorg") -> Optional[Path]:
-        """用户挂载的 polyDB 目录; 未挂载/目录被挪走返回 None。
+    #: polyDB 变体 → 目录名兜底关键字（小写）。正常以 ``meta.json`` 的
+    #: ``variant`` 字段为准，只有 meta 读不出时才用文件名判。
+    _POLYDB_NAME_HINTS: ClassVar[dict[str, tuple[str, ...]]] = {
+        "cod-inorg": ("cod-inorg", "inorg"),
+        "cod-full": ("cod-full", "full"),
+    }
 
-        polyDB 走"外挂目录"路线: 库可以放在任意位置（内置盘、移动硬盘、
-        网络盘）, 发布包里不带, 所以没有默认路径。上层拿到 None 时应视为
-        "该库不可用"并回退到下一优先级, 而不是抱死路径报错。
+    #: 记住"用户显式取消挂载过哪些变体"的键。没有它的话, 取消挂载后下次
+    #: 启动又被自动发现出来的默认库顶回来, 用户会以为卸载没生效。
+    _POLYDB_DISABLED_KEY: ClassVar[str] = "polydb_disabled"
+
+    def _polydb_search_roots(self) -> list[Path]:
+        """默认 polyDB 的候选父目录, 顺序即优先级。
+
+        1. ``POLYXRD_POLYDB_DIR`` —— 显式指定（部署脚本/测试用）；
+        2. 打包运行：``<exe 所在目录>/databases`` —— 便携版把库放这里，
+           解压即可用（安装到 Program Files 时该目录只读，但读取没问题）；
+        3. 源码运行：仓库 ``databases/`` + 构库仓库的 ``polydb/`` 产物目录。
+        """
+        roots: list[Path] = []
+        env = os.environ.get("POLYXRD_POLYDB_DIR", "").strip()
+        if env:
+            roots.append(Path(env))
+        if getattr(sys, "frozen", False):
+            try:
+                roots.append(Path(sys.executable).resolve().parent / "databases")
+            except OSError:
+                pass
+        else:
+            repo = Path(__file__).resolve().parents[2]
+            roots.append(repo / "databases")
+            # 源码态开发: 构库仓库与软件仓库同级 (不写死盘符 —— 换机器/换盘即失效)
+            roots.append(repo.parent / "PolyXRD-DataBase" / "polydb")
+        return roots
+
+    def discover_polydb(self, variant: str = "cod-inorg") -> Optional[Path]:
+        """在候选目录里找该变体最新的一份 polyDB; 找不到返回 None。
+
+        Args:
+            variant: ``cod-inorg`` / ``cod-full``。
+
+        Returns:
+            polyDB 目录；同一目录下有多份时取**目录名最大**的那份
+            （产物名带快照日期，如 ``COD-Inorg-20261021.polyDB``，字符串序即时间序）。
+        """
+        hints = self._POLYDB_NAME_HINTS.get(variant)
+        if not hints:
+            return None
+        found: list[Path] = []
+        for root in self._polydb_search_roots():
+            for cand in self._iter_polydb_dirs(root):
+                meta_variant = self._read_polydb_variant(cand)
+                if meta_variant:
+                    if meta_variant == variant:
+                        found.append(cand)
+                    continue
+                # meta 读不出来时退回文件名判据
+                low = cand.name.lower()
+                if any(h in low for h in hints):
+                    found.append(cand)
+        if not found:
+            return None
+        return sorted(found, key=lambda p: p.name)[-1]
+
+    @staticmethod
+    def _iter_polydb_dirs(root: Path) -> list[Path]:
+        """``root`` 自身是 polyDB 就返回它，否则列出其下的 polyDB 子目录。"""
+        def _is_polydb(d: Path) -> bool:
+            return (d / "meta.json").is_file() and (d / "index.sqlite").is_file()
+
+        if not root.is_dir():
+            return []
+        if _is_polydb(root):
+            return [root]
+        try:
+            return [c for c in sorted(root.iterdir())
+                    if c.is_dir() and _is_polydb(c)]
+        except OSError:
+            return []
+
+    @staticmethod
+    def _read_polydb_variant(path: Path) -> str:
+        try:
+            meta = json.loads((path / "meta.json").read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return ""
+        return str(meta.get("variant") or "") if isinstance(meta, dict) else ""
+
+    def get_polydb_path(self, variant: str = "cod-inorg") -> Optional[Path]:
+        """当前生效的 polyDB 目录; 一份都没有时返回 None。
+
+        解析顺序: **用户挂载的路径** → **自动发现的默认库**。
+        默认库让"解压便携版就能检索"成立, 不需要用户先手工挂载;
+        用户显式取消挂载过的变体不再自动发现（见 :meth:`set_polydb_path`）。
         """
         key = self.POLYDB_VARIANTS.get(variant)
         if not key:
             return None
         p = self.user_db_path(key)
-        if p is None:
+        if p is not None:
+            return p if p.is_dir() else None
+        disabled = self._load_user_db_paths().get(self._POLYDB_DISABLED_KEY) or []
+        if isinstance(disabled, list) and variant in disabled:
             return None
-        return p if p.is_dir() else None
+        return self.discover_polydb(variant)
 
     def set_polydb_path(self, path: str | Path | None,
                         variant: str = "cod-inorg") -> None:
-        """挂载/取消挂载某个 polyDB 变体 (空值 = 取消挂载)。"""
+        """挂载/取消挂载某个 polyDB 变体 (空值 = 取消挂载)。
+
+        取消挂载会记住"这个变体不要再用默认库", 否则下次启动自动发现又会
+        把它挂回来, 界面上表现为"卸载不掉"。
+        """
         key = self.POLYDB_VARIANTS.get(variant)
         if not key:
             raise ValueError("未知 polyDB 变体: %s" % variant)
         self._update_user_db_path(key, path)
+        self._set_polydb_disabled(variant, disabled=not path)
+
+    def _set_polydb_disabled(self, variant: str, *, disabled: bool) -> None:
+        data = self._load_user_db_paths()
+        cur = data.get(self._POLYDB_DISABLED_KEY)
+        cur = [v for v in cur if isinstance(v, str)] if isinstance(cur, list) else []
+        cur = [v for v in cur if v != variant]
+        if disabled:
+            cur.append(variant)
+        if cur:
+            data[self._POLYDB_DISABLED_KEY] = cur
+        else:
+            data.pop(self._POLYDB_DISABLED_KEY, None)
+        self._save_user_db_paths(data)
 
     # ── CIF 落盘缓存 (v4.0.0 收口: 从三处硬编码 Path.home() 提到一处) ──
 

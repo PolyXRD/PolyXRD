@@ -44,13 +44,13 @@ def pv(qapp, tmp_path, monkeypatch):
 # 一律 patch ``db_mounts.source_entries``, 断言与开发机上真实挂了什么库无关。
 
 #: (挂载 id, 类型, 路径, 相数, i18n 键) —— 与 probe_all 的行同形
+#: v4.1.0: 只剩 polyDB 两变体 + PDF2 + 用户库 (旧 COD sqlite / XinMatch 槽位已删)
 _STD_SOURCES = (
-    ("cod_inorganics", "cod_inorganics", r"D:\db\COD_inorganics.sqlite", 77130, ""),
-    ("cod_index", "cod_index", r"D:\db\cod_index.sqlite", 1959421, ""),
-    ("pdf2", "pdf2", r"D:\db\PDF2_2004.sqlite", 163834, ""),
-    ("xinmatch", "xinmatch", r"D:\db\cod_inorganics.db", 3000, ""),
     ("polydb:cod-inorg", "polydb", r"D:\db\COD-Inorg.polyDB", 77500,
      "db_mounts.kind.polydb_inorg"),
+    ("polydb:cod-full", "polydb", r"D:\db\COD-Full.polyDB", 521361,
+     "db_mounts.kind.polydb_full"),
+    ("pdf2", "pdf2", r"D:\db\PDF2_2004.sqlite", 163834, ""),
     ("user", "user", r"D:\db\user_phases.sqlite", 5, "db_mounts.kind.user"),
 )
 
@@ -89,17 +89,19 @@ def patched_sources(monkeypatch):
 
 class TestDbSourceCombo:
     def test_source_list_is_registry_driven(self, pv, patched_sources):
-        """下拉项 = 内置 + 每个挂载项 + 合并 + 用户库, 文案与 key 一一对齐。"""
+        """下拉项 = 内置 + 每个挂载项 + 用户库, 文案与 key 一一对齐。"""
         view, _vm = pv
         view.refresh_db_sources()
         keys = view._db_source_keys
         assert keys[0] == "builtin"
         # 挂载项按注册表顺序出现 (同一类型挂多份也会各占一项)
-        for mid in ("cod_inorganics", "cod_index", "pdf2", "xinmatch",
-                    "polydb:cod-inorg"):
+        for mid in ("polydb:cod-inorg", "polydb:cod-full", "pdf2"):
             assert mid in keys, f"{mid} 未出现在数据源下拉里"
-        # 合并 / 用户库固定在末尾 (用户库是 v2.6.0 以来的约定位置)
-        assert keys[-2:] == ["merged", "user"]
+        # 用户库固定在末尾 (v2.6.0 以来的约定位置)
+        assert keys[-1] == "user"
+        # v4.1.0 删掉的旧槽位不能再冒出来
+        for gone in ("cod_inorganics", "cod_index", "xinmatch", "merged"):
+            assert gone not in keys, f"旧槽位 {gone} 还在下拉里"
         # 文案条数必须与 key 一一对应 (错位会让选 A 跑 B)
         assert view._db_combo.count() == len(keys)
         assert view._db_combo.itemText(keys.index("pdf2")).startswith("PDF2-2004")
@@ -166,33 +168,8 @@ class TestDbSourceCombo:
         tip = view._db_combo.model().item(1).toolTip()
         assert "外挂数据库管理" in tip
 
-    def test_xinmatch_item_present(self, pv, patched_sources):
-        """v3.1.0: 下拉里必须能看到「XinMatch 格式库」, 且 key/文案对齐。"""
-        view, _vm = pv
-        view.refresh_db_sources()
-        idx = view._db_source_keys.index("xinmatch")
-        assert view._db_combo.count() == len(view._db_source_keys)
-        assert view._db_combo.itemText(idx).startswith("XinMatch")
-
-    def test_xinmatch_disabled_when_not_mounted(self, pv, patched_sources):
-        """未挂载的 XinMatch 库要置灰, 否则用户选中后静默返回空结果。"""
-        patched_sources({"xinmatch": False})
-        view, _vm = pv
-        view.refresh_db_sources()
-        idx = view._db_source_keys.index("xinmatch")
-        item = view._db_combo.model().item(idx)
-        assert item is not None and not item.isEnabled()
-        assert "未挂载" in view._db_source_labels()[idx]
-
-    def test_xinmatch_enabled_when_mounted(self, pv, patched_sources):
-        view, _vm = pv
-        view.refresh_db_sources()
-        idx = view._db_source_keys.index("xinmatch")
-        assert view._db_combo.model().item(idx).isEnabled()
-        assert "3,000" in view._db_source_labels()[idx]
-
     def test_polydb_variants_are_separate_items(self, pv, patched_sources):
-        """v4.0.0: polyDB 的无机库与全库是两份库 → 必须是两个独立数据源。
+        """polyDB 的无机库与全库是两份库 → 必须是两个独立数据源。
 
         合成一项的话, "选无机库"和"选全库"会落到同一个 db_source, 用户
         以为换库了实际没换。
@@ -200,10 +177,22 @@ class TestDbSourceCombo:
         view, _vm = pv
         view.refresh_db_sources()
         keys = view._db_source_keys
-        assert "polydb:cod-inorg" in keys
+        assert "polydb:cod-inorg" in keys and "polydb:cod-full" in keys
         assert view._db_combo.itemText(keys.index("polydb:cod-inorg")).startswith(
             "COD 无机物库（polyDB）")
+        assert view._db_combo.itemText(keys.index("polydb:cod-full")).startswith(
+            "COD 全库（polyDB）")
         assert "77,500" in view._db_source_labels()[keys.index("polydb:cod-inorg")]
+        assert "521,361" in view._db_source_labels()[keys.index("polydb:cod-full")]
+
+    def test_polydb_inorg_is_the_default_library(self, pv, patched_sources):
+        """COD-Inorg 那份是默认库: 挂上后就是可用项, 且排在其他库前面。"""
+        view, _vm = pv
+        view.refresh_db_sources()
+        keys = view._db_source_keys
+        assert keys.index("polydb:cod-inorg") < keys.index("pdf2")
+        idx = keys.index("polydb:cod-inorg")
+        assert view._db_combo.model().item(idx).isEnabled()
 
 
 # ── 2. 识别分支 ──────────────────────────────────────────────
@@ -232,8 +221,8 @@ class TestIdentifyRouting:
         # 元素过滤必须透传 (PDF2 与 COD 共用四态过滤)
         assert calls[0]["element_filter"] == {"must_have": ["Ca"]}
 
-    def test_vm_routes_xinmatch_to_identify_with_xinmatch(self, pv, monkeypatch):
-        """v3.1.0: db_source="xinmatch" 必须落到 identify_with_xinmatch。"""
+    def test_vm_routes_polydb_to_identify_with_polydb(self, pv, monkeypatch):
+        """db_source="polydb:cod-inorg" 必须落到 identify_with_polydb (默认库)。"""
         view, vm = pv
         calls: list[dict] = []
 
@@ -242,17 +231,19 @@ class TestIdentifyRouting:
             return []
 
         monkeypatch.setattr(vm._phase_vm._identifier,
-                            "identify_with_xinmatch", _spy)
+                            "identify_with_polydb", _spy)
         from polyxrd.models.peak import Peak, PeakList
         vm._phase_vm._peaks = PeakList(peaks=[
             Peak(two_theta=29.4, intensity=100.0, fwhm=0.1, d_spacing=3.03),
         ])
         vm._phase_vm.identify_phases(
-            data=object(), top_n=5, db_source="xinmatch",
+            data=object(), top_n=5, db_source="polydb:cod-inorg",
             element_filter={"must_have": ["Zn"]},
         )
-        assert len(calls) == 1, "未走 XinMatch 分支"
+        assert len(calls) == 1, "未走 polyDB 分支"
         assert calls[0]["element_filter"] == {"must_have": ["Zn"]}
+        # 变体必须带下去, 否则两个 polyDB 变体会互相串门
+        assert calls[0]["variant"] == "cod-inorg"
 
     def test_button_path_passes_pdf2(self, pv, monkeypatch):
         """点「传统 Search/Match」时下拉选中的 PDF2 必须传到 VM。"""

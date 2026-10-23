@@ -55,7 +55,7 @@ from PySide6.QtWidgets import (
 from polyxrd.config import AppConfig
 from polyxrd.i18n import tr, I18nManager, Language
 from polyxrd.utils import registration as _registration
-from polyxrd.utils.build_flavor import INTERNAL_BUILD_LABEL, is_internal
+from polyxrd.utils.build_flavor import is_internal
 from polyxrd.utils.resources import get_app_icon_path, get_icon_path
 from polyxrd.viewmodels.main_vm import MainViewModel
 from polyxrd.views.data_view import DataView
@@ -64,6 +64,7 @@ from polyxrd.views.refinement_view import RefinementView
 from polyxrd.views.report_view import ReportView
 from polyxrd.views.widgets.busy_indicator import BusyIndicator, busy
 from polyxrd.views.widgets.database_dialog import DatabaseManagerDialog
+from polyxrd.views.widgets.edition_badge import internal_badge_label
 from polyxrd.services import CIFDatabase, CODSearcher
 
 
@@ -646,9 +647,18 @@ class MainWindow(QMainWindow):
         self._maybe_first_run_db_hint()
 
     def _maybe_first_run_db_hint(self) -> None:
-        """一个库都没挂载时给出明确指引 (仅首次弹窗, 之后只留状态栏常驻提示)。"""
-        from polyxrd.services import db_import
-        if any(db_import.live_counts().values()):
+        """一个库都没挂载时给出明确指引 (仅首次弹窗, 之后只留状态栏常驻提示)。
+
+        v4.1.0: 判据从「旧 sqlite 四槽位有记录数」改为「挂载表里至少有一份
+        真实存在的库」—— 只挂 polyDB 时旧判据会误报"未检测到任何外挂数据库"。
+        """
+        from polyxrd.services import db_mounts
+        try:
+            usable = [m for m in db_mounts.all_mounts(include_user=False)
+                      if m.exists]
+        except Exception:  # noqa: BLE001 - 状态提示不该因注册表异常而崩
+            usable = []
+        if usable:
             return
         self.statusBar().showMessage(tr("status.no_database"))
         if self._settings.value("db/nodb_hint_shown", False, type=bool):
@@ -661,17 +671,18 @@ class MainWindow(QMainWindow):
     def _setup_edition_status_label(self) -> None:
         """状态栏**最右侧**（右对齐）的版本/注册标识。
 
-        * 内部评估版 —— 固定显示 ``内部评估版本``，全程无注册 UI、无启动提示；
+        * 内部评估版 —— 固定显示 ``内部评估版本``（**红色加粗**），全程无注册
+          UI、无启动提示；
         * 正式发布版 —— 显示注册状态 ``已注册：<单位部门名称>`` / ``未注册``。
 
         ``stretch=1`` 让标签吃掉中间空白，使文案始终贴着状态栏右端，
         窗口拉宽也不会漂到中间（沿用 Qt 状态栏 permanent widget 的排布语义）。
+
+        红色加粗用**控件自带 stylesheet** 而不是全局 QSS: 状态栏会被主题
+        重新刷一遍样式，挂在控件上的规则优先级更高，换主题也不会掉色。
         """
         if is_internal():
-            label = QLabel(INTERNAL_BUILD_LABEL)
-            label.setObjectName("editionStatusLabel")
-            label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            label.setToolTip(INTERNAL_BUILD_LABEL)
+            label = internal_badge_label()
             self._edition_label = label
             self.statusBar().addPermanentWidget(label, 1)
             return
@@ -1812,13 +1823,20 @@ class MainWindow(QMainWindow):
             pass
 
     def _on_open_db_dir(self) -> None:
-        """打开数据库存放目录 (方便用户把解压出来的 .sqlite 放进去)。"""
-        from polyxrd.services import db_import as _dbi
-        paths = _dbi._default_paths()
-        # 优先打开已挂载库所在目录; 都没有则退到用户可写目录
-        # (~/.polyxrd/cif_db) —— 安装目录在 Program Files 下普通用户不可写。
-        target = next((p.parent for p in paths.values() if p.exists()), None)
+        """打开参考库存放目录 (方便用户把解压出来的 polyDB / PDF2 放进去)。"""
+        target = None
+        try:
+            # 优先打开当前生效的 polyDB 所在目录（便携版的 <exe>/databases）
+            p = self._config.get_polydb_path("cod-inorg")
+            if p is not None:
+                target = p.parent
+            elif self._config.get_polydb_path("cod-full") is not None:
+                target = self._config.get_polydb_path("cod-full").parent
+        except Exception:  # noqa: BLE001 - 只是"打开目录", 失败不该弹栈
+            target = None
         if target is None:
+            # 都没有则退到用户可写目录 (~/.polyxrd/cif_db) ——
+            # 安装目录在 Program Files 下普通用户不可写。
             target = self._config.user_db_dir()
         try:
             target.mkdir(parents=True, exist_ok=True)

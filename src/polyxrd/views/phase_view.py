@@ -433,22 +433,20 @@ class PhaseView(QWidget):
     #    v4.0.0: 列表式挂载 —— 下拉项由挂载注册表现算) ──
     #: 内置库类型的显示名在 ``vw.phase_view.*`` 下; polyDB 变体等用注册表自带的
     #: ``label_key`` (与「外挂数据库管理」列表同一套文案, 两处口径必须一致)。
+    #: v4.1.0: 只剩 PDF2 一类 sqlite 库, 其余（polyDB）一律走注册表文案。
     _DB_LABEL_KEYS: ClassVar[dict[str, str]] = {
-        "cod_inorganics": "vw.phase_view.db_cod_inorg",
-        "cod_index": "vw.phase_view.db_cod_full",
         "pdf2": "vw.phase_view.db_pdf2",
-        "xinmatch": "vw.phase_view.db_xinmatch",
     }
 
     def _build_db_entries(self) -> list[str]:
         """按挂载列表重建下拉条目, 返回显示文案 (key 同步写入 ``_db_source_keys``)。
 
-        v4.0.0 起「数据源」不再是写死的 8 个槽位, 而是**一张挂载表**: 用户在
+        v4.0.0 起「数据源」不再是写死的槽位, 而是**一张挂载表**: 用户在
         「外挂数据库管理」里挂了几份库, 这里就有几项 (同一类型挂多份也各占
         一项)。项的 key 就是挂载项 id, 直接作为 ``db_source`` 传给 ViewModel。
 
-        内置库与「合并」永远保留:「合并」= 内置 118 相 + COD 全库, 是唯一一个
-        不属于任何单个库的数据源。
+        内置 118 相参考库 (``builtin``) 永远保留; v4.1.0 删掉了「合并」
+        （它依赖已删除的 COD 全库 sqlite 索引）。
         """
         from polyxrd.services import db_mounts
 
@@ -463,11 +461,8 @@ class PhaseView(QWidget):
             rows = []
 
         unmounted = tr("vw.phase_view.db_unmounted_hint")
-        cod_index_ok = False
         user_rows = 0
         for r in rows:
-            if r["kind"] == "cod_index" and r["ok"]:
-                cod_index_ok = True
             if r["kind"] == "user":
                 # 用户自建库固定排在最后一项 (与 v2.6.0 的位置保持一致)
                 user_rows = int(r["rows"] or 0)
@@ -484,11 +479,6 @@ class PhaseView(QWidget):
             keys.append(r["id"])
             enabled.append(bool(r["ok"]))
             hints.append(unmounted)
-
-        keys.append("merged")
-        labels.append(tr("vw.phase_view.db_merged"))
-        enabled.append(cod_index_ok)
-        hints.append(unmounted)
 
         keys.append("user")
         labels.append(self._db_label("vw.phase_view.db_user", user_rows))

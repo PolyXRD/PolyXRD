@@ -242,28 +242,8 @@ class PhaseViewModel(QObject):
             _poly_path = _mount.path
             _explicit = None
         try:
-            if db_source in ("cod_full", "merged"):
-                if not getattr(self._identifier, "_cod_ready", False):
-                    self._identifier.enable_cod_local()
-                results = self._identifier.identify_with_cod_local(
-                    data,
-                    peaks=use_peaks,
-                    elements=elements,
-                    top_n=top_n,
-                    tolerance=tolerance,
-                    merge_with_builtin=(db_source == "merged"),
-                )
-            elif _kind == "pdf2":
+            if _kind == "pdf2":
                 results = self._identifier.identify_with_pdf2(
-                    data,
-                    peaks=use_peaks,
-                    element_filter=element_filter,
-                    top_n=top_n,
-                    tolerance=tolerance,
-                    db_path=_explicit,
-                )
-            elif _kind == "cod_inorganics":
-                results = self._identifier.identify_with_cod_inorganics(
                     data,
                     peaks=use_peaks,
                     element_filter=element_filter,
@@ -281,23 +261,10 @@ class PhaseViewModel(QObject):
                     top_n=top_n,
                     tolerance=tolerance,
                 )
-            elif _kind == "xinmatch":
-                # v3.1.0: 用户挂载的 XinMatch 格式库 (entries/peaks/elements)。
-                # 与 COD 无机库共用 _rank_candidates 的 FOM 口径, 差别只在
-                # 预筛走 XinMatch 适配器; 该库无 CIF → 候选不能直接精修。
-                results = self._identifier.identify_with_xinmatch(
-                    data,
-                    peaks=use_peaks,
-                    element_filter=element_filter,
-                    top_n=top_n,
-                    tolerance=tolerance,
-                    progress_cb=self.index_progress.emit,
-                    db_path=_explicit,
-                )
             elif _kind == "polydb":
-                # v4.0.0: polyDB 外挂库（目录容器 + 位图倒排预筛）。
-                # 与 COD 无机库同一套打分，只是候选池靠位图+上界分层生成；
-                # 条目带非对称单位原子位点，命中相可直接进精修。
+                # v4.0.0: polyDB 外挂库（目录容器 + 位图倒排预筛），v4.1.0 起
+                # 它是**默认参考库**。与 COD 无机库同一套打分，只是候选池靠
+                # 位图+上界分层生成；条目带非对称单位原子位点，命中相可直接精修。
                 results = self._identifier.identify_with_polydb(
                     data,
                     peaks=use_peaks,
@@ -309,21 +276,6 @@ class PhaseViewModel(QObject):
                     # 若被卸下, 绝不能悄悄退到无机库那一份去查。
                     variant=(_mount.variant if _mount and _mount.variant
                              else "cod-inorg"),
-                )
-            elif _kind == "cod_index":
-                # 列表里额外挂的第二份 COD 全库索引 (用户自加): 只查这一份,
-                # 不与内置结果合并 —— 合并是「merged」这个独立数据源的语义。
-                # 注意: 不要在这里调 `enable_cod_local()` —— 显式 db_path 已经在
-                # `identify_with_cod_local` 内部建临时只读实例 (v4.0.0 修复了
-                # 串库), 多调一次只会白开配置里的库并跑 COUNT(*), 大库上要数秒。
-                results = self._identifier.identify_with_cod_local(
-                    data,
-                    peaks=use_peaks,
-                    elements=elements,
-                    top_n=top_n,
-                    tolerance=tolerance,
-                    merge_with_builtin=False,
-                    db_path=_explicit,
                 )
             elif element_filter:
                 results = self._identifier.identify_with_element_filter(

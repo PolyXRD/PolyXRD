@@ -286,7 +286,7 @@ def test_elements_from_db_formula_is_single_source():
     # 闭包里直接调; 用户库走的是共用的 ``_rank_candidates`` + ``_make_user_phase``,
     # 所以字面调用在 ``_make_user_phase`` 里, 不在 identify_with_user_db 里。
     for meth in (
-        pim.PhaseIdentifier.identify_with_cod_inorganics,
+        pim.PhaseIdentifier._make_polydb_phase,
         pim.PhaseIdentifier.identify_with_pdf2,
         pim.PhaseIdentifier._make_user_phase,
     ):

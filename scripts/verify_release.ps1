@@ -76,15 +76,38 @@ if (-not (Test-Path -LiteralPath $portable)) {
             }
             $bad = $entries | Where-Object {
                 $n = $_.Name
-                ($bannedNames -contains $n) -or
-                ($_.FullName -like '*.polyDB*') -or
-                (($n -like '*.sqlite' -or $n -like '*.sqlite3' -or $n -like '*.db') -and
-                 $_.FullName.Replace('\', '/') -notlike "*$allowedSqlite")
+                $rel = $_.FullName.Replace('\', '/')
+                # v4.1.0: 便携包**内置**默认库 COD-Inorg polyDB —— 解压即可检索。
+                # 只允许 databases/<*.polyDB>/ 这一处（polyDB 自身含 index.sqlite，
+                # 属于库的正常分段文件，不是"漏进去的业务库"）。
+                $isBundledPolyDB = $rel -like 'databases/*.polyDB/*'
+                if (-not $isBundledPolyDB) {
+                    ($bannedNames -contains $n) -or
+                    ($rel -like '*.polyDB*') -or
+                    (($n -like '*.sqlite' -or $n -like '*.sqlite3' -or $n -like '*.db') -and
+                     $rel -notlike "*$allowedSqlite")
+                }
             }
             if ($bad) {
                 foreach ($b in $bad) { Fail ("包内不应存在的数据库: " + $b.FullName) }
             } else {
-                Write-Output '      OK: 未发现业务数据库 (符合 0.10.0 外挂策略)'
+                Write-Output '      OK: 数据库仅位于 databases\<*.polyDB>\ (v4.1.0 内置默认库)'
+            }
+            # 内置库完整性: 8 个分段文件一个都不能少
+            $segments = @('meta.json', 'index.sqlite', 'peaks_d.f32', 'peaks_i.u16',
+                          'bins.u8', 'elem.u8', 'sites.bin', 'sites_off.i64')
+            $libEntry = $entries | Where-Object { $_.FullName -like 'databases/*.polyDB/meta.json' } |
+                        Select-Object -First 1
+            if ($libEntry) {
+                $libDir = ($libEntry.FullName -replace '/meta.json$', '')
+                foreach ($seg in $segments) {
+                    if (-not ($entries | Where-Object { $_.FullName -eq "$libDir/$seg" })) {
+                        Fail ("内置 polyDB 缺少分段文件: $libDir/$seg")
+                    }
+                }
+                Write-Output ('      内置库 ' + (Split-Path $libDir -Leaf) + ' 8/8 分段文件齐全')
+            } else {
+                Fail '便携包内没有 databases\*.polyDB\meta.json —— 解压后无法直接检索'
             }
         } finally { $zip.Dispose() }
     } catch {

@@ -26,8 +26,10 @@ import time
 
 import numpy as np
 
+#: 数据根（2026-10-23 起在仓库外，PolyXRD / XinMatch 两库共用）。
+_DATA_ROOT = os.environ.get("XRD_DATA_ROOT") or r"D:/Project/XRD/sync-COD"
 TOOLS = r"D:/Project/XRD/PolyXRD-DataBase/tools"
-COD_ROOT = r"D:/Project/XRD/PolyXRD-DataBase/COD"
+COD_ROOT = os.path.join(_DATA_ROOT, "COD")
 
 D_TOL = 1e-4          # f32 量化
 I_TOL = 0.05          # u16 量化（1000 标度）

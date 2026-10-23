@@ -4,10 +4,10 @@
   <p>
     <b>多晶 X 射线衍射 (XRD) 图谱综合分析套件</b>
     <br />
-    峰检测 &nbsp;·&nbsp; 多物相定性检索 &nbsp;·&nbsp; Rietveld 结构精修 &nbsp;·&nbsp; Le Bail 晶胞精修 &nbsp;·&nbsp; 指标化 &nbsp;·&nbsp; 3D 结构可视化 &nbsp;·&nbsp; 多库外挂检索 (COD 无机物 / COD 全库 / PDF2-2004 / XinMatch 格式)
+    峰检测 &nbsp;·&nbsp; 多物相定性检索 &nbsp;·&nbsp; Rietveld 结构精修 &nbsp;·&nbsp; Le Bail 晶胞精修 &nbsp;·&nbsp; 指标化 &nbsp;·&nbsp; 3D 结构可视化 &nbsp;·&nbsp; 内置 COD 无机物库 (polyDB) + 多库外挂检索
   </p>
   <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v4.0.0-blue?style=flat-square" /></a>
+    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v4.1.0-blue?style=flat-square" /></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
     &nbsp;
@@ -15,7 +15,7 @@
     &nbsp;
     <img src="https://img.shields.io/badge/UI-PySide6%20(Qt6)-41cd52?style=flat-square" />
     &nbsp;
-    <img src="https://img.shields.io/badge/Tests-1574%20collected-brightgreen?style=flat-square" />
+    <img src="https://img.shields.io/badge/Tests-1565%20passed-brightgreen?style=flat-square" />
   </p>
   <p><i>🌐 English documentation: [README-EN.md](README-EN.md)</i></p>
 </div>
@@ -29,7 +29,7 @@
 核心设计哲学：
 
 - **无需 Python 环境** — 安装包内置完整 Python 3.10 + PySide6 + pymatgen + scipy，目标机器开箱即用。
-- **程序与数据库彻底分离** — 主程序（安装包 / 便携包）不内置任何数据库；**数据库本体、构建工具与格式规范统一在独立仓库 [PolyXRD-DataBase](https://github.com/PolyXRD/PolyXRD-DataBase) 维护**，并以该仓库的 Releases 分发（v4.0.0 起为 polyDB：COD-Inorg 77,500 相 / 48.1 MB、COD-Full 521,361 相 / 710.3 MB）。本仓库与 Release **只发程序**。
+- **开箱即检索 + 其余库外挂** — **v4.1.0 起便携包/安装包内置默认库 `COD-Inorg` polyDB**（78,036 相，解压即用，无需任何下载或挂载）；可选扩展库（COD 全库等）与**库构建工具、格式规范**统一在独立仓库 [PolyXRD-DataBase](https://github.com/PolyXRD/PolyXRD-DataBase) 维护并分发。PDF2-2004 为 ICDD 版权库，永不随包分发。
 - **算法可控 + 结果可复现** — 预处理/拟合的每一步参数可保存、可回放，项目文件 (`.polyxrd` JSON) 全序列化。
 - **UI 与算法分层** — MVVM 架构，`services/` 层是纯算法、不依赖 Qt，可独立单元测试。
 
@@ -39,7 +39,30 @@
 
 ---
 
-## 🆕 最新版本 v4.0.0（2026-10-23 · 已发布）
+## 🆕 最新版本 v4.1.0（2026-10-23 · 已发布）
+
+**COD-Inorg 成为唯一内置默认库 + 旧格式运行期代码全部删除**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.1.0）：
+
+- **开箱即检索**：便携包与安装包**内置** `COD-Inorg-20261021.polyDB`（78,036 相 / 86 MiB，8 个分段文件），
+  解压/安装后直接检索，不再需要先下载库包再挂载。`POLYXRD_NO_BUNDLE_DB=1` 可退化为"纯客户端小包"。
+- **旧格式运行期代码删除**：`DB_KINDS` 只剩 `pdf2`；`cod_inorganics` / `cod_index` / `xinmatch` 三个旧槽位与
+  `services/xinmatch_db.py` 一并移除，`phase_identifier` 的 6 个旧入口删除 —— 检索统一走 `identify_with_polydb`。
+- **内部评估版标识**：状态栏最右端用**红色加粗**字显示「内部评估版本」（`#d32f2f` + `font-weight: bold`，
+  挂在控件自身 stylesheet 上，换主题不掉色）。
+- **回归**：全量 **1565 passed / 6 skipped**（8m20s）。
+
+| 产物 | 说明 |
+|---|---|
+| `PolyXRD-Setup-v4.1.0.exe` | 正式版安装包（带注册），**内置 COD-Inorg 库** |
+| `PolyXRD-v4.1.0-Portable.zip` | 便携包（**内部评估版**：状态栏红字「内部评估版本」），内置 COD-Inorg 库 |
+| `PolyXRD-v4.1.0-Databases-COD-inorg-polyDB.zip` | COD 无机物库独立包（给已有主程序换库/补库） |
+| `SHA256-v4.1.0.txt` | 以上产物的 SHA-256 |
+
+> PDF2-2004 为 ICDD 版权库，永不出现在 Release 里；COD-Full 等扩展库在 [PolyXRD-DataBase](https://github.com/PolyXRD/PolyXRD-DataBase) 的 Releases 分发。
+
+---
+
+## 上一版 v4.0.0（2026-10-23 · 已发布）
 
 **自研外挂物相库格式 polyDB —— 更小、更快、候选剪枝可证**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.0.0 与 [docs/外挂库格式规范-polyDB-v4.md](docs/外挂库格式规范-polyDB-v4.md)）：
 

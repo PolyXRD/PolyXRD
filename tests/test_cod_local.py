@@ -177,48 +177,12 @@ def test_cif_database_search_cod_local(cod_index):
 
 # ── PhaseIdentifier 扩展 tests ──────────────────────────────
 
-def test_phase_identifier_enable_cod(cod_index):
-    db_path, root = cod_index
-    from polyxrd.services.cod_local import CODLocalDatabase
-    cod_db = CODLocalDatabase(cod_root=root, db_path=db_path)
-    from polyxrd.services.phase_identifier import PhaseIdentifier
-    pi = PhaseIdentifier()
-    pi.enable_cod_local(cod_db=cod_db)
-    info = pi.get_database_info()
-    assert info["cod_local_enabled"] is True
-    assert info["cod_local_ready"] is True
+def _removed_legacy_identifier_tests() -> None:
+    """v4.1.0: ``PhaseIdentifier.enable_cod_local`` / ``identify_with_cod_local``
+    已随旧 COD sqlite 槽位一并删除，对应用例已移除（polyDB 路径见
+    ``test_phase_identifier.py::TestPolydbIdentify``）。
+    """
 
-
-def test_phase_identifier_identify_with_cod_local(cod_index):
-    db_path, root = cod_index
-    from polyxrd.services.cod_local import CODLocalDatabase
-    cod_db = CODLocalDatabase(cod_root=root, db_path=db_path)
-    from polyxrd.services.phase_identifier import PhaseIdentifier
-    from polyxrd.models.xrd_data import XRDData
-    import numpy as np
-
-    pi = PhaseIdentifier()
-    pi.enable_cod_local(cod_db=cod_db)
-
-    # Create synthetic Silicon XRD data with peaks around major Silicon 2θ
-    np.random.seed(0)
-    two_theta = np.linspace(20, 80, 1000)
-    intensity = np.zeros_like(two_theta)
-    # Si strong peaks: 28.44, 47.3, 56.1, 69.1, 76.4
-    for c, a, s in [(28.44, 1.0, 0.15), (47.30, 0.6, 0.18), (56.11, 0.35, 0.15)]:
-        intensity += a * np.exp(-0.5 * ((two_theta - c) / s) ** 2)
-    intensity += np.random.normal(0, 0.005, len(two_theta))
-    intensity = np.clip(intensity, 0, None) + 0.001
-    data = XRDData(two_theta=two_theta, intensity=intensity)
-
-    results = pi.identify_with_cod_local(
-        data, elements=["Si"], top_n=5, cod_candidates=20,
-        merge_with_builtin=True,
-    )
-    assert len(results) > 0
-    names = [r.phase.name for r in results]
-    # Built-in or COD-local Silicon should appear
-    assert any("ilicon" in n for n in names), f"No silicon in: {names}"
 
 
 # ── RietveldRefiner 扩展 tests ──────────────────────────────

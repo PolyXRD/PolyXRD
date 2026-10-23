@@ -132,14 +132,10 @@ translations = {
         "src_imported": "user-imported",
         "src_default": "default location",
         "kind": {
-            "cod_inorganics": "COD Inorganics Database",
-            "pdf2": "PDF2-2004 Database",
-            "cod_index": "COD Full Index",
-            "xinmatch": "XinMatch-format Database"
+            "pdf2": "PDF2-2004",
         },
         "notice": {
-            "pdf2": "[Please confirm you hold a valid licence] PDF2-2004 is a commercial database from ICDD. This software only provides format conversion and an offline index, and conveys no licence of any kind - please make sure you are properly licensed before use.",
-            "xinmatch": "[Please confirm your data source is properly licensed] Databases in this format are published by the XinMatch project. This software only adapts the format and searches offline — it neither bundles nor redistributes the database itself. The first search builds a strong-peak index on this machine (about 3 s; fast afterwards). The database contains no CIF: entries carry a unit cell but no atomic coordinates, so they support phase search and cross-checking but cannot be used as refinement starting structures."
+            "pdf2": "【Confirm your licence】PDF2-2004 is a commercial ICDD database. This software only provides format conversion and offline indexing and ships no licence; make sure you hold a valid licence before use.",
         },
         "mount_any_group": "Mount from any location (recommended)",
         "mount_any_hint": "The database file may live in any folder — no need to copy it into the program directory. Just point at the file and the path is remembered. Pointing at a folder mounts every valid database in it at once (top level only, no recursion).",
@@ -153,7 +149,7 @@ translations = {
         "mount_any_failed": "Cannot Mount",
         "mount_any_failed_body": "No usable database was found at this path.\n\nPath: {path}\nReason: {error}",
         "first_run_title": "No Database Imported Yet",
-        "first_run_body": "Starting with 0.10.0 the installer no longer bundles any database.\n\nEach database ships as its own archive — download only what you need:\n  · COD Inorganics    …-Databases-COD-inorg.zip\n  · COD Full Index    …-Databases-COD-full.zip\n  · PDF2-2004         not downloadable (ICDD licensed; supply your own)\n\nAfter extracting, import each one via \"Database ▸ Manage External Databases…\".\nWithout imported databases only the 118 built-in reference phases are available.",
+        "first_run_body": "Since v4.1.0 the default reference library is the COD Inorganics library in polyDB format (77,500 phases). The portable build ships it under the program's databases folder, so it works right after unzipping - no manual import.\n\nTo switch or mount more libraries use Menu ‘Database > External Database Manager...’: one row per library; several polyDB folders can be mounted at once (even several of the same kind).\n\nWith no library at all the program still falls back to the 118 built-in phases.",
         "list_intro": "One row per database — mount as many as you like (even several of the same type, e.g. an always-on full database plus a portable inorganics subset); each row is an independent data source. Select a row and click “Use This” (or double-click it) and phase identification runs against that one. Unmounting only removes the row from this list; the database file itself is never deleted.",
         "col_active": "In use",
         "col_name": "Name",
@@ -186,9 +182,9 @@ translations = {
             "polydb": "polyDB"
         },
         "kind": {
-            "polydb_inorg": "COD Inorganics (polyDB)",
-            "polydb_full": "COD Full (polyDB)",
-            "user": "User Database"
+            "polydb_inorg": "COD inorganics (polyDB)",
+            "polydb_full": "COD full (polyDB)",
+            "pdf2": "PDF2-2004",
         },
         "pkg_free": "This database is generated or managed locally; there is no download package."
     },
@@ -390,7 +386,8 @@ translations = {
     },
     "status": {
         "ready": "Ready",
-        "no_database": "No external database detected — only the 118 built-in reference phases are available. Import one via \"Database ▸ Manage External Databases…\".",
+        "internal_tooltip": "Internal evaluation build: registration is disabled; for internal testing only.",
+        "no_database": "No usable reference database found; only the 118 built-in phases are available. Mount a polyDB folder via Menu ‘Database > External Database Manager...’, or unzip the COD-Inorg polyDB into the program's databases folder and restart.",
         "loading_file": "Loading file: {path}",
         "background_subtract": "Performing background subtraction ({method})",
         "smoothing": "Performing smoothing ({method})",
@@ -879,20 +876,15 @@ translations = {
             "filter_prefix": "Filter: ",
             "filter_default_exclude": " (unselected elements excluded by default)",
             "db_builtin": "Built-in Library (118 phases)",
-            "db_cod_inorg": "COD Inorganics",
-            "db_cod_full": "COD Full",
-            "db_merged": "Built-in + COD Full (Merged)",
             "db_pdf2": "PDF2-2004",
             "db_label_count": "{base} ({count:,})",
             "db_unmounted": " (not mounted)",
-            "db_combo_tip_main": "Select the database used for phase search (applies to Traditional Search/Match and Quick identification):\n· Built-in: 118 common phases bundled with the app (fastest)\n· COD Inorganics: 71,199 externally mounted phases (precomputed d-I peaks, Hanawalt pre-screen)\n· COD Full: 113,223 external CIF indexes (local search)\n· Merged: Built-in + COD Full results merged and ranked\n· PDF2-2004: ICDD PDF-2 2004 edition, 163,834 phases with space groups and cells\n  (cell 81.8% / space group 72.8%); hits can be used directly as refinement starting structures.\n· XinMatch-format: a third-party database you mount yourself (entries/peaks\n  structure); usable for search and cross-checking. It contains no CIF, so hits\n  cannot be used directly as refinement starting structures.\n",
+            "db_combo_tip_main": "Select the database used for phase search (applies to Traditional Search/Match and Quick identification):\n- Built-in: 118 common phases bundled with the app (fastest)\n- COD Inorganics (polyDB): default reference library, 77,500 phases, bitmap inverted prescreen + upper-bound layering\n- COD Full (polyDB): 521,361 phases (optional download), covers every COD entry\n- PDF2-2004: ICDD PDF-2 2004 edition, ships space groups and cells, hits can seed a refinement directly\n- User database: CIF files you imported yourself\n",
             "db_combo_tip_import": "Databases are not bundled with the installer; download and unzip separately, then import via\nMenu “Database ▸ External Database Manager…”.",
             "pdf2_coverage": "  Local library: {total} phases, space group {sg}%, cell {cell}%.\n",
             "db_unmounted_hint": "This database is not mounted. Import the unzipped library file via Menu “Database ▸ External Database Manager…”.",
             "db_user_empty_hint": "The user database has no entries yet. Import your own CIF files via “Database ▸ Manage User Database…”.",
             "db_user": "User Database",
-            "db_xinmatch": "XinMatch-format DB",
-            "db_polydb": "COD Inorganics (polyDB)",
             "no_match": "No matching phases found",
             "no_match_amorphous": "No matching phases — the pattern is a diffuse halo (near-amorphous); crystalline search does not apply",
             "amorphous_partial": " · contains amorphous/diffuse background",

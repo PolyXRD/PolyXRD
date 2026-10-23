@@ -147,76 +147,74 @@ class TestPhaseIdentifier:
         assert "phase" in result.to_dict()
 
 
-class TestCodInorganicsIdentify:
-    """COD 无机物库检索路径 (P3 新增, 依赖本地外挂库, 无库则跳过)"""
+class TestPolydbIdentify:
+    """polyDB 检索路径 —— v4.1.0 起这是**默认参考库**, 依赖本地外挂库, 无库则跳过。
+
+    基线意义: 这条链路是 GUI 默认走的那条 (COD 无机物库 77,500 相)。旧版这里
+    断言的是已删除的 COD sqlite 槽位, 现在换成等价的 polyDB 目录容器。
+    """
 
     @pytest.fixture()
-    def cod_ready(self):
-        from polyxrd.services.cif_database import CIFDatabase
-        cdb = CIFDatabase(enable_cod_local=False)
-        return cdb.cod_db_available()
-
-    @pytest.fixture()
-    def stock_cod_db(self, monkeypatch):
-        """把 COD 无机物库钉回**项目自带**的那一份。
-
-        下面的 Fluorite 断言的是"基线排序"（71,199 相上 CaF2 进前列）。
-        开发机上若挂了大库（如 3COD-Inorg，1,185,866 相），候选池完全变了
-        —— 实测 4-1 上 CaF2 掉出 top20、ZnO 升到第一 —— 那是**库换了**，
-        不是检索变差，不该让这条基线用例跟着机器状态漂。
-        """
-        from polyxrd.config import get_config
-
-        base = Path(__file__).resolve().parents[1] / "cod_data"
-        for name in ("COD_inorganics_index.sqlite", "COD_inorganics.sqlite"):
-            cand = base / name
-            if cand.exists():
-                monkeypatch.setattr(get_config(), "get_cod_db_path",
-                                    lambda: cand)
+    def poly_db(self) -> Path:
+        for cand in (
+            Path("D:/Project/XRD/PolyXRD-DataBase/polydb/COD-Inorg-20261021.polyDB"),
+            Path("D:/Project/XRD/PolyXRD-DataBase/polydb/COD-Inorg.polyDB"),
+        ):
+            if cand.is_dir():
                 return cand
-        pytest.skip("项目自带 COD 无机库不存在")
+        pytest.skip("本地没有 COD-Inorg polyDB")
 
-    def test_element_filter_restricts_to_allowed(self, cod_ready):
-        """元素过滤必须生效: 所有候选元素 ⊆ must∪maybe"""
-        if not cod_ready:
-            pytest.skip("COD 无机物库未挂载")
-        if not Path(f"{DATA_DIR}/4-1.txt").exists():
+    @pytest.fixture()
+    def sample(self):
+        txt = Path(f"{DATA_DIR}/4-1.txt")
+        if not txt.exists():
             pytest.skip(f"本地试样目录不存在: {DATA_DIR}")
         from polyxrd.services.data_loader import DataLoader
         from polyxrd.services.peak_finder import PeakFinder
-        from polyxrd.services.phase_identifier import PhaseIdentifier
 
-        data = DataLoader().load(f"{DATA_DIR}/4-1.txt")
-        peaks = PeakFinder().find_peaks(data)
-        pi = PhaseIdentifier()
-        allowed = {"Zn", "Al", "Ca", "Mg", "F", "O"}
-        results = pi.identify_with_cod_inorganics(
-            data, peaks=peaks, top_n=10,
-            element_filter={"must": list(allowed), "maybe": [], "exclude": []},
-        )
-        assert len(results) > 0, "4-1 试样在 COD 无机物库应检索到候选"
+        data = DataLoader().load(str(txt))
+        return data, PeakFinder().find_peaks(data)
+
+    def test_returns_candidates(self, poly_db, sample):
+        data, peaks = sample
+        results = PhaseIdentifier().identify_with_polydb(
+            data, peaks=peaks, top_n=10, db_path=str(poly_db))
+        assert results, "默认 polyDB 上 4-1 试样检索不到任何候选"
+        assert len(results) <= 10
+
+    def test_must_have_filter_is_enforced(self, poly_db, sample):
+        """``must_have`` 是 AND 语义: 每个候选都必须含全部必有元素。"""
+        data, peaks = sample
+        results = PhaseIdentifier().identify_with_polydb(
+            data, peaks=peaks, top_n=10, db_path=str(poly_db),
+            element_filter={"must_have": ["Ca", "F"]})
+        assert results, "Ca+F 必有过滤下不该一个候选都没有"
         for r in results:
-            assert r.phase.elements and r.phase.elements.issubset(allowed), (
-                f"{r.phase.name} 含过滤范围外元素: {r.phase.elements}"
-            )
+            els = set(r.phase.elements or ())
+            assert {"Ca", "F"} <= els, f"{r.phase.name} 缺必含元素: {sorted(els)}"
 
-    def test_fluorite_found_in_top_candidates(self, cod_ready, stock_cod_db):
-        """4-1 试样含 CaF2 (Fluorite), 应出现在前列"""
-        if not cod_ready:
-            pytest.skip("COD 无机物库未挂载")
-        if not Path(f"{DATA_DIR}/4-1.txt").exists():
-            pytest.skip(f"本地试样目录不存在: {DATA_DIR}")
-        from polyxrd.services.data_loader import DataLoader
-        from polyxrd.services.peak_finder import PeakFinder
-        from polyxrd.services.phase_identifier import PhaseIdentifier
+    def test_exclude_filter_is_enforced(self, poly_db, sample):
+        data, peaks = sample
+        results = PhaseIdentifier().identify_with_polydb(
+            data, peaks=peaks, top_n=10, db_path=str(poly_db),
+            element_filter={"exclude": ["Zn", "S"]})
+        for r in results:
+            els = set(r.phase.elements or ())
+            assert not (els & {"Zn", "S"}), f"{r.phase.name} 含被排除元素: {sorted(els)}"
 
-        data = DataLoader().load(f"{DATA_DIR}/4-1.txt")
-        peaks = PeakFinder().find_peaks(data)
-        pi = PhaseIdentifier()
-        allowed = {"Zn", "Al", "Ca", "Mg", "F", "O"}
-        results = pi.identify_with_cod_inorganics(
-            data, peaks=peaks, top_n=20,
-            element_filter={"must": list(allowed), "maybe": [], "exclude": []},
-        )
+    def test_fluorite_found_in_top_candidates(self, poly_db, sample):
+        """4-1 试样含 CaF2 (Fluorite), 在默认库上应进前列。"""
+        data, peaks = sample
+        results = PhaseIdentifier().identify_with_polydb(
+            data, peaks=peaks, top_n=20, db_path=str(poly_db),
+            element_filter={"must_have": ["Ca", "F"]})
         names = [r.phase.name for r in results]
-        assert any("Ca F2" in n for n in names), f"CaF2 未进入候选: {names[:5]}"
+        assert any("Ca F2" in n or "CaF2" in n for n in names),             f"CaF2 未进入候选: {names[:5]}"
+
+    def test_missing_db_returns_empty(self, tmp_path):
+        """库不存在时返回空, 不抛异常 (GUI 才不会崩)。"""
+        data = XRDData(two_theta=np.linspace(20, 80, 500),
+                       intensity=np.zeros(500) + 0.01, wavelength=1.5406)
+        res = PhaseIdentifier().identify_with_polydb(
+            data, top_n=5, db_path=str(tmp_path / "gone.polyDB"))
+        assert res == []

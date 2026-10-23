@@ -1,53 +1,77 @@
 # -*- mode: python ; coding: utf-8 -*-
 import os
+from pathlib import Path
+
 from PyInstaller.utils.hooks import collect_all
 
-# ── 数据库打包策略 (0.10.0 起: 默认【不】打包) ────────────────
-# 数据库改外挂: 单独下载 → 解压 → 在 GUI「数据库 ▸ 外挂数据库管理…」导入。
-# 好处是安装包从 ~900 MB 降到 ~150 MB, 且数据库可独立更新, 不必重发客户端。
-#
-#   POLYXRD_WITH_DB=1   -> 仍然内嵌三个库 (仅供内部/离线整包分发)
-#
-# 内嵌时各库的去向 (与运行时解析路径一致, 不要随意改):
-#   cod_index.sqlite      -> 'cod'       (cod_local._BUNDLED_COD_DB_SUBPATH)
-#   COD_inorganics.sqlite -> 'cod_data'
-#   PDF2_2004.sqlite      -> 'cod_data'
+# spec 自身所在目录 (= 仓库根)。PyInstaller 构建时把 SPECPATH 注入 globals。
+_SPEC_DIR = globals().get('SPECPATH', os.getcwd())
 
+# 必须随包的非库资源 (库资源见下面的 polyDB 段)。
 _datas_base = [
     ('src/polyxrd/i18n', 'polyxrd/i18n'),
     ('src/polyxrd/resources', 'polyxrd/resources'),
 ]
 
-_WITH_DB = os.environ.get('POLYXRD_WITH_DB') == '1'
+# ── 参考数据库策略 (v4.1.0: 默认【不】随 exe 收集) ────────────────
+# v4.1.0 起可检索的参考库只有一种: **polyDB 目录容器**
+# (``COD-Inorg-<日期>.polyDB/``, 8 个分段文件 + meta.json, mmap 只读)。
+# 旧的 ``cod_index.sqlite`` / ``COD_inorganics.sqlite`` / ``PDF2_2004.sqlite``
+# 槽位已全部删除, 因此本 spec 不再收集任何 .sqlite。
+#
+# 默认策略: 数据库**不进 _internal**, 由 build.bat 在第 3 步把
+# ``<repo>/../PolyXRD-DataBase/polydb/COD-Inorg-*.polyDB`` 复制到
+# ``dist/PolyXRD/databases/`` —— 便携版解压即可检索, 且用户能直接看到、
+# 替换库目录 (运行时解析路径见 config._polydb_search_roots:
+# 冻结态 = ``<exe 目录>/databases``)。
+#
+#   POLYXRD_WITH_POLYDB=1  -> 由 spec 直接收集进 ``databases/``
+#                             (仅当想让"单跑 pyinstaller"也自带库时用)
+_POLYDB_ENV = os.environ.get('POLYXRD_POLYDB_DIR', '').strip()
 
-if _WITH_DB:
-    # COD 全库 (cod_index.sqlite, crystallography.net, 113K 条目 + 5.1M 原子位点)
-    _cod_full = 'cod_index.sqlite'
-    if os.path.exists(_cod_full):
-        _datas_base.append((_cod_full, 'cod'))
-        print(f'[PolyXRD.spec] Bundling COD full database: {_cod_full}')
-    else:
-        print(f'[PolyXRD.spec] COD full database not found, skipping: {_cod_full}')
 
-    # COD 无机物库 (从 COD 筛选的无机物子集, 预计算 d-I 峰)
-    _cod_inorg = 'cod_data/COD_inorganics.sqlite'
-    if os.path.exists(_cod_inorg):
-        _datas_base.append((_cod_inorg, 'cod_data'))
-        print(f'[PolyXRD.spec] Bundling COD inorganics database: {_cod_inorg}')
-    else:
-        print(f'[PolyXRD.spec] COD inorganics database not found, skipping: {_cod_inorg}')
+def _find_polydb(variant_hint: str):
+    """找到要内嵌的 polyDB 目录 (最新的那份), 找不到返回 None。
 
-    # PDF2-2004 库 (ICDD PDF-2 2004, 163K 物相, 带空间群/晶胞)
-    _pdf2 = 'cod_data/PDF2_2004.sqlite'
-    if os.path.exists(_pdf2):
-        _datas_base.append((_pdf2, 'cod_data'))
-        print(f'[PolyXRD.spec] Bundling PDF2-2004 database: {_pdf2}')
+    搜索顺序: ``POLYXRD_POLYDB_DIR`` → 仓库 ``databases/`` → 构库仓库
+    ``../PolyXRD-DataBase/polydb``。判据与运行时一致: 目录里有
+    ``meta.json`` + ``index.sqlite``。
+    """
+    roots = []
+    if _POLYDB_ENV:
+        roots.append(Path(_POLYDB_ENV))
+    roots.append(Path(_SPEC_DIR) / 'databases')
+    roots.append(Path(_SPEC_DIR).parent / 'PolyXRD-DataBase' / 'polydb')
+
+    found = []
+    for root in roots:
+        if not root.is_dir():
+            continue
+        cands = [root] if (root / 'meta.json').is_file() else [
+            d for d in root.iterdir() if d.is_dir() and (d / 'meta.json').is_file()
+        ]
+        for cand in cands:
+            if variant_hint.lower() in cand.name.lower():
+                found.append(cand)
+    if not found:
+        return None
+    return sorted(found, key=lambda p: p.name)[-1]
+
+
+_WITH_POLYDB = os.environ.get('POLYXRD_WITH_POLYDB') == '1'
+
+if _WITH_POLYDB:
+    _polydb = _find_polydb('cod-inorg')
+    if _polydb is not None:
+        # polyDB 是目录容器: 整目录收进 databases/<目录名>, 分段文件一个都不能少。
+        _datas_base.append((str(_polydb), f'databases/{_polydb.name}'))
+        print(f'[PolyXRD.spec] Bundling polyDB: {_polydb.name}')
     else:
-        print(f'[PolyXRD.spec] PDF2-2004 database not found, skipping: {_pdf2}')
+        print('[PolyXRD.spec] POLYXRD_WITH_POLYDB=1 but no COD-Inorg *.polyDB '
+              'found, skipping')
 else:
-    print('[PolyXRD.spec] Databases EXTERNAL (0.10.0 default): '
-          'no .sqlite bundled. Import via GUI.'
-          ' Set POLYXRD_WITH_DB=1 to bundle them anyway.')
+    print('[PolyXRD.spec] Reference databases EXTERNAL: polyDB goes to '
+          'dist/PolyXRD/databases by build.bat (portable = ready to search).')
 
 datas = _datas_base
 binaries = []
@@ -58,7 +82,6 @@ hiddenimports = ['polyxrd', 'polyxrd.i18n', 'polyxrd.i18n.translations.zh_CN', '
 # 静态依赖分析可能不把它算进图里。一旦漏收集, 内部版会【静默退化成正式版】——
 # "内部版不弹注册提示"这个承诺失效, 反而开始每次启动骚扰内部用户, 且极难察觉。
 # 所以这里显式把它挂进依赖图, 并用 print 让构建日志可核对。
-_SPEC_DIR = globals().get('SPECPATH', os.getcwd())
 _BUILD_FLAVOR_SRC = os.path.join(_SPEC_DIR, 'src', 'polyxrd', '_build_flavor.py')
 if os.path.exists(_BUILD_FLAVOR_SRC):
     hiddenimports.append('polyxrd._build_flavor')

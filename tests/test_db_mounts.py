@@ -1,20 +1,23 @@
-"""挂载注册表 db_mounts 单测 (v4.0.0)
+"""挂载注册表 db_mounts 单测 (v4.1.0)
 =====================================
 列表式多库挂载的**唯一真相源**是 ``polyxrd.services.db_mounts``; 对话框与
-物相检索都只是它的视图。这里钉住它对外承诺的六件事:
+物相检索都只是它的视图。v4.1.0 把旧 sqlite 槽位 (cod_inorganics / cod_index /
+xinmatch) 删掉后, 这里钉住现在的六件事:
 
-1. **内置项零迁移** —— 老用户升级后, 配置里挂着的库自动出现在列表里
-   (id 就是类型名), 历史 ``db_source="pdf2"`` 一类字面量继续有效;
+1. **内置项零迁移** —— 内置 id 固定为 ``polydb:cod-inorg`` / ``polydb:cod-full``
+   / ``pdf2`` / ``user``, 老字面量 (``cod_inorganics`` 等) 一律**别名**到
+   语义等价的新库, 老配置不会报"库不存在";
 2. **同类型多份共存** —— 用户自加项 id 为 ``<kind>:<路径摘要>``, 幂等;
-3. **解析成 (kind, path)** —— 检索链路据此分发; 库被挪走时给出"按配置解析"
-   或"不可用", 不能静默指向另一份库;
-4. **卸载不清库文件** —— 内置项卸载 = 清配置槽位, 自加项卸载 = 删记录;
+3. **解析成 (kind, path)** —— 检索链路据此分发;
+4. **卸载不清库文件** —— 内置 polyDB 卸载 = 取消挂载 (并记住别再自动发现),
+   自加项卸载 = 删记录;
 5. **探测只读** —— probe 不改任何配置, 失败原因原样返回;
-6. **挂载不改配置** —— mount_any 只写挂载表 (旧 db_import 是"每类覆盖槽位"
-   语义, 会在同类型第二份库上把第一份顶掉)。
+6. **旧格式文件不再被接受** —— COD 的无机库 sqlite 已废弃, 挂载时报
+   ``no_matching_schema`` 而不是静默挂上一个查不出东西的库。
 """
 from __future__ import annotations
 
+import json
 import sqlite3
 import sys
 from pathlib import Path
@@ -27,29 +30,14 @@ sys.path.insert(0, str(ROOT / "src"))
 from polyxrd.config import AppConfig, get_config   # noqa: E402
 from polyxrd.services import db_mounts             # noqa: E402
 
-COD_DDL = ("CREATE TABLE phases (cod_id TEXT, formula TEXT, n_peaks INTEGER,"
-           " peaks_d TEXT, peaks_i TEXT, cell_a REAL)")
-COD_INS = "INSERT INTO phases VALUES (?,?,?,?,?,?)"
-COD_ROW = ("9001", "SiO2", 2, "3.34,4.26", "100,45", 4.913)
+#: v4.1.0 之前那套 COD 无机物库的 DDL（**故意保留**: 用来证明旧格式被拒）
+OLD_COD_DDL = ("CREATE TABLE phases (cod_id TEXT, formula TEXT, n_peaks INTEGER,"
+               " peaks_d TEXT, peaks_i TEXT, cell_a REAL)")
+OLD_COD_ROW = ("9001", "SiO2", 2, "3.34,4.26", "100,45", 4.913)
 
 PDF2_DDL = ("CREATE TABLE phases (cod_id TEXT, formula TEXT, name TEXT,"
             " pearson TEXT, n_peaks INTEGER, peaks_d TEXT, peaks_i TEXT, cell_a REAL)")
-PDF2_INS = "INSERT INTO phases VALUES (?,?,?,?,?,?,?,?)"
 PDF2_ROW = ("00-046-1045", "SiO2", "Quartz", "hP9", 2, "3.34,4.26", "100,22", 4.913)
-
-XM_DDL = (
-    "CREATE TABLE entries (entry_id TEXT PRIMARY KEY, formula TEXT,"
-    " mineral_name TEXT, space_group TEXT, crystal_system TEXT, a REAL, b REAL,"
-    " c REAL, alpha REAL, beta REAL, gamma REAL, volume REAL, density REAL,"
-    " color TEXT, year INTEGER, author TEXT, journal TEXT, quality TEXT,"
-    " elements TEXT)",
-    "CREATE TABLE peaks (entry_id TEXT NOT NULL, d REAL NOT NULL,"
-    " intensity REAL, h INTEGER, k INTEGER, l INTEGER)",
-    "CREATE TABLE elements (entry_id TEXT NOT NULL, element TEXT NOT NULL,"
-    " PRIMARY KEY (entry_id, element))",
-    "CREATE TABLE element_combo (element_set_hash TEXT PRIMARY KEY,"
-    " entry_ids TEXT NOT NULL)",
-)
 
 
 @pytest.fixture
@@ -59,211 +47,247 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setattr(db_mounts, "_store_file", lambda: store)
     monkeypatch.setattr(AppConfig, "_user_db_paths_file",
                         lambda self: tmp_path / "user_db_paths.json")
-    # 内置项指向不存在的默认位置 (改字段而不是改 get_*_db_path: 后者被
-    # set_cod_db_path 写进配置后要能立刻读到, 换了实现就读不到了)
     cfg = get_config()
     empty = tmp_path / "empty"
-    monkeypatch.setattr(cfg, "cod_db_path", empty / "n_cod.sqlite")
+    empty.mkdir()
     monkeypatch.setattr(cfg, "pdf2_db_path", empty / "n_pdf2.sqlite")
     monkeypatch.setattr(cfg, "cif_db_path", empty)
     monkeypatch.setattr(cfg, "user_db_dir", lambda: empty)
-    monkeypatch.setattr(cfg, "get_xinmatch_db_path", lambda: None)
+    # 默认 polyDB 的自动发现也要隔离, 否则本机真实产物会让断言飘
     monkeypatch.setattr(cfg, "get_polydb_path", lambda *a, **k: None)
-    monkeypatch.setattr(db_mounts, "_cod_index_path", lambda: None)
     monkeypatch.setattr(db_mounts, "_probe_user",
                         lambda p: {"ok": False, "rows": 0, "error": "user_db_empty"})
     db_mounts.clear_probe_cache()
     return store
 
 
-def _db(path: Path, ddl: str, row: tuple, insert: str) -> Path:
+def _sqlite(path: Path, ddl: str, row: tuple) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path)
-    conn.execute(ddl)
-    conn.executemany(insert, [row])
-    conn.commit()
-    conn.close()
-    return path
-
-
-def _xm(path: Path, rows: int = 3) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path)
-    for ddl in XM_DDL:
+    try:
         conn.execute(ddl)
-    for i in range(rows):
-        eid = f"XM-{i:03d}"
-        conn.execute(
-            "INSERT INTO entries (entry_id, formula, space_group, crystal_system,"
-            " a, b, c, alpha, beta, gamma, elements) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-            (eid, "O Zn", "P 63 m c", "hexagonal", 3.2495, 3.2495, 5.2069,
-             90.0, 90.0, 120.0, "O,Zn"))
-        conn.execute("INSERT INTO peaks VALUES (?,?,?,?,?,?)",
-                     (eid, 2.4759 + i * 0.01, 570.0, 1, 0, 1))
-        conn.execute("INSERT INTO elements VALUES (?,?)", (eid, "Zn"))
-    conn.commit()
-    conn.close()
+        marks = ",".join("?" * len(row))
+        conn.execute(f"INSERT INTO phases VALUES ({marks})", row)
+        conn.commit()
+    finally:
+        conn.close()
     return path
 
 
-# ── 1. 内置项与老字面量 ─────────────────────────────────────
-
-def test_builtin_mounts_have_kind_as_id(isolated):
-    """内置项 id 就用类型名 → 历史 ``db_source`` 字面量继续有效。"""
-    ids = [m.id for m in db_mounts.default_mounts()]
-    assert ids == ["cod_inorganics", "cod_index", "pdf2", "xinmatch",
-                   "polydb:cod-inorg", "polydb:cod-full", "user"]
-
-
-def test_legacy_aliases_resolve(isolated, tmp_path):
-    """``cod_full`` / ``polydb`` / ``polydb_full`` 这些老写法必须还能解析。"""
-    assert db_mounts.resolve_mount("cod_full").kind == "cod_index"
-    assert db_mounts.resolve_mount("polydb").id == "polydb:cod-inorg"
-    assert db_mounts.resolve_mount("polydb_full").id == "polydb:cod-full"
-    assert db_mounts.resolve_mount("pdf2").kind == "pdf2"
-    # 内置库/合并不是"某个具体的库", 交给原有分支
-    assert db_mounts.resolve_mount("builtin") is None
-    assert db_mounts.resolve_mount("merged") is None
+def _polydb(root: Path, name: str, variant: str = "cod-inorg",
+            phases: int = 100) -> Path:
+    """造一个"看起来合法"的 polyDB 目录 (只满足存在性与 meta 解析, 不开库)。"""
+    d = root / name
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "meta.json").write_text(json.dumps({
+        "format": "polyDB", "schema_version": 1, "variant": variant,
+        "counts": {"phases": phases, "k": 100, "peaks": 1000, "sites": 500},
+    }), encoding="utf-8")
+    (d / "index.sqlite").write_bytes(b"")
+    return d
 
 
-def test_configured_path_shows_up_as_builtin_and_passes_path(isolated, tmp_path, monkeypatch):
-    """配置里挂着的库自动出现在列表里, 且解析出的路径就是它。"""
-    cod = _db(tmp_path / "cod.sqlite", COD_DDL, COD_ROW, COD_INS)
-    get_config().set_cod_db_path(cod)
-    m = db_mounts.resolve_mount("cod_inorganics")
-    assert m.path == cod and m.builtin
-    kind, path = db_mounts.resolve_source("cod_inorganics")
-    assert (kind, path) == ("cod_inorganics", cod)
+# ── 1. 内置项 ────────────────────────────────────────────────
+
+def test_builtin_ids_and_order(isolated):
+    ids = [m.id for m in db_mounts.all_mounts()]
+    assert ids == ["polydb:cod-inorg", "polydb:cod-full", "pdf2", "user"]
 
 
-# ── 2. 同类型多份 ───────────────────────────────────────────
+def test_builtin_polydb_labels_are_distinct(isolated):
+    by_id = {m.id: m for m in db_mounts.all_mounts()}
+    assert (by_id["polydb:cod-inorg"].label_key
+            != by_id["polydb:cod-full"].label_key)
+    assert by_id["polydb:cod-inorg"].variant == "cod-inorg"
+    assert by_id["polydb:cod-full"].variant == "cod-full"
 
-def test_same_kind_multiple_mounts_are_distinct(isolated, tmp_path):
-    a = _xm(tmp_path / "a" / "cod_inorganics.db", 2)
-    b = _xm(tmp_path / "b" / "cod_full.db", 5)
-    ma = db_mounts.add_mount(a)
-    mb = db_mounts.add_mount(b)
-    assert ma.id != mb.id
-    assert ma.kind == mb.kind == "xinmatch"
-    assert not ma.builtin
-    rows = [r for r in db_mounts.probe_all() if r["kind"] == "xinmatch" and r["ok"]]
-    assert {r["path"] for r in rows} == {str(a), str(b)}
-    # 各自解析到各自的文件 (同类型挂多份的全部意义)
-    assert db_mounts.resolve_source(ma.id)[1] == a
-    assert db_mounts.resolve_source(mb.id)[1] == b
+
+@pytest.mark.parametrize("legacy,expected_kind", [
+    ("cod_inorganics", "polydb"),
+    ("xinmatch", "polydb"),
+    ("cod_index", "polydb"),
+    ("cod_full", "polydb"),
+    ("cod_local", "polydb"),
+    ("polydb", "polydb"),
+    ("pdf2", "pdf2"),
+])
+def test_legacy_aliases_resolve(isolated, legacy, expected_kind):
+    m = db_mounts.resolve_mount(legacy)
+    assert m is not None and m.kind == expected_kind
+
+
+def test_legacy_inorg_aliases_land_on_the_inorg_variant(isolated):
+    assert db_mounts.resolve_mount("cod_inorganics").variant == "cod-inorg"
+    assert db_mounts.resolve_mount("xinmatch").variant == "cod-inorg"
+    assert db_mounts.resolve_mount("cod_full").variant == "cod-full"
+
+
+def test_unknown_source_resolves_to_none(isolated):
+    assert db_mounts.resolve_mount("no-such-lib") is None
+    assert db_mounts.resolve_source("builtin") == (None, None)
+
+
+def test_configured_polydb_path_shows_up_as_builtin(isolated, tmp_path, monkeypatch):
+    poly = _polydb(tmp_path / "libs", "COD-Inorg-20261021.polyDB")
+    cfg = get_config()
+    monkeypatch.setattr(cfg, "get_polydb_path",
+                        lambda variant="cod-inorg": poly if variant == "cod-inorg" else None)
+    m = db_mounts.get_mount("polydb:cod-inorg")
+    assert m is not None and m.builtin and m.path == poly and m.exists
+
+
+# ── 2. 用户自加项 ────────────────────────────────────────────
+
+def test_add_mount_polydb_reads_variant(isolated, tmp_path):
+    poly = _polydb(tmp_path / "libs", "Mine.polyDB", variant="cod-full")
+    m = db_mounts.add_mount(poly)
+    assert m.kind == "polydb" and m.builtin is False
+    assert m.id.startswith("polydb:")
+    stored = json.loads((tmp_path / "db_mounts.json").read_text(encoding="utf-8"))
+    assert stored["mounts"][0]["variant"] == "cod-full"
 
 
 def test_add_mount_is_idempotent(isolated, tmp_path):
-    """同一路径反复添加 → 同一个 id, 列表里不会出现两行一样的库。"""
-    a = _xm(tmp_path / "a" / "cod_inorganics.db")
-    first = db_mounts.add_mount(a)
-    again = db_mounts.add_mount(a)
-    assert first.id == again.id
-    assert [m.id for m in db_mounts.all_mounts()].count(first.id) == 1
+    poly = _polydb(tmp_path / "libs", "A.polyDB")
+    a = db_mounts.add_mount(poly)
+    b = db_mounts.add_mount(poly)
+    assert a.id == b.id
+    stored = json.loads((tmp_path / "db_mounts.json").read_text(encoding="utf-8"))
+    assert len(stored["mounts"]) == 1
 
 
-def test_mount_any_does_not_touch_slot_config(isolated, tmp_path):
-    """挂载只写挂载表: 不能像旧 mount_databases 那样把别人的槽位顶掉。"""
-    store_cfg = Path.home() / ".polyxrd" / "user_db_paths.json"
-    before = store_cfg.read_text(encoding="utf-8") if store_cfg.exists() else ""
-    _xm(tmp_path / "a" / "cod_inorganics.db")
-    db_mounts.mount_any(tmp_path / "a")
-    after = store_cfg.read_text(encoding="utf-8") if store_cfg.exists() else ""
-    assert before == after
+def test_same_kind_multiple_mounts_are_distinct(isolated, tmp_path):
+    a = db_mounts.add_mount(_polydb(tmp_path / "l", "A.polyDB"))
+    b = db_mounts.add_mount(_polydb(tmp_path / "l", "B.polyDB"))
+    assert a.id != b.id
+    assert {a.id, b.id} <= {m.id for m in db_mounts.all_mounts()}
 
 
-def test_rejects_wrong_kind_when_expect_given(isolated, tmp_path):
-    """显式声明类型时不做"猜": 拿错库必须报错, 而不是静默改判。"""
-    cod = _db(tmp_path / "cod.sqlite", COD_DDL, COD_ROW, COD_INS)
+def test_add_mount_rejects_old_cod_sqlite(isolated, tmp_path):
+    """旧格式 COD 无机物库不再被接受（v4.1.0 删掉该类槽位）。"""
+    old = _sqlite(tmp_path / "old.sqlite", OLD_COD_DDL, OLD_COD_ROW)
+    with pytest.raises(ValueError) as ei:
+        db_mounts.add_mount(old)
+    # 表名对得上 phases 但缺 pearson/name 签名 → no_matching_schema
+    assert "no_matching_s" in str(ei.value) or "不合格" in str(ei.value)
+    assert db_mounts.detect_kind(old)[0] == ""
+
+
+def test_add_mount_rejects_missing_path(isolated, tmp_path):
     with pytest.raises(ValueError):
-        db_mounts.add_mount(cod, kind="pdf2")
+        db_mounts.add_mount(tmp_path / "nope.polyDB")
 
 
-def test_detects_kind_automatically(isolated, tmp_path):
-    cod = _db(tmp_path / "cod.sqlite", COD_DDL, COD_ROW, COD_INS)
-    pdf = _db(tmp_path / "pdf.sqlite", PDF2_DDL, PDF2_ROW, PDF2_INS)
-    assert db_mounts.add_mount(cod).kind == "cod_inorganics"
-    assert db_mounts.add_mount(pdf).kind == "pdf2"
-
-
-# ── 3. 当前库与卸载 ─────────────────────────────────────────
-
-def test_set_active_and_clear(isolated, tmp_path):
-    a = _xm(tmp_path / "a" / "cod_inorganics.db")
-    m = db_mounts.add_mount(a)
-    db_mounts.set_active(m.id)
-    assert db_mounts.active_id() == m.id
-    assert db_mounts.active_mount().path == a
-    db_mounts.set_active("")
-    assert db_mounts.active_mount() is None
-
+# ── 3. 卸载 ─────────────────────────────────────────────────
 
 def test_remove_custom_mount_keeps_file(isolated, tmp_path):
-    a = _xm(tmp_path / "a" / "cod_inorganics.db")
-    m = db_mounts.add_mount(a)
-    db_mounts.set_active(m.id)
+    poly = _polydb(tmp_path / "libs", "A.polyDB")
+    m = db_mounts.add_mount(poly)
     db_mounts.remove_mount(m.id)
-    assert a.exists()
-    assert db_mounts.get_mount(m.id) is None
-    assert db_mounts.active_id() == ""
+    assert poly.is_dir()
+    assert m.id not in {x.id for x in db_mounts.all_mounts()}
 
 
-def test_remove_builtin_clears_slot_config(isolated, tmp_path):
-    """内置项卸载 = 清配置槽位 (与旧「取消挂载」等价)。"""
-    cod = _db(tmp_path / "cod.sqlite", COD_DDL, COD_ROW, COD_INS)
-    get_config().set_cod_db_path(cod)
-    assert db_mounts.resolve_mount("cod_inorganics").path == cod
-    db_mounts.remove_mount("cod_inorganics")
-    assert get_config().user_db_path("cod_db_path") is None
+def test_remove_builtin_polydb_disables_variant(isolated, monkeypatch):
+    """卸载内置 polyDB = 取消挂载, 并且**记住别再自动发现**。"""
+    seen: list[tuple] = []
+    monkeypatch.setattr(AppConfig, "set_polydb_path",
+                        lambda self, path, variant="cod-inorg": seen.append((path, variant)))
+    db_mounts.remove_mount("polydb:cod-inorg")
+    assert seen == [(None, "cod-inorg")]
+
+
+def test_remove_builtin_pdf2_clears_slot(isolated, monkeypatch):
+    from polyxrd.services import db_import
+
+    seen: list[str] = []
+    monkeypatch.setattr(db_import, "clear_import", lambda kind: seen.append(kind))
+    db_mounts.remove_mount("pdf2")
+    assert seen == ["pdf2"]
 
 
 def test_user_db_cannot_be_removed_here(isolated):
-    """用户自建库由它自己的管理界面负责, 这里只显示不给卸载。"""
     with pytest.raises(ValueError):
         db_mounts.remove_mount("user")
 
 
+def test_set_active_and_clear(isolated, tmp_path):
+    poly = _polydb(tmp_path / "libs", "A.polyDB")
+    m = db_mounts.add_mount(poly)
+    db_mounts.set_active(m.id)
+    assert db_mounts.active_id() == m.id
+    assert db_mounts.active_mount().id == m.id
+    db_mounts.set_active("")
+    assert db_mounts.active_id() == ""
+    assert db_mounts.active_mount() is None
+
+
 # ── 4. 探测 ─────────────────────────────────────────────────
 
-def test_probe_reports_rows_and_never_writes(isolated, tmp_path):
-    a = _xm(tmp_path / "a" / "cod_inorganics.db", 4)
-    m = db_mounts.add_mount(a)
-    res = db_mounts.probe(m)
-    assert res["ok"] and res["rows"] == 4
-    # probe 不应产生任何挂载表改动
-    assert [x.id for x in db_mounts.all_mounts()].count(m.id) == 1
-
-
-def test_probe_missing_file(isolated, tmp_path):
-    a = _xm(tmp_path / "a" / "cod_inorganics.db")
-    m = db_mounts.add_mount(a)
-    a.unlink()
+def test_probe_missing_file(isolated):
+    m = db_mounts.Mount(id="pdf2", kind="pdf2", path=Path("D:/no/such.sqlite"))
     res = db_mounts.probe(m)
     assert res["ok"] is False and res["error"] == "missing"
 
 
-def test_missing_custom_mount_resolves_to_no_path(isolated, tmp_path):
-    """库被挪走后不能"按配置解析"到另一份库 —— 必须解析成不可用。"""
-    a = _xm(tmp_path / "a" / "cod_inorganics.db")
-    m = db_mounts.add_mount(a)
-    a.unlink()
-    kind, path = db_mounts.resolve_source(m.id)
-    assert kind == "xinmatch" and path is None
+def test_probe_unmounted_builtin(isolated):
+    res = db_mounts.probe(db_mounts.get_mount("polydb:cod-inorg"))
+    assert res["ok"] is False and res["error"] == "unmounted"
 
 
-def test_mount_any_folder_collects_all_kinds(isolated, tmp_path):
-    folder = tmp_path / "data"
-    _xm(folder / "cod_inorganics.db")
-    _db(folder / "p.sqlite", PDF2_DDL, PDF2_ROW, PDF2_INS)
-    mounted = db_mounts.mount_any(folder)
-    assert {m.kind for m in mounted} == {"xinmatch", "pdf2"}
+def test_probe_never_writes_config(isolated, tmp_path):
+    before = (tmp_path / "user_db_paths.json").exists()
+    db_mounts.probe_all()
+    assert (tmp_path / "user_db_paths.json").exists() == before
 
 
-def test_mount_any_rejects_empty_folder(isolated, tmp_path):
-    folder = tmp_path / "nothing"
-    folder.mkdir()
-    (folder / "readme.txt").write_text("hi", encoding="utf-8")
+def test_source_entries_carry_mount_fields(isolated):
+    rows = db_mounts.source_entries()
+    assert {"id", "kind", "path", "ok", "rows", "label_key"} <= set(rows[0])
+    assert [r["id"] for r in rows][:2] == ["polydb:cod-inorg", "polydb:cod-full"]
+
+
+# ── 5. 类型判别 / 整目录挂载 ────────────────────────────────
+
+def test_detect_kind_pdf2_file(isolated, tmp_path):
+    f = _sqlite(tmp_path / "PDF2_2004.sqlite", PDF2_DDL, PDF2_ROW)
+    assert db_mounts.detect_kind(f)[0] == "pdf2"
+
+
+def test_detect_kind_rejects_plain_dir(isolated, tmp_path):
+    d = tmp_path / "notalib"
+    d.mkdir()
+    kind, why = db_mounts.detect_kind(d)
+    assert kind == "" and "polyDB" in why
+
+
+def test_detect_kind_expect_mismatch(isolated, tmp_path):
+    poly = _polydb(tmp_path / "libs", "A.polyDB")
+    kind, why = db_mounts.detect_kind(poly, expect="pdf2")
+    assert kind == "" and "pdf2" in why
+
+
+def test_mount_any_folder_collects_polydb_and_pdf2(isolated, tmp_path):
+    root = tmp_path / "drop"
+    _polydb(root, "A.polyDB")
+    _polydb(root, "B.polyDB", variant="cod-full")
+    _sqlite(root / "PDF2_2004.sqlite", PDF2_DDL, PDF2_ROW)
+    mounted = db_mounts.mount_any(root)
+    kinds = sorted(m.kind for m in mounted)
+    assert kinds == ["pdf2", "polydb", "polydb"]
+
+
+def test_mount_any_empty_folder_raises(isolated, tmp_path):
+    d = tmp_path / "empty"          # 已由 isolated fixture 建好, 这里不再重复 mkdir
+    d.mkdir(exist_ok=True)
     with pytest.raises(ValueError) as ei:
-        db_mounts.mount_any(folder)
-    # 失败说明要讲清"什么才算合格库", 否则用户不知道该往目录里放什么
-    assert "polyDB" in str(ei.value)
+        db_mounts.mount_any(d)
+    assert "没有" in str(ei.value)
+
+
+def test_backup_files_are_ignored(isolated, tmp_path):
+    d = tmp_path / "drop"
+    d.mkdir()
+    (d / "old.bak-20261011.db").write_bytes(b"")
+    (d / "old~.sqlite").write_bytes(b"")
+    assert db_mounts._iter_db_files(d) == []

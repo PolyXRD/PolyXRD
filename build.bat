@@ -6,12 +6,12 @@ set PYTHONUTF8=1
 set PYTHONIOENCODING=utf-8
 
 REM APPVER 是版本号唯一真源（标题 / banner / 输出名 / 安装包名都跟随）
-set APPVER=4.0.0
+set APPVER=4.1.0
 
 title PolyXRD v%APPVER% 打包构建器
 echo ========================================
 echo   PolyXRD v%APPVER% 打包为独立安装包
-echo   数据库外挂 (不随包分发)
+echo   内置 COD-Inorg 库 + 其余库外挂
 echo ========================================
 echo.
 
@@ -50,8 +50,9 @@ if %errorlevel% neq 0 (
 echo.
 echo [步骤 1/6] PyInstaller 打包 (EXE 阶段, COLLECT 阶段可能因沙盒 safe-delete 失败)...
 echo.
-echo [信息] 数据库策略: 外挂。安装包不含 .sqlite, 由用户单独下载后经 GUI 导入。
-echo        若需内嵌整包, 请先 set POLYXRD_WITH_DB=1 再运行本脚本。
+echo [信息] 数据库策略: v4.1.0 起**内置**默认库 COD-Inorg (polyDB, ~86 MB)。
+echo        COD-Full 仍为外挂可选包; PDF2-2004 因版权永不随包分发。
+echo        若要做"纯客户端小包", 请先 set POLYXRD_NO_BUNDLE_DB=1 再运行本脚本。
 
 REM 应用图标已由 build_icon.py 生成 (基于 crystal-mark 品牌资产, 7 档多分辨率 ICO).
 REM 如需重新生成: %PYTHON% build_icon.py
@@ -89,10 +90,16 @@ if %errorlevel% neq 0 (
     echo [警告] ICU 复制阶段异常, 请检查 PySide6 Qt 启动依赖
 )
 
-REM 兜底: 确认安装包里确实没有数据库 (0.10.0 的核心约束)
+REM v4.1.0: 默认库**内置** —— 把 COD-Inorg polyDB 复制进 dist\PolyXRD\databasesREM (只要是无机物库; 解压即可检索, 无需先下载外挂库)。跳过用 set POLYXRD_NO_BUNDLE_DB=1
 echo.
-echo [检查] 确认 dist 内不含数据库文件...
-"%PYTHON%" scripts\_build_post.py no-db
+echo [步骤 2.5/6] 内置默认库 COD-Inorg (polyDB) -> dist\PolyXRD\databases...
+echo.
+"%PYTHON%" scripts\_build_post.py bundle-polydb
+
+REM 兜底: 断言库布局正确 (只允许 databases\<*.polyDB>\ 的 8 个分段文件)
+echo.
+echo [检查] 数据库布局 (内置 polyDB + 无意外库文件)...
+"%PYTHON%" scripts\_build_post.py db-layout
 
 echo.
 echo [步骤 3/6] 创建 Inno Setup 安装程序...

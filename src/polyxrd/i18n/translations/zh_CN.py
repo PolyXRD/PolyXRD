@@ -132,14 +132,10 @@ translations = {
         "src_imported": "用户导入",
         "src_default": "默认位置",
         "kind": {
-            "cod_inorganics": "COD 无机物库",
             "pdf2": "PDF2-2004 库",
-            "cod_index": "COD 全库索引",
-            "xinmatch": "XinMatch 格式库"
         },
         "notice": {
             "pdf2": "【请确认您有正版授权】PDF2-2004 是 ICDD 的商业数据库。本软件只提供格式转换与离线索引，不附带任何授权；使用前请确认您已获得合法授权。",
-            "xinmatch": "【请自行确认数据来源合规】该格式的库由 XinMatch 项目提供，本软件只做格式适配与离线检索，不附带、也不分发库数据本身。首次检索会在本机建一份强峰索引（约 3 秒，之后很快）。该库不含 CIF：条目只有晶胞、没有原子坐标，可用于物相检索与核对，但不能直接进结构精修。"
         },
         "mount_any_group": "任意位置挂载（推荐）",
         "mount_any_hint": "数据库文件放在哪个文件夹都行，不必搬进程序目录 —— 直接指到文件即可，路径会被记住。选文件夹时，该目录下所有合格的库会一次全挂上（只扫本层，不递归）。",
@@ -153,7 +149,7 @@ translations = {
         "mount_any_failed": "无法挂载",
         "mount_any_failed_body": "这个路径上没有可用的数据库。\n\n路径：{path}\n原因：{error}",
         "first_run_title": "尚未导入数据库",
-        "first_run_body": "从 0.10.0 起，安装包不再内置数据库。\n\n数据库各自独立打包，需要哪个下哪个：\n　· COD 无机物库　…-Databases-COD-inorg.zip\n　· COD 全库索引　…-Databases-COD-full.zip\n　· PDF2-2004 库　不提供下载（ICDD 版权库，需自行准备）\n\n解压后从菜单「数据库 ▸ 外挂数据库管理…」逐个导入。\n未导入数据库时，程序仍可使用内置的 118 种参考物相。",
+        "first_run_body": "从 v4.1.0 起，默认参考库是 polyDB 格式的 COD 无机物库（77,500 物相），随便携版放在程序的 databases 目录下，解压即用，无需手工导入。\n\n要换库或挂多份库，用菜单「数据库 ▸ 外挂数据库管理…」：一个库一行，可挂多个 polyDB 目录（同一类型也能挂多份）。\n\n找不到任何库时，程序仍可使用内置的 118 种参考物相。",
         "list_intro": "一个库一行：可以挂多份库（同一类型也能挂多份，例如「常驻的全库」+「随身的无机子集」），每行都是独立的数据源。选中某行点「设为当前」（或双击该行），物相检索就用那一份。卸载只是把这一行从列表里去掉，不会删除库文件。",
         "col_active": "当前",
         "col_name": "名称",
@@ -188,7 +184,7 @@ translations = {
         "kind": {
             "polydb_inorg": "COD 无机物库（polyDB）",
             "polydb_full": "COD 全库（polyDB）",
-            "user": "用户自建库"
+            "pdf2": "PDF2-2004 库",
         },
         "pkg_free": "本库由用户自行生成或管理，没有下载包。"
     },
@@ -390,7 +386,8 @@ translations = {
     },
     "status": {
         "ready": "就绪",
-        "no_database": "未检测到任何外挂数据库，当前仅内置 118 种参考物相可用。请从菜单「数据库 ▸ 外挂数据库管理…」导入已解压的数据库文件。",
+        "internal_tooltip": "内部评估版本：未启用注册机制，仅供内部测试与评估使用。",
+        "no_database": "未检测到可用的参考数据库，当前仅内置 118 种参考物相可用。请从菜单「数据库 ▸ 外挂数据库管理…」挂载 polyDB 目录（或把 COD-Inorg 的 polyDB 解压到程序的 databases 目录后重启）。",
         "loading_file": "加载文件: {path}",
         "background_subtract": "执行背景扣除 ({method})",
         "smoothing": "执行平滑 ({method})",
@@ -877,16 +874,11 @@ translations = {
             "filter_prefix": "过滤: ",
             "filter_default_exclude": " (未勾选元素默认排除)",
             "db_builtin": "内置库 (118 物相)",
-            "db_cod_inorg": "COD 无机物库",
-            "db_cod_full": "COD 全库",
-            "db_merged": "内置+COD全库合并",
             "db_pdf2": "PDF2-2004 库",
             "db_user": "用户数据库",
-            "db_xinmatch": "XinMatch 格式库",
-            "db_polydb": "COD 无机物库 (polyDB)",
             "db_label_count": "{base} ({count:,})",
             "db_unmounted": " (未挂载)",
-            "db_combo_tip_main": "选择物相检索使用的数据库 (作用于传统 Search/Match 与快速识别):\n· 内置库: 程序自带 118 种常见物相 (最快)\n· COD 无机物库: 外挂 71,199 物相 (预计算 d-I 峰, Hanawalt 预筛)\n· COD 全库: 外挂 113,223 条 CIF 索引 (本地检索)\n· 合并: 内置库 + COD 全库结果合并排序\n· PDF2-2004: ICDD PDF-2 2004 版 163,834 物相, 自带空间群与晶胞\n  (晶胞 81.8% / 空间群 72.8%), 命中相可直接作为精修起始结构。\n· XinMatch 格式库: 你自行挂载的第三方库 (entries/peaks 结构),\n  可用于检索与核对; 该库不含 CIF, 命中相不能直接精修。\n",
+            "db_combo_tip_main": "选择物相检索使用的数据库 (作用于传统 Search/Match 与快速识别):\n· 内置库: 程序自带 118 种常见物相 (最快)\n· COD 无机物库 (polyDB): 默认参考库, 77,500 物相, 位图倒排预筛 + 上界分层\n· COD 全库 (polyDB): 521,361 相 (可选下载), 覆盖全部 COD 条目\n· PDF2-2004: ICDD PDF-2 2004 版, 自带空间群与晶胞, 命中相可直接作精修起始结构\n· 用户数据库: 你自己导入的 CIF\n",
             "db_combo_tip_import": "数据库不随安装包分发, 请单独下载解压后在\n菜单「数据库 ▸ 外挂数据库管理…」中导入。",
             "pdf2_coverage": "  本机库: {total} 相, 空间群 {sg}%, 晶胞 {cell}%。\n",
             "db_unmounted_hint": "该数据库未挂载。请从菜单「数据库 ▸ 外挂数据库管理…」导入已解压的库文件。",
