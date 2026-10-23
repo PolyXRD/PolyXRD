@@ -7,7 +7,7 @@
     Peak detection &nbsp;·&nbsp; Multi-phase qualitative search &nbsp;·&nbsp; Rietveld structure refinement &nbsp;·&nbsp; Le Bail cell refinement &nbsp;·&nbsp; Indexing &nbsp;·&nbsp; 3D structure visualization &nbsp;·&nbsp; Three external databases (COD Inorganics / COD Full / PDF2-2004) plus XinMatch-format libraries
   </p>
   <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v3.2.0-blue?style=flat-square" /></a>
+    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v4.0.0-blue?style=flat-square" /></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
     &nbsp;
@@ -15,7 +15,7 @@
     &nbsp;
     <img src="https://img.shields.io/badge/UI-PySide6%20(Qt6)-41cd52?style=flat-square" />
     &nbsp;
-    <img src="https://img.shields.io/badge/Tests-1100%2B%20collected-brightgreen?style=flat-square" />
+    <img src="https://img.shields.io/badge/Tests-1500%2B%20collected-brightgreen?style=flat-square" />
   </p>
   <p><i>🌐 简体中文文档：[README.md](README.md)</i></p>
 </div>
@@ -38,7 +38,23 @@ Core design philosophy:
 
 ---
 
-## 🆕 Latest Release v3.2.0 (2026-10-20)
+## 🆕 Latest Release v4.0.0 (2026-10-23 · in development)
+
+**polyDB — a purpose-built external phase-database format: smaller, faster, provably safe pruning** (details in Chinese: [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.0.0 and [docs/外挂库格式规范-polyDB-v1.md](docs/外挂库格式规范-polyDB-v1.md)):
+
+- **New format**: a `.polyDB` directory container = `meta.json` + `index.sqlite` + columnar binaries (`peaks_d.f32` / `peaks_i.u16`) + a d-bin bitmap inverted index (`bins.u8`) + element bitmaps (`elem.u8`) + an atomic-site sidecar (`sites.bin` / `sites_off.i64`). Opened read-only via mmap with zero startup parsing; the retrieval path never writes.
+- **Two measured libraries**: `COD-Inorg-20261021.polyDB` **77,500 phases / 89.9 MB** (the old sqlite inorganic library was 1,194.5 MB / 71,199 phases → **13.9x** smaller with more phases); `COD-Full-20261021.polyDB` **521,361 phases / 1,107.7 MB**.
+- **Speed**: COD-Inorg end-to-end retrieval **0.5-0.7 s/sample** (old sqlite chain 6.3-11 s); COD-Full **~2 s** (brute-force scoring on the same library: 45-53 s).
+- **Accuracy**: on all 13 benchmark samples the top-100 returned by `search` is **identical, item by item**, to an unprunded brute-force ranking — including the regression that had dropped 3 true phases on sample 5-1.
+- **List-style database manager**: one row per mounted library, **multiple libraries of the same kind** (one on the internal disk + one on a portable drive, custom subsets, a colleague's export); mount from any folder; "set as current" explicitly selects the search source; the old four config slots migrate with zero action.
+- **Explicit `db_path` on every retrieval entry point** (`polydb` / `cod_inorganics` / `cod_index` / `pdf2` / `xinmatch`), so several libraries of one kind are queried independently; fixes a state leak where an explicit path poisoned the shared identifier instance and later switches kept querying the old library.
+- **Plus a full code assessment** (9 P0/P1 items + a batch of P2, all with regression tests): default peak detection silently ran a joint curve fit (14.2 s → 11 ms), savgol/median windows larger than the pattern crashed, moving-average endpoints lost 45%, European decimals parsed as thousands separators (10x silent error), PDF2 coverage recomputed on every refresh (0.23 s → 0.014 s cached), SVG export NaN/degenerate axes, missing i18n keys, MAUD temp-directory leak, and silent structure loss when the CIF cache directory was not writable.
+
+> 📦 Databases remain external and are not distributed; PDF2-2004 is a commercial ICDD library and never appears in a Release.
+
+👉 **Release artifacts not built yet** (v4.0.0 is in development; documentation is being brought up to date first).
+
+## 📚 Previous Release v3.2.0 (2026-10-20)
 
 **Large-database usability fixes** — makes 20-30 GB external phase databases actually usable. Full details (Chinese): [docs/CHANGELOG.md](docs/CHANGELOG.md) §3.2.0 and [docs/3COD数据库验收报告-20261020.md](docs/3COD数据库验收报告-20261020.md).
 
@@ -50,7 +66,7 @@ Core design philosophy:
 
 👉 [Download v3.2.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v3.2.0) (installer + internal evaluation portable + SHA256)
 
-## 📚 Previous Release v2.5.0 (2026-10-01)
+## 📚 Earlier Release v2.5.0 (2026-10-01)
 
 **Search-chain enhancements + combination-strategy tuning + residual-peak search** (validated on a 13-sample benchmark; see [docs/基准报告-物相检索-v1.md](docs/基准报告-物相检索-v1.md) and [docs/基准报告-物相组合-v1.md](docs/基准报告-物相组合-v1.md), Chinese):
 

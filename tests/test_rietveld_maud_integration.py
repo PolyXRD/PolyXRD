@@ -10,7 +10,6 @@
 """
 from __future__ import annotations
 
-import time
 from pathlib import Path
 from unittest.mock import patch
 
@@ -104,7 +103,7 @@ class TestEngineDispatch:
                 maud_root=fake_maud_root,
                 maud_wizard_index=13,
                 maud_on_progress=lambda p: progress_calls.append(p),
-                maud_keep_workdir=True,
+                maud_keep_workdir=False,
             )
 
         assert isinstance(result, RefinementResult)
@@ -180,7 +179,7 @@ class TestMaudFallback:
                 synthetic_xrd_data, [al2o3_phase],
                 engine="maud", max_cycles=5,
                 maud_root=fake_maud_root,
-                maud_keep_workdir=True,
+                maud_keep_workdir=False,
             )
 
         # 兜底回 builtin: fit_params["engine"] 应是 "builtin"

@@ -130,3 +130,55 @@ class TestExportCsvCif:
     def test_export_returns_none_for_missing_source(self, tmp_path):
         from polyxrd.services.report import export_via_libreoffice
         assert export_via_libreoffice(tmp_path / "nope.html", "docx") is None
+
+
+# ─────────────────────────────────────────────────────────────────
+# v4.0.0 回归: SVG 导出的 NaN / 退化 2θ 轴 / 全负强度 (svc-data)
+# ─────────────────────────────────────────────────────────────────
+
+class TestSvgRobustness:
+    """实测缺陷 (旧实现):
+      - 2θ 轴退化 (全部同角) → px() 除零, 全坐标 nan (曲线消失);
+      - 强度含 NaN → ymax=nan, 全坐标 nan;
+      - 强度全负 → ymax<0, 曲线被画出绘图区。
+    """
+
+    @staticmethod
+    def _coords(svg):
+        import re
+        m = re.search(r'<polyline points="([^"]*)"', svg)
+        assert m, "SVG 中没有 polyline"
+        return m.group(1).split()
+
+    def test_degenerate_two_theta_axis(self):
+        from polyxrd.models.xrd_data import XRDData
+        from polyxrd.services.report import export_svg_pattern
+        d = XRDData(two_theta=np.array([20.0, 20.0, 20.0]),
+                    intensity=np.array([1.0, 2.0, 3.0]))
+        svg = export_svg_pattern(d)
+        assert "nan" not in svg.lower()
+        for pt in self._coords(svg):
+            xv, yv = (float(v) for v in pt.split(","))
+            assert np.isfinite(xv) and np.isfinite(yv)
+
+    def test_nan_intensity(self):
+        from polyxrd.models.xrd_data import XRDData
+        from polyxrd.services.report import export_svg_pattern
+        y = np.linspace(10.0, 100.0, 50)
+        y[10] = np.nan
+        d = XRDData(two_theta=np.linspace(10, 30, 50), intensity=y)
+        svg = export_svg_pattern(d)
+        assert "nan" not in svg.lower()
+        for pt in self._coords(svg):
+            xv, yv = (float(v) for v in pt.split(","))
+            assert np.isfinite(xv) and np.isfinite(yv)
+
+    def test_all_negative_intensity_inside_viewport(self):
+        from polyxrd.models.xrd_data import XRDData
+        from polyxrd.services.report import export_svg_pattern
+        d = XRDData(two_theta=np.linspace(10, 20, 10),
+                    intensity=np.full(10, -5.0))
+        svg = export_svg_pattern(d, width=800, height=300)
+        for pt in self._coords(svg):
+            xv, yv = (float(v) for v in pt.split(","))
+            assert 0 <= xv <= 800 and 0 <= yv <= 300

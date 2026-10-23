@@ -10,7 +10,7 @@ pandas>=2.0.0
 pyqtgraph>=0.13.0
 Pillow>=9.0.0
 platformdirs>=3.0.0
-spglib>=2.0
+spglib>=2.5
 plotly>=5.0
 
 # Build tools

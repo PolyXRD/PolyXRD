@@ -310,8 +310,15 @@ class DataPreprocessor:
         window: int = 51,
         **kwargs,
     ) -> np.ndarray:
-        """中值滤波背景扣除"""
-        return median_filter(intensity, size=window)
+        """中值滤波背景扣除
+
+        v4.0.0 修复: 窗口大于谱点数时 ``median_filter`` 会用 0 填充,
+        短谱 (点数 < window) 的背景被整体估成 0 (实测 5 点谱 size=51 → 全 0),
+        等于"不扣背景"或把信号当背景。现把窗口收缩到不超过谱点数。
+        """
+        y = np.asarray(intensity, dtype=float)
+        window = max(3, min(int(window), y.size))
+        return median_filter(y, size=window)
 
     def _rolling_background(
         self,
@@ -344,10 +351,22 @@ class DataPreprocessor:
         polyorder: int = 3,
         **kwargs,
     ) -> np.ndarray:
-        """Savitzky-Golay平滑"""
-        window = max(3, window if window % 2 == 1 else window + 1)
-        polyorder = min(polyorder, window - 1)
-        return signal.savgol_filter(intensity, window, polyorder)
+        """Savitzky-Golay平滑
+
+        v4.0.0 修复: 窗口未随谱点数收缩 → 短谱 (点数 < window) 直接抛
+        ``ValueError: window_length must be less than or equal to the size of x``。
+        稀点/窄区间导入的谱 (例如 2θ 步长 2°、几十点的概览扫描) 走默认
+        window=11 就会崩。现按点数收缩为最大奇数窗口, 点数 < 3 时原样返回。
+        """
+        y = np.asarray(intensity, dtype=float)
+        n = y.size
+        window = max(3, int(window) if int(window) % 2 == 1 else int(window) + 1)
+        if window > n:
+            window = n if n % 2 == 1 else n - 1
+        if window < 3:
+            return y.copy()
+        polyorder = min(int(polyorder), window - 1)
+        return signal.savgol_filter(y, window, polyorder)
 
     @staticmethod
     def _gaussian_smooth(
@@ -387,9 +406,25 @@ class DataPreprocessor:
         window: int = 11,
         **kwargs,
     ) -> np.ndarray:
-        """移动平均"""
-        kernel = np.ones(window) / window
-        return signal.convolve(intensity, kernel, mode="same")
+        """移动平均
+
+        v4.0.0 修复: 原实现 ``signal.convolve(..., mode="same")`` 两端按零填充,
+        常数谱 100 平滑后首末各 window//2 点掉到 54.5 (45% 塌陷) —— 与
+        v3.0.1 已修好的高斯平滑是同一类缺陷, 会让归一化/扣背景后的低角端
+        出现假低强度。现改为与 ``_gaussian_smooth`` 一致的边缘值延拓 +
+        核归一, 常数谱保持恒定; 并把窗口收缩到不超过谱点数。
+        """
+        y = np.asarray(intensity, dtype=float)
+        n = y.size
+        window = max(1, int(window))
+        if window <= 1 or n == 0:
+            return y.copy()
+        window = min(window, n)
+        kernel = np.ones(window) / float(window)
+        half = window // 2
+        padded = np.pad(y, half, mode="edge")
+        out = signal.convolve(padded, kernel, mode="same")
+        return out[half:half + n]
 
     @staticmethod
     def _median_smooth(
@@ -397,6 +432,10 @@ class DataPreprocessor:
         window: int = 11,
         **kwargs,
     ) -> np.ndarray:
-        """中值平滑"""
-        window = max(3, window if window % 2 == 1 else window + 1)
-        return median_filter(intensity, size=window)
+        """中值平滑 (窗口收缩到不超过谱点数, 避免短谱被 0 填充吞掉)"""
+        y = np.asarray(intensity, dtype=float)
+        window = max(3, int(window) if int(window) % 2 == 1 else int(window) + 1)
+        window = min(window, y.size if y.size % 2 == 1 else y.size - 1)
+        if window < 3:
+            return y.copy()
+        return median_filter(y, size=window)

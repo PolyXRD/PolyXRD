@@ -7,7 +7,7 @@
     峰检测 &nbsp;·&nbsp; 多物相定性检索 &nbsp;·&nbsp; Rietveld 结构精修 &nbsp;·&nbsp; Le Bail 晶胞精修 &nbsp;·&nbsp; 指标化 &nbsp;·&nbsp; 3D 结构可视化 &nbsp;·&nbsp; 多库外挂检索 (COD 无机物 / COD 全库 / PDF2-2004 / XinMatch 格式)
   </p>
   <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v3.2.0-blue?style=flat-square" /></a>
+    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v4.0.0-blue?style=flat-square" /></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
     &nbsp;
@@ -15,7 +15,7 @@
     &nbsp;
     <img src="https://img.shields.io/badge/UI-PySide6%20(Qt6)-41cd52?style=flat-square" />
     &nbsp;
-    <img src="https://img.shields.io/badge/Tests-1489%2B%20collected-brightgreen?style=flat-square" />
+    <img src="https://img.shields.io/badge/Tests-1574%20collected-brightgreen?style=flat-square" />
   </p>
   <p><i>🌐 English documentation: [README-EN.md](README-EN.md)</i></p>
 </div>
@@ -34,11 +34,40 @@
 - **UI 与算法分层** — MVVM 架构，`services/` 层是纯算法、不依赖 Qt，可独立单元测试。
 
 > 📋 **版本变更记录**：见 [docs/CHANGELOG.md](docs/CHANGELOG.md)。
+> ✅ **v4.0.0 发布检查清单（构建/产物/验收记录）**：见 [docs/发布检查清单-v4.0.0.md](docs/发布检查清单-v4.0.0.md)。
 > 🏗️ **代码结构与分层说明**：见 [docs/代码结构说明.md](docs/代码结构说明.md)。
 
 ---
 
-## 🆕 最新版本 v3.2.0（2026-10-20）
+## 🆕 最新版本 v4.0.0（2026-10-23 · 发布就绪，本地产物已构建）
+
+**自研外挂物相库格式 polyDB —— 更小、更快、候选剪枝可证**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.0.0 与 [docs/外挂库格式规范-polyDB-v1.md](docs/外挂库格式规范-polyDB-v1.md)）：
+
+- **新格式**：`.polyDB` 目录容器 = `meta.json` + `index.sqlite` + 列存二进制（`peaks_d.f32` / `peaks_i.u16`）+ d 分箱位图倒排（`bins.u8`）+ 元素位图（`elem.u8`）+ 位点侧车（`sites.bin` / `sites_off.i64`）。全程只读 mmap 打开、零启动解析，检索链**从不写库**。
+- **两个实测库**：`COD-Inorg-20261021.polyDB` **77,500 相 / 89.9 MB**（旧 sqlite 无机库 1,194.5 MB / 71,199 相 → 体积 **13.9×** 更小、相数还更多）；`COD-Full-20261021.polyDB` **521,361 相 / 1,107.7 MB**。
+- **速度**：COD-Inorg 端到端检索 **0.5~0.7 s/样本**（旧 sqlite 链路 6.3~11 s）；COD-Full **约 2 s**（同条件下全量暴力打分 45~53 s）。
+- **准确性**：13 个基准试样 × 全库暴力打分逐条比对，`search` 的 top-100 **完全等于**无剪枝暴力结果 —— 覆盖了「5-1 试样曾掉 3 个物相」的旧剪枝缺陷回归。
+- **列表式外挂库管理**：一行 = 一个已挂载的库，**同类型可挂多份**（内置盘一份 + 移动硬盘一份 / 自裁子集 / 同事导出的库），任意文件夹指过去即可；「设为当前」显式决定用哪一行检索；老的四类配置槽位**零迁移**自动出现在列表里。
+- **检索链路显式路径**：`polydb` / `cod_inorganics` / `cod_index` / `pdf2` / `xinmatch` 均可传 `db_path`，同类型多份库各查各的；顺带修掉「显式路径污染实例状态 → 切库后仍在查旧库」的串库缺陷。
+- **同步完成一轮全量代码评估**（9 项 P0/P1 + 一批 P2，全部带回归测试）：默认寻峰误走联合拟合（14.2 s → 11 ms）、savgol/median 窗口越界崩溃、moving 平均端点掉 45%、欧式小数被当千位分隔（10× 静默误差）、PDF2 覆盖率每次重算（0.23 s → 缓存后 0.014 s）、SVG 导出的 NaN/退化轴、i18n 缺失键无回退、MAUD 临时目录泄漏、CIF 缓存目录不可写时静默丢结构等。
+
+> 📦 数据库仍为外挂，不随分发；PDF2-2004 为 ICDD 版权库，永不出现在 Release 里。
+
+👉 **本地产物已构建并通过自动化验收**（2026-10-23，详见 [docs/发布检查清单-v4.0.0.md](docs/发布检查清单-v4.0.0.md)）；待打 tag / 上传 Release。
+
+| 产物 | 体积 | SHA-256（前 16 位） |
+|---|---|---|
+| `PolyXRD-Setup-v4.0.0.exe`（正式版安装包，带注册，不含数据库） | 249.1 MB | `b467e8d747bebee9…` |
+| `PolyXRD-v4.0.0-Portable.zip`（正式版便携包，解压即用） | 389.0 MB | `9c4e99e9bcad84c7…` |
+| `PolyXRD-v4.0.0-Databases-COD-inorg-polyDB.zip`（无机物库 77,500 相） | 48.1 MB | `d9e57d11ced3082e…` |
+| `PolyXRD-v4.0.0-Databases-COD-full-polyDB.zip`（全库 521,361 相） | 710.3 MB | `191246b7ee2bcc10…` |
+
+> 完整校验值见 `SHA256-v4.0.0.txt`（构建时生成，已独立复核 4/4 一致）。
+> 发布验收：全量回归 1567 passed / 6 skipped / 1 failed（唯一失败为本机 LibreOffice 环境限制，
+> 改动前即失败）；便携包解压 13,151 文件无业务数据库、离屏启动 `shown visible=True`、crash 日志 0；
+> 两个 polyDB 库 `polydb_verify` 全绿；功能冒烟 10/10。
+
+## 📚 上一版 v3.2.0（2026-10-20）
 
 **大库可用性修复：让 20~30 GB 级的外挂物相库真正能用**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §3.2.0 与 [docs/3COD数据库验收报告-20261020.md](docs/3COD数据库验收报告-20261020.md)）：
 
@@ -52,7 +81,7 @@
 
 👉 [下载 v3.2.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v3.2.0)（正式版安装包 + 内部评估版便携包 + SHA256）
 
-## 📚 上一版 v3.1.0（2026-10-18）
+## 📚 v3.1.0（2026-10-18）
 
 **XinMatch 格式库支持 + 任意位置挂载 + 全量 review 修正**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §3.1.0 与 [docs/code-review-2026-10-18.md](docs/code-review-2026-10-18.md)）：
 
@@ -150,13 +179,14 @@ python scripts/make_reg_code.py --verify PXRD1-XXXX-...  # 校验并回显单位
 - **单实例运行**：重复双击不会开出多个窗口，而是把已在运行的窗口切到前台
 - **数据库管理对话框**：三个槽位各自显示「已挂载/未挂载」、记录数、体积，并直接标明该槽位对应哪个下载包
 
-### ⑥ 外挂检索服务（三库 + XinMatch 格式兼容库）
+### ⑥ 外挂检索服务（polyDB / COD / PDF2 / XinMatch，列表式挂载）
 | 库 | 规模 | 作用 |
 |---|---|---|
 | COD 无机物库 | 71,199 物相 | 预计算 d-I 峰 + 预截断强峰列 + Hanawalt 预筛，**主检索库**，速度最快。默认发布**瘦身索引式**（362 MB，`COD_inorganics_index.sqlite`）：原子位点完整保留，CIF 由本地 `cod/cif` 目录按需读取，缺失时自动回退 COD 在线接口下载。完整内嵌版（1.19 GB）仍可导入，两者数据逐行一致 |
 | COD 全库索引 | 113,223 条目 | COD 全量 CIF 索引（432 MB，不内嵌 CIF），用于「COD 全库」与「内置+全库合并」两个检索源 |
 | PDF2-2004 库 | 163,834 物相 | ICDD PDF-2 2004，自带空间群与晶胞，用于与商品库对照 |
 | XinMatch 格式库 | 自备（71,206 / 112,734 条目） | **第三方格式兼容**：直接挂载 `entries`/`peaks`/`elements`/`element_combo` 四表的库文件，无需转换。检索口径与 COD 无机物库逐项一致（同一套 Hanawalt 度量 + 同一套 FOM 排序），首次检索自动建强峰索引（约 3 秒，之后每次 ~0.4 秒）。该库**不含 CIF**：候选只有晶胞没有原子坐标，可用于检索与核对，不能直接进结构精修 |
+| polyDB 外挂库（v4.0.0） | 自备（实测 77,500 / 521,361 相） | PolyXRD 自有列存格式：`meta.json` + `index.sqlite` + 峰矩阵 + d 分箱位图 + 元素位图 + 位点侧车。**只读 mmap、零启动解析**，检索时只解候选行；命中相带非对称单位位点，可直接进精修。目录容器放任意路径，挂载即用 |
 
 - **任意位置挂载**（v3.1.0）：库文件放在哪个文件夹都行，不必搬进程序目录 —— 在「外挂数据库管理…」里点「挂载数据库文件…」直接指过去即可，路径记进 `~/.polyxrd/user_db_paths.json`，下次启动自动加载；点「挂载文件夹…」时会自动把该目录下所有合格的库**一次全挂上**（只扫本层，`.bak` 备份文件会被跳过）
 - 路径优先级：**GUI 挂载的持久化路径 (`~/.polyxrd/user_db_paths.json`) > 默认位置（存在才用）> `~/.polyxrd/cif_db/` 兜底**
@@ -185,8 +215,9 @@ python scripts/make_reg_code.py --verify PXRD1-XXXX-...  # 校验并回显单位
 ⑤ 开始使用!
 ```
 
-> **发布口径**：Release 提供 **Setup 安装包 + Portable 便携包 + 两个 COD 索引库包**
-> （Setup 241 MB / Portable 369 MB / 无机物索引 134 MB / 全库索引 206 MB）。
+> **发布口径**（v4.0.0 实测）：Release 3 附件 = **Setup 安装包（249.1 MB）+ Portable 便携包（389.0 MB）+ SHA256**；
+> 数据库作为**独立下载项**：`COD-inorg-polyDB.zip`（48.1 MB / 77,500 相）与
+> `COD-full-polyDB.zip`（710.3 MB / 521,361 相）。PDF2-2004 不在任何发布物中。
 > PDF2-2004 包为 ICDD 版权库，**不随 Release 分发**，需要时自行准备库文件。
 
 > **瘦身无机库说明**：索引式无机库不含内嵌 CIF。本机若有 COD 原始
@@ -296,7 +327,8 @@ PolyXRD 基于众多高质量开源项目构建 —— Python / PySide6 (Qt6) / 
 
 | PolyXRD | COD 无机物库 | COD 全库索引 | PDF2-2004 |
 |---|---|---|---|
-| **2.x / 1.x（当前）** | `…-Databases-COD-inorg-index.zip`（瘦身索引式, 默认; 内嵌版仍可导入） | `…-Databases-COD-full-index.zip` | 用户自行准备（ICDD 授权，仓库不分发） |
+| **4.0.0（当前）** | `…-Databases-COD-inorg-index.zip`（瘦身索引式，旧 sqlite 仍可导入） + `…-Databases-COD-full-index.zip`；**推荐**改用 `COD-Inorg-<日期>.polyDB` / `COD-Full-<日期>.polyDB`（见 `docs/外挂库格式规范-polyDB-v1.md`） | 用户自行准备（ICDD 授权，仓库不分发） |
+| 2.x / 1.x | `…-Databases-COD-inorg-index.zip`（瘦身索引式, 默认; 内嵌版仍可导入） | `…-Databases-COD-full-index.zip` | 用户自行准备（ICDD 授权，仓库不分发） |
 | 0.11.0–0.13.2 | `…-Databases-COD-inorg.zip`（v2, 内嵌 CIF） | `…-Databases-COD-full.zip` | 用户自行准备（ICDD 授权，仓库不分发） |
 | 0.10.0 | `…-Databases-COD-inorg.zip`（v1, 仅 d-I 峰） | `…-Databases-COD-full.zip` | 用户自行准备（ICDD 授权，仓库不分发） |
 | 0.9.10 及以前 | 内嵌或 `PolyXRD_COD_Inorganics_v0.9.x.zip` | 内嵌或 `PolyXRD_COD_Full_v0.9.x.zip` | 不支持 |

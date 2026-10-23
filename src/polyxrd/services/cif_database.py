@@ -1150,13 +1150,25 @@ class CIFDatabase:
         db.export_cif("SiO2", "./output/")
     """
 
-    def __init__(self, enable_cod_local: bool = True) -> None:
+    def __init__(self, enable_cod_local: bool = True,
+                 cod_db_path: Optional[Path] = None) -> None:
         self._config = get_config()
         self._external_minerals: dict[str, dict] = {}
         self._ensure_db_dir()
+        # v4.0.0: 显式指定的 COD 无机物库路径 (列表式多库挂载用)。
+        # None = 按配置解析 (与历史行为逐字一致); 给了就只读这一份,
+        # **不写配置** —— 挂多份同类型库时不能互相覆盖对方的槽位。
+        self._cod_db_override: Optional[Path] = (
+            Path(cod_db_path) if cod_db_path else None)
         # 本地 COD 全库数据库 (懒加载, cod_index.sqlite)
         self._cod_db = None  # type: ignore[var-annotated]
         self._cod_enabled = enable_cod_local
+
+    def cod_db_file(self) -> Path:
+        """当前生效的 COD 物相库文件 (显式覆盖优先, 否则按配置解析)。"""
+        if self._cod_db_override is not None:
+            return self._cod_db_override
+        return self._config.get_cod_db_path()
 
     def _ensure_db_dir(self) -> None:
         db_path = self._config.get_cif_db_path()
@@ -1584,7 +1596,7 @@ class CIFDatabase:
         if self._cod_conn is not None:
             return self._cod_conn
         import sqlite3
-        db_path = self._config.get_cod_db_path()
+        db_path = self.cod_db_file()
         if not db_path.exists():
             return None
         # read-only, 多线程安全
@@ -1623,7 +1635,7 @@ class CIFDatabase:
 
     def cod_db_available(self) -> bool:
         """COD 离线数据库是否可用"""
-        return self._config.get_cod_db_path().exists()
+        return self.cod_db_file().exists()
 
     def cod_phase_count(self) -> int:
         """COD 数据库中的物相总数"""

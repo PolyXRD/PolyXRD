@@ -266,3 +266,50 @@ class TestKa2StripRegression:
             data, ratio=0.5, skip_on_mismatch=False)
         assert out.metadata.get("ka2_stripped") is True
         assert out.intensity.min() >= 0.0   # 仍被 np.maximum(raw, 0) 夹住
+
+# ─────────────────────────────────────────────────────────────────
+# v4.0.0 回归: 短谱窗口收缩 + 移动平均边界 (svc-data)
+# ─────────────────────────────────────────────────────────────────
+
+class TestShortSpectrumWindows:
+    """短谱 (点数 < 默认窗口) 不得崩溃/不得被 0 填充吞掉。
+
+    实测缺陷:
+      - savgol window=11 作用于 5 点谱 → ValueError (window_length > size);
+      - moving 常数谱 100 → 首点 54.5 (零填充, 45% 边缘塌陷);
+      - median 5 点谱 size=51 → 输出全 0 (0 填充主导)。
+    """
+
+    def _short(self, n=5, val=100.0):
+        return XRDData(two_theta=np.linspace(10, 20, n),
+                       intensity=np.full(n, val))
+
+    def test_savgol_window_larger_than_spectrum(self):
+        data = self._short(5)
+        out = DataPreprocessor().smooth(data, method="savgol", window=11)
+        assert len(out.intensity) == 5
+        assert np.all(np.isfinite(out.intensity))
+
+    def test_moving_average_preserves_constant_and_edges(self):
+        n = 201
+        data = XRDData(two_theta=np.linspace(10, 30, n),
+                       intensity=np.full(n, 100.0))
+        out = DataPreprocessor().smooth(data, method="moving", window=11)
+        # 边缘不得塌陷 (旧实现首末各 5 点掉到 ~54.5)
+        assert np.allclose(out.intensity, 100.0, rtol=1e-6)
+
+    def test_moving_average_short_spectrum_length(self):
+        data = self._short(5)
+        out = DataPreprocessor().smooth(data, method="moving", window=11)
+        assert len(out.intensity) == len(data.intensity)
+        assert np.all(np.isfinite(out.intensity))
+
+    def test_median_smooth_short_spectrum_not_zeroed(self):
+        data = self._short(5)
+        out = DataPreprocessor().smooth(data, method="median", window=51)
+        assert np.allclose(out.intensity, 100.0)
+
+    def test_median_background_short_spectrum_not_zeroed(self):
+        data = self._short(5)
+        res = DataPreprocessor().subtract_background(data, method="median", window=51)
+        assert np.allclose(res.background, 100.0)

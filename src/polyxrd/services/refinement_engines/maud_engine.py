@@ -680,87 +680,94 @@ class MaudEngine:
         Returns:
             RefinementResult (wR 单位 %; phases 已回写 weight_fraction + lattice)
         """
-        # 优先级: 用户传入 work_dir > keep_workdir=True 时建一个跟踪目录 > 否则 mkdtemp
-        # 之前版本 keep_workdir=True 时会忽略用户的 work_dir, 这里修正.
+        # 所有权: 调用方传了 work_dir 就归调用方; 引擎自己 mkdtemp 出来的归引擎,
+        # 非 keep_workdir 时在 finally 回收 —— 旧版本这里从不清理, 每次直接调用
+        # (向导 / 测试 / 二次开发) 都会在 CWD 堆一个 maud_engine_* 目录.
+        owns_workdir = work_dir is None
         if work_dir is None:
             work_dir = Path(tempfile.mkdtemp(prefix="maud_engine_"))
+        work_dir = Path(work_dir)
 
         try:
-            artifacts = self.prepare_workdir(
-                data, phases,
-                iterations=iterations,
-                wizard_index=wizard_index,
-                work_dir=Path(work_dir),
-                cod_root=cod_root,
+            try:
+                artifacts = self.prepare_workdir(
+                    data, phases,
+                    iterations=iterations,
+                    wizard_index=wizard_index,
+                    work_dir=Path(work_dir),
+                    cod_root=cod_root,
+                )
+                self.run(
+                    artifacts,
+                    max_memory_mb=max_memory_mb,
+                    timeout_s=timeout_s,
+                    on_progress=on_progress,
+                )
+            except MaudEngineError as e:
+                logger.warning("MAUD engine failed, caller decides fallback: %s", e)
+                raise
+
+            # 结果回读
+            rfactors = _parse_par_rfactors(artifacts.output_par_path)
+            tsv_entries = _parse_tsv_results(artifacts.output_tsv_path)
+            _apply_tsv_to_phases(phases, tsv_entries)
+            # MAUD2/3 的 TSV 不含相定量 — 相体积分数/晶胞从 refined.par 解析回写
+            par_entries = _parse_par_phases(artifacts.output_par_path)
+            _apply_par_to_phases(phases, par_entries)
+
+            # 复制最终 par 到 work_dir 顶层 (供 GUI 查看); 不动 shutil.rmtree 因为可能 keep_workdir
+            rwp = float(rfactors.get("rwp") or 0.0)
+            wrp = float(rfactors.get("wrp") or 0.0)
+            rexp = float(rfactors.get("rexp") or 0.0)
+            rb = float(rfactors.get("rb") or 0.0)
+            gof = float(rfactors.get("gof") or 0.0)
+            n_iter = int(rfactors.get("iterations") or 0)
+
+            # v1.1.2: 质量分级统一走 models.refinement.quality_grade_for
+            quality = quality_grade_for(wrp)
+
+            # 残差谱: MAUD 不直接暴露 simulated_data, 用 observed 0 残差占位
+            try:
+                obs_x = np.asarray(data.two_theta, dtype=float)
+                obs_y = np.asarray(data.intensity, dtype=float)
+                observed = (obs_x, obs_y)
+                simulated = (obs_x, obs_y)  # 简化: 占位
+                residual = (obs_x, np.zeros_like(obs_y))
+            except Exception:
+                observed = simulated = residual = None
+
+            result = RefinementResult(
+                phases=list(phases),
+                observed_data=observed,
+                simulated_data=simulated,
+                residual_data=residual,
+                wR=wrp,  # wR ≡ Rwp (加权轮廓 R), 用作主要指标
+                Rexp=rexp,  # MAUD par 有则带出, 无则 0
+                Rb=0.0,   # v2.0.0: 真实 Bragg R 未实现 (MAUD 回传的 rb 不入此槽位, 见 fit_params)
+                Rp=rb,
+                metrics_valid=bool(rexp > 0.0),
+                GOF=gof,
+                quality=quality,
+                num_cycles=n_iter,
+                converged=(wrp > 0.0 and wrp < 50.0),  # MAUD 没显式收敛标志
+                time_seconds=0.0,  # 调用方 (RietveldRefiner) 会覆盖
+                fit_params={
+                    "engine": "maud",
+                    "maud_root": str(self.maud_root),
+                    "iterations_requested": iterations or self.DEFAULT_ITERATIONS,
+                    "wizard_index": wizard_index,
+                    "r_factor": rwp,
+                    "wR_factor": wrp,
+                    "goodness_of_fit": gof,
+                    "work_dir": str(artifacts.work_dir),
+                    "output_par": str(artifacts.output_par_path),
+                    "output_tsv": str(artifacts.output_tsv_path),
+                    "tsv_entries": tsv_entries,
+                    "par_phase_entries": par_entries,
+                    "kept_workdir": keep_workdir,
+                },
             )
-            self.run(
-                artifacts,
-                max_memory_mb=max_memory_mb,
-                timeout_s=timeout_s,
-                on_progress=on_progress,
-            )
-        except MaudEngineError as e:
-            logger.warning("MAUD engine failed, caller decides fallback: %s", e)
-            raise
-
-        # 结果回读
-        rfactors = _parse_par_rfactors(artifacts.output_par_path)
-        tsv_entries = _parse_tsv_results(artifacts.output_tsv_path)
-        _apply_tsv_to_phases(phases, tsv_entries)
-        # MAUD2/3 的 TSV 不含相定量 — 相体积分数/晶胞从 refined.par 解析回写
-        par_entries = _parse_par_phases(artifacts.output_par_path)
-        _apply_par_to_phases(phases, par_entries)
-
-        # 复制最终 par 到 work_dir 顶层 (供 GUI 查看); 不动 shutil.rmtree 因为可能 keep_workdir
-        rwp = float(rfactors.get("rwp") or 0.0)
-        wrp = float(rfactors.get("wrp") or 0.0)
-        rexp = float(rfactors.get("rexp") or 0.0)
-        rb = float(rfactors.get("rb") or 0.0)
-        gof = float(rfactors.get("gof") or 0.0)
-        n_iter = int(rfactors.get("iterations") or 0)
-
-        # v1.1.2: 质量分级统一走 models.refinement.quality_grade_for
-        quality = quality_grade_for(wrp)
-
-        # 残差谱: MAUD 不直接暴露 simulated_data, 用 observed 0 残差占位
-        try:
-            obs_x = np.asarray(data.two_theta, dtype=float)
-            obs_y = np.asarray(data.intensity, dtype=float)
-            observed = (obs_x, obs_y)
-            simulated = (obs_x, obs_y)  # 简化: 占位
-            residual = (obs_x, np.zeros_like(obs_y))
-        except Exception:
-            observed = simulated = residual = None
-
-        result = RefinementResult(
-            phases=list(phases),
-            observed_data=observed,
-            simulated_data=simulated,
-            residual_data=residual,
-            wR=wrp,  # wR ≡ Rwp (加权轮廓 R), 用作主要指标
-            Rexp=rexp,  # MAUD par 有则带出, 无则 0
-            Rb=0.0,   # v2.0.0: 真实 Bragg R 未实现 (MAUD 回传的 rb 不入此槽位, 见 fit_params)
-            Rp=rb,
-            metrics_valid=bool(rexp > 0.0),
-            GOF=gof,
-            quality=quality,
-            num_cycles=n_iter,
-            converged=(wrp > 0.0 and wrp < 50.0),  # MAUD 没显式收敛标志
-            time_seconds=0.0,  # 调用方 (RietveldRefiner) 会覆盖
-            fit_params={
-                "engine": "maud",
-                "maud_root": str(self.maud_root),
-                "iterations_requested": iterations or self.DEFAULT_ITERATIONS,
-                "wizard_index": wizard_index,
-                "r_factor": rwp,
-                "wR_factor": wrp,
-                "goodness_of_fit": gof,
-                "work_dir": str(artifacts.work_dir),
-                "output_par": str(artifacts.output_par_path),
-                "output_tsv": str(artifacts.output_tsv_path),
-                "tsv_entries": tsv_entries,
-                "par_phase_entries": par_entries,
-                "kept_workdir": keep_workdir,
-            },
-        )
-        return result
+            return result
+        finally:
+            if owns_workdir and not keep_workdir:
+                shutil.rmtree(work_dir, ignore_errors=True)

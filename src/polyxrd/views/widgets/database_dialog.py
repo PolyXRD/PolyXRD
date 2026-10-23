@@ -1,445 +1,490 @@
-"""外挂数据库管理对话框 (0.10.0)
-================================
-0.10.0 起发布包不再内置数据库。用户单独下载数据库后在这里导入:
-  文件 → 校验 (是不是对的库、有多少相、列齐不齐) → 持久化路径。
-导入后立即清缓存并通知主窗口刷新数据源下拉, 无需重启。
+r"""外挂数据库管理对话框 —— 列表式多库挂载 (v4.0.0 重设计)
+==========================================================
 
-设计取舍: 校验失败时**不静默失败也不只弹一句"格式错误"**, 而是尽量告诉
-用户"这个文件其实是 PDF2 库 / 缺了 peaks_d 列", 并且如果它确实是另一类
-合法库, 直接问"要不要导入到对应槽位"。外挂库这事最容易踩的坑就是
-拿错文件, 而拿错文件原本是不会报错的 (COD 无机物库与 PDF2 库表名同为
-`phases`, 拿混了只会静默检索不到东西)。
+旧版是**按类型一个槽位**: COD 无机物库 / COD 全库索引 / PDF2 / XinMatch 格式库
+各占一行, 每类只能挂一份。v4.0.0 起改成**一张表**: 一行 = 一个已挂载的数据库,
+想挂几份挂几份 (同一类型也可以挂多份, 例如"内置盘常驻的 polyDB 全库" +
+"移动硬盘上的无机子集"), 选中某行点「设为当前」, 物相检索就用那一份。
+
+界面结构
+--------
+    ┌ 说明 ───────────────────────────────────────────────┐
+    │ 挂载数据库文件…  挂载文件夹…  卸载  设为当前  重新检测  用户库管理… │
+    ├ 表格 (名称/类型/相数/大小/状态/位置) ────────────────────┤
+    │ ● COD 无机物库 (polyDB)  polyDB  77,500  89.9 MB  已挂载  D:\... │
+    │   COD 全库索引           COD    1,959,421 30.2 GB 已挂载  D:\... │
+    ├ 详情 (路径 / 下载包 / 授权提示) ────────────────────────┤
+    │ 当前物相检索使用：COD 无机物库 (polyDB)              [关闭] │
+    └──────────────────────────────────────────────────┘
+
+设计取舍
+--------
+1. **「设为当前」是一个显式动作, 不是"选中即切换"**。选中行会立刻改变详情区,
+   但真正换数据源要按按钮 (或双击行) —— 表格里点一下就换库、下一张谱跑出
+   另一套结果的体验太危险。
+2. **卸载内置库 = 清对应配置槽位**(与旧「取消挂载」等价), 卸载用户自加项 =
+   从挂载表里删掉。两者都不删库文件本身。
+3. **授权提示跟着选中行走**(PDF2-2004 是 ICDD 商业库)。提示必须出现在用户
+   挂载它的地方, 藏在许可协议里等于没提示。
 """
 from __future__ import annotations
 
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
     QFrame,
-    QGridLayout,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QMessageBox,
     QPushButton,
-    QSizePolicy,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
 from polyxrd.i18n import tr
-from polyxrd.services import db_import, user_db
-from polyxrd.services.db_import import DB_KINDS, inspect_db_file
+from polyxrd.services import db_import, db_mounts, user_db
 
-#: kind key → DBKind, 供"自动挂载"结果回显库名 (DB_KINDS 的顺序即优先级,
-#: 这里要按 key 查, 不能按下标)。
+#: kind key → DBKind; 保留给"下载包提示"用 (DB_KINDS 的顺序即优先级, 这里按 key 查)
 DB_KINDS_BY_KEY = db_import.KIND_BY_KEY
 
-_FILE_FILTER = "vw.database_dialog.file_filter"
+_ROW_ID = Qt.ItemDataRole.UserRole
+
+#: 表格列顺序 (与 ``_HEADER_KEYS`` 一一对应)
+_COL_ACTIVE, _COL_NAME, _COL_TYPE, _COL_ROWS, _COL_SIZE, _COL_STATUS, _COL_PATH = range(7)
+
+_HEADER_KEYS = (
+    "db_manager.col_active",
+    "db_manager.col_name",
+    "db_manager.col_type",
+    "db_manager.col_rows",
+    "db_manager.col_size",
+    "db_manager.col_status",
+    "db_manager.col_path",
+)
+
+#: 库类型 → 显示名 i18n 键 (polyDB 的显示名带变体信息, 由 mount.label_key 覆盖)
+_GREEN = "#1e8449"
+_RED = "#c0392b"
+_AMBER = "#b9770e"
+_MUTED = "#7f8c8d"
 
 
 class DatabaseManagerDialog(QDialog):
-    """外挂数据库管理: 查看 / 导入 / 清除三个库槽位。"""
+    """外挂数据库管理: 列表式挂载 / 卸载 / 选当前库。"""
 
     databases_changed = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle(tr("db_manager.title"))
-        self.setMinimumWidth(760)
-        self._rows: dict[str, dict] = {}
+        self.setMinimumSize(920, 560)
+        self._rows: list[dict] = []
         self._build()
-        self._refresh()
+        self.reload()
 
     # ── 构建 ──────────────────────────────────────────────
     def _build(self) -> None:
         root = QVBoxLayout(self)
         root.setSpacing(10)
 
-        intro = QLabel(tr("db_manager.intro"))
+        intro = QLabel(tr("db_manager.list_intro"))
         intro.setWordWrap(True)
         intro.setStyleSheet("color: palette(mid);")
         root.addWidget(intro)
 
-        line = QFrame()
-        line.setFrameShape(QFrame.Shape.HLine)
-        line.setFrameShadow(QFrame.Shadow.Sunken)
-        root.addWidget(line)
+        root.addLayout(self._build_toolbar())
+        root.addWidget(self._build_table(), stretch=1)
+        root.addWidget(self._build_detail())
 
-        grid = QGridLayout()
-        grid.setColumnStretch(1, 1)
-        grid.setHorizontalSpacing(12)
-        grid.setVerticalSpacing(10)
-        root.addLayout(grid)
-
-        for i, kind in enumerate(DB_KINDS):
-            self._build_row(grid, i, kind)
-
-        root.addWidget(self._build_mount_any_group())
-        root.addWidget(self._build_user_group())
-
-        root.addStretch(1)
-
+        foot = QHBoxLayout()
+        self._current_lbl = QLabel("—")
+        self._current_lbl.setWordWrap(True)
+        foot.addWidget(self._current_lbl, stretch=1)
         btns = QDialogButtonBox()
         self._btn_recheck = btns.addButton(
             tr("db_manager.recheck"), QDialogButtonBox.ButtonRole.ActionRole
         )
-        self._btn_recheck.clicked.connect(self._refresh)
+        self._btn_recheck.clicked.connect(self.reload)
         close_btn = btns.addButton(
             tr("common.close"), QDialogButtonBox.ButtonRole.AcceptRole
         )
         close_btn.clicked.connect(self.accept)
-        root.addWidget(btns)
+        foot.addWidget(btns)
+        root.addLayout(foot)
 
-    def _build_row(self, grid: QGridLayout, row: int, kind) -> None:
-        name = QLabel(f"<b>{tr(kind.label_key)}</b>")
-        name.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
+    def _build_toolbar(self) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.setSpacing(6)
+        self._btn_mount_file = QPushButton(tr("db_manager.btn_mount_file"))
+        self._btn_mount_file.clicked.connect(self._on_mount_file)
+        self._btn_mount_dir = QPushButton(tr("db_manager.btn_mount_dir"))
+        self._btn_mount_dir.clicked.connect(self._on_mount_dir)
 
-        status = QLabel("—")
-        status.setWordWrap(True)
-        status.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self._btn_set_active = QPushButton(tr("db_manager.btn_set_active"))
+        self._btn_set_active.clicked.connect(self._on_set_active)
+        self._btn_unmount = QPushButton(tr("db_manager.btn_unmount"))
+        self._btn_unmount.clicked.connect(self._on_unmount)
+        self._btn_user = QPushButton(tr("db_manager.btn_user_manage"))
+        self._btn_user.clicked.connect(self._on_open_user_db)
 
-        path_lbl = QLabel("—")
-        path_lbl.setStyleSheet("color: palette(mid);")
-        path_lbl.setWordWrap(True)
+        for b in (self._btn_mount_file, self._btn_mount_dir):
+            b.setStyleSheet(
+                "QPushButton { background-color: #1565c0; color: white;"
+                " padding: 4px 12px; }"
+                "QPushButton:hover { background-color: #0d47a1; }")
+        self._btn_set_active.setStyleSheet(
+            "QPushButton { background-color: #2e7d32; color: white;"
+            " padding: 4px 12px; }"
+            "QPushButton:hover { background-color: #1b5e20; }")
 
-        info = QVBoxLayout()
-        info.setSpacing(2)
-        info.addWidget(status)
-        info.addWidget(path_lbl)
-        pkg_lbl = QLabel("—")
-        pkg_lbl.setStyleSheet("color: palette(mid);")
-        pkg_lbl.setWordWrap(True)
-        pkg_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        info.addWidget(pkg_lbl)
+        row.addWidget(self._btn_mount_file)
+        row.addWidget(self._btn_mount_dir)
+        row.addSpacing(12)
+        row.addWidget(self._btn_set_active)
+        row.addWidget(self._btn_unmount)
+        row.addSpacing(12)
+        row.addWidget(self._btn_user)
+        row.addStretch(1)
+        return row
 
-        # 授权/合规提示 (目前只有 PDF2-2004 需要): 该库是 ICDD 的商业数据库,
-        # 我们只做格式转换与离线索引、不附带任何授权, 所以把"请确认正版授权"
-        # 直接摆在导入按钮旁边 —— 用户是在这里点的「导入…」, 提示放这里才有用。
-        notice_key = getattr(kind, "notice_key", "")
-        if notice_key:
-            notice = QLabel(tr(notice_key))
-            notice.setWordWrap(True)
-            notice.setStyleSheet("color: #b9770e;")
-            notice.setTextInteractionFlags(
-                Qt.TextInteractionFlag.TextSelectableByMouse
-            )
-            info.addWidget(notice)
+    def _build_table(self) -> QTableWidget:
+        t = QTableWidget(0, len(_HEADER_KEYS))
+        t.setHorizontalHeaderLabels([tr(k) for k in _HEADER_KEYS])
+        t.verticalHeader().setVisible(False)
+        t.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        t.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        t.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        t.setAlternatingRowColors(True)
+        t.setShowGrid(False)
+        # 单行 + 右侧省略: 一行一库, 行高必须整齐 (长路径靠 tooltip 看全)
+        t.setWordWrap(False)
+        t.setTextElideMode(Qt.TextElideMode.ElideRight)
+        t.verticalHeader().setDefaultSectionSize(26)
+        t.itemSelectionChanged.connect(self._on_selection_changed)
+        t.itemDoubleClicked.connect(lambda _it: self._on_set_active())
+        head = t.horizontalHeader()
+        head.setStretchLastSection(True)
+        for col, width in ((_COL_ACTIVE, 72), (_COL_NAME, 300), (_COL_TYPE, 96),
+                           (_COL_ROWS, 96), (_COL_SIZE, 92), (_COL_STATUS, 120)):
+            t.setColumnWidth(col, width)
+        head.setSectionResizeMode(_COL_NAME, QHeaderView.ResizeMode.Interactive)
+        self._table = t
+        return t
 
-        info_w = QWidget()
-        info_w.setLayout(info)
-
-        btn_import = QPushButton(tr("db_manager.import"))
-        btn_import.clicked.connect(lambda _=False, k=kind.key: self._on_import(k))
-        btn_clear = QPushButton(tr("db_manager.clear"))
-        btn_clear.clicked.connect(lambda _=False, k=kind.key: self._on_clear(k))
-        btn_row = QHBoxLayout()
-        btn_row.setSpacing(6)
-        btn_row.addWidget(btn_import)
-        btn_row.addWidget(btn_clear)
-        btn_row.addStretch(1)
-        btn_w = QWidget()
-        btn_w.setLayout(btn_row)
-
-        grid.addWidget(name, row, 0, Qt.AlignmentFlag.AlignTop)
-        grid.addWidget(info_w, row, 1)
-        grid.addWidget(btn_w, row, 2, Qt.AlignmentFlag.AlignTop)
-        self._rows[kind.key] = {
-            "status": status, "path": path_lbl, "clear": btn_clear,
-            "pkg": pkg_lbl,
-        }
-
-    # ── 任意位置挂载 (v3.1.0) ──────────────────────────────
-    def _build_mount_any_group(self) -> QWidget:
-        """「指过去就能用」的挂载入口。
-
-        逐行的「导入…」要求用户先判断"这个文件属于哪个槽位", 而我们早就
-        能自动判别库类型了 —— 这一组把这一步省掉: 用户只需指到一个合格的
-        数据库文件 (放在哪个文件夹都行) 或一个装着库的文件夹, 剩下的由
-        ``db_import.mount_databases`` 处理。
-        """
+    def _build_detail(self) -> QWidget:
         box = QFrame()
         box.setFrameShape(QFrame.Shape.StyledPanel)
         lay = QVBoxLayout(box)
-        lay.setSpacing(4)
+        lay.setSpacing(3)
 
-        title = QLabel(f"<b>{tr('db_manager.mount_any_group')}</b>")
-        lay.addWidget(title)
+        self._detail_name = QLabel("—")
+        self._detail_name.setStyleSheet("font-weight: bold;")
+        lay.addWidget(self._detail_name)
 
-        hint = QLabel(tr("db_manager.mount_any_hint"))
-        hint.setWordWrap(True)
-        hint.setStyleSheet("color: palette(mid);")
-        lay.addWidget(hint)
+        self._detail_path = QLabel("—")
+        self._detail_path.setWordWrap(True)
+        self._detail_path.setStyleSheet("color: palette(mid);")
+        self._detail_path.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse)
+        lay.addWidget(self._detail_path)
 
-        row = QHBoxLayout()
-        row.setSpacing(6)
-        self._btn_mount_file = QPushButton(tr("db_manager.mount_any_file"))
-        self._btn_mount_file.clicked.connect(self._on_mount_file)
-        self._btn_mount_dir = QPushButton(tr("db_manager.mount_any_dir"))
-        self._btn_mount_dir.clicked.connect(self._on_mount_dir)
-        row.addWidget(self._btn_mount_file)
-        row.addWidget(self._btn_mount_dir)
-        row.addStretch(1)
-        lay.addLayout(row)
+        self._detail_pkg = QLabel("")
+        self._detail_pkg.setWordWrap(True)
+        self._detail_pkg.setStyleSheet("color: palette(mid);")
+        self._detail_pkg.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse)
+        lay.addWidget(self._detail_pkg)
+
+        self._detail_notice = QLabel("")
+        self._detail_notice.setWordWrap(True)
+        self._detail_notice.setStyleSheet(f"color: {_AMBER};")
+        self._detail_notice.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse)
+        self._detail_notice.hide()
+        lay.addWidget(self._detail_notice)
         return box
 
+    # ── 刷新 ──────────────────────────────────────────────
+    def reload(self) -> None:
+        """重新探测全部挂载项并重画表格 (保留当前选中行)。"""
+        keep = self._selected_id()
+        db_mounts.clear_probe_cache()
+        self._rows = db_mounts.probe_all()
+        self._fill_table(keep)
+        self._update_footer()
+
+    #: 兼容旧名 (外部曾用它做"导入后刷新")
+    _refresh = reload
+
+    def _fill_table(self, keep_id: str = "") -> None:
+        active = db_mounts.active_id()
+        self._table.blockSignals(True)
+        self._table.setRowCount(len(self._rows))
+        for r, row in enumerate(self._rows):
+            is_active = row["id"] == active and row["ok"]
+            cells = [
+                tr("db_manager.active_mark") if is_active else "",
+                self._display_name(row),
+                self._type_label(row),
+                f"{row['rows']:,}" if row["ok"] else "—",
+                f"{row['size_mb']} MB" if row["size_mb"] else "—",
+                self._status_text(row),
+                row["path"] or "—",
+            ]
+            for c, text in enumerate(cells):
+                item = QTableWidgetItem(text)
+                item.setData(_ROW_ID, row["id"])
+                if c == _COL_ACTIVE and is_active:
+                    item.setForeground(QColor(_GREEN))
+                if c == _COL_STATUS:
+                    item.setForeground(QColor(
+                        _GREEN if row["ok"] else
+                        (_RED if row["exists"] else _AMBER)))
+                if c == _COL_PATH:
+                    item.setForeground(QColor(_MUTED))
+                    item.setToolTip(row["path"] or "")
+                if c == _COL_NAME and item.text():
+                    item.setToolTip(self._name_tooltip(row))
+                if not row["ok"]:
+                    item.setToolTip(tr("db_manager.row_disabled_tip"))
+                self._table.setItem(r, c, item)
+        self._table.blockSignals(False)
+        # 恢复选中
+        target = -1
+        for r, row in enumerate(self._rows):
+            if row["id"] == keep_id:
+                target = r
+                break
+        if target < 0 and self._rows:
+            target = 0
+        if target >= 0:
+            self._table.selectRow(target)
+        self._on_selection_changed()
+
+    def _update_footer(self) -> None:
+        m = db_mounts.active_mount()
+        if m is not None and m.exists:
+            self._current_lbl.setText(
+                f"<span style='color:{_GREEN}'>"
+                f"{tr('db_manager.current_source', name=self._display_name_of(m.id))}"
+                f"</span>")
+        else:
+            self._current_lbl.setText(tr("db_manager.current_source_none"))
+
+    # ── 行 → 文案 ─────────────────────────────────────────
+    def _display_name(self, row: dict) -> str:
+        """行名称: 内置项用类型名; 同类型挂了多份时补"是哪一份"(文件/目录名)。
+
+        只有一份时补名字是噪音 (类型列已经说清是什么库); 有两份以上时不补
+        名字就分不清哪行是哪份库了 —— 而"选哪份库"正是这张表的全部意义。
+        """
+        key = row.get("label_key") or ""
+        base = tr(key) if key else (row.get("label") or row["id"])
+        same = [r for r in self._rows if r.get("kind") == row.get("kind")]
+        if len(same) > 1 and row.get("path"):
+            return f"{base} · {Path(row['path']).name}"
+        return base
+
+    def _name_tooltip(self, row: dict) -> str:
+        """名称列的完整信息 (列宽不够时被省略, 悬停可看全)。"""
+        name = self._display_name(row)
+        path = row.get("path") or tr("db_manager.no_path")
+        return f"{name}\n{path}"
+
+    def _display_name_of(self, mount_id: str) -> str:
+        for row in self._rows:
+            if row["id"] == mount_id:
+                return self._display_name(row)
+        return mount_id
+
+    @staticmethod
+    def _type_label(row: dict) -> str:
+        """类型列: 讲清"这是哪种库", 而不重复行名称里的变体信息。"""
+        kind = row["kind"]
+        if kind == "polydb":
+            return tr("db_mounts.type.polydb")
+        key = db_mounts.KIND_LABEL_KEY.get(kind, "")
+        return tr(key) if key else kind
+
+    @staticmethod
+    def _status_text(row: dict) -> str:
+        if row["ok"]:
+            return tr("db_manager.status_ok")
+        if not row["path"]:
+            return tr("db_manager.status_unmounted")
+        if not row["exists"]:
+            return tr("db_manager.status_missing")
+        detail = row.get("error") or "unknown"
+        if row.get("hint"):
+            detail += f" ({row['hint']})"
+        return f"{tr('db_manager.status_bad')} · {detail}"
+
+    # ── 选中 → 详情 ───────────────────────────────────────
+    def _selected_id(self) -> str:
+        it = self._table.currentItem() if hasattr(self, "_table") else None
+        return str(it.data(_ROW_ID)) if it is not None else ""
+
+    def _current_row(self) -> dict | None:
+        mid = self._selected_id()
+        for row in self._rows:
+            if row["id"] == mid:
+                return row
+        return None
+
+    def _on_selection_changed(self) -> None:
+        row = self._current_row()
+        if row is None:
+            self._detail_name.setText("—")
+            self._detail_path.setText("—")
+            self._detail_pkg.setText("")
+            self._detail_notice.hide()
+            self._btn_set_active.setEnabled(False)
+            self._btn_unmount.setEnabled(False)
+            return
+        self._detail_name.setText(self._display_name(row))
+        self._detail_path.setText(row["path"] or tr("db_manager.no_path"))
+        self._detail_pkg.setText(self._pkg_hint(row))
+        notice = self._notice_of(row)
+        self._detail_notice.setText(notice)
+        self._detail_notice.setVisible(bool(notice))
+        self._btn_set_active.setEnabled(
+            bool(row["ok"]) and db_mounts.active_id() != row["id"])
+        # 用户自建库的位置由 user_db 自己管, 这里不给"卸载"
+        self._btn_unmount.setEnabled(
+            row["kind"] != "user" and (bool(row["path"]) or not row["builtin"]))
+
+    def _pkg_hint(self, row: dict) -> str:
+        spec = DB_KINDS_BY_KEY.get(row["kind"])
+        if spec is None:
+            return tr("db_mounts.pkg_free")
+        version = _app_version()
+        pkg = db_import.release_package_name(spec.key, version)
+        fname = db_import.PKG_FILENAME.get(spec.key, "")
+        if pkg:
+            return tr("db_manager.pkg_hint", pkg=pkg, file=fname)
+        return tr("db_manager.pkg_hint_local", file=fname)
+
+    @staticmethod
+    def _notice_of(row: dict) -> str:
+        spec = DB_KINDS_BY_KEY.get(row["kind"])
+        key = getattr(spec, "notice_key", "") if spec else ""
+        return tr(key) if key else ""
+
+    # ── 交互 ──────────────────────────────────────────────
     def _on_mount_file(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, tr("db_manager.mount_any_title"), str(Path.home()),
-            tr("db_manager.mount_any_filter"))
-        if not path:
-            return
-        self.mount_path(path)
+            self, tr("db_manager.mount_title_file"), str(Path.home()),
+            tr("db_manager.mount_filter"))
+        if path:
+            self.mount_path(path)
 
     def _on_mount_dir(self) -> None:
         path = QFileDialog.getExistingDirectory(
-            self, tr("db_manager.mount_dir_title"), str(Path.home()))
-        if not path:
-            return
-        self.mount_path(path)
+            self, tr("db_manager.mount_title_dir"), str(Path.home()))
+        if path:
+            self.mount_path(path)
 
     def mount_path(self, path: str) -> bool:
-        """对任意路径执行"自动判别 + 挂载"。
+        """挂载一个路径下所有合格的库 (sqlite 各类 + polyDB 目录)。
 
-        与选文件对话框解耦, 便于单测直接喂路径 (含文件夹路径)。
+        与选文件对话框解耦, 便于单测直接喂路径; 返回是否至少挂上一个。
         """
         try:
-            mounted = db_import.mount_databases(path)
+            mounted = db_mounts.mount_any(path)
         except Exception as e:  # noqa: BLE001 - 失败原因要如实展示
             QMessageBox.warning(
-                self, tr("db_manager.mount_any_failed"),
-                tr("db_manager.mount_any_failed_body", path=path, error=str(e)))
+                self, tr("db_manager.mount_failed"),
+                tr("db_manager.mount_failed_body", path=path, error=str(e)))
             return False
-        self._refresh()
+        db_import.reload_caches()
+        self.reload()
         self.databases_changed.emit()
-        detail = "\n".join(
-            f"· {tr(DB_KINDS_BY_KEY[m.kind].label_key)} — {m.rows:,}"
-            for m in mounted
-        )
+        lines: list[str] = []
+        for m in mounted:
+            n = _probe_rows(m)
+            tail = f"{n:,}" if n else tr("db_manager.status_unmounted")
+            lines.append(f"· {self._name_of_mount(m)} — {tail}")
         QMessageBox.information(
-            self, tr("db_manager.mount_any_ok"),
-            tr("db_manager.mount_any_ok_body", n=len(mounted), detail=detail))
+            self, tr("db_manager.mount_ok"),
+            tr("db_manager.mount_ok_body", n=len(mounted),
+               detail="\n".join(lines)))
         return True
 
-    # ── 用户自建库分组 (v2.6.0) ────────────────────────────
-    def _build_user_group(self) -> QWidget:
-        """用户数据库分组: 与上面三个"下载后挂载"的库不同, 这个库由用户
-        自己导入 CIF 生成 (不存在"下载包"), 因此只给状态 + 管理/挂载入口。
+    def _name_of_mount(self, m: db_mounts.Mount) -> str:
+        if m.label_key:
+            return tr(m.label_key)
+        return m.display_name()
 
-        为什么放在挂载页: 物相源下拉里的「用户数据库」要能在这里一眼看到
-        "有没有条目 / 多少条", 否则下拉里被置灰时用户不知道去哪建库。
-        """
-        box = QFrame()
-        box.setFrameShape(QFrame.Shape.StyledPanel)
-        lay = QVBoxLayout(box)
-        lay.setSpacing(4)
+    def _on_set_active(self) -> None:
+        row = self._current_row()
+        if row is None:
+            return
+        if not row["ok"]:
+            QMessageBox.warning(
+                self, tr("db_manager.btn_set_active"),
+                tr("db_manager.set_active_unavailable",
+                   name=self._display_name(row)))
+            return
+        db_mounts.set_active(row["id"])
+        self._fill_table(row["id"])
+        self._update_footer()
+        self.databases_changed.emit()
 
-        title = QLabel(f"<b>{tr('user_db.group_title')}</b>")
-        lay.addWidget(title)
-
-        self._user_status = QLabel("—")
-        self._user_status.setWordWrap(True)
-        lay.addWidget(self._user_status)
-
-        self._user_path = QLabel("—")
-        self._user_path.setStyleSheet("color: palette(mid);")
-        self._user_path.setWordWrap(True)
-        self._user_path.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse)
-        lay.addWidget(self._user_path)
-
-        hint = QLabel(tr("user_db.group_hint"))
-        hint.setWordWrap(True)
-        hint.setStyleSheet("color: palette(mid);")
-        lay.addWidget(hint)
-
-        row = QHBoxLayout()
-        row.setSpacing(6)
-        self._btn_user_manage = QPushButton(tr("user_db.btn_manage"))
-        self._btn_user_manage.clicked.connect(self._on_open_user_db)
-        self._btn_user_mount = QPushButton(tr("user_db.btn_mount_sqlite"))
-        self._btn_user_mount.clicked.connect(self._on_mount_user_sqlite)
-        row.addWidget(self._btn_user_manage)
-        row.addWidget(self._btn_user_mount)
-        row.addStretch(1)
-        lay.addLayout(row)
-        return box
+    def _on_unmount(self) -> None:
+        row = self._current_row()
+        if row is None:
+            return
+        name = self._display_name(row)
+        if QMessageBox.question(
+            self, tr("db_manager.btn_unmount"),
+            tr("db_manager.unmount_confirm", name=name),
+        ) != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            db_mounts.remove_mount(row["id"])
+        except Exception as e:  # noqa: BLE001
+            QMessageBox.critical(self, tr("db_manager.btn_unmount"), str(e))
+            return
+        db_import.reload_caches()
+        self.reload()
+        self.databases_changed.emit()
 
     def _on_open_user_db(self) -> None:
         from polyxrd.views.widgets.user_db_dialog import UserDatabaseDialog
 
         dlg = UserDatabaseDialog(self)
-        dlg.changed.connect(self._refresh)
+        dlg.changed.connect(self.reload)
         dlg.changed.connect(self.databases_changed.emit)
         dlg.exec()
-        self._refresh()
+        self.reload()
 
-    def _on_mount_user_sqlite(self) -> None:
-        """把已导出的用户库 .sqlite 挂载回来 (换机器 / 同事分享的场景)。"""
-        path, _ = QFileDialog.getOpenFileName(
-            self, tr("user_db.mount_sqlite_title"), str(Path.home()),
-            tr("user_db.sqlite_filter"))
-        if not path:
-            return
-        try:
-            user_db.mount_user_db(path)
-        except Exception as e:  # noqa: BLE001 - 挂载失败要如实提示
-            QMessageBox.critical(self, tr("user_db.mount_sqlite_title"),
-                                 str(e))
-            return
-        st = user_db.user_stats()
-        self._refresh()
-        self.databases_changed.emit()
-        QMessageBox.information(
-            self, tr("user_db.mount_sqlite_title"),
-            tr("user_db.mount_ok_body", rows=st["rows"], path=st["path"]))
 
-    def _refresh_user_group(self) -> None:
-        try:
-            st = user_db.user_stats()
-        except Exception:  # noqa: BLE001
-            self._user_status.setText("—")
-            return
-        self._user_path.setText(st.get("path") or "—")
-        if not st.get("exists") or not st.get("rows"):
-            self._user_status.setText(
-                f"<span style='color:#b9770e'>{tr('user_db.status_empty')}</span>")
-            return
-        self._user_status.setText(
-            f"<span style='color:#1e8449'>{tr('user_db.status_mounted')}</span>"
-            f" · {tr('user_db.status_rows', rows=st['rows'], size=st['size_mb'])}")
+def _app_version() -> str:
+    try:
+        from polyxrd.config import get_config
 
-    # ── 刷新 ──────────────────────────────────────────────
-    def _refresh(self) -> None:
-        self._refresh_user_group()
-        for st in db_import.slot_states():
-            row = self._rows.get(st["kind"])
-            if row is None:
-                continue
-            row["clear"].setEnabled(st["imported"])
-            row["path"].setText(st["path"] or "—")
-            # 三个库各自独立打包下载 —— 把"这个槽位该下哪个包"写死在行里,
-            # 否则用户面对三个槽位只能靠文件名猜。
-            # PDF2-2004 没有发布包 (ICDD 版权): pkg_name 为空, 改说明"自行准备"。
-            if st["pkg_name"]:
-                row["pkg"].setText(
-                    tr("db_manager.pkg_hint",
-                       pkg=st["pkg_name"], file=st["pkg_filename"])
-                )
-            else:
-                row["pkg"].setText(
-                    tr("db_manager.pkg_hint_local", file=st["pkg_filename"])
-                )
-            if not st["exists"]:
-                if not st["path"]:
-                    # 压根没有默认位置的槽位 (XinMatch 格式库): 这是"还没挂载",
-                    # 不是"找不到库"。红色"未找到"会让人以为库坏了。
-                    row["status"].setText(tr("db_manager.status_unmounted"))
-                    row["path"].setText(tr("db_manager.no_path"))
-                    continue
-                row["status"].setText(f"<span style='color:#c0392b'>"
-                                      f"{tr('db_manager.status_missing')}</span>")
-                row["path"].setText(tr("db_manager.no_path"))
-                continue
-            if st["ok"]:
-                extra = ""
-                if st["has_top_peaks"]:
-                    extra = " · " + tr("db_manager.has_top_peaks")
-                src = (tr("db_manager.src_imported") if st["imported"]
-                       else tr("db_manager.src_default"))
-                row["status"].setText(
-                    f"<span style='color:#1e8449'>{tr('db_manager.status_ok')}"
-                    f"</span> · {st['rows']:,} · {st['size_mb']} MB"
-                    f" · {src}{extra}"
-                )
-            else:
-                reason = st["error"] or "unknown"
-                if st["hint"]:
-                    reason += f" ({st['hint']})"
-                row["status"].setText(
-                    f"<span style='color:#c0392b'>{tr('db_manager.status_bad')}"
-                    f"</span> · {reason}"
-                )
+        return get_config().app_version
+    except Exception:  # noqa: BLE001
+        return ""
 
-    # ── 交互 ──────────────────────────────────────────────
-    def _on_import(self, expect_kind: str) -> None:
-        start = str(Path.home())
-        path, _ = QFileDialog.getOpenFileName(
-            self, tr("db_manager.import_title"), start, tr(_FILE_FILTER)
-        )
-        if not path:
-            return
-        self._import_path(expect_kind, path)
 
-    def _import_path(self, expect_kind: str, path: str) -> bool:
-        """对给定路径执行导入 (校验 → 类型确认 → 落盘 → 刷新 → 发信号)。
+def _probe_rows(m: db_mounts.Mount) -> int:
+    res = db_mounts.probe(m)
+    return int(res.get("rows") or 0) if res.get("ok") else 0
 
-        与选文件解耦, 便于测试: 单测直接喂路径, 不必驱动 QFileDialog。
 
-        Returns:
-            是否真的完成了导入 (用户取消/校验失败/落盘失败都返回 False)。
-        """
-        ins = inspect_db_file(path)
-
-        if not ins.ok:
-            detail = ins.error + (f"\n{ins.hint}" if ins.hint else "")
-            QMessageBox.warning(
-                self, tr("db_manager.import_failed"),
-                tr("db_manager.import_failed_body", path=path, detail=detail),
-            )
-            return False
-
-        if ins.kind != expect_kind:
-            other = db_import.KIND_BY_KEY[ins.kind]
-            ans = QMessageBox.question(
-                self, tr("db_manager.kind_mismatch"),
-                tr("db_manager.kind_mismatch_body",
-                   path=path, got=tr(other.label_key),
-                   want=tr(db_import.KIND_BY_KEY[expect_kind].label_key)),
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.Yes,
-            )
-            if ans != QMessageBox.StandardButton.Yes:
-                return False
-            expect_kind = ins.kind
-
-        try:
-            db_import.apply_import(ins)
-        except Exception as e:  # noqa: BLE001 - 落盘失败要如实告诉用户
-            QMessageBox.critical(
-                self, tr("db_manager.import_failed"),
-                tr("db_manager.save_failed_body", error=str(e)),
-            )
-            return False
-
-        db_import.reload_caches()
-        self._refresh()
-        self.databases_changed.emit()
-        extra = ("\n" + tr("db_manager.has_top_peaks")
-                 if ins.has_top_peaks else "")
-        QMessageBox.information(
-            self, tr("db_manager.import_ok"),
-            tr("db_manager.import_ok_body",
-               rows=f"{ins.rows:,}", path=path) + extra,
-        )
-        return True
-
-    def _on_clear(self, kind_key: str) -> None:
-        if QMessageBox.question(
-            self, tr("db_manager.clear"),
-            tr("db_manager.clear_confirm",
-               name=tr(db_import.KIND_BY_KEY[kind_key].label_key)),
-        ) != QMessageBox.StandardButton.Yes:
-            return
-        try:
-            db_import.clear_import(kind_key)
-        except Exception as e:  # noqa: BLE001
-            QMessageBox.critical(self, tr("db_manager.clear"),
-                                 str(e))
-            return
-        db_import.reload_caches()
-        self._refresh()
-        self.databases_changed.emit()
+def user_db_summary() -> dict:
+    """用户自建库概况 (给外部/测试用; 库里没有条目时 rows=0)。"""
+    try:
+        return user_db.user_stats()
+    except Exception:  # noqa: BLE001
+        return {"rows": 0, "path": "", "exists": False, "size_mb": 0}

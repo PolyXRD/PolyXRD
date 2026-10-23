@@ -4,8 +4,11 @@
 #
 # 做三件事:
 #   1. 校验便携包 zip 可读、含 PolyXRD.exe、且**不含**任何业务数据库
-#   2. 生成三个**独立**的外挂数据库包 (每个包一个库) 并逐包对账
-#      (条目数 + 解压后字节必须等于源文件), 同时删掉旧的合并包
+#   2. 生成**独立**的外挂数据库包并逐包对账:
+#        · v4.0.0 起优先打 **polyDB** 两个包 (COD-Inorg / COD-Full) —— 自研列存格式,
+#          体积小 13.9×、检索快 12~14×, 见 docs/代码评估-v4.0.0.md;
+#        · 找不到 polyDB 目录时退回旧的 sqlite 三包逻辑 (兼容老机器/老流程);
+#      PDF2-2004 为 ICDD 版权库, 任何情况下都**不**进 Release 上传清单。
 #   3. 打印所有产物的 SHA-256 到 installer_output\SHA256-v<ver>.txt
 #
 # 为什么把"含不含 .sqlite"当成断言: 0.10.0 的核心约束就是数据库外挂,
@@ -18,6 +21,8 @@
 param(
     [Parameter(Mandatory = $true)][string]$Version,
     [string]$Root = (Split-Path -Parent $PSScriptRoot),
+    # polyDB 库所在目录; 默认取仓库同级 PolyXRD-DataBase\polydb
+    [string]$PolyDbRoot = '',
     [switch]$SkipHash
 )
 
@@ -68,6 +73,7 @@ if (-not (Test-Path -LiteralPath $portable)) {
             $bad = $entries | Where-Object {
                 $n = $_.Name
                 ($bannedNames -contains $n) -or
+                ($_.FullName -like '*.polyDB*') -or
                 (($n -like '*.sqlite' -or $n -like '*.sqlite3' -or $n -like '*.db') -and
                  $_.FullName.Replace('\', '/') -notlike "*$allowedSqlite")
             }
@@ -96,6 +102,65 @@ foreach ($stale in @(
 }
 
 $builtPkgs = @()
+
+# ── 2a. polyDB (v4.0.0 起的发布形态) ─────────────────────────
+# 每个 .polyDB 是**目录容器**, 所以包内是多文件; 对账口径 = 文件数 + 解压字节
+# + 必需段齐全, 不比单个条目。
+$polyBuilt = $false
+$polyRoot = if ($PolyDbRoot) { $PolyDbRoot } else {
+    Join-Path (Split-Path -Parent $Root) 'PolyXRD-DataBase\polydb'
+}
+if (Test-Path -LiteralPath $polyRoot) {
+    Write-Output ('      polyDB 根目录: ' + $polyRoot)
+    foreach ($pk in @(
+        [pscustomobject]@{ Name = 'COD-inorg-polyDB'; Glob = 'COD-Inorg-*.polyDB' },
+        [pscustomobject]@{ Name = 'COD-full-polyDB';  Glob = 'COD-Full-*.polyDB' }
+    )) {
+        $dirs = @(Get-ChildItem -LiteralPath $polyRoot -Directory -Filter $pk.Glob -ErrorAction SilentlyContinue |
+                  Sort-Object Name -Descending)
+        if ($dirs.Count -eq 0) {
+            Write-Output ('      [跳过] 未找到 ' + $pk.Glob + ' (' + $polyRoot + ')')
+            continue
+        }
+        $src = $dirs[0].FullName
+        $pkg = Join-Path $outDir ("PolyXRD-v$Version-Databases-" + $pk.Name + '.zip')
+        if (Test-Path -LiteralPath $pkg) { Remove-Item -LiteralPath $pkg -Force }  # 幂等: CreateFromDirectory 不覆盖
+        [System.IO.Compression.ZipFile]::CreateFromDirectory(
+            $src, $pkg, [System.IO.Compression.CompressionLevel]::Optimal, $true)
+        $zipSize = (Get-Item -LiteralPath $pkg).Length
+        $srcFiles = @(Get-ChildItem -LiteralPath $src -Recurse -File)
+        $srcBytes = ($srcFiles | Measure-Object -Property Length -Sum).Sum
+        Write-Output ('      ' + [IO.Path]::GetFileName($pkg).PadRight(46) +
+                      (MiB $zipSize).PadLeft(12) + '  (源 ' + (MiB $srcBytes) + ')')
+
+        $zip = [System.IO.Compression.ZipFile]::OpenRead($pkg)
+        try {
+            $fileEntries = @($zip.Entries | Where-Object { $_.Name -ne '' })
+            $zipBytes = ($fileEntries | Measure-Object -Property Length -Sum).Sum
+            $names = @($fileEntries | ForEach-Object { $_.Name })
+        } finally { $zip.Dispose() }
+
+        $need = @('meta.json', 'index.sqlite', 'peaks_d.f32', 'peaks_i.u16',
+                  'bins.u8', 'elem.u8', 'sites.bin', 'sites_off.i64')
+        $missing = @($need | Where-Object { $names -notcontains $_ })
+        if ($fileEntries.Count -ne $srcFiles.Count) {
+            Fail "$($pk.Name): 包内文件数 $($fileEntries.Count) != 源 $($srcFiles.Count)"
+        } elseif ($zipBytes -ne $srcBytes) {
+            Fail "$($pk.Name): 解压后 $zipBytes B != 源 $srcBytes B (打包被截断?)"
+        } elseif ($missing.Count -gt 0) {
+            Fail "$($pk.Name): 缺必需段 $($missing -join ',')"
+        } else {
+            Write-Output ('            OK: ' + $fileEntries.Count + ' 个文件 / 字节对账通过 / 必需段齐全')
+            $builtPkgs += $pkg
+            $polyBuilt = $true
+        }
+    }
+}
+if ($polyBuilt) {
+    Write-Output '      (polyDB 已生成 -> 本次不再打旧的 sqlite 索引包)'
+    $dbKinds = @()
+}
+
 foreach ($k in $dbKinds) {
     $src = Join-Path $Root $k.Src
     if (-not (Test-Path -LiteralPath $src)) {
@@ -128,6 +193,9 @@ foreach ($k in $dbKinds) {
 }
 
 if ($builtPkgs.Count -eq 0) { Fail '没有生成任何数据库包' }
+if ($polyBuilt) {
+    Write-Output '      注意: PDF2-2004 不进 Release; polyDB 库解压后在外挂数据库管理里指向目录即可。'
+}
 
 # ── 3. SHA-256 ───────────────────────────────────────────────
 Write-Output '[3/3] SHA-256'

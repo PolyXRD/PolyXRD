@@ -115,3 +115,55 @@ class TestEstimateBackground:
         resid = np.abs(est - bg)
         # 排除峰心附近 (峰区背景估计略偏)
         assert float(np.median(resid)) < 15.0, f"背景中位误差 {np.median(resid):.1f}"
+
+
+# ─────────────────────────────────────────────────────────────────
+# v4.0.0 回归: refine_mode="parabola" 不得触发联合曲线拟合 (svc-data)
+# ─────────────────────────────────────────────────────────────────
+
+class TestRefineModeGate:
+    """默认 refine_mode="parabola" 曾因条件写成
+    ``refine_mode == "fit" or (refine_by_fit and ...)`` 而执行联合 curve_fit:
+    7001 点 / ~25 峰实测 11 ms → 14.2 s (~1300×), 直接卡死 GUI 线程。
+    字段注释明确 "refine_by_fit: refine_mode=fit 时执行"。
+    """
+
+    def _sig(self):
+        x = np.arange(15.0, 60.0, 0.02)
+        y = _pv(x, 1000.0, 36.221, 0.2) + _pv(x, 500.0, 40.5, 0.2) + 50.0
+        return x, y
+
+    def test_parabola_does_not_run_curve_fit(self, monkeypatch):
+        import polyxrd.services.peak_detection as pd
+        called = []
+
+        def _spy(*a, **kw):
+            called.append(1)
+            return np.asarray(a[2]), np.asarray(a[3])  # centers, fwhms
+
+        monkeypatch.setattr(pd, "_refine_by_fit", _spy)
+        x, y = self._sig()
+        pd.detect_peaks_advanced(x, y, PeakDetectOptions(refine_mode="parabola"))
+        assert called == [], "parabola 模式不应执行局部峰形拟合"
+
+    def test_centroid_does_not_run_curve_fit(self, monkeypatch):
+        import polyxrd.services.peak_detection as pd
+        called = []
+        monkeypatch.setattr(pd, "_refine_by_fit",
+                            lambda *a, **kw: (called.append(1), (np.asarray(a[2]), np.asarray(a[3])))[1])
+        x, y = self._sig()
+        pd.detect_peaks_advanced(x, y, PeakDetectOptions(refine_mode="centroid"))
+        assert called == []
+
+    def test_fit_mode_runs_curve_fit_unless_disabled(self, monkeypatch):
+        import polyxrd.services.peak_detection as pd
+        called = []
+        monkeypatch.setattr(pd, "_refine_by_fit",
+                            lambda *a, **kw: (called.append(1), (np.asarray(a[2]), np.asarray(a[3])))[1])
+        x, y = self._sig()
+        pd.detect_peaks_advanced(x, y, PeakDetectOptions(refine_mode="fit"))
+        assert len(called) == 1
+        called.clear()
+        pd.detect_peaks_advanced(x, y, PeakDetectOptions(
+            refine_mode="fit", refine_by_fit=False))
+        assert called == []

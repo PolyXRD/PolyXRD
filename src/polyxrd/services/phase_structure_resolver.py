@@ -350,7 +350,8 @@ class PhaseStructureResolver:
     def _ensure_cif_file(db, cod_id: int, cif_path: Optional[str]) -> Optional[str]:
         """保证 cif_path 是磁盘上真实存在的 .cif (GSAS-II/MAUD 的硬要求)。
 
-        库里只有 BLOB (无机库 cif_gz) 时落盘到 ~/.polyxrd/cif_cache/。
+        库里只有 BLOB (无机库 cif_gz) 时落盘到 ``cif_cache_dir()``
+        （默认 ``~/.polyxrd/cif_cache``，可用 ``POLYXRD_CIF_CACHE_DIR`` 覆盖）。
         """
         if cif_path and Path(cif_path).exists() and Path(cif_path).suffix.lower() == ".cif":
             return cif_path
@@ -358,10 +359,19 @@ class PhaseStructureResolver:
             text = db.get_cif(cod_id)
             if not text:
                 return cif_path
-            cache_dir = Path.home() / ".polyxrd" / "cif_cache"
+            from polyxrd.config import get_config
+
+            cache_dir = get_config().cif_cache_dir()
             cache_dir.mkdir(parents=True, exist_ok=True)
             out = cache_dir / f"COD{cod_id}.cif"
-            out.write_text(text, encoding="utf-8")
+            try:
+                out.write_text(text, encoding="utf-8")
+            except OSError:
+                # 缓存目录只读 / 文件被占用时, 已有的缓存文件仍可用;
+                # 实在拿不到磁盘文件才退回原来的 cif_path (可能为 None)。
+                if out.exists() and out.stat().st_size > 0:
+                    return str(out)
+                raise
             return str(out)
         except Exception:
             return cif_path

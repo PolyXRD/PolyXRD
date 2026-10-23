@@ -27,30 +27,86 @@ def qapp():
 
 
 @pytest.fixture
-def pv(qapp):
+def pv(qapp, tmp_path, monkeypatch):
+    # 物相页换源会把「当前库」写进挂载表 → 指到临时文件, 不污染真实配置
+    from polyxrd.services import db_mounts
+
+    monkeypatch.setattr(db_mounts, "_store_file",
+                        lambda: tmp_path / "db_mounts.json")
     vm = MainViewModel()
     return PhaseView(vm), vm
 
 
 # ── 1. 下拉项 ────────────────────────────────────────────────
+#
+# v4.0.0: 「数据源」不再是写死的槽位表, 而是由挂载注册表
+# (``polyxrd.services.db_mounts``) 现算 —— 挂了几份库就有几项。所以这里
+# 一律 patch ``db_mounts.source_entries``, 断言与开发机上真实挂了什么库无关。
+
+#: (挂载 id, 类型, 路径, 相数, i18n 键) —— 与 probe_all 的行同形
+_STD_SOURCES = (
+    ("cod_inorganics", "cod_inorganics", r"D:\db\COD_inorganics.sqlite", 77130, ""),
+    ("cod_index", "cod_index", r"D:\db\cod_index.sqlite", 1959421, ""),
+    ("pdf2", "pdf2", r"D:\db\PDF2_2004.sqlite", 163834, ""),
+    ("xinmatch", "xinmatch", r"D:\db\cod_inorganics.db", 3000, ""),
+    ("polydb:cod-inorg", "polydb", r"D:\db\COD-Inorg.polyDB", 77500,
+     "db_mounts.kind.polydb_inorg"),
+    ("user", "user", r"D:\db\user_phases.sqlite", 5, "db_mounts.kind.user"),
+)
+
+
+def _fake_sources(ok=True, user_rows: int = 5) -> list[dict]:
+    """构造 probe_all 同形数据; ``ok`` 可整体置真假, 也可按 id 逐个指定。"""
+    from pathlib import Path as _P
+
+    out: list[dict] = []
+    for mid, kind, path, rows, label_key in _STD_SOURCES:
+        good = ok if isinstance(ok, bool) else ok.get(mid, True)
+        n = user_rows if kind == "user" else rows
+        out.append({
+            "id": mid, "kind": kind, "path": path, "exists": True,
+            "builtin": True, "variant": "", "label_key": label_key,
+            "label": _P(path).name, "ok": good, "rows": n if good else 0,
+            "size_mb": 1.0, "engine": kind,
+            "error": "" if good else "missing", "hint": "", "detail": "",
+            "has_top_peaks": False, "mount": None,
+        })
+    return out
+
+
+@pytest.fixture
+def patched_sources(monkeypatch):
+    """把挂载表换成可控数据; 返回一个"再 patch 一次"的函数 (便于切场景)。"""
+    from polyxrd.services import db_mounts
+
+    def _apply(ok=True, user_rows: int = 5) -> None:
+        monkeypatch.setattr(db_mounts, "source_entries",
+                            lambda: _fake_sources(ok, user_rows))
+
+    _apply()
+    return _apply
+
 
 class TestDbSourceCombo:
-    def test_pdf2_item_present_and_aligned(self, pv):
+    def test_source_list_is_registry_driven(self, pv, patched_sources):
+        """下拉项 = 内置 + 每个挂载项 + 合并 + 用户库, 文案与 key 一一对齐。"""
         view, _vm = pv
+        view.refresh_db_sources()
         keys = view._db_source_keys
-        # v2.6.0: 末尾追加 "user" (用户自建库) —— 前 5 项索引一律不动,
-        # 免得历史持久化的 db_source 索引错位 (选 A 跑 B)。
-        # v3.1.0: 再追加 "xinmatch" (用户挂载的 XinMatch 格式库), 同样只往后加。
-        assert keys == [
-            "builtin", "cod_inorganics", "cod_full", "merged", "pdf2", "user",
-            "xinmatch",
-        ]
+        assert keys[0] == "builtin"
+        # 挂载项按注册表顺序出现 (同一类型挂多份也会各占一项)
+        for mid in ("cod_inorganics", "cod_index", "pdf2", "xinmatch",
+                    "polydb:cod-inorg"):
+            assert mid in keys, f"{mid} 未出现在数据源下拉里"
+        # 合并 / 用户库固定在末尾 (用户库是 v2.6.0 以来的约定位置)
+        assert keys[-2:] == ["merged", "user"]
         # 文案条数必须与 key 一一对应 (错位会让选 A 跑 B)
         assert view._db_combo.count() == len(keys)
         assert view._db_combo.itemText(keys.index("pdf2")).startswith("PDF2-2004")
 
-    def test_selecting_pdf2_returns_key(self, pv):
+    def test_selecting_pdf2_returns_key(self, pv, patched_sources):
         view, _vm = pv
+        view.refresh_db_sources()
         view._db_combo.setCurrentIndex(view._db_source_keys.index("pdf2"))
         assert view._current_db_source() == "pdf2"
         assert view._db_source_display().startswith("PDF2-2004")
@@ -59,49 +115,38 @@ class TestDbSourceCombo:
         view, _vm = pv
         assert "PDF2-2004" in view._db_combo.toolTip()
 
-    def test_disabled_when_db_missing(self, pv, monkeypatch):
-        """库不可用时该项置灰, 且不因异常而导致整个面板起不来。
-
-        0.10.0 起可用性判定统一走 ``db_import.live_counts()`` (三个槽位同一口径),
-        不再单独 new 一个 PDF2Database 去问 —— 所以这里 patch 的是 live_counts。
-        """
-        from polyxrd.services import db_import
-
-        monkeypatch.setattr(db_import, "live_counts",
-                            lambda: {"cod_inorganics": 0, "pdf2": 0, "cod_index": 0})
-        vm = MainViewModel()
-        view = PhaseView(vm)          # 不应抛异常
-        item = view._db_combo.model().item(view._db_source_keys.index("pdf2"))
-        assert item is not None and not item.isEnabled()
-        assert "未挂载" in view._db_source_labels()[4]
-
-    def test_all_external_sources_disabled_without_dbs(self, pv, monkeypatch):
-        """发布包不内置数据库: 除内置库外全部置灰, 且当前选中回退到内置库。"""
-        from polyxrd.services import db_import
-
-        monkeypatch.setattr(db_import, "live_counts",
-                            lambda: {"cod_inorganics": 0, "pdf2": 0, "cod_index": 0})
-        # 用户库条目数走真实 user_phases.sqlite: 固定为 0, 结果才与开发机状态无关
-        monkeypatch.setattr(PhaseView, "_user_phase_count", staticmethod(lambda: 0))
+    def test_disabled_when_db_missing(self, pv, patched_sources):
+        """库不可用时该项置灰, 且不因异常而导致整个面板起不来。"""
+        patched_sources({"pdf2": False})
         view, _vm = pv
+        view.refresh_db_sources()
+        idx = view._db_source_keys.index("pdf2")
+        item = view._db_combo.model().item(idx)
+        assert item is not None and not item.isEnabled()
+        assert "未挂载" in view._db_source_labels()[idx]
+
+    def test_all_external_sources_disabled_without_dbs(self, pv, patched_sources):
+        """发布包不内置数据库: 除内置库外全部置灰, 且当前选中回退到内置库。"""
+        patched_sources(False, user_rows=0)
+        view, _vm = pv
+        view.refresh_db_sources()
         view._db_combo.setCurrentIndex(view._db_source_keys.index("pdf2"))
         view.refresh_db_sources()
 
         model = view._db_combo.model()
         assert model.item(0).isEnabled()
-        # 1..5 = cod_inorganics / cod_full / merged / pdf2 / user
         for i in range(1, len(view._db_source_keys)):
             assert not model.item(i).isEnabled(), f"index {i} 应置灰"
         assert view._current_db_source() == "builtin", "选中项应回退到内置库"
 
-    def test_user_db_source_disabled_and_hinted_when_empty(self, pv, monkeypatch):
+    def test_user_db_source_disabled_and_hinted_when_empty(self, pv, patched_sources):
         """v2.6.0: 用户库没有条目时置灰, 并给出「去导入 CIF」的专用提示。
 
         置灰而不只是标灰 —— 用户看到灰项会去菜单找入口, 看到提示会直接照做。
         """
         from PySide6.QtCore import Qt
 
-        monkeypatch.setattr(PhaseView, "_user_phase_count", staticmethod(lambda: 0))
+        patched_sources(True, user_rows=0)
         view, _vm = pv
         view.refresh_db_sources()
 
@@ -112,33 +157,26 @@ class TestDbSourceCombo:
         hint = item.data(Qt.ItemDataRole.ToolTipRole) or item.toolTip()
         assert "CIF" in str(hint), "置灰项必须指路, 否则用户不知道去哪导入"
 
-    def test_unmounted_hint_points_to_menu(self, pv, monkeypatch):
+    def test_unmounted_hint_points_to_menu(self, pv, patched_sources):
         """置灰项必须告诉用户去哪导入, 否则用户只会看到灰掉的选项。"""
-        from polyxrd.services import db_import
-
-        monkeypatch.setattr(db_import, "live_counts",
-                            lambda: {"cod_inorganics": 0, "pdf2": 0, "cod_index": 0})
+        patched_sources(False, user_rows=0)
         view, _vm = pv
-        # 注意: pv fixture 先于 monkeypatch 建立, 视图构造时用的是真实库状态,
-        # 必须 refresh 一次才会套用上面 patch 出来的"全未挂载"。
+        # 注意: pv fixture 先于 patch 生效前的构造, 必须 refresh 一次才套用
         view.refresh_db_sources()
         tip = view._db_combo.model().item(1).toolTip()
         assert "外挂数据库管理" in tip
 
-    def test_xinmatch_item_present(self, pv):
+    def test_xinmatch_item_present(self, pv, patched_sources):
         """v3.1.0: 下拉里必须能看到「XinMatch 格式库」, 且 key/文案对齐。"""
         view, _vm = pv
+        view.refresh_db_sources()
         idx = view._db_source_keys.index("xinmatch")
         assert view._db_combo.count() == len(view._db_source_keys)
         assert view._db_combo.itemText(idx).startswith("XinMatch")
 
-    def test_xinmatch_disabled_when_not_mounted(self, pv, monkeypatch):
+    def test_xinmatch_disabled_when_not_mounted(self, pv, patched_sources):
         """未挂载的 XinMatch 库要置灰, 否则用户选中后静默返回空结果。"""
-        from polyxrd.services import db_import
-
-        monkeypatch.setattr(db_import, "live_counts",
-                            lambda: {"cod_inorganics": 0, "pdf2": 0,
-                                     "cod_index": 0, "xinmatch": 0})
+        patched_sources({"xinmatch": False})
         view, _vm = pv
         view.refresh_db_sources()
         idx = view._db_source_keys.index("xinmatch")
@@ -146,17 +184,26 @@ class TestDbSourceCombo:
         assert item is not None and not item.isEnabled()
         assert "未挂载" in view._db_source_labels()[idx]
 
-    def test_xinmatch_enabled_when_mounted(self, pv, monkeypatch):
-        from polyxrd.services import db_import
-
-        monkeypatch.setattr(db_import, "live_counts",
-                            lambda: {"cod_inorganics": 0, "pdf2": 0,
-                                     "cod_index": 0, "xinmatch": 71206})
+    def test_xinmatch_enabled_when_mounted(self, pv, patched_sources):
         view, _vm = pv
         view.refresh_db_sources()
         idx = view._db_source_keys.index("xinmatch")
         assert view._db_combo.model().item(idx).isEnabled()
-        assert "71,206" in view._db_source_labels()[idx]
+        assert "3,000" in view._db_source_labels()[idx]
+
+    def test_polydb_variants_are_separate_items(self, pv, patched_sources):
+        """v4.0.0: polyDB 的无机库与全库是两份库 → 必须是两个独立数据源。
+
+        合成一项的话, "选无机库"和"选全库"会落到同一个 db_source, 用户
+        以为换库了实际没换。
+        """
+        view, _vm = pv
+        view.refresh_db_sources()
+        keys = view._db_source_keys
+        assert "polydb:cod-inorg" in keys
+        assert view._db_combo.itemText(keys.index("polydb:cod-inorg")).startswith(
+            "COD 无机物库（polyDB）")
+        assert "77,500" in view._db_source_labels()[keys.index("polydb:cod-inorg")]
 
 
 # ── 2. 识别分支 ──────────────────────────────────────────────
@@ -267,14 +314,12 @@ def test_candidate_label_without_symmetry(pv):
 
 # ── 4. 真实库可用性文案 ──────────────────────────────────────
 
-def test_pdf2_label_reports_real_count(pv):
-    """挂载了真实库时文案里的相数来自实际 COUNT(*), 不是写死的。"""
-    from polyxrd.services import db_import
-
+def test_pdf2_label_reports_real_count(pv, patched_sources):
+    """挂载了真实库时文案里的相数来自实际探测结果, 不是写死的常量。"""
     view, _vm = pv
-    label = view._db_source_labels()[4]
-    if db_import.live_counts().get("pdf2", 0) > 0:
-        assert "163" in label or "164" in label, label
-        assert "未挂载" not in label
-    else:
-        assert label == "PDF2-2004 库 (未挂载)"
+    view.refresh_db_sources()
+    idx = view._db_source_keys.index("pdf2")
+    label = view._db_source_labels()[idx]
+    # patch 出来的行带 163,834 相 → 文案必须把它格式化进括号里
+    assert "163,834" in label, label
+    assert "未挂载" not in label

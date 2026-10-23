@@ -1545,15 +1545,22 @@ class PhaseIdentifier:
                                wavelength: float,
                                two_theta_range,
                                top_n_candidates: int = 50,
-                               tolerance: float = 0.15):
+                               tolerance: float = 0.15,
+                               db=None):
         """从 COD 索引中筛选候选物相，动态生成 reference_peaks 并计算 FOM。
 
         策略:
           - 如 elements 有条件，先用元素过滤得到 COD 候选 (最多 top_n_candidates)
           - 对每个候选做 FOM (计算快速，pymatgen 峰生成慢则跳过)
           - 返回 top_n FOM 最好的 PhaseMatchResult
+
+        Args:
+            db: v4.0.0 显式库实例 (列表式多库挂载时由调用方传入)。省略则用
+                ``self._cod_db`` —— 与历史行为一致。显式传入的实例**不会**
+                被写回 ``self``, 因此同类型多份库各查各的、互不污染。
         """
-        db = getattr(self, "_cod_db", None)
+        if db is None:
+            db = getattr(self, "_cod_db", None)
         if db is None or not db.is_ready():
             return []
 
@@ -1602,6 +1609,7 @@ class PhaseIdentifier:
         tolerance: float = 0.15,
         cod_candidates: int = 30,
         merge_with_builtin: bool = True,
+        db_path: str | Path | None = None,
     ) -> list[PhaseMatchResult]:
         """物相识别: 内置 118 物相 + 本地 COD 扩展。
 
@@ -1613,36 +1621,69 @@ class PhaseIdentifier:
             tolerance: 2θ 容差
             cod_candidates: 最多评估 COD 物相数 (pymatgen 峰计算较慢)
             merge_with_builtin: True → 与内置库结果合并排序; False → 仅 COD
+            db_path: v4.0.0 显式全库索引文件; 省略时按配置解析。
+                列表式多库挂载用: 同一类型可挂多份, 每份独立检索。
         """
         if peaks is None:
             peaks = default_peak_list(data)
 
-        wavelength = self._effective_wavelength(data)
-        t_min, t_max = self._config.default_two_theta_range
-        t_range = (max(t_min, 5.0), min(t_max, 90.0))
+        # v4.0.0: 显式 db_path → **局部**适配器, 不回写 self.
+        # 旧实现把显式库塞进 self._cod_db, 于是「用户挂的第二份 COD 索引」
+        # 会粘在 PhaseIdentifier 实例上: 之后切回内置「COD 全库/merged」
+        # (db_path=None, 但 _cod_ready 仍为 True) 会静默查错库。
+        # 这里显式路径失败就只返回内置结果, 不静默回退到全局配置的库。
+        explicit_db = None
+        if db_path:
+            try:
+                from polyxrd.services.cod_local import CODLocalDatabase
 
-        combined: list[PhaseMatchResult] = []
-        if merge_with_builtin:
-            builtin = self.identify(data, peaks=peaks, elements=elements,
-                                    top_n=max(top_n, 10), tolerance=tolerance)
-            combined.extend(builtin)
+                explicit_db = CODLocalDatabase(db_path=Path(db_path))
+                if not explicit_db.is_ready():
+                    explicit_db.close()
+                    explicit_db = None
+            except Exception:  # noqa: BLE001 - 显式库坏了不拖垮内置链路
+                explicit_db = None
 
-        # COD 部分
-        if getattr(self, "_cod_ready", False) or (
-            getattr(self, "_cod_db", None) and self._cod_db.is_ready()
-        ):
-            cod_results = self._search_cod_for_phases(
-                peaks=peaks,
-                elements=elements,
-                wavelength=wavelength,
-                two_theta_range=t_range,
-                top_n_candidates=cod_candidates,
-                tolerance=tolerance,
-            )
-            combined.extend(cod_results)
+        try:
+            wavelength = self._effective_wavelength(data)
+            t_min, t_max = self._config.default_two_theta_range
+            t_range = (max(t_min, 5.0), min(t_max, 90.0))
 
-        combined.sort(key=lambda r: r.score)
-        return combined[:top_n]
+            combined: list[PhaseMatchResult] = []
+            if merge_with_builtin:
+                builtin = self.identify(data, peaks=peaks, elements=elements,
+                                        top_n=max(top_n, 10), tolerance=tolerance)
+                combined.extend(builtin)
+
+            # COD 部分
+            if db_path:
+                cod_db = explicit_db
+                cod_ready = cod_db is not None
+            else:
+                cod_db = getattr(self, "_cod_db", None)
+                cod_ready = bool(
+                    getattr(self, "_cod_ready", False)
+                    or (cod_db is not None and cod_db.is_ready())
+                )
+            if cod_ready and cod_db is not None:
+                cod_results = self._search_cod_for_phases(
+                    peaks=peaks,
+                    elements=elements,
+                    wavelength=wavelength,
+                    two_theta_range=t_range,
+                    top_n_candidates=cod_candidates,
+                    tolerance=tolerance,
+                    db=cod_db,
+                )
+                combined.extend(cod_results)
+
+            combined.sort(key=lambda r: r.score)
+            return combined[:top_n]
+        finally:
+            # 局部实例的只读连接用完即关 (Windows 上被挂载库可能被用户替换,
+            # 句柄残留会让文件换不掉)。
+            if explicit_db is not None:
+                explicit_db.close()
 
     def _rank_candidates(
         self,
@@ -1724,6 +1765,7 @@ class PhaseIdentifier:
         prefilter_tolerance_rel: float = 0.0,
         prefilter_min_match: int = 3,
         prefilter_max_ref_peaks: int = 40,
+        db_path: str | Path | None = None,
     ) -> list[PhaseMatchResult]:
         """物相识别: COD 无机物库 (71,199 物相, 预计算 d-I 峰)。
 
@@ -1749,6 +1791,8 @@ class PhaseIdentifier:
                 max(abs, rel*d), 使 2θ 窗口近似恒定)
             prefilter_min_match: 预筛最少反向匹配测量峰数
             prefilter_max_ref_peaks: 预筛每物相参与匹配的最大主要峰数
+            db_path: v4.0.0 显式库文件; 省略时按配置解析 (历史行为不变)。
+                列表式多库挂载用: 同一类型可以挂多份库, 每份各自检索。
         """
         if peaks is None:
             peaks = default_peak_list(data)
@@ -1758,7 +1802,7 @@ class PhaseIdentifier:
         except Exception:
             return []
 
-        cdb = CIFDatabase(enable_cod_local=False)
+        cdb = CIFDatabase(enable_cod_local=False, cod_db_path=db_path)
         if not cdb.cod_db_available():
             return []
 
@@ -1904,6 +1948,7 @@ class PhaseIdentifier:
         prefilter_max_ref_peaks: int = 40,
         db=None,
         progress_cb=None,
+        db_path: str | Path | None = None,
     ) -> list[PhaseMatchResult]:
         """物相识别: XinMatch 格式数据库 (v3.1.0)。
 
@@ -1932,6 +1977,7 @@ class PhaseIdentifier:
             progress_cb: 建强峰索引时的进度回调 ``cb(done, total, stage)``。
                 首次挂一个大库 (百万相级) 要建 5~10 min 的索引, 不回报进度
                 界面上就是彻底假死。已有缓存时不触发。
+            db_path: v4.0.0 显式库文件; 省略时按配置解析。列表式多库挂载用。
         """
         if peaks is None:
             peaks = default_peak_list(data)
@@ -1942,7 +1988,7 @@ class PhaseIdentifier:
             return []
 
         if db is None:
-            db = XinMatchDatabase()
+            db = XinMatchDatabase(db_path) if db_path else XinMatchDatabase()
         if not db.is_ready():
             return []
         if progress_cb is not None:
@@ -1989,6 +2035,139 @@ class PhaseIdentifier:
             make_phase=self._make_xinmatch_phase,
             ef=ef, data=data, peaks=peaks, top_n=top_n,
             tolerance=tolerance, wavelength=wavelength,
+        )
+
+    def identify_with_polydb(
+        self,
+        data: XRDData,
+        peaks: Optional[PeakList] = None,
+        element_filter: Optional[dict] = None,
+        top_n: int = 5,
+        tolerance: float = 0.15,
+        prefilter_limit: int = 100,
+        prefilter_tolerance: float = 0.02,
+        prefilter_tolerance_rel: float = 0.0,
+        prefilter_min_match: int = 3,
+        prefilter_max_ref_peaks: int = 40,
+        db=None,
+        db_path: str | None = None,
+        variant: str = "cod-inorg",
+    ) -> list[PhaseMatchResult]:
+        """物相识别: polyDB 外挂库 (v4.0.0)。
+
+        polyDB 是 PolyXRD 自有的列存外挂格式（:mod:`polyxrd.services.polydb`），
+        与 COD 无机库**打分口径完全一致**，差异只在候选生成：
+        COD 库逐相 Python 循环扫描，polyDB 先用 d 分箱位图倒排把候选池从
+        十万级压到百级，再对入围行做同一套 Hanawalt 度量。
+
+        Args:
+            data: XRD 数据
+            peaks: 可选峰列表 (自动检测)
+            element_filter: 三态元素过滤 (预筛层 + 判定层都会用)
+            top_n: 返回候选数
+            tolerance: 2θ 容差 (FOM 匹配用)
+            prefilter_*: d-I 预筛参数, 语义与 ``identify_with_cod_inorganics``
+                逐项相同
+            db: 可选的既有 :class:`PolyDatabase` 实例 (A/B 对照/复用 mmap 用)
+            db_path: 显式库目录; 省略时取配置里挂载的 polyDB
+            variant: ``cod-inorg`` / ``cod-full``, 仅在 db_path 省略时用于选槽位
+        """
+        if peaks is None:
+            peaks = default_peak_list(data)
+
+        try:
+            from polyxrd.services.polydb import PolyDatabase
+        except Exception:  # noqa: BLE001 - 裁剪安装缺模块时不该崩 UI
+            return []
+
+        if db is None:
+            db = PolyDatabase(db_path) if db_path else PolyDatabase(variant=variant)
+        if not db.is_ready():
+            return []
+
+        wavelength = self._effective_wavelength(data)
+
+        # 1. 实验峰 2θ → d 值
+        d_list: list[float] = []
+        i_list: list[float] = []
+        for p in peaks.peaks:
+            sin_theta = np.sin(np.radians(p.two_theta / 2.0))
+            if sin_theta <= 1e-6:
+                continue
+            d_list.append(wavelength / (2.0 * sin_theta))
+            i_list.append(float(p.intensity))
+        if not d_list:
+            return []
+
+        # 2. 位图倒排预筛 + 入围行 Hanawalt 精确度量
+        ef = normalize_element_filter(element_filter) if element_filter else None
+        allowed_pool = (set(ef["must_have"]) | set(ef["has"]) | set(ef["maybe"])
+                        if ef else set())
+        elements_allowed = allowed_pool if allowed_pool else None
+        try:
+            cands = db.search_by_d_peaks(
+                d_list, i_list, tolerance=prefilter_tolerance,
+                tolerance_rel=prefilter_tolerance_rel,
+                min_match=prefilter_min_match,
+                max_ref_peaks=prefilter_max_ref_peaks,
+                main_peak_topk=3,
+                limit=prefilter_limit,
+                elements_allowed=elements_allowed,
+            )
+        except Exception:  # noqa: BLE001 - 检索失败按"无候选"处理
+            return []
+        if not cands:
+            return []
+
+        # 3. 候选 → Phase → 统一 FOM 评分
+        return self._rank_candidates(
+            cands,
+            fetch=db.get_phase,
+            make_phase=lambda d, c, rp: self._make_polydb_phase(d, c, rp, db=db),
+            ef=ef, data=data, peaks=peaks, top_n=top_n,
+            tolerance=tolerance, wavelength=wavelength,
+        )
+
+    @staticmethod
+    def _make_polydb_phase(detail: dict, cand: dict, ref_peaks: list,
+                           db=None) -> Phase:
+        """polyDB 候选 → Phase (带晶胞 + 非对称单位位点)。
+
+        polyDB 的 ``sites.bin`` 侧车存的是 CIF 原样的非对称单位位点，与
+        ``user_db.cod_atomic_sites`` 同构，因此候选**可以直接进精修**；
+        位点读取失败时退化成"只有晶胞"（与 XinMatch 库同等能力）。
+        """
+        from polyxrd.models.phase import LatticeParams
+
+        eid = int(cand["cod_id"])
+        formula = detail.get("formula", "") or ""
+        mineral = (detail.get("mineral_name") or "").strip()
+        label = f"{mineral} - {formula}" if mineral and mineral != formula else formula
+        lattice = LatticeParams(
+            a=float(detail.get("cell_a") or 0.0),
+            b=float(detail.get("cell_b") or 0.0),
+            c=float(detail.get("cell_c") or 0.0),
+            alpha=float(detail.get("cell_alpha") or 90.0),
+            beta=float(detail.get("cell_beta") or 90.0),
+            gamma=float(detail.get("cell_gamma") or 90.0),
+        )
+        sites = []
+        if db is not None:
+            try:
+                sites = db.get_atomic_sites(eid)
+            except Exception:  # noqa: BLE001 - 侧车缺失不该拖垮检索
+                sites = []
+        els = {e for e in detail.get("elements_list") or [] if e}
+        return Phase(
+            name=f"{label} (COD {eid})",
+            formula=formula,
+            space_group=detail.get("space_group", "") or "",
+            lattice=lattice if lattice.a else None,
+            atomic_sites=sites,
+            reference_peaks=ref_peaks,
+            elements=els or elements_from_db_formula(formula),
+            density=float(detail.get("density") or 0.0) or None,
+            db_id=eid,
         )
 
     @staticmethod
@@ -2066,6 +2245,7 @@ class PhaseIdentifier:
         prefilter_tolerance_rel: float = 0.0,
         prefilter_min_match: int = 3,
         prefilter_max_ref_peaks: int = 40,
+        db_path: str | Path | None = None,
     ) -> list[PhaseMatchResult]:
         """物相识别: PDF2-2004 数据库 (ICDD PDF-2 2004 版)。
 
@@ -2093,7 +2273,7 @@ class PhaseIdentifier:
         except Exception:
             return []
 
-        pdb = PDF2Database()
+        pdb = PDF2Database(db_path) if db_path else PDF2Database()
         if not pdb.is_available():
             return []
 

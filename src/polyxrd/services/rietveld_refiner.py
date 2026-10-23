@@ -482,6 +482,25 @@ class RietveldRefiner:
                     capture_output=True, text=True, timeout=timeout,
                     env=self._gsas2_env(py),
                 )
+                # v4.0.1: subprocess 的 returncode/stderr 以前被直接丢弃 ——
+                # GSAS-II 桥崩溃 (DLL/LAPACK/导入失败) 时只剩一句
+                # "produced no output.json", 现场诊断信息全丢。这里落日志并
+                # 写进 fallback reason (桥约定: 成功 exit=0, 失败 exit=1)。
+                _rc = int(getattr(proc, "returncode", 0) or 0)
+                _err_tail = ""
+                if _rc != 0:
+                    _lines = [
+                        ln.strip()
+                        for ln in str(getattr(proc, "stderr", "") or "").splitlines()
+                        if ln.strip()
+                    ]
+                    _err_tail = " | ".join(_lines[-5:])[:400]
+                    logger.warning(
+                        "GSAS-II bridge exit=%s stderr=%s", _rc,
+                        _err_tail or "<empty>",
+                    )
+                    log(f"[gsas2] bridge exit={_rc}: "
+                        f"{_err_tail or '<no stderr>'}")
                 if not Path(out_path).exists():
                     logger.warning("GSAS-II bridge produced no output.json, "
                                    "fallback to builtin")
@@ -490,7 +509,10 @@ class RietveldRefiner:
                         data, phases, strategy, max_cycles, **kwargs
                     )
                     result.fit_params["engine_requested"] = "gsas2"
-                    result.fit_params["engine_fallback_reason"] = "bridge produced no result file"
+                    result.fit_params["engine_fallback_reason"] = (
+                        f"bridge produced no result file (exit={_rc}"
+                        f"{': ' + _err_tail if _err_tail else ''})"
+                    )
                     return result
                 with open(out_path, "r", encoding="utf-8") as f:
                     out = _json.load(f)
@@ -736,19 +758,32 @@ class RietveldRefiner:
 
         log(f"[maud] MaudText batch start: wizard_index={wizard} "
             f"iterations={max_cycles} phases={len(phases)}")
+        # 临时工作目录所有权归调用方: MaudEngine.refine 的 keep_workdir 只被记录,
+        # 自身**从不**清理 mkdtemp 出来的 maud_engine_* 目录 (实测每次调用泄漏
+        # 一个目录, 含 input.xye/cif/refined.par)。这里显式建目录 + finally 清理,
+        # 成功与失败 (含 MaudEngineError) 两条路径都能回收; keep_workdir=True 时
+        # 才保留 (调试用, 调用方自取 fit_params["work_dir"])。
+        import shutil
+        import tempfile
+
+        keep_work = bool(kwargs.get("maud_keep_workdir", False))
+        work_dir: Optional[Path] = None
         try:
             maud_root = kwargs.get("maud_root")
             engine = MaudEngine(
                 maud_root=Path(maud_root) if maud_root else None,
             )
+            if not keep_work:
+                work_dir = Path(tempfile.mkdtemp(prefix="polyxrd_maud_"))
             result = engine.refine(
                 data, list(phases),  # 引擎会就地改 phases 的 weight/lattice, 先复制防破坏
                 iterations=max_cycles,
                 wizard_index=wizard,
                 timeout_s=float(kwargs.get("maud_timeout", 600.0)),
-                keep_workdir=bool(kwargs.get("maud_keep_workdir", False)),
+                keep_workdir=keep_work,
                 on_progress=kwargs.get("maud_on_progress"),
                 cod_root=Path(kwargs["maud_cod_root"]) if kwargs.get("maud_cod_root") else None,
+                work_dir=work_dir,
             )
         except MaudEngineError as e:
             log(f"[maud] engine error: {e} -> fallback to builtin")
@@ -756,6 +791,9 @@ class RietveldRefiner:
         except Exception as e:  # noqa: BLE001
             log(f"[maud] exception: {type(e).__name__}: {e} -> fallback to builtin")
             return self._refine_builtin(data, phases, strategy, max_cycles, **kwargs)
+        finally:
+            if work_dir is not None:
+                shutil.rmtree(work_dir, ignore_errors=True)
 
         # 标记 first-run 完成 (下次可走自动 wizard)
         self._maud_mark_first_run_done()
@@ -983,6 +1021,12 @@ class RietveldRefiner:
                 Rexp=Rexp,
                 Rb=Rb,
                 GOF=GOF,
+                # v4.0.1: 这里的 Rexp/GOF 是用**单位权**算出来的 (powerxrd 的
+                # 权方案在库内部, 不外传), 与内置引擎 stat_weights="none" 同口径,
+                # 物理上不可解读。旧实现让 metrics_valid 走默认值 True, 报告里
+                # 会把 Rexp/GOF 当成有效指标展示 —— 改为显式无效 + 诊断码。
+                metrics_valid=False,
+                diagnostics=[{"code": "diag.metrics_no_weights", "params": {}}],
                 quality=quality,
                 num_cycles=int(getattr(result, "nfev", 0)),
                 converged=bool(getattr(result, "success", True)),
@@ -997,9 +1041,18 @@ class RietveldRefiner:
                     "wR": float(wR),
                 },
             )
-        except Exception:
-            # 任何异常回退内置引擎, 保证精修流程不中断
-            return self._refine_builtin(data, phases, strategy, max_cycles, **kwargs)
+        except Exception as e:  # noqa: BLE001
+            # v4.0.1: 旧实现"静默回退" —— 不写 engine_requested/reason, GUI 只看到
+            # engine=builtin, 与用户选的 powerxrd 不符且无从排查。与 gsas2/maud
+            # 分支对齐: 记录原因, 由 refine() 统一追加 diag.engine_fallback。
+            logger.warning("powerxrd refinement failed, fallback to builtin: %s", e)
+            log(f"[powerxrd] error: {type(e).__name__}: {e} -> fallback to builtin")
+            result = self._refine_builtin(data, phases, strategy, max_cycles, **kwargs)
+            result.fit_params["engine_requested"] = "powerxrd"
+            result.fit_params["engine_fallback_reason"] = (
+                f"{type(e).__name__}: {e}"
+            )
+            return result
 
     # ------------------------------------------------------------------
     # 内置精修引擎 (最小实现)
@@ -3297,22 +3350,24 @@ class RietveldRefiner:
     ) -> float:
         """从Miller指数和晶胞参数计算d-spacing
 
-        使用一般三斜晶胞公式。
+        使用一般三斜晶胞公式。标量数学一律走 :mod:`math` (而非 numpy 标量
+        函数): 本函数在 ``cell_mode="full"`` 时**每次残差评估 × 每相 × 每峰**
+        都会被调用 (实测 3 相/2000 点/7200 次残差评估 ≈ 10⁶ 次), numpy 的
+        ``np.radians/cos/sqrt`` 对 Python 标量有 ~10× 固定开销。实测单次调用
+        19.8 µs → 1.9 µs, 数值逐位相同 (2000 组随机三斜晶胞误差 0)。
         """
-        alpha_r = np.radians(alpha)
-        beta_r = np.radians(beta)
-        gamma_r = np.radians(gamma)
+        import math as _math
 
-        cos_a = np.cos(alpha_r)
-        cos_b = np.cos(beta_r)
-        cos_g = np.cos(gamma_r)
-        sin_a = np.sin(alpha_r)
-        sin_b = np.sin(beta_r)
-        sin_g = np.sin(gamma_r)
+        alpha_r = _math.radians(alpha)
+        beta_r = _math.radians(beta)
+        gamma_r = _math.radians(gamma)
 
-        volume = a * b * c * np.sqrt(
-            1 - cos_a**2 - cos_b**2 - cos_g**2 + 2 * cos_a * cos_b * cos_g
-        )
+        cos_a = _math.cos(alpha_r)
+        cos_b = _math.cos(beta_r)
+        cos_g = _math.cos(gamma_r)
+        sin_a = _math.sin(alpha_r)
+        sin_b = _math.sin(beta_r)
+        sin_g = _math.sin(gamma_r)
 
         # 1/d² 公式 (通用)
         inv_d_sq = (
@@ -3326,7 +3381,7 @@ class RietveldRefiner:
 
         # ── v1.1.2 修正: 漏了归一化因子 ────────────────────────────────
         # 一般三斜公式是 1/d² = (上式) / (1 − cos²α − cos²β − cos²γ + 2cosαcosβcosγ),
-        # 分母 = (V/(abc))²。旧实现只算了分子 (上面那个 volume 算完就再没用过, 正是漏项
+        # 分母 = (V/(abc))²。旧实现只算了分子 (旧版 volume 算完就再没用过, 正是漏项
         # 的旁证) → **非正交晶胞全部算错**: 立方/正交因子=1 侥幸正确 (Fluorite 实测自洽
         # 0.0007°), 而六方/三方 (γ=120°) 因子=0.75 → d 偏大 √(4/3) 倍。
         # 实测: ZnO(100) 27.42°(错) → 31.767°(对); ZnO(101) 31.26 → 36.252;
@@ -3339,10 +3394,8 @@ class RietveldRefiner:
         if inv_d_sq <= 0:
             return 0.0
 
-        # d = 1 / sqrt(1/d²)
-        # 对于立方晶系: inv_d_sq = (h²+k²+l²)/a², d = a/sqrt(h²+k²+l²)
-        # 对 Si(111), a=5.431: d = 5.431/sqrt(3) ≈ 3.136 Å
-        return 1.0 / float(np.sqrt(inv_d_sq))
+        # d = 1 / sqrt(1/d²); 立方: d = a/sqrt(h²+k²+l²), Si(111)=3.136 Å
+        return 1.0 / _math.sqrt(inv_d_sq)
 
     @staticmethod
     def _calc_wR(

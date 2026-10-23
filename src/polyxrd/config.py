@@ -6,6 +6,7 @@ PolyXRD 包配置
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar, Optional
@@ -234,6 +235,54 @@ class AppConfig:
     def set_xinmatch_db_path(self, path: str | Path | None) -> None:
         """记录 XinMatch 库的挂载路径并持久化 (空值 = 取消挂载)。"""
         self._update_user_db_path("xinmatch_db_path", path)
+
+    # ── polyDB 外挂库路径 (v4.0.0) ──────────────────────────
+
+    #: polyDB 变体 → user_db_paths.json 里的槽位 key。
+    #: polyDB 是**目录容器**（不是单个文件），两个变体各自独立挂载。
+    #: ClassVar: 这是全类共享的常量映射, 不是实例字段 (ruff RUF012)。
+    POLYDB_VARIANTS: ClassVar[dict[str, str]] = {
+        "cod-inorg": "polydb_inorg_path",
+        "cod-full": "polydb_full_path",
+    }
+
+    def get_polydb_path(self, variant: str = "cod-inorg") -> Optional[Path]:
+        """用户挂载的 polyDB 目录; 未挂载/目录被挪走返回 None。
+
+        polyDB 走"外挂目录"路线: 库可以放在任意位置（内置盘、移动硬盘、
+        网络盘）, 发布包里不带, 所以没有默认路径。上层拿到 None 时应视为
+        "该库不可用"并回退到下一优先级, 而不是抱死路径报错。
+        """
+        key = self.POLYDB_VARIANTS.get(variant)
+        if not key:
+            return None
+        p = self.user_db_path(key)
+        if p is None:
+            return None
+        return p if p.is_dir() else None
+
+    def set_polydb_path(self, path: str | Path | None,
+                        variant: str = "cod-inorg") -> None:
+        """挂载/取消挂载某个 polyDB 变体 (空值 = 取消挂载)。"""
+        key = self.POLYDB_VARIANTS.get(variant)
+        if not key:
+            raise ValueError("未知 polyDB 变体: %s" % variant)
+        self._update_user_db_path(key, path)
+
+    # ── CIF 落盘缓存 (v4.0.0 收口: 从三处硬编码 Path.home() 提到一处) ──
+
+    def cif_cache_dir(self) -> Path:
+        """库内 BLOB 的 CIF 落盘目录 (GSAS-II / MAUD 要求真实磁盘文件)。
+
+        默认 ``~/.polyxrd/cif_cache``。可用环境变量
+        ``POLYXRD_CIF_CACHE_DIR`` 覆盖 —— 便携版想放程序目录旁边、或在
+        用户目录不可写（只读沙箱 / 受控文件夹）时用, 免得写盘失败后
+        精修悄悄拿不到结构。缓存目录必须可写, 否则写失败会回退为"无 CIF"。
+        """
+        env = os.environ.get("POLYXRD_CIF_CACHE_DIR", "").strip()
+        if env:
+            return Path(env)
+        return Path.home() / ".polyxrd" / "cif_cache"
 
     # ── 外部精修程序路径 (v0.15 M25) ────────────────────────
 

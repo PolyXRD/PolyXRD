@@ -933,7 +933,9 @@ class RefinementWizard(QWidget):
             )
             return None
         try:
-            cache_dir = Path.home() / ".polyxrd" / "cif_cache"
+            from polyxrd.config import get_config
+
+            cache_dir = get_config().cif_cache_dir()
             cache_dir.mkdir(parents=True, exist_ok=True)
             out = cache_dir / f"COD{cod_id}.cif"
             out.write_text(text, encoding="utf-8")

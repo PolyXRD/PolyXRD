@@ -48,13 +48,31 @@ def export_svg_pattern(
     plot_w = width - pad_l - pad_r
     plot_h = height - pad_t - pad_b
     x0, x1 = float(x.min()), float(x.max())
-    ymax = float(y.max()) or 1.0
-    ymax *= 1.06
+    # v4.0.0 修复三处会让导出的报告"空白/乱画"的缺陷:
+    #  1. 2θ 轴退化 (x1 == x0, 例如整条谱同一个角) → px() 除零, 所有坐标 NaN;
+    #  2. 强度含 NaN → ymax = nan, py() 全 NaN, 曲线消失且无任何提示;
+    #  3. 强度全负 (背景扣除/差分谱) → ymax < 0, py() 把负值画到图外。
+    fin = np.isfinite(y)
+    y_fin = y[fin] if fin.any() else np.zeros(1)
+    y_lo = min(float(np.min(y_fin)), 0.0)
+    y_hi = max(float(np.max(y_fin)), 0.0)
+    if y_hi <= 0.0:
+        y_hi = 1.0
+    y_hi *= 1.06
+    y_span = y_hi - y_lo
+    if y_span < 1e-12:
+        y_span = 1.0
+    y_plot = np.where(fin, y, 0.0)
 
-    def px(v): return pad_l + (v - x0) / (x1 - x0) * plot_w
-    def py(v): return pad_t + (1.0 - v / ymax) * plot_h
+    def px(v):
+        if x1 <= x0:
+            return pad_l + plot_w / 2.0
+        return pad_l + (v - x0) / (x1 - x0) * plot_w
 
-    pts = " ".join(f"{px(a):.1f},{py(b):.1f}" for a, b in zip(x, y))
+    def py(v):
+        return pad_t + (1.0 - (v - y_lo) / y_span) * plot_h
+
+    pts = " ".join(f"{px(a):.1f},{py(b):.1f}" for a, b in zip(x, y_plot))
     parts = [
         '<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" '
         'viewBox="0 0 %d %d">' % (width, height, width, height),
@@ -67,7 +85,7 @@ def export_svg_pattern(
             if not (x0 <= p.two_theta <= x1):
                 continue
             cx = px(p.two_theta)
-            top = py(min(p.intensity, ymax))
+            top = py(min(float(p.intensity), y_hi))
             parts.append(
                 f'<polygon points="{cx:.1f},{top-7:.1f} {cx-4:.1f},{top:.1f} '
                 f'{cx+4:.1f},{top:.1f}" fill="#D85A30"/>')
@@ -351,7 +369,9 @@ def export_via_libreoffice(
                 return None
             if not tmp_odt.exists():
                 return None
-            ok = _run_lo_convert(soffice, env, prog, fmt, dst_dir, tmp_odt, timeout)
+            if not _run_lo_convert(soffice, env, prog, fmt, dst_dir,
+                                   tmp_odt, timeout):
+                return None
         finally:
             try:
                 tmp_odt.unlink()

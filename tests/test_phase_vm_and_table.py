@@ -145,3 +145,58 @@ class TestPeakMatchTable:
         pmt.set_assignments(assigns)
         pmt.clear_table()
         assert pmt._table.rowCount() == 0
+
+
+# ── v4.0.0: 列表式挂载 → polyDB 分支的 db_path / 失效库处理 ─────────────
+
+class TestPolyDbDispatch:
+    """同一类型挂多份库时, db_source 必须是"挂载项 id", 显式路径/变体要带下去。"""
+
+    def _vm_with_peaks(self):
+        vm = PhaseViewModel()
+        vm._peaks = PeakList(peaks=[Peak(two_theta=30.0, intensity=1000)])
+        return vm
+
+    def test_custom_polydb_mount_passes_explicit_path_and_variant(
+            self, qapp, tmp_path, monkeypatch):
+        from polyxrd.services import db_mounts
+        from polyxrd.services.db_mounts import Mount
+
+        dbdir = tmp_path / "mydb.polyDB"
+        dbdir.mkdir()
+        (dbdir / "index.sqlite").write_bytes(b"")
+        (dbdir / "meta.json").write_text("{}", encoding="utf-8")
+        mount = Mount(id="polydb:deadbeef", kind="polydb", path=dbdir,
+                      builtin=False, variant="cod-full")
+        monkeypatch.setattr(db_mounts, "resolve_mount",
+                            lambda mid: mount if mid == "polydb:deadbeef" else None)
+
+        vm = self._vm_with_peaks()
+        calls: list[dict] = []
+        monkeypatch.setattr(vm._identifier, "identify_with_polydb",
+                            lambda data, **kw: calls.append(kw) or [])
+        vm.identify_phases(None, db_source="polydb:deadbeef", top_n=5)
+        assert calls, "polyDB 挂载项必须分发到 identify_with_polydb"
+        assert calls[0]["db_path"] == str(dbdir)
+        assert calls[0]["variant"] == "cod-full"
+
+    def test_missing_custom_mount_emits_error_and_skips_dispatch(
+            self, qapp, tmp_path, monkeypatch):
+        from polyxrd.services import db_mounts
+        from polyxrd.services.db_mounts import Mount
+
+        gone = tmp_path / "gone.sqlite"
+        mount = Mount(id="pdf2:cafe", kind="pdf2", path=gone, builtin=False)
+        monkeypatch.setattr(db_mounts, "resolve_mount",
+                            lambda mid: mount if mid == "pdf2:cafe" else None)
+
+        vm = self._vm_with_peaks()
+        errs: list[str] = []
+        vm.error.connect(errs.append)
+        called: list[int] = []
+        monkeypatch.setattr(vm._identifier, "identify_with_pdf2",
+                            lambda *a, **k: called.append(1) or [])
+        vm.identify_phases(None, db_source="pdf2:cafe")
+        assert errs, "库文件被挪走后必须报错, 不能静默返回空结果"
+        assert not called, "不可用的挂载项不该再进检索引擎"
+

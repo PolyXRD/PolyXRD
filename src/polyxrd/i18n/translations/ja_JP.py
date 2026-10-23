@@ -153,7 +153,44 @@ translations = {
         "mount_any_failed": "マウントできません",
         "mount_any_failed_body": "このパスに使用可能なデータベースがありません。\n\nパス：{path}\n理由：{error}",
         "first_run_title": "データベース未導入",
-        "first_run_body": "0.10.0 以降、インストーラーにデータベースは同梱されません。\n\n3つのデータベースは個別のアーカイブで配布されます。必要なものだけダウンロードしてください:\n　· COD 無機物　　　…-Databases-COD-inorg.zip\n　· COD 全庫インデックス　…-Databases-COD-full.zip\n　· PDF2-2004　　　配布なし（ICDD ライセンス、ご自身で用意）\n\n解凍後、「データベース ▸ 外部データベース管理…」から順にインポートしてください。\n未導入の場合、内蔵の 118 種の参照相のみ利用できます。"
+        "first_run_body": "0.10.0 以降、インストーラーにデータベースは同梱されません。\n\n3つのデータベースは個別のアーカイブで配布されます。必要なものだけダウンロードしてください:\n　· COD 無機物　　　…-Databases-COD-inorg.zip\n　· COD 全庫インデックス　…-Databases-COD-full.zip\n　· PDF2-2004　　　配布なし（ICDD ライセンス、ご自身で用意）\n\n解凍後、「データベース ▸ 外部データベース管理…」から順にインポートしてください。\n未導入の場合、内蔵の 118 種の参照相のみ利用できます。",
+        "list_intro": "1 データベースにつき 1 行です。何個でもマウントできます（同じ種類を複数でも可。例：常設の全庫＋持ち運び用の無機物サブセット）。各行は独立したデータソースです。行を選んで「これを現在の DB にする」（またはダブルクリック）と、その DB で相同定を行います。アンマウントしてもファイル自体は削除されません。",
+        "col_active": "使用中",
+        "col_name": "名称",
+        "col_type": "種類",
+        "col_rows": "相数",
+        "col_size": "サイズ",
+        "col_status": "状態",
+        "col_path": "場所",
+        "active_mark": "● 使用中",
+        "btn_mount_file": "データベースをマウント…",
+        "btn_mount_dir": "フォルダをマウント…",
+        "btn_unmount": "アンマウント",
+        "btn_set_active": "これを現在の DB にする",
+        "btn_user_manage": "ユーザー DB 管理…",
+        "mount_title_file": "データベースファイルを選択",
+        "mount_title_dir": "データベースを含むフォルダを選択",
+        "mount_filter": "データベース (*.sqlite *.sqlite3 *.db *.db3);;すべてのファイル (*)",
+        "mount_ok": "マウントしました",
+        "mount_ok_body": "{n} 個のデータベースをマウントしました:\n{detail}",
+        "mount_failed": "マウントできません",
+        "mount_failed_body": "このパスに使用可能なデータベースがありません。\n\nパス: {path}\n理由: {error}",
+        "unmount_confirm": "「{name}」をアンマウントしますか？\nこの行とマウント記録を削除するだけで、データベースファイルは削除されません。",
+        "set_active_unavailable": "「{name}」は現在使用できません（未マウントまたはファイル破損）。同定のデータソースには指定できません。",
+        "current_source": "現在の相同定データソース: {name}",
+        "current_source_none": "相同定のデータソースは未指定です：相分析ページのプルダウンで選択中のものが使われます。",
+        "row_disabled_tip": "このデータベースは現在使用できません：ファイルの移動・削除を確認するか、再マウントしてください。"
+    },
+    "db_mounts": {
+        "type": {
+            "polydb": "polyDB"
+        },
+        "kind": {
+            "polydb_inorg": "COD 無機物（polyDB）",
+            "polydb_full": "COD 全庫（polyDB）",
+            "user": "ユーザー作成 DB"
+        },
+        "pkg_free": "このデータベースはローカルで生成・管理されているため、配布パッケージはありません。"
     },
     "user_db": {
         "title": "ユーザーデータベース管理",
@@ -392,6 +429,7 @@ translations = {
         "export_failed": "エクスポートに失敗しました: {error}",
         "refine_failed": "精密化に失敗しました: {error}",
         "identify_failed": "相の同定に失敗しました: {error}",
+        "db_missing": "データベース「{name}」が元の場所にありません（移動または削除されました）。「データベース ▸ 外部データベース管理」で再マウントしてください。",
         "peak_finder_failed": "ピーク検出に失敗しました: {error}",
         "peak_fit_failed": "ピークフィッティングに失敗しました: {error}",
         "background_failed": "バックグラウンド除去に失敗しました: {error}",
@@ -854,6 +892,7 @@ translations = {
             "db_user_empty_hint": "ユーザーデータベースに項目がありません。メニュー「データベース ▸ ユーザーデータベース管理…」からご自身の CIF を取り込んでください。",
             "db_user": "ユーザーデータベース",
             "db_xinmatch": "XinMatch 形式ライブラリ",
+            "db_polydb": "COD 無機物データベース (polyDB)",
             "no_match": "一致する物相が見つかりません",
             "no_match_amorphous": "一致する物相なし —— パターンは拡散ハロー (非晶質に近い) で、結晶相検索は適用外です",
             "amorphous_partial": " · 非晶質/拡散背景を含む",

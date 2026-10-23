@@ -68,3 +68,50 @@ class TestLoadAuto:
     def test_missing_file(self, tmp_path):
         with pytest.raises(FileNotFoundError):
             load_auto(tmp_path / "none.txt")
+
+
+# ─────────────────────────────────────────────────────────────────
+# v4.0.0 回归: 列选择 / 欧式小数 / 残行 / 有效行不足 (svc-data)
+# ─────────────────────────────────────────────────────────────────
+
+class TestColumnAndNumberParsing:
+    """实测缺陷:
+      - 三列文件只给 y_col 时被自动列选择覆盖, 静默选错强度列;
+      - 分号分隔的欧式导出 ``20,5;100,5`` 被当千位分隔符, 20.5→205, 100.5→1005;
+      - 列数不一致的残行让 np.asarray 抛 "setting an array element with a sequence";
+      - 有效行 <3 时抛模型的 "数据点数量必须 >= 3" (无文件名/无定位信息)。
+    """
+
+    def test_explicit_y_col_only_is_honored(self, tmp_path):
+        # 列2 数值变化最剧烈 (会被自动列选择挑中), 显式 y_col=1 必须优先
+        rows = [f"{i} {20+i} {10*i}" for i in range(5)]
+        p = _write(tmp_path, "three_col.txt", "\n".join(rows))
+        d = load_auto(p, y_col=1)
+        assert d.metadata["x_col"] == 0 and d.metadata["y_col"] == 1, d.metadata
+        assert d.intensity.tolist() == [20.0, 21.0, 22.0, 23.0, 24.0]
+
+    def test_european_decimal_comma(self, tmp_path):
+        text = "2theta;intensity\n20,5;100,5\n21,5;200,5\n22,5;300,5\n"
+        p = _write(tmp_path, "eu.xy", text)
+        d = load_auto(p)
+        assert d.two_theta.tolist() == pytest.approx([20.5, 21.5, 22.5])
+        assert d.intensity.tolist() == pytest.approx([100.5, 200.5, 300.5])
+
+    def test_ragged_rows_keep_modal_width(self, tmp_path):
+        # 前 3 行 2 列, 第 4 行多一列 (尾随注释列)
+        text = "2theta counts\n20 100\n21 200\n22 300\n23 400 junk\n"
+        p = _write(tmp_path, "ragged.xy", text)
+        d = load_auto(p)
+        assert len(d) == 3
+        assert d.intensity.tolist() == [100.0, 200.0, 300.0]
+
+    def test_too_few_valid_rows_message(self, tmp_path):
+        p = _write(tmp_path, "short.xy", "2theta counts\n20 100\n21 200\n")
+        with pytest.raises(DataFormatError) as ei:
+            load_auto(p)
+        assert "至少需要 3 行" in str(ei.value)
+
+    def test_explicit_column_out_of_range(self, tmp_path):
+        p = _write(tmp_path, "two.xy", "10 100\n11 200\n12 300\n")
+        with pytest.raises(DataFormatError):
+            load_auto(p, x_col=0, y_col=5)

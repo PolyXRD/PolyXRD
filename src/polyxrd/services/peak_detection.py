@@ -308,7 +308,12 @@ def detect_peaks_advanced(
             areas.append(0.0)
 
     # 7) 可选的局部峰形拟合精修 center/FWHM (重叠峰联合)
-    if opts.refine_mode == "fit" or (opts.refine_by_fit and len(centers) > 0):
+    # v4.0.0 修复: 原条件 `refine_mode == "fit" or (refine_by_fit and ...)`
+    # 让默认 refine_mode="parabola" 也跑联合曲线拟合, 与字段注释
+    # ("refine_by_fit: refine_mode=fit 时执行") 相反 —— 默认路径因此从
+    # ~11 ms 暴涨到 ~14 s (7001 点/25 峰实测, 见 tests/test_peak_detection_m21.py
+    # 的回归用例), GUI 线程会被直接卡死。现只在显式要求 fit 时拟合。
+    if opts.refine_mode == "fit" and opts.refine_by_fit:
         centers, fwhms = _refine_by_fit(x, ys, np.asarray(centers),
                                         np.asarray(fwhms), np.asarray(heights), step)
 

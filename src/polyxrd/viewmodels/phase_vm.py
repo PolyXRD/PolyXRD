@@ -195,6 +195,10 @@ class PhaseViewModel(QObject):
                 - "user": 用户自建库 (v2.6.0, 导入的 CIF 带晶胞/原子坐标)
                 - "xinmatch": 用户挂载的 XinMatch 格式库 (v3.1.0, 只有晶胞
                   没有原子坐标, 可用于检索/核对但不宜直接精修)
+                - "polydb" / "polydb:cod-full": polyDB 外挂库 (v4.0.0)
+                - **任意挂载项 id** (v4.0.0 列表式挂载): ``"<kind>:<摘要>"``,
+                  例如 ``"polydb:1a2b3c4d"`` —— 由 :mod:`polyxrd.services.db_mounts`
+                  登记, 同一类型可以挂多份库, 各自独立检索。
             marked_peaks: 标记峰 2θ 序列 (v2.2 S13)。None → 全部实测峰;
                 传入时仅保留与标记位最近 (≤0.30°) 的实测峰参与检索,
                 用于残差相/微量相追查 (候选列表右键"仅对标记峰再匹配")。
@@ -214,24 +218,60 @@ class PhaseViewModel(QObject):
                 return
             use_peaks = PeakList(peaks=[all_peaks[k] for k in keep],
                                  source=self._peaks.source)
+        # v4.0.0: 数据源 = 「挂载列表」里某一行的 id。先解析成 (kind, 挂载项),
+        # 再按 kind 分发 —— 同一类型挂多份库时只有"用户自加的那一份"才传
+        # 显式路径; 内置项继续按配置解析, 与历史行为逐字一致。
         try:
-            if db_source == "pdf2":
+            from polyxrd.services import db_mounts
+
+            _mount = db_mounts.resolve_mount(db_source)
+        except Exception:  # noqa: BLE001 - 注册表异常不该阻断识别主链路
+            _mount = None
+        _kind = _mount.kind if _mount is not None else ""
+        _explicit = None
+        if _mount is not None and not _mount.builtin:
+            if not _mount.exists:
+                self.error.emit(
+                    tr("error.db_missing", name=_mount.display_name()))
+                return
+            _explicit = _mount.path
+        # polyDB 是目录容器, 两个变体是两份独立的库: 必须把路径/变体带下去,
+        # 否则「COD 全库 (polyDB)」会被当成无机库那一份来查。
+        _poly_path = None
+        if _kind == "polydb" and _mount is not None and _mount.exists:
+            _poly_path = _mount.path
+            _explicit = None
+        try:
+            if db_source in ("cod_full", "merged"):
+                if not getattr(self._identifier, "_cod_ready", False):
+                    self._identifier.enable_cod_local()
+                results = self._identifier.identify_with_cod_local(
+                    data,
+                    peaks=use_peaks,
+                    elements=elements,
+                    top_n=top_n,
+                    tolerance=tolerance,
+                    merge_with_builtin=(db_source == "merged"),
+                )
+            elif _kind == "pdf2":
                 results = self._identifier.identify_with_pdf2(
                     data,
                     peaks=use_peaks,
                     element_filter=element_filter,
                     top_n=top_n,
                     tolerance=tolerance,
+                    db_path=_explicit,
                 )
-            elif db_source == "cod_inorganics":
+            elif _kind == "cod_inorganics":
                 results = self._identifier.identify_with_cod_inorganics(
                     data,
                     peaks=use_peaks,
                     element_filter=element_filter,
                     top_n=top_n,
                     tolerance=tolerance,
+                    db_path=_explicit,
                 )
-            elif db_source == "user":
+            elif _kind == "user":
                 # v2.6.0: 用户自建库 (同构 sqlite)。与 COD 无机库同一套
                 # 预筛/评分, 但返回的 Phase 自带晶胞+原子坐标, 可直接精修。
                 results = self._identifier.identify_with_user_db(
@@ -241,7 +281,7 @@ class PhaseViewModel(QObject):
                     top_n=top_n,
                     tolerance=tolerance,
                 )
-            elif db_source == "xinmatch":
+            elif _kind == "xinmatch":
                 # v3.1.0: 用户挂载的 XinMatch 格式库 (entries/peaks/elements)。
                 # 与 COD 无机库共用 _rank_candidates 的 FOM 口径, 差别只在
                 # 预筛走 XinMatch 适配器; 该库无 CIF → 候选不能直接精修。
@@ -252,17 +292,38 @@ class PhaseViewModel(QObject):
                     top_n=top_n,
                     tolerance=tolerance,
                     progress_cb=self.index_progress.emit,
+                    db_path=_explicit,
                 )
-            elif db_source in ("cod_full", "merged"):
-                if not getattr(self._identifier, "_cod_ready", False):
-                    self._identifier.enable_cod_local()
+            elif _kind == "polydb":
+                # v4.0.0: polyDB 外挂库（目录容器 + 位图倒排预筛）。
+                # 与 COD 无机库同一套打分，只是候选池靠位图+上界分层生成；
+                # 条目带非对称单位原子位点，命中相可直接进精修。
+                results = self._identifier.identify_with_polydb(
+                    data,
+                    peaks=use_peaks,
+                    element_filter=element_filter,
+                    top_n=top_n,
+                    tolerance=tolerance,
+                    db_path=str(_poly_path) if _poly_path else None,
+                    # 路径缺省时靠 variant 选槽位: 「COD 全库 (polyDB)」这一行
+                    # 若被卸下, 绝不能悄悄退到无机库那一份去查。
+                    variant=(_mount.variant if _mount and _mount.variant
+                             else "cod-inorg"),
+                )
+            elif _kind == "cod_index":
+                # 列表里额外挂的第二份 COD 全库索引 (用户自加): 只查这一份,
+                # 不与内置结果合并 —— 合并是「merged」这个独立数据源的语义。
+                # 注意: 不要在这里调 `enable_cod_local()` —— 显式 db_path 已经在
+                # `identify_with_cod_local` 内部建临时只读实例 (v4.0.0 修复了
+                # 串库), 多调一次只会白开配置里的库并跑 COUNT(*), 大库上要数秒。
                 results = self._identifier.identify_with_cod_local(
                     data,
                     peaks=use_peaks,
                     elements=elements,
                     top_n=top_n,
                     tolerance=tolerance,
-                    merge_with_builtin=(db_source == "merged"),
+                    merge_with_builtin=False,
+                    db_path=_explicit,
                 )
             elif element_filter:
                 results = self._identifier.identify_with_element_filter(

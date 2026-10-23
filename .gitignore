@@ -150,3 +150,14 @@ _bwork/
 
 # 运行时生成的纯 ASCII 构建副本 (由编排器派生, 不入库)
 build_ascii.bat
+
+# ── 测试/引擎运行残留 (2026-10-23, v4.0.0 评估发现) ──────────
+# 这些是测试与外部引擎在仓库根目录留下的临时工作目录/画布导出, 不该入库。
+maud_engine_*/
+polyxrd_maud_*/
+polyxrd_repro_*/
+pytest-of-*/
+/*.xy
+
+# 测试临时目录 (DSH 沙箱把 TEMP 回退到 cwd 时会在此建 tmp*; 2026-10-23)
+/tmp*/

@@ -1826,9 +1826,12 @@ class CODLocalDatabase:
         return list(out.values())[:limit]
 
     def _structure_by_id(self, cod_id: int) -> Optional[dict]:
-        """按编号取单条结构候选 (两通道, 无机库优先)。"""
-        got = self.find_structure_candidates("", limit=1)
-        got = []  # find_structure_candidates 需要至少一个条件, 这里单独查
+        """按编号取单条结构候选 (两通道, 无机库优先)。
+
+        注: 不要在这里调 ``find_structure_candidates("")`` 来"预热" —— 该方法
+        要求至少一个条件, 空条件会白跑一次查询 (旧版两行写法: 先真实执行一次
+        再 ``got = []`` 丢弃, 每次按 ID 查结构都白付一次全表 LIKE)。
+        """
         try:
             conn = self._inorg_db()
             if conn is not None:

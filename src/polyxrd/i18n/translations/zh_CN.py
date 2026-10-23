@@ -153,7 +153,44 @@ translations = {
         "mount_any_failed": "无法挂载",
         "mount_any_failed_body": "这个路径上没有可用的数据库。\n\n路径：{path}\n原因：{error}",
         "first_run_title": "尚未导入数据库",
-        "first_run_body": "从 0.10.0 起，安装包不再内置数据库。\n\n数据库各自独立打包，需要哪个下哪个：\n　· COD 无机物库　…-Databases-COD-inorg.zip\n　· COD 全库索引　…-Databases-COD-full.zip\n　· PDF2-2004 库　不提供下载（ICDD 版权库，需自行准备）\n\n解压后从菜单「数据库 ▸ 外挂数据库管理…」逐个导入。\n未导入数据库时，程序仍可使用内置的 118 种参考物相。"
+        "first_run_body": "从 0.10.0 起，安装包不再内置数据库。\n\n数据库各自独立打包，需要哪个下哪个：\n　· COD 无机物库　…-Databases-COD-inorg.zip\n　· COD 全库索引　…-Databases-COD-full.zip\n　· PDF2-2004 库　不提供下载（ICDD 版权库，需自行准备）\n\n解压后从菜单「数据库 ▸ 外挂数据库管理…」逐个导入。\n未导入数据库时，程序仍可使用内置的 118 种参考物相。",
+        "list_intro": "一个库一行：可以挂多份库（同一类型也能挂多份，例如「常驻的全库」+「随身的无机子集」），每行都是独立的数据源。选中某行点「设为当前」（或双击该行），物相检索就用那一份。卸载只是把这一行从列表里去掉，不会删除库文件。",
+        "col_active": "当前",
+        "col_name": "名称",
+        "col_type": "类型",
+        "col_rows": "相数",
+        "col_size": "大小",
+        "col_status": "状态",
+        "col_path": "位置",
+        "active_mark": "● 使用中",
+        "btn_mount_file": "挂载数据库文件…",
+        "btn_mount_dir": "挂载文件夹…",
+        "btn_unmount": "卸载",
+        "btn_set_active": "设为当前",
+        "btn_user_manage": "用户库管理…",
+        "mount_title_file": "选择数据库文件",
+        "mount_title_dir": "选择包含数据库的文件夹",
+        "mount_filter": "数据库 (*.sqlite *.sqlite3 *.db *.db3);;所有文件 (*)",
+        "mount_ok": "挂载成功",
+        "mount_ok_body": "已挂载 {n} 个数据库：\n{detail}",
+        "mount_failed": "无法挂载",
+        "mount_failed_body": "这个路径上没有可用的数据库。\n\n路径：{path}\n原因：{error}",
+        "unmount_confirm": "确定要卸载「{name}」吗？\n卸载只是从列表里去掉这一行（并清掉它的挂载记录），不会删除库文件本身。",
+        "set_active_unavailable": "「{name}」当前不可用（未挂载或库文件已损坏），不能设为检索数据源。",
+        "current_source": "当前物相检索使用：{name}",
+        "current_source_none": "尚未指定检索数据源：物相分析页按其下拉框里选中的那一项检索。",
+        "row_disabled_tip": "该库当前不可用：请检查文件是否被移动/删除，或重新挂载。"
+    },
+    "db_mounts": {
+        "type": {
+            "polydb": "polyDB 库"
+        },
+        "kind": {
+            "polydb_inorg": "COD 无机物库（polyDB）",
+            "polydb_full": "COD 全库（polyDB）",
+            "user": "用户自建库"
+        },
+        "pkg_free": "本库由用户自行生成或管理，没有下载包。"
     },
     "user_db": {
         "title": "用户数据库管理",
@@ -392,6 +429,7 @@ translations = {
         "export_failed": "导出失败：{error}",
         "refine_failed": "精修失败：{error}",
         "identify_failed": "物相识别失败：{error}",
+        "db_missing": "数据库「{name}」已不在原位置（文件被移动或删除）。请到「数据库 ▸ 外挂数据库管理」重新挂载。",
         "peak_finder_failed": "峰检测失败：{error}",
         "peak_fit_failed": "峰拟合失败：{error}",
         "background_failed": "背景扣除失败：{error}",
@@ -845,6 +883,7 @@ translations = {
             "db_pdf2": "PDF2-2004 库",
             "db_user": "用户数据库",
             "db_xinmatch": "XinMatch 格式库",
+            "db_polydb": "COD 无机物库 (polyDB)",
             "db_label_count": "{base} ({count:,})",
             "db_unmounted": " (未挂载)",
             "db_combo_tip_main": "选择物相检索使用的数据库 (作用于传统 Search/Match 与快速识别):\n· 内置库: 程序自带 118 种常见物相 (最快)\n· COD 无机物库: 外挂 71,199 物相 (预计算 d-I 峰, Hanawalt 预筛)\n· COD 全库: 外挂 113,223 条 CIF 索引 (本地检索)\n· 合并: 内置库 + COD 全库结果合并排序\n· PDF2-2004: ICDD PDF-2 2004 版 163,834 物相, 自带空间群与晶胞\n  (晶胞 81.8% / 空间群 72.8%), 命中相可直接作为精修起始结构。\n· XinMatch 格式库: 你自行挂载的第三方库 (entries/peaks 结构),\n  可用于检索与核对; 该库不含 CIF, 命中相不能直接精修。\n",

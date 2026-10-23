@@ -3,8 +3,6 @@
 验证: 载入数据 → 寻峰 → 识别 → 候选可勾选 → 勾选驱动
 PatternDisplayWidget(实验/参考棒/计算谱/归属) + PeakMatchTable 刷新。
 """
-import os
-import tempfile
 
 import numpy as np
 import pytest
@@ -48,10 +46,12 @@ def qapp():
 
 
 @pytest.fixture
-def setup(qapp: QApplication):
+def setup(qapp: QApplication, tmp_path):
     vm = MainViewModel()
     pv = PhaseView(vm)
-    path = os.path.join(tempfile.gettempdir(), "polyxrd_qt_synth.xy")
+    # v4.0.0: 写 tmp_path（原实现写 tempfile.gettempdir()，TEMP 不可写时会
+    # 落到 cwd，测试因此往仓库根丢 .xy 残留）。
+    path = str(tmp_path / "polyxrd_qt_synth.xy")
     _write_synth_quartz(path)
     vm.load_file(path)
     for _ in range(5):
@@ -128,3 +128,89 @@ class TestPhaseViewV2:
         n_calc_off = sum(1 for l in pv._plot._ax_main.lines
                          if l.get_gid() == "calc")
         assert n_calc_off == 0
+
+
+# ── v4.0.0: 数据源下拉 (挂载列表) 刷新性能与状态同步 ──────────────────
+
+class TestDbSourceRefresh:
+    """钉住两处 v4.0.0 数据源下拉的缺陷:
+
+    1. PDF2 覆盖率是全表聚合, 每次 refresh 都重跑会卡主线程;
+    2. 选回「内置库 / 合并」时必须清 active, 否则下次刷新会悄悄跳回外挂库。
+    """
+
+    @pytest.fixture
+    def pv(self, qapp):
+        from polyxrd.viewmodels.main_vm import MainViewModel
+
+        return PhaseView(MainViewModel())
+
+    def test_pdf2_coverage_scanned_once_per_db_version(self, pv, tmp_path,
+                                                       monkeypatch):
+        from polyxrd.config import get_config
+        from polyxrd.services import pdf2_database
+
+        fake_db = tmp_path / "PDF2_2004.sqlite"
+        fake_db.write_bytes(b"fake")
+        monkeypatch.setattr(get_config(), "get_pdf2_db_path", lambda: fake_db)
+
+        calls: list[int] = []
+
+        class _FakePDF2:
+            def __init__(self, db_path=None):
+                self.db_path = db_path
+
+            def is_available(self):
+                return True
+
+            def coverage(self):
+                calls.append(1)
+                return {"total": 10, "pct_space_group": 100.0,
+                        "pct_cell": 100.0}
+
+        monkeypatch.setattr(pdf2_database, "PDF2Database", _FakePDF2)
+        pv._pdf2_cov_cache = None
+        pv.refresh_db_sources()
+        assert len(calls) == 1
+        for _ in range(3):
+            pv.refresh_db_sources()
+        assert len(calls) == 1, "库没换就不该重复做全表覆盖率聚合"
+
+        # 库文件被替换 (size/mtime 变) → 必须重新统计
+        fake_db.write_bytes(b"fake-and-longer")
+        import os
+        os.utime(fake_db, (fake_db.stat().st_atime, fake_db.stat().st_mtime + 5))
+        pv.refresh_db_sources()
+        assert len(calls) == 2
+
+    def test_selecting_non_mount_source_clears_active(self, pv, tmp_path,
+                                                      monkeypatch):
+        from polyxrd.services import db_mounts
+
+        monkeypatch.setattr(db_mounts, "_store_file",
+                            lambda: tmp_path / "db_mounts.json")
+        db_mounts.set_active("pdf2")   # 假装之前选过外挂库
+        pv._db_combo.setCurrentIndex(0)   # 内置库 (非挂载项)
+        pv._on_db_source_changed()
+        assert db_mounts.active_id() == "", (
+            "选回非挂载数据源后 active 必须清空, 否则下次刷新会把下拉拽回旧库")
+
+
+def test_project_status_keys_resolve_in_all_languages():
+    """项目保存/打开的 status/error 键三语齐全 (缺键会直接显示成键名)。"""
+    from polyxrd.i18n.translations import en_US, ja_JP, zh_CN
+
+    def _resolve(tree: dict, dotted: str):
+        node = tree
+        for part in dotted.split("."):
+            if not isinstance(node, dict) or part not in node:
+                return None
+            node = node[part]
+        return node
+
+    keys = ("dialog.project_saved", "dialog.project_loaded",
+            "dialog.project_load_failed")
+    for mod in (zh_CN, en_US, ja_JP):
+        for k in keys:
+            assert _resolve(mod.translations, k), f"{k} 在 {mod.__name__} 中缺失"
+

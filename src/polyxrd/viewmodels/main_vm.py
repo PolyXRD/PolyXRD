@@ -145,7 +145,7 @@ class MainViewModel(QObject):
             refinement_result=self.refinement_result,
         )
         self._project_file = str(path)
-        self.status_changed.emit(tr("status.project_saved", path=str(path)))
+        self.status_changed.emit(tr("dialog.project_saved", path=str(path)))
 
     def open_project(self, path: str | Path) -> None:
         """打开 .pxrd 项目文件, 恢复数据与全部分析状态。
@@ -158,7 +158,7 @@ class MainViewModel(QObject):
         try:
             project = ProjectService().load_project(str(path))
         except Exception as e:
-            self.error_occurred.emit(tr("status.project_load_failed", error=e))
+            self.error_occurred.emit(tr("dialog.project_load_failed", error=e))
             return
 
         self._project_file = str(path)
@@ -175,11 +175,11 @@ class MainViewModel(QObject):
             if refinement is not None:
                 self.adopt_refinement_result(refinement)
             self.status_changed.emit(
-                tr("status.project_loaded", name=Path(path).name)
+                tr("dialog.project_loaded", name=Path(path).name)
             )
         else:
             self.error_occurred.emit(
-                tr("status.project_load_failed", error="project has no data")
+                tr("dialog.project_load_failed", error="project has no data")
             )
 
     # ------------------------------------------------------------------
@@ -313,7 +313,8 @@ class MainViewModel(QObject):
 
         Args:
             db_source: 数据库源 ("builtin" / "cod_inorganics" /
-                "cod_full" / "merged" / "pdf2" / "user")
+                "cod_full" / "merged" / "pdf2" / "user" / "xinmatch" /
+                "polydb")
             marked_peaks: 标记峰 2θ 序列 (v2.2 S13, None → 全部实测峰)
         """
         data = self.current_data

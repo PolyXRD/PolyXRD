@@ -450,6 +450,10 @@ def fit_candidate(
         return out
 
     p = sol.x
+    # 2026-10 审查: least_squares 收敛标志以前完全被丢弃 —— 固定 nfev=60 的预算下
+    # "未收敛但仍有最优解"与"真收敛"在结果对象上不可区分。排序判据本身继续用
+    # 当前解 (不能把未收敛候选的 FoM 归零, 否则排序失真), 但把状态记进 extra
+    # 供诊断/日志使用。
     scale, shift = float(p[0]), float(p[1])
     k = 2
     if use_uvw:
@@ -527,6 +531,9 @@ def fit_candidate(
     out.fom = float(fom)              # 排序分 (按 score_domain/score_mode)
     out.extra["n_reflections"] = int(centres.size)
     out.extra["n_params"] = n_params
+    out.extra["solver_success"] = bool(getattr(sol, "success", False))
+    out.extra["solver_status"] = int(getattr(sol, "status", -1))
+    out.extra["solver_nfev"] = int(getattr(sol, "nfev", 0))
     out.extra["scale0"] = float(scale0)
     out.extra["wavelength"] = float(wavelength)
     out.extra["rwp_domain"] = float(rwp_domain)

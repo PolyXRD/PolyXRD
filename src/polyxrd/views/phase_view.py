@@ -10,7 +10,8 @@
 """
 from __future__ import annotations
 
-from typing import Optional
+from pathlib import Path
+from typing import ClassVar, Optional
 
 import numpy as np
 from PySide6.QtCore import Qt, Signal
@@ -39,7 +40,6 @@ from PySide6.QtWidgets import (
 
 from polyxrd.i18n import tr
 from polyxrd.viewmodels.main_vm import MainViewModel
-from polyxrd.services import db_import
 from polyxrd.views.widgets.busy_indicator import busy
 from polyxrd.views.widgets.pattern_display import PatternDisplayWidget
 from polyxrd.views.widgets.peak_match_table import PeakMatchTable
@@ -66,13 +66,15 @@ class PhaseView(QWidget):
         self._filter_dict: dict = {}
         self._current_results: list = []
         self._element_dialog: Optional[ElementFilterDialog] = None
-        # 数据库源: key 与 PhaseViewModel.identify_phases 的 db_source 对应
-        # (顺序即下拉索引, 末尾追加新源可保持既有索引不变)
-        self._db_source_keys = [
-            "builtin", "cod_inorganics", "cod_full", "merged", "pdf2", "user",
-            # v3.1.0: 用户挂载的 XinMatch 格式库
-            "xinmatch",
-        ]
+        # 数据源: v4.0.0 起由「挂载列表」现算 (见 _build_db_entries), 这里只
+        # 占位初始化 —— key 与 PhaseViewModel.identify_phases 的 db_source 对应。
+        self._db_source_keys: list[str] = []
+        self._db_enabled: list[bool] = []
+        self._db_hints: list[str] = []
+        #: PDF2 覆盖率文案缓存 ((路径, mtime_ns, size), 文案)。``coverage()`` 是
+        #: 全表聚合查询 (16 万行库约 0.2 s), 而 tooltip 每次 refresh_db_sources
+        #: 都会重建 —— 不缓存等于每次切语言/开关管理对话框都卡一下主线程。
+        self._pdf2_cov_cache: Optional[tuple[tuple, str]] = None
         self._setup_ui()
         self._setup_connections()
 
@@ -138,6 +140,7 @@ class PhaseView(QWidget):
         self._db_combo.addItems(self._db_source_labels())
         self._db_combo.setFixedHeight(28)
         self._db_combo.setToolTip(self._db_combo_tooltip())
+        self._db_combo.currentIndexChanged.connect(self._on_db_source_changed)
         self._mark_unavailable_db_sources()
         db_row.addWidget(self._db_combo)
         db_row.addStretch()
@@ -402,28 +405,104 @@ class PhaseView(QWidget):
         """当前数据库源的显示名"""
         return self._db_combo.currentText()
 
-    # ── 数据源可用性 (2026-09-10: 补 PDF2-2004; 0.10.0: 库外挂化) ──
-    def _db_source_labels(self) -> list[str]:
-        """各数据源的显示文案。
+    def _on_db_source_changed(self, _index: int = -1) -> None:
+        """下拉换源时把"当前库"同步回挂载表 (两处必须始终一致)。
 
-        0.10.0 起数据库不再随包分发, 相数一律**实时读库**而不是写死;
-        未挂载的直接标「未挂载」, 配合 ``_mark_unavailable_db_sources``
-        置灰, 避免用户选中后得到空结果却不知为何。
+        用户在物相页直接换源, 与在「外挂数据库管理」里点「设为当前」是**同一件
+        事**: 都意味着"接下来用这份库检索"。只写界面不写注册表, 下次打开管理
+        对话框会显示另一个"当前库", 两边对不上。内置库/合并不属于挂载项, 不写。
+
+        反过来, 选回「内置库 / 合并」时必须**清掉**注册表里的 active: 否则下次
+        ``refresh_db_sources`` (切语言 / 开关管理对话框) 会优先恢复 active 那一
+        行, 把下拉从用户刚选的「内置库」悄悄拽回外挂库 —— 下一次检索就跑错库。
         """
-        n = db_import.live_counts()
+        key = self._current_db_source()
+        try:
+            from polyxrd.services import db_mounts
 
-        def _n(key: str) -> int:
-            return n.get(key, 0)
+            if db_mounts.get_mount(key) is None:
+                if db_mounts.active_id():
+                    db_mounts.set_active("")
+                return
+            if db_mounts.active_id() != key:
+                db_mounts.set_active(key)
+        except Exception:  # noqa: BLE001 - 记录当前库失败不该影响检索
+            pass
 
-        return [
-            tr("vw.phase_view.db_builtin"),
-            self._db_label("vw.phase_view.db_cod_inorg", _n("cod_inorganics")),
-            self._db_label("vw.phase_view.db_cod_full", _n("cod_index")),
-            tr("vw.phase_view.db_merged"),
-            self._db_label("vw.phase_view.db_pdf2", _n("pdf2")),
-            self._db_label("vw.phase_view.db_user", self._user_phase_count()),
-            self._db_label("vw.phase_view.db_xinmatch", _n("xinmatch")),
-        ]
+    # ── 数据源可用性 (2026-09-10: 补 PDF2-2004; 0.10.0: 库外挂化;
+    #    v4.0.0: 列表式挂载 —— 下拉项由挂载注册表现算) ──
+    #: 内置库类型的显示名在 ``vw.phase_view.*`` 下; polyDB 变体等用注册表自带的
+    #: ``label_key`` (与「外挂数据库管理」列表同一套文案, 两处口径必须一致)。
+    _DB_LABEL_KEYS: ClassVar[dict[str, str]] = {
+        "cod_inorganics": "vw.phase_view.db_cod_inorg",
+        "cod_index": "vw.phase_view.db_cod_full",
+        "pdf2": "vw.phase_view.db_pdf2",
+        "xinmatch": "vw.phase_view.db_xinmatch",
+    }
+
+    def _build_db_entries(self) -> list[str]:
+        """按挂载列表重建下拉条目, 返回显示文案 (key 同步写入 ``_db_source_keys``)。
+
+        v4.0.0 起「数据源」不再是写死的 8 个槽位, 而是**一张挂载表**: 用户在
+        「外挂数据库管理」里挂了几份库, 这里就有几项 (同一类型挂多份也各占
+        一项)。项的 key 就是挂载项 id, 直接作为 ``db_source`` 传给 ViewModel。
+
+        内置库与「合并」永远保留:「合并」= 内置 118 相 + COD 全库, 是唯一一个
+        不属于任何单个库的数据源。
+        """
+        from polyxrd.services import db_mounts
+
+        keys: list[str] = ["builtin"]
+        labels: list[str] = [tr("vw.phase_view.db_builtin")]
+        enabled: list[bool] = [True]
+        hints: list[str] = [""]
+
+        try:
+            rows = db_mounts.source_entries()
+        except Exception:  # noqa: BLE001 - 注册表异常不该让面板起不来
+            rows = []
+
+        unmounted = tr("vw.phase_view.db_unmounted_hint")
+        cod_index_ok = False
+        user_rows = 0
+        for r in rows:
+            if r["kind"] == "cod_index" and r["ok"]:
+                cod_index_ok = True
+            if r["kind"] == "user":
+                # 用户自建库固定排在最后一项 (与 v2.6.0 的位置保持一致)
+                user_rows = int(r["rows"] or 0)
+                continue
+            base = tr(self._DB_LABEL_KEYS.get(r["kind"], "")) \
+                if r["kind"] in self._DB_LABEL_KEYS else tr(r["label_key"] or "")
+            if not base:
+                base = r["label"] or r["id"]
+            if r["ok"] and r["rows"]:
+                labels.append(tr("vw.phase_view.db_label_count",
+                                 base=base, count=r["rows"]))
+            else:
+                labels.append(base + tr("vw.phase_view.db_unmounted"))
+            keys.append(r["id"])
+            enabled.append(bool(r["ok"]))
+            hints.append(unmounted)
+
+        keys.append("merged")
+        labels.append(tr("vw.phase_view.db_merged"))
+        enabled.append(cod_index_ok)
+        hints.append(unmounted)
+
+        keys.append("user")
+        labels.append(self._db_label("vw.phase_view.db_user", user_rows))
+        enabled.append(user_rows > 0)
+        hints.append(tr("vw.phase_view.db_user_empty_hint"))
+
+        self._db_source_keys = keys
+        self._db_enabled = enabled
+        self._db_hints = hints
+        return labels
+
+    def _db_source_labels(self) -> list[str]:
+        """各数据源的显示文案 (相数一律**实时读库**, 未挂载标「未挂载」)。"""
+        return self._build_db_entries()
 
     @staticmethod
     def _user_phase_count() -> int:
@@ -451,48 +530,66 @@ class PhaseView(QWidget):
         )
 
     def _pdf2_coverage_line(self) -> str:
-        """PDF2 库实际覆盖率 (可选行; 读取失败则省略)。"""
+        """PDF2 库实际覆盖率 (可选行; 读取失败则省略)。
+
+        结果按库文件 (路径, mtime, size) 缓存: ``coverage()`` 会对 phases 表做
+        全表聚合, 而本方法会被 ``refresh_db_sources`` 间接反复调用 (切语言、
+        关一次管理对话框都会触发)。库文件被替换时 mtime/size 变化, 自动失效。
+        """
         try:
-            from polyxrd.services.pdf2_database import PDF2Database
-            db = PDF2Database()
-            if not db.is_available():
-                return ""
-            cov = db.coverage()
-            if not cov:
-                return ""
-            return tr(
-                "vw.phase_view.pdf2_coverage",
-                total=f"{cov['total']:,}",
-                sg=cov["pct_space_group"],
-                cell=cov["pct_cell"],
-            )
-        except Exception:
+            from polyxrd.config import get_config
+
+            db_file = Path(get_config().get_pdf2_db_path())
+            try:
+                st = db_file.stat()
+                key: tuple = (str(db_file), st.st_mtime_ns, st.st_size)
+            except OSError:
+                key = (str(db_file), 0, 0)
+            cached = self._pdf2_cov_cache
+            if cached is not None and cached[0] == key:
+                return cached[1]
+            line = self._compute_pdf2_coverage_line(db_file, key)
+            self._pdf2_cov_cache = (key, line)
+            return line
+        except Exception:  # noqa: BLE001 - tooltip 不该因探测失败而崩
             return ""
+
+    @staticmethod
+    def _compute_pdf2_coverage_line(db_file: Path, key: tuple) -> str:
+        from polyxrd.services.pdf2_database import PDF2Database
+
+        db = PDF2Database(db_file)
+        if not db.is_available():
+            return ""
+        # 再确认一次文件身份, 避免探测期间刚被替换 (mtime 变) 的库被缓存成旧值
+        try:
+            st = db_file.stat()
+            if (str(db_file), st.st_mtime_ns, st.st_size) != key:
+                return ""
+        except OSError:
+            return ""
+        cov = db.coverage()
+        if not cov:
+            return ""
+        return tr(
+            "vw.phase_view.pdf2_coverage",
+            total=f"{cov['total']:,}",
+            sg=cov["pct_space_group"],
+            cell=cov["pct_cell"],
+        )
 
     def _mark_unavailable_db_sources(self) -> None:
         """未挂载的数据源在下拉里置灰, 避免选中后静默返回空结果。"""
         model = self._db_combo.model()
-        counts = db_import.live_counts()
-
-        def _disable(index: int, hint: str) -> None:
-            item = model.item(index)
+        for i, ok in enumerate(getattr(self, "_db_enabled", [])):
+            if ok:
+                continue
+            item = model.item(i)
             if item is not None:
+                hint = (self._db_hints[i] if i < len(self._db_hints)
+                        else tr("vw.phase_view.db_unmounted_hint"))
                 item.setEnabled(False)
                 item.setToolTip(hint)
-
-        hint = tr("vw.phase_view.db_unmounted_hint")
-        if counts.get("cod_inorganics", 0) <= 0:
-            _disable(1, hint)
-        if counts.get("cod_index", 0) <= 0:
-            # "COD 全库" 与 "合并" 都依赖 cod_index.sqlite
-            _disable(2, hint)
-            _disable(3, hint)
-        if counts.get("pdf2", 0) <= 0:
-            _disable(4, hint)
-        if self._user_phase_count() <= 0:
-            _disable(5, tr("vw.phase_view.db_user_empty_hint"))
-        if counts.get("xinmatch", 0) <= 0:
-            _disable(6, hint)
 
         # 当前选中项若刚被置灰 → 退回内置库 (否则用户按"识别"会一无所获)
         idx = self._db_combo.currentIndex()
@@ -501,17 +598,30 @@ class PhaseView(QWidget):
             self._db_combo.setCurrentIndex(0)
 
     def refresh_db_sources(self) -> None:
-        """重读三个库的挂载状态, 就地刷新下拉文案/可用性 (保留当前选择)。
+        """重建「数据源」下拉 (挂载变化 / 切语言时调用), 尽量保留当前选择。
 
-        由「外挂数据库管理…」对话框的 ``databases_changed`` 触发, 导入或
-        取消挂载后无需重启即可生效。
+        由「外挂数据库管理…」对话框的 ``databases_changed`` 触发: 挂载、卸载、
+        切换当前库后无需重启即可生效。
         """
         keep = self._current_db_source()
+        # 「设为当前」在挂载表里指定的那一份优先: 用户刚在管理界面对某行按了
+        # 「设为当前」, 回到物相页就该是它, 而不是上次界面上残留的选择。
+        try:
+            from polyxrd.services import db_mounts
+
+            active = db_mounts.active_id()
+        except Exception:  # noqa: BLE001
+            active = ""
         self._db_combo.blockSignals(True)
         self._db_combo.clear()
         self._db_combo.addItems(self._db_source_labels())
-        if keep in self._db_source_keys:
+        if active and active in self._db_source_keys:
+            self._db_combo.setCurrentIndex(self._db_source_keys.index(active))
+        elif keep in self._db_source_keys:
             self._db_combo.setCurrentIndex(self._db_source_keys.index(keep))
+        else:
+            # 原来选的那份库被卸载了 → 回退到内置库
+            self._db_combo.setCurrentIndex(0)
         self._db_combo.setToolTip(self._db_combo_tooltip())
         self._db_combo.blockSignals(False)
         self._mark_unavailable_db_sources()

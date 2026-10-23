@@ -153,7 +153,44 @@ translations = {
         "mount_any_failed": "Cannot Mount",
         "mount_any_failed_body": "No usable database was found at this path.\n\nPath: {path}\nReason: {error}",
         "first_run_title": "No Database Imported Yet",
-        "first_run_body": "Starting with 0.10.0 the installer no longer bundles any database.\n\nEach database ships as its own archive — download only what you need:\n  · COD Inorganics    …-Databases-COD-inorg.zip\n  · COD Full Index    …-Databases-COD-full.zip\n  · PDF2-2004         not downloadable (ICDD licensed; supply your own)\n\nAfter extracting, import each one via \"Database ▸ Manage External Databases…\".\nWithout imported databases only the 118 built-in reference phases are available."
+        "first_run_body": "Starting with 0.10.0 the installer no longer bundles any database.\n\nEach database ships as its own archive — download only what you need:\n  · COD Inorganics    …-Databases-COD-inorg.zip\n  · COD Full Index    …-Databases-COD-full.zip\n  · PDF2-2004         not downloadable (ICDD licensed; supply your own)\n\nAfter extracting, import each one via \"Database ▸ Manage External Databases…\".\nWithout imported databases only the 118 built-in reference phases are available.",
+        "list_intro": "One row per database — mount as many as you like (even several of the same type, e.g. an always-on full database plus a portable inorganics subset); each row is an independent data source. Select a row and click “Use This” (or double-click it) and phase identification runs against that one. Unmounting only removes the row from this list; the database file itself is never deleted.",
+        "col_active": "In use",
+        "col_name": "Name",
+        "col_type": "Type",
+        "col_rows": "Phases",
+        "col_size": "Size",
+        "col_status": "Status",
+        "col_path": "Location",
+        "active_mark": "● In use",
+        "btn_mount_file": "Mount database file…",
+        "btn_mount_dir": "Mount folder…",
+        "btn_unmount": "Unmount",
+        "btn_set_active": "Use This",
+        "btn_user_manage": "Manage user database…",
+        "mount_title_file": "Select Database File",
+        "mount_title_dir": "Select a Folder Containing Databases",
+        "mount_filter": "Databases (*.sqlite *.sqlite3 *.db *.db3);;All files (*)",
+        "mount_ok": "Mounted",
+        "mount_ok_body": "Mounted {n} database(s):\n{detail}",
+        "mount_failed": "Cannot Mount",
+        "mount_failed_body": "No usable database at this path.\n\nPath: {path}\nReason: {error}",
+        "unmount_confirm": "Unmount “{name}”?\nThis only removes the row (and its mount record); the database file itself is never deleted.",
+        "set_active_unavailable": "“{name}” is currently unavailable (not mounted or the file is damaged) and cannot be used for identification.",
+        "current_source": "Current identification source: {name}",
+        "current_source_none": "No identification source selected: the Phase Analysis page uses whatever is chosen in its own dropdown.",
+        "row_disabled_tip": "This database is currently unavailable: check whether the file was moved/deleted, or mount it again."
+    },
+    "db_mounts": {
+        "type": {
+            "polydb": "polyDB"
+        },
+        "kind": {
+            "polydb_inorg": "COD Inorganics (polyDB)",
+            "polydb_full": "COD Full (polyDB)",
+            "user": "User Database"
+        },
+        "pkg_free": "This database is generated or managed locally; there is no download package."
     },
     "user_db": {
         "title": "Manage User Database",
@@ -392,6 +429,7 @@ translations = {
         "export_failed": "Export failed: {error}",
         "refine_failed": "Refinement failed: {error}",
         "identify_failed": "Phase identification failed: {error}",
+        "db_missing": "The database \"{name}\" is no longer at its original location (moved or deleted). Re-mount it in Database ▸ External Database Manager.",
         "peak_finder_failed": "Peak detection failed: {error}",
         "peak_fit_failed": "Peak fitting failed: {error}",
         "background_failed": "Background subtraction failed: {error}",
@@ -854,6 +892,7 @@ translations = {
             "db_user_empty_hint": "The user database has no entries yet. Import your own CIF files via “Database ▸ Manage User Database…”.",
             "db_user": "User Database",
             "db_xinmatch": "XinMatch-format DB",
+            "db_polydb": "COD Inorganics (polyDB)",
             "no_match": "No matching phases found",
             "no_match_amorphous": "No matching phases — the pattern is a diffuse halo (near-amorphous); crystalline search does not apply",
             "amorphous_partial": " · contains amorphous/diffuse background",

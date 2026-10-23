@@ -1,7 +1,4 @@
 """M21 Request2 UI 接线: 高精度寻峰通过 DataView 按钮驱动 + PeakTable/plot 不崩。"""
-import os
-import tempfile
-
 import numpy as np
 import pytest
 
@@ -18,7 +15,7 @@ def qapp():
 
 
 @pytest.fixture
-def dv_vm(qapp):
+def dv_vm(qapp, tmp_path):
     vm = MainViewModel()
     dv = DataView(vm)
     # 真实 ZnO 谱 (已知多峰/双峰) 写临时 .xy
@@ -31,7 +28,9 @@ def dv_vm(qapp):
                    (67.96, 3000), (69.10, 700)]:  # 末尾弱峰
         y += amp * np.exp(-((x - c) / 0.08) ** 2)
     y += 40.0
-    path = os.path.join(tempfile.gettempdir(), "polyxrd_ui_peak.xy")
+    # v4.0.0: 写 tmp_path —— 原实现写 tempfile.gettempdir()，在 TEMP 不可写
+    # 的沙箱/受控目录环境里会落到 cwd，测试因此往仓库根丢 .xy 残留。
+    path = str(tmp_path / "polyxrd_ui_peak.xy")
     with open(path, "w") as f:
         for a, b in zip(x, y):
             f.write(f"{a:.4f} {b:.3f}\n")

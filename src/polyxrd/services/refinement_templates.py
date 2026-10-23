@@ -15,6 +15,20 @@ from typing import Any, Optional
 
 from polyxrd.config import get_config
 
+#: 模板名 → 文件名时**必须**清洗的字符 (Windows 非法文件名 + 路径分隔符)。
+#: 模板名来自用户输入, 直接拼 ``f"{name}.json"`` 时 ``..\\..\\x`` 会把文件写到
+#: 模板目录之外 (路径穿越), 含 ``:``/``*`` 等则在 Windows 上直接抛 OSError。
+#: 注意必须用 str.maketrans (字符键 → ordinal 键): 手写 ``{c: "_"}`` 得到的是
+#: 字符串键, str.translate 只认 ordinal, 会静默什么都不替换 (踩过)。
+_ILLEGAL_FILENAME_CHARS = str.maketrans({c: "_" for c in '\\/:*?"<>|'})
+
+
+def _template_stem(name: str) -> str:
+    """模板名 → 安全文件名主干 (save/load/delete 三处必须共用同一映射)。"""
+    stem = str(name or "").translate(_ILLEGAL_FILENAME_CHARS)
+    stem = stem.strip().rstrip(".")  # Windows 不允许结尾空格/点
+    return stem or "_"
+
 
 @dataclass
 class RefinementTemplate:
@@ -199,7 +213,8 @@ class RefinementTemplateManager:
         return [RefinementTemplate(**t.to_dict()) for t in _BUILTIN_TEMPLATES]
 
     def get_user_templates(self) -> list[RefinementTemplate]:
-        return list(self._user_templates)
+        # 返回副本: 调用方 (GUI 列表模型) 拿到的列表可随意增删而不污染管理器状态
+        return [RefinementTemplate(**t.to_dict()) for t in self._user_templates]
 
     def get_all_templates(self) -> list[RefinementTemplate]:
         return self.get_builtin_templates() + self.get_user_templates()
@@ -216,15 +231,15 @@ class RefinementTemplateManager:
 
     def save_template(self, template: RefinementTemplate) -> None:
         self.user_templates_dir.mkdir(parents=True, exist_ok=True)
-        path = self.user_templates_dir / f"{template.name}.json"
+        template.is_builtin = False
+        path = self.user_templates_dir / f"{_template_stem(template.name)}.json"
         with open(path, "w", encoding="utf-8") as f:
             json.dump(template.to_dict(), f, indent=2, ensure_ascii=False)
-        template.is_builtin = False
         if template not in self._user_templates:
             self._user_templates.append(template)
 
     def load_template(self, name: str) -> Optional[RefinementTemplate]:
-        path = self.user_templates_dir / f"{name}.json"
+        path = self.user_templates_dir / f"{_template_stem(name)}.json"
         if path.exists():
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -234,11 +249,13 @@ class RefinementTemplateManager:
         return None
 
     def delete_user_template(self, name: str) -> bool:
-        path = self.user_templates_dir / f"{name}.json"
-        if path.exists():
+        """删除用户模板; 返回**是否真的存在**该模板文件 (旧实现恒 True)。"""
+        path = self.user_templates_dir / f"{_template_stem(name)}.json"
+        existed = path.exists()
+        if existed:
             path.unlink()
         self._user_templates = [t for t in self._user_templates if t.name != name]
-        return True
+        return existed
 
     def _load_user_templates(self) -> None:
         self._user_templates = []
@@ -251,7 +268,10 @@ class RefinementTemplateManager:
                 t = RefinementTemplate.from_dict(data)
                 t.is_builtin = False
                 self._user_templates.append(t)
-            except (json.JSONDecodeError, KeyError, TypeError):
+            except (json.JSONDecodeError, KeyError, TypeError,
+                    UnicodeDecodeError, OSError, ValueError):
+                # 坏文件 (非 UTF-8 / 半截 JSON / 无权限) 跳过即可 —— 一个坏模板
+                # 不该让整个模板管理器 (以及启动时的 GUI) 起不来。
                 continue
 
     # ------------------------------------------------------------------

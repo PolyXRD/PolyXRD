@@ -18,6 +18,22 @@ from polyxrd.services.phase_structure_resolver import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _isolated_cif_cache(tmp_path, monkeypatch):
+    """CIF 落盘缓存隔离到 tmp_path。
+
+    解析器本来把库内 BLOB 写到 ``~/.polyxrd/cif_cache``；测试写真实用户目录
+    既不卫生（残留文件互相影响），在只读用户目录 / 受控文件夹环境下还会
+    直接抛 PermissionError，让 4 条用例假失败。v4.0.0 把缓存目录收口成
+    ``AppConfig.cif_cache_dir()``（可用 ``POLYXRD_CIF_CACHE_DIR`` 覆盖），
+    这里把它指到 tmp_path。
+    """
+    from polyxrd.config import get_config
+
+    cache = tmp_path / "cif_cache"
+    monkeypatch.setattr(get_config(), "cif_cache_dir", lambda: cache)
+
+
 # ── 化学式规范化 ──────────────────────────────────────────────
 
 @pytest.mark.parametrize(
