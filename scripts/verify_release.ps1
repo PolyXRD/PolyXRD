@@ -94,14 +94,19 @@ if (-not (Test-Path -LiteralPath $portable)) {
                 Write-Output '      OK: 数据库仅位于 databases\<*.polyDB>\ (v4.1.0 内置默认库)'
             }
             # 内置库完整性: 8 个分段文件一个都不能少
+            # ⚠ 条目名分隔符不可信: Compress-Archive(.NET Framework) 写出的 zip 里
+            #   ZipArchiveEntry.FullName 用的是**反斜杠**，Python zipfile 读出来却是
+            #   正斜杠 —— 所以一律先归一化再比对，别直接拼 '/xxx' 去比。
             $segments = @('meta.json', 'index.sqlite', 'peaks_d.f32', 'peaks_i.u16',
                           'bins.u8', 'elem.u8', 'sites.bin', 'sites_off.i64')
-            $libEntry = $entries | Where-Object { $_.FullName -like 'databases/*.polyDB/meta.json' } |
+            $norm = @{}
+            foreach ($e in $entries) { $norm[$e.FullName.Replace('\', '/')] = $e.Length }
+            $metaName = $norm.Keys | Where-Object { $_ -like 'databases/*.polyDB/meta.json' } |
                         Select-Object -First 1
-            if ($libEntry) {
-                $libDir = ($libEntry.FullName -replace '/meta.json$', '')
+            if ($metaName) {
+                $libDir = ($metaName -replace '/meta\.json$', '')
                 foreach ($seg in $segments) {
-                    if (-not ($entries | Where-Object { $_.FullName -eq "$libDir/$seg" })) {
+                    if (-not $norm.ContainsKey("$libDir/$seg")) {
                         Fail ("内置 polyDB 缺少分段文件: $libDir/$seg")
                     }
                 }
