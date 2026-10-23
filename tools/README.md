@@ -1,4 +1,4 @@
-# tools/ · 外挂物相库构建工具（polyDB v1）
+# tools/ · 外挂物相库构建工具（polyDB v4）
 
 本目录放 **polyDB 外挂库的构建器**，让"库"和"程序"都可复现、可版本管理。
 
@@ -46,7 +46,7 @@ python tools/build_polydb.py --scope inorg --limit 5000 --out D:/tmp/test.polyDB
 
 产物落在 `<数据根>/polydb/COD-Inorg-<YYYYMMDD>.polyDB` 与
 `COD-Full-<YYYYMMDD>.polyDB`（目录容器，格式见
-[`docs/外挂库格式规范-polyDB-v1.md`](../docs/外挂库格式规范-polyDB-v1.md)）。
+[`docs/外挂库格式规范-polyDB-v4.md`](../docs/外挂库格式规范-polyDB-v4.md)）。
 
 **注意**：首轮全量必须带 `--force`（断点续跑会复用旧 part 文件，陈旧 part 会静默吞数据；
 构建器已加条数守恒检查：输入 == 入库 + skip，不平即告警）。

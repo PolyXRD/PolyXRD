@@ -41,7 +41,7 @@
 
 ## 🆕 最新版本 v4.0.0（2026-10-23 · 已发布）
 
-**自研外挂物相库格式 polyDB —— 更小、更快、候选剪枝可证**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.0.0 与 [docs/外挂库格式规范-polyDB-v1.md](docs/外挂库格式规范-polyDB-v1.md)）：
+**自研外挂物相库格式 polyDB —— 更小、更快、候选剪枝可证**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.0.0 与 [docs/外挂库格式规范-polyDB-v4.md](docs/外挂库格式规范-polyDB-v4.md)）：
 
 - **新格式**：`.polyDB` 目录容器 = `meta.json` + `index.sqlite` + 列存二进制（`peaks_d.f32` / `peaks_i.u16`）+ d 分箱位图倒排（`bins.u8`）+ 元素位图（`elem.u8`）+ 位点侧车（`sites.bin` / `sites_off.i64`）。全程只读 mmap 打开、零启动解析，检索链**从不写库**。
 - **两个实测库**：`COD-Inorg-20261021.polyDB` **77,500 相 / 89.9 MB**（旧 sqlite 无机库 1,194.5 MB / 71,199 相 → 体积 **13.9×** 更小、相数还更多）；`COD-Full-20261021.polyDB` **521,361 相 / 1,107.7 MB**。
@@ -329,7 +329,7 @@ PolyXRD 基于众多高质量开源项目构建 —— Python / PySide6 (Qt6) / 
 
 | PolyXRD | COD 无机物库 | COD 全库索引 | PDF2-2004 |
 |---|---|---|---|
-| **4.0.0（当前）** | `…-Databases-COD-inorg-index.zip`（瘦身索引式，旧 sqlite 仍可导入） + `…-Databases-COD-full-index.zip`；**推荐**改用 `COD-Inorg-<日期>.polyDB` / `COD-Full-<日期>.polyDB`（见 `docs/外挂库格式规范-polyDB-v1.md`） | 用户自行准备（ICDD 授权，仓库不分发） |
+| **4.0.0（当前）** | `…-Databases-COD-inorg-index.zip`（瘦身索引式，旧 sqlite 仍可导入） + `…-Databases-COD-full-index.zip`；**推荐**改用 `COD-Inorg-<日期>.polyDB` / `COD-Full-<日期>.polyDB`（见 `docs/外挂库格式规范-polyDB-v4.md`） | 用户自行准备（ICDD 授权，仓库不分发） |
 | 2.x / 1.x | `…-Databases-COD-inorg-index.zip`（瘦身索引式, 默认; 内嵌版仍可导入） | `…-Databases-COD-full-index.zip` | 用户自行准备（ICDD 授权，仓库不分发） |
 | 0.11.0–0.13.2 | `…-Databases-COD-inorg.zip`（v2, 内嵌 CIF） | `…-Databases-COD-full.zip` | 用户自行准备（ICDD 授权，仓库不分发） |
 | 0.10.0 | `…-Databases-COD-inorg.zip`（v1, 仅 d-I 峰） | `…-Databases-COD-full.zip` | 用户自行准备（ICDD 授权，仓库不分发） |

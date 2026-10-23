@@ -40,7 +40,7 @@ Core design philosophy:
 
 ## 🆕 Latest Release v4.0.0 (2026-10-23 · in development)
 
-**polyDB — a purpose-built external phase-database format: smaller, faster, provably safe pruning** (details in Chinese: [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.0.0 and [docs/外挂库格式规范-polyDB-v1.md](docs/外挂库格式规范-polyDB-v1.md)):
+**polyDB — a purpose-built external phase-database format: smaller, faster, provably safe pruning** (details in Chinese: [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.0.0 and [docs/外挂库格式规范-polyDB-v4.md](docs/外挂库格式规范-polyDB-v4.md)):
 
 - **New format**: a `.polyDB` directory container = `meta.json` + `index.sqlite` + columnar binaries (`peaks_d.f32` / `peaks_i.u16`) + a d-bin bitmap inverted index (`bins.u8`) + element bitmaps (`elem.u8`) + an atomic-site sidecar (`sites.bin` / `sites_off.i64`). Opened read-only via mmap with zero startup parsing; the retrieval path never writes.
 - **Two measured libraries**: `COD-Inorg-20261021.polyDB` **77,500 phases / 89.9 MB** (the old sqlite inorganic library was 1,194.5 MB / 71,199 phases → **13.9x** smaller with more phases); `COD-Full-20261021.polyDB` **521,361 phases / 1,107.7 MB**.

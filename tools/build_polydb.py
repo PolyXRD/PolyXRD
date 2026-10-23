@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""polyDB v1 构建器：COD CIF → `*.polyDB` 目录容器。
+"""polyDB v4 构建器：COD CIF → `*.polyDB` 目录容器。
 
-规范见 `PolyXRD/docs/外挂库格式规范-polyDB-v1.md`。要点：
+规范见 `PolyXRD/docs/外挂库格式规范-polyDB-v4.md`。要点：
   · 峰口径：λ=1.5406、2θ 5~100.76°（d≥1.0）、等价反射按 2θ 合并、I 归一 1000；
   · 每相保留 **强度前 K=100** 条峰（不是按 d 截断），行内按 I 降序；
   · 数组段：peaks_d.f32 / peaks_i.u16 / bins.u8（d 分箱位图）/ elem.u8（元素位图）；
@@ -47,14 +47,16 @@ os.environ.setdefault("MKL_NUM_THREADS", "1")
 import numpy as np  # noqa: E402
 
 # ── 路径: 数据根 (COD CIF + 清单 + 中间产物) 与代码仓库分离 ──────────
-# v4.0.0 起本脚本入库到 `PolyXRD/tools/`，而数据仍在仓库同级的
-# `PolyXRD-DataBase/`。默认按这个布局推导，也可用环境变量覆盖:
-#   POLYXRD_DATABASE_ROOT  数据根 (默认 <仓库父目录>/PolyXRD-DataBase)
+# 2026-10-23 起源数据统一放在 `D:/Project/XRD/sync-COD`（PolyXRD 与 XinMatch
+# 两库共用），不再放在 `PolyXRD-DataBase/` 里。可用环境变量覆盖:
+#   POLYXRD_DATABASE_ROOT  数据根 (默认 D:/Project/XRD/sync-COD)
 #   POLYXRD_COD_ROOT       COD CIF 归档根 (默认 <数据根>/COD)
 #   POLYXRD_MANIFEST       清单 sqlite (默认 <数据根>/inorg_manifest.sqlite)
+# 另兼容构库仓库侧的通用变量 XRD_DATA_ROOT（优先级低于上面三个专用变量）。
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BASE = (os.environ.get("POLYXRD_DATABASE_ROOT")
-        or os.path.join(os.path.dirname(_REPO_ROOT), "PolyXRD-DataBase"))
+        or os.environ.get("XRD_DATA_ROOT")
+        or r"D:\Project\XRD\sync-COD")
 MANIFEST = (os.environ.get("POLYXRD_MANIFEST")
             or os.path.join(BASE, "inorg_manifest.sqlite"))
 COD_DIR = (os.environ.get("POLYXRD_COD_ROOT")
