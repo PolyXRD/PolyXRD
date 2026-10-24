@@ -8,7 +8,6 @@ test_data/
 
 # 用户指定不上传的测试代码 (scripts 下的 test_*.py)
 scripts/test_*.py
-
 # 发布产物 / 构建中间目录 (超过 100 MB / 通过 GitHub Release 分发)
 release/
 release_staging/
@@ -28,6 +27,11 @@ _*.py
 # 且 git status 不报错(被忽略)。必须显式放行包初始化文件。
 !__init__.py
 !**/__init__.py
+# v4.1.1: build.bat 的构建步骤脚本必须入库（曾被 _*.py 静默吞掉，
+# 导致 fresh clone 构建不出内置库/VERSION.txt/便携 extras）。
+# 白名单必须放在 `_*.py` 之后，否则会被后续排除规则覆盖。
+!scripts/_build_post.py
+!scripts/_pyinst_collect.py
 # v2.1 P2-4: tests/_cif_old_ref.py 被约 41 个用例导入(缺失时静默 skip),
 # 必须随测试套件入库; _baseline_* 为开发机指标快照, 不入库。
 !tests/_cif_old_ref.py
@@ -150,6 +154,10 @@ _bwork/
 
 # 运行时生成的纯 ASCII 构建副本 (由编排器派生, 不入库)
 build_ascii.bat
+
+# v4.1.1: 内置库工作目录与验收临时副本（都是大文件/临时产物，不入库）
+/databases/
+/*_verify*.exe
 
 # ── 测试/引擎运行残留 (2026-10-23, v4.0.0 评估发现) ──────────
 # 这些是测试与外部引擎在仓库根目录留下的临时工作目录/画布导出, 不该入库。

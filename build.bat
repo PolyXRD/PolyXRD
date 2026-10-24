@@ -6,7 +6,7 @@ set PYTHONUTF8=1
 set PYTHONIOENCODING=utf-8
 
 REM APPVER 是版本号唯一真源（标题 / banner / 输出名 / 安装包名都跟随）
-set APPVER=4.1.0
+set APPVER=4.1.1
 
 title PolyXRD v%APPVER% 打包构建器
 echo ========================================
@@ -90,16 +90,27 @@ if %errorlevel% neq 0 (
     echo [警告] ICU 复制阶段异常, 请检查 PySide6 Qt 启动依赖
 )
 
-REM v4.1.0: 默认库**内置** —— 把 COD-Inorg polyDB 复制进 dist\PolyXRD\databasesREM (只要是无机物库; 解压即可检索, 无需先下载外挂库)。跳过用 set POLYXRD_NO_BUNDLE_DB=1
+REM v4.1.0: 默认库内置 —— 把 COD-Inorg polyDB 复制进 dist\PolyXRD\databases
+REM (只要是无机物库; 解压即可检索, 无需先下载外挂库)。跳过用 set POLYXRD_NO_BUNDLE_DB=1
 echo.
 echo [步骤 2.5/6] 内置默认库 COD-Inorg (polyDB) 复制到 dist\PolyXRD\databases ...
 echo.
 "%PYTHON%" scripts\_build_post.py bundle-polydb
+if %errorlevel% neq 0 (
+    echo [错误] 内置默认库复制失败, 构建中止!
+    pause
+    exit /b 1
+)
 
 REM 兜底: 断言库布局正确 (只允许 databases\<*.polyDB>\ 的 8 个分段文件)
 echo.
 echo [检查] 数据库布局 (内置 polyDB + 无意外库文件)...
 "%PYTHON%" scripts\_build_post.py db-layout
+if %errorlevel% neq 0 (
+    echo [错误] 内置库布局检查未通过, 构建中止!
+    pause
+    exit /b 1
+)
 
 echo.
 echo [步骤 3/6] 创建 Inno Setup 安装程序...
@@ -114,6 +125,11 @@ echo.
 echo [步骤 3/6 前置] 写 VERSION.txt (必须先于 Inno 打包, 否则安装包内残留旧版本)...
 echo.
 "%PYTHON%" scripts\_build_post.py version %APPVER%
+if %errorlevel% neq 0 (
+    echo [错误] VERSION.txt 写入失败, 构建中止!
+    pause
+    exit /b 1
+)
 
 REM -- flavor 门禁 (v4.1.0 修复) ------------------------------------------------
 REM   Setup 与便携包是**两个不同变体**的两个产物, 却落在同一批次输出目录:
@@ -125,6 +141,13 @@ REM   两个变体的产物无法区分(同名), 发布时极易装错/发错。
 REM   本次修复还顺带解决了首版 Setup 把**便携版专属文件**(启动 PolyXRD.bat /
 REM   安全模式启动.bat / 便携版使用说明.txt)一起打进安装根目录的问题 ——
 REM   根因是 portable-extras 与打包步骤无条件执行, 顺序一换就串味。
+REM v4.1.1: release 分支显式清掉可能残留的便携版专属文件
+REM (dist 未被完全清空时, 上次 internal 构建的三件套会串进 Setup)
+if /i not "%POLYXRD_FLAVOR%"=="internal" (
+    del /q "dist\PolyXRD\启动 PolyXRD.bat" 2>nul
+    del /q "dist\PolyXRD\安全模式启动.bat" 2>nul
+    del /q "dist\PolyXRD\便携版使用说明.txt" 2>nul
+)
 if /i "%POLYXRD_FLAVOR%"=="internal" goto :skip_iscc
 echo [flavor] release 变体: 编译正式安装包 (Setup)...
 echo.
@@ -148,11 +171,23 @@ goto :no_iscc
 
 :have_iscc
 %ISCC% /DAppVersion=%APPVER% /O"installer_output" /F"PolyXRD-Setup-v%APPVER%" scripts\PolyXRD-Setup.iss
-if %errorlevel% neq 0 (
-    echo [警告] Inno 编译失败, 跳过安装程序
+if %errorlevel% equ 0 goto :iscc_ok
+echo [错误] Inno 编译失败!
+if /i not "%POLYXRD_FLAVOR%"=="internal" (
+    pause
+    exit /b 1
 )
+goto :no_iscc
+
+:iscc_ok
+goto :skip_iscc
 
 :no_iscc
+if /i not "%POLYXRD_FLAVOR%"=="internal" (
+    echo [错误] release 构建需要 Inno Setup, 但未找到 —— 构建中止!
+    pause
+    exit /b 1
+)
 :skip_iscc
 echo.
 
@@ -164,6 +199,11 @@ if /i not "%POLYXRD_FLAVOR%"=="internal" goto :skip_portable
 echo [flavor] internal 变体: 生成便携包附加文件 + 便携压缩包...
 echo.
 "%PYTHON%" scripts\_build_post.py portable-extras %APPVER%
+if %errorlevel% neq 0 (
+    echo [错误] 便携版附加文件生成失败, 构建中止!
+    pause
+    exit /b 1
+)
 
 echo.
 echo [步骤 4/6] 创建便携压缩包 (ZIP)...
@@ -179,26 +219,29 @@ if %errorlevel% neq 0 (
 :skip_portable
 
 echo.
-echo [步骤 5/6] 校验产物 + 生成独立外挂数据库 ZIP (polyDB) + 计算 SHA-256...
+echo [步骤 5/6] 校验产物 + 计算 SHA-256 (数据库包默认不打包)...
 echo.
-echo [信息] v4.0.0 起发布 polyDB 目录容器 (每个库各自成包, 用户按需只下一个):
-echo          PolyXRD-v%APPVER%-Databases-COD-inorg-polyDB.zip  (COD 无机物库 77,500 相 / ~90 MB)
-echo          PolyXRD-v%APPVER%-Databases-COD-full-polyDB.zip   (COD 全库 521,361 相 / ~1.1 GB)
-echo        找不到 polyDB 目录时自动退回旧的 sqlite 三包逻辑 (兼容)。
+echo [政策] 主仓库 Release 只发程序 (Setup + Portable + SHA256), 不上传任何数据库包。
+echo        默认库 COD-Inorg 已内置在安装包/便携包内; 扩展库 (COD-Full 等) 由独立仓库
+echo        https://github.com/PolyXRD/PolyXRD-DataBase 的 Releases 分发。
+echo        本步骤默认不生成/校验外挂数据库包 (本地归档请手工加 -PackDbPackages)。
 echo.
 echo [重要] PDF2-2004 是 ICDD 版权商品库: 永远不要上传到 GitHub / Release。
-echo        发布时只传 Setup + Portable + SHA256 + 两个 COD polyDB 包。
 echo.
 
 set PWSH=pwsh
 where pwsh >nul 2>&1 || set PWSH=powershell
-REM 便携包由 internal 变体那次构建产出; release 构建时它可能还不存在 -> 跳过该项
+REM v4.1.1: 验收口径由 flavor 决定 (release -> Setup; internal -> Portable),
+REM 不再用"文件是否存在"自证跳过 (zip 生成失败也会被跳过并误报 OK)。
 set VERIFY_EXTRA=
-if not exist "installer_output\PolyXRD-v%APPVER%-Portable.zip" set VERIFY_EXTRA=-SkipPortable
+if /i "%POLYXRD_FLAVOR%"=="internal" set VERIFY_EXTRA=-SkipSetup
+if /i not "%POLYXRD_FLAVOR%"=="internal" set VERIFY_EXTRA=-SkipPortable
 %PWSH% -NoProfile -ExecutionPolicy Bypass -File "scripts\verify_release.ps1" -Version %APPVER% %VERIFY_EXTRA%
 if %errorlevel% neq 0 (
     echo.
-    echo [警告] 产物校验未全部通过, 请检查上面的 FAIL 项!
+    echo [错误] 发布产物校验未通过; 见上方 FAIL 项; 构建中止!
+    pause
+    exit /b 1
 )
 
 echo.

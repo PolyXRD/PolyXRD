@@ -637,7 +637,13 @@ class PolyDatabase:
         }
 
     def get_atomic_sites(self, eid: int) -> list[dict]:
-        """取非对称单位原子位点（精修用）。缺失返回空列表。"""
+        """取**非对称单位**原子位点（CIF 原样）。缺失返回空列表。
+
+        ⚠ 调用方需按空间群展开后才能进"全胞"语义的精修链路：
+        本项目的 ``phase_identifier._make_polydb_phase`` 出口已用
+        ``phase_cif.expand_sites_by_symmetry`` 展开。直接拿本方法结果去
+        构造 pymatgen ``Structure`` 会给高对称相造出假峰（v4.1.1 修复）。
+        """
         arr = self._get_arrays()
         if arr is None:
             return []

@@ -115,6 +115,18 @@ def get_phase_cif_text(phase: Phase) -> tuple[str, Optional[int]]:
         if text.strip():
             return text, resolve_cod_id(phase)
 
+    # 1b) 无 CIF 文件但有原子位点 → 由位点反生成 (v4.1.1)
+    #     内置 polyDB 候选就是这种形态；旧 COD sqlite 已不在发布包内。
+    if getattr(phase, "atomic_sites", None) and getattr(phase, "lattice", None):
+        try:
+            from polyxrd.services.phase_cif import phase_to_cif_text
+
+            text = phase_to_cif_text(phase)
+            if text.strip():
+                return text, resolve_cod_id(phase)
+        except Exception:  # noqa: BLE001 - 反生成失败继续走旧库回退
+            pass
+
     db = _cod_db()
 
     # 2) 库编号直取 (五级回退)。用户库条目 (9 亿段 ID) 的 CIF 存在

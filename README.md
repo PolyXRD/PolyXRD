@@ -7,7 +7,7 @@
     峰检测 &nbsp;·&nbsp; 多物相定性检索 &nbsp;·&nbsp; Rietveld 结构精修 &nbsp;·&nbsp; Le Bail 晶胞精修 &nbsp;·&nbsp; 指标化 &nbsp;·&nbsp; 3D 结构可视化 &nbsp;·&nbsp; 内置 COD 无机物库 (polyDB) + 多库外挂检索
   </p>
   <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v4.1.0-blue?style=flat-square" /></a>
+    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v4.1.1-blue?style=flat-square" /></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
     &nbsp;
@@ -29,22 +29,45 @@
 核心设计哲学：
 
 - **无需 Python 环境** — 安装包内置完整 Python 3.10 + PySide6 + pymatgen + scipy，目标机器开箱即用。
-- **开箱即检索 + 其余库外挂** — **v4.1.0 起便携包/安装包内置默认库 `COD-Inorg` polyDB**（78,036 相，解压即用，无需任何下载或挂载）；可选扩展库（COD 全库等）与**库构建工具、格式规范**统一在独立仓库 [PolyXRD-DataBase](https://github.com/PolyXRD/PolyXRD-DataBase) 维护并分发。PDF2-2004 为 ICDD 版权库，永不随包分发。
+- **开箱即检索 + 其余库外挂** — **v4.1.0 起便携包/安装包内置默认库 `COD-Inorg` polyDB**（77,500 相，解压即用，无需任何下载或挂载）；可选扩展库（COD 全库等）与**库构建工具、格式规范**统一在独立仓库 [PolyXRD-DataBase](https://github.com/PolyXRD/PolyXRD-DataBase) 维护并分发。PDF2-2004 为 ICDD 版权库，永不随包分发。
 - **算法可控 + 结果可复现** — 预处理/拟合的每一步参数可保存、可回放，项目文件 (`.polyxrd` JSON) 全序列化。
 - **UI 与算法分层** — MVVM 架构，`services/` 层是纯算法、不依赖 Qt，可独立单元测试。
 
 > 📋 **版本变更记录**：见 [docs/CHANGELOG.md](docs/CHANGELOG.md)。
-> ✅ **v4.1.0 发布检查清单（构建/产物/验收记录）**：见 [docs/发布检查清单-v4.1.0.md](docs/发布检查清单-v4.1.0.md)。
+> ✅ **v4.1.1 发布检查清单（构建/产物/验收记录）**：见 [docs/发布检查清单-v4.1.1.md](docs/发布检查清单-v4.1.1.md)。
+> ✅ v4.1.0 发布检查清单：见 [docs/发布检查清单-v4.1.0.md](docs/发布检查清单-v4.1.0.md)。
 > ✅ v4.0.0 发布检查清单：见 [docs/发布检查清单-v4.0.0.md](docs/发布检查清单-v4.0.0.md)。
 > 🏗️ **代码结构与分层说明**：见 [docs/代码结构说明.md](docs/代码结构说明.md)。
 
 ---
 
-## 🆕 最新版本 v4.1.0（2026-10-23 · 已发布）
+## 🆕 最新版本 v4.1.1（2026-10-24 · 已发布）
+
+**hotfix：默认库精修正确性 + 干净安装外部引擎 + 构建可复现 + 发布政策收口**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.1.1 与 [docs/代码评估-v4.1.0.md](docs/代码评估-v4.1.0.md)）：
+
+- **修复默认库精修模拟峰错误（P1）**：polyDB 侧车存的是**非对称单位**位点，v4.1.0 当全胞直构 → 高对称相出现假峰。v4.1.1 在出口按空间群展开（幂等）并在精修侧兜底；Corundum 实测由「6.8°/100% 假峰」恢复为 **57.49/43.34/35.14** 真主峰。
+- **干净安装也能用 GSAS-II / MAUD（P1）**：只有内置 polyDB、没有 CIF 文件时，resolver 现从原子位点反生成 CIF 落盘并回填 `cif_path`（实测 1.3 ms → 4 ms，`structure match 1/1`）；CIF 导出同样支持位点回退。
+- **构建可复现（P0）**：`scripts/_build_post.py` 曾被 `.gitignore` 吞掉、从未入库（fresh clone 构建必丢内置库/VERSION/便携 extras）；现已强制入库 + 守卫测试，并把 bundle/db-layout/version/portable-extras/验收全部改为**硬失败**。
+- **发布政策收口**：主仓库 Release **只发程序 3 附件**（Setup + Portable + SHA256），**不再上传数据库包**；默认库已内置，扩展库统一在 [PolyXRD-DataBase](https://github.com/PolyXRD/PolyXRD-DataBase) 的 Releases 分发。
+- **文档勘误**：内置库相数统一为 **77,500**（与内置库 `meta.json` 一致）；README-EN 同步到 v4.1.1。
+
+| 产物 | 体积 | SHA-256（前 16 位） | 说明 |
+|---|---|---|---|
+| `PolyXRD-Setup-v4.1.1.exe` | 286.8 MB | `8a57d36f339b…` | 正式版安装包（带注册），内置 COD-Inorg 默认库 |
+| `PolyXRD-v4.1.1-Portable.zip` | 428.2 MB | `257909776e54…` | 便携包（**内部评估版**：状态栏红字「内部评估版本」），内置 COD-Inorg |
+| `SHA256-v4.1.1.txt` | — | — | 以上两个产物的 SHA-256 |
+
+👉 **已发布**：[Release v4.1.1](https://github.com/PolyXRD/PolyXRD/releases/tag/v4.1.1)（3 附件，不含数据库；远端 digest 与本地清单逐件一致）。
+
+> PDF2-2004 为 ICDD 版权库，永不出现在 Release 里；两个 polyDB 库包在 [PolyXRD-DataBase Releases](https://github.com/PolyXRD/PolyXRD-DataBase/releases) 分发。
+
+---
+
+## 上一版 v4.1.0（2026-10-23 · 已发布）
 
 **COD-Inorg 成为唯一内置默认库 + 旧格式运行期代码全部删除**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.1.0）：
 
-- **开箱即检索**：便携包与安装包**内置** `COD-Inorg-20261021.polyDB`（78,036 相 / 86 MiB，8 个分段文件），
+- **开箱即检索**：便携包与安装包**内置** `COD-Inorg-20261021.polyDB`（77,500 相 / 86 MiB，8 个分段文件），
   解压/安装后直接检索，不再需要先下载库包再挂载。`POLYXRD_NO_BUNDLE_DB=1` 可退化为"纯客户端小包"。
 - **旧格式运行期代码删除**：`DB_KINDS` 只剩 `pdf2`；`cod_inorganics` / `cod_index` / `xinmatch` 三个旧槽位与
   `services/xinmatch_db.py` 一并移除，`phase_identifier` 的 6 个旧入口删除 —— 检索统一走 `identify_with_polydb`。
@@ -56,8 +79,7 @@
 |---|---|---|---|
 | `PolyXRD-Setup-v4.1.0.exe` | 288.3 MiB | `d3ae6891c42442fc…` | 正式版安装包（带注册），**内置 COD-Inorg 库**；不含便携版辅助文件 |
 | `PolyXRD-v4.1.0-Portable.zip` | 430.7 MiB | `fa6be55174df08f7…` | 便携包（**内部评估版**：状态栏红字「内部评估版本」），内置 COD-Inorg 库 |
-| `PolyXRD-v4.1.0-Databases-COD-inorg-polyDB.zip` | 48.1 MiB | `d9e57d11ced3082e…` | COD 无机物库独立包（给已有主程序换库/补库） |
-| `SHA256-v4.1.0.txt` | — | — | 以上产物的 SHA-256 |
+| `SHA256-v4.1.0.txt` | — | — | 程序产物的 SHA-256（数据库包自 v4.1.1 起不在主仓库发布） |
 
 👉 **已发布**：[Release v4.1.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v4.1.0)
 
@@ -86,10 +108,10 @@
 |---|---|---|
 | `PolyXRD-Setup-v4.0.0.exe`（正式版安装包，带注册，不含数据库） | 249.1 MB | `b467e8d747bebee9…` |
 | `PolyXRD-v4.0.0-Portable.zip`（正式版便携包，解压即用） | 389.0 MB | `9c4e99e9bcad84c7…` |
-| `PolyXRD-v4.0.0-Databases-COD-inorg-polyDB.zip`（无机物库 77,500 相） | 48.1 MB | `d9e57d11ced3082e…` |
-| `PolyXRD-v4.0.0-Databases-COD-full-polyDB.zip`（全库 521,361 相） | 710.3 MB | `191246b7ee2bcc10…` |
+| `PolyXRD-v4.0.0-Databases-COD-inorg-polyDB.zip`（无机物库 77,500 相；**本地归档，未随 Release 发布**） | 48.1 MB | `d9e57d11ced3082e…` |
+| `PolyXRD-v4.0.0-Databases-COD-full-polyDB.zip`（全库 521,361 相；**本地归档，未随 Release 发布**） | 710.3 MB | `191246b7ee2bcc10…` |
 
-> 完整校验值见 `SHA256-v4.0.0.txt`（构建时生成，已独立复核 4/4 一致）。
+> 完整校验值见 `SHA256-v4.0.0.txt`（构建时生成，发布前已逐件复核）。
 > 发布验收：全量回归 1567 passed / 6 skipped / 1 failed（唯一失败为本机 LibreOffice 环境限制，
 > 改动前即失败）；便携包解压 13,151 文件无业务数据库、离屏启动 `shown visible=True`、crash 日志 0；
 > 两个 polyDB 库 `polydb_verify` 全绿；功能冒烟 10/10。
@@ -219,8 +241,8 @@ python scripts/make_reg_code.py --verify PXRD1-XXXX-...  # 校验并回显单位
 - 路径优先级：**GUI 挂载的持久化路径 (`~/.polyxrd/user_db_paths.json`) > 默认位置（存在才用）> `~/.polyxrd/cif_db/` 兜底**
 - 导入时自动**校验库类型**：COD 无机物与 PDF2 都叫 `phases` 表，选错槽位会提示而非静默失败；XinMatch 格式库按"四表齐全 + 特征列"判别，半成品库（只有 `entries` 没有 `peaks`）会被拒绝
 - 导入后立即生效，**无需重启**；物相分析面板的「数据库源」下拉同步刷新，未挂载的源自动置灰
-- 各库完全独立，可只装其中一个；一个都不装也能用内置的 **106 种参考物相**
-- **数据库从哪下载**（v4.0.0 起）：程序仓库与 Release **只发程序**；两个 polyDB 库包统一在 [PolyXRD-DataBase 的 Releases](https://github.com/PolyXRD/PolyXRD-DataBase/releases) 发布（当前 tag `20261021`，**以该仓库 Releases 页面为准**），构建工具与格式规范也在这个仓库。
+- 各库完全独立，可只装其中一个；默认库 COD-Inorg **已内置**（77,500 相），另有内置 **106 种参考物相**兜底
+- **数据库从哪下载**（v4.1.1）：程序仓库与 Release **只发程序（3 附件）**；默认库 COD-Inorg **已内置**，无需下载；扩展库（COD 全库等）统一在 [PolyXRD-DataBase 的 Releases](https://github.com/PolyXRD/PolyXRD-DataBase/releases) 发布（当前 tag `20261021`，以该仓库页面为准），构建工具与格式规范也在这个仓库。
 
 ---
 
@@ -244,7 +266,7 @@ python scripts/make_reg_code.py --verify PXRD1-XXXX-...  # 校验并回显单位
 ⑤ 开始使用!
 ```
 
-> **发布口径**（v4.0.0，已发布）：本仓库 Release 3 附件 = **Setup 安装包（249.1 MB）+ Portable 便携包（389.0 MB）+ SHA256**，
+> **发布口径**（v4.1.1，已发布）：本仓库 Release **恒 3 附件** = **Setup 安装包（286.8 MB）+ Portable 便携包（428.2 MB）+ SHA256**，
 > **不含任何数据库**。数据库统一在 [PolyXRD-DataBase](https://github.com/PolyXRD/PolyXRD-DataBase) 仓库的 Releases 分发：
 > COD-Inorg（48.1 MB / 77,500 相）与 COD-Full（710.3 MB / 521,361 相）。
 > PDF2-2004 为 ICDD 版权库，**任何仓库都不分发**，需要时自行准备库文件。
@@ -257,7 +279,7 @@ python scripts/make_reg_code.py --verify PXRD1-XXXX-...  # 校验并回显单位
 > 持有正版授权的用户可自行准备 `PDF2_2004.sqlite` 并在「外挂数据库管理…」中作为 PDF2 槽位导入；
 > 未授权时该槽位留空即可，其余功能不受影响。
 
-> 一个库都不装也能用：程序内置 **106 种**常见参考物相。
+> 内置 COD-Inorg 默认库（77,500 相）开箱即可检索；另有 **106 种**常见参考物相兜底。
 > 详细说明与排错见上方各段落（外挂数据库管理对话框各槽位已自带说明）。
 
 ### 方式 B · 开发者 / 二次开发 (源码运行)

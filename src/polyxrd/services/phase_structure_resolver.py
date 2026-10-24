@@ -14,7 +14,11 @@
    (pymatgen 模拟峰) 合并进原物相 —— **保留原 name / formula /
    match_score**, 勾选集合与谱图叠加的身份不受影响;
 5. cif_path 若只存在于库内 BLOB (无机库 cif_gz), 落盘到
-   ``~/.polyxrd/cif_cache/COD<id>.cif`` —— GSAS-II 桥要求磁盘文件。
+   ``~/.polyxrd/cif_cache/COD<id>.cif`` —— GSAS-II 桥要求磁盘文件;
+6. v4.1.1: 相**已有展开后的原子位点**但无 cif_path 时 (内置 polyDB 默认库
+   的典型形态), 直接用 :func:`phase_cif.phase_to_cif_text` 反生成 CIF 落盘
+   并回填 cif_path —— 否则干净安装下 ``_phases_have_structure`` 恒 False,
+   GSAS-II/MAUD 会被静默跳过, 与"开箱即用 + 真 Rietveld"承诺不符。
 
 日志用 ``[cif]`` 前缀的技术行 (与引擎的 [start]/[data]/[phase] 同风格,
 不做本地化), 经回调交给精修页的过程日志面板。
@@ -225,6 +229,14 @@ class PhaseStructureResolver:
             return phase, f"{name}: 已有结构, 跳过 ({Path(cif_path).name})"
 
         key = (name, formula)
+
+        # 0.5) 有位点、无 CIF 文件 → 由位点反生成 CIF 落盘并回填（v4.1.1）
+        #      内置 polyDB 候选就是这种形态：晶胞 + 全胞位点，没有 CIF 文件。
+        synth = self._synthesize_cif_from_sites(phase)
+        if synth is not None:
+            self._cache[key] = synth
+            return synth, f"{name}: 由原子位点生成 CIF ({Path(synth.cif_path).name})"
+
         cached = self._cache.get(key)
         if cached is not None:
             if cached is phase:
@@ -307,6 +319,53 @@ class PhaseStructureResolver:
         return phase, note
 
     # ── 工具 ────────────────────────────────────────────────
+
+    @staticmethod
+    def _synthesize_cif_from_sites(phase: Phase) -> Optional[Phase]:
+        """有位点、无 CIF 文件时反生成 CIF 落盘并回填 ``cif_path``。
+
+        v4.1.1: 内置 polyDB 默认库的候选带完整晶胞 + 原子位点，但没有 CIF
+        文件；旧 COD sqlite 又已从发布包移除。若这里不兜底，干净安装下
+        ``_phases_have_structure`` 恒为 False → auto 引擎永远退回 builtin，
+        GSAS-II/MAUD 装了也用不上（且日志误报"COD 库不可用"）。
+
+        落盘位置 = ``AppConfig.cif_cache_dir()``（可写、可被 GSAS-II 读取）；
+        失败时返回 None（调用方继续走旧的 COD 库/参考峰回退，不劣化）。
+        """
+        sites = getattr(phase, "atomic_sites", None)
+        if not sites or getattr(phase, "lattice", None) is None:
+            return None
+        cif_path = getattr(phase, "cif_path", None)
+        if cif_path and Path(cif_path).exists():
+            return None
+        try:
+            import copy
+            import hashlib
+
+            from polyxrd.config import get_config
+            from polyxrd.services.phase_cif import phase_to_cif_text
+
+            text = phase_to_cif_text(phase)
+            if not text.strip():
+                return None
+            cache_dir = get_config().cif_cache_dir()
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            db_id = getattr(phase, "db_id", None)
+            if isinstance(db_id, int) and db_id > 0:
+                stem = f"COD{db_id}"
+            else:
+                stem = "PHASE-" + hashlib.sha1(
+                    (phase.name or phase.formula or "?").encode("utf-8")
+                ).hexdigest()[:12]
+            out = cache_dir / f"{stem}.cif"
+            if (not out.exists()
+                    or out.read_text(encoding="utf-8", errors="ignore") != text):
+                out.write_text(text, encoding="utf-8")
+            copy_phase = copy.deepcopy(phase)
+            copy_phase.cif_path = str(out)
+            return copy_phase
+        except Exception:  # noqa: BLE001 - 生成失败不阻断精修
+            return None
 
     @staticmethod
     def _clean_mineral(name: str) -> str:

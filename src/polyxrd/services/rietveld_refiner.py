@@ -1147,12 +1147,24 @@ class RietveldRefiner:
             calc = XRDCalculator(wavelength=float(wavelength))
 
             # ── 路径 1 (v0.15.2): atomic_sites 直构 Structure ──────────
-            # 位点已经是展开全胞 (cod_local.get_phase 出口保证)。旧路径强制
-            # 走 CIF 全文 → CifParser, 会对"全胞位点 × 空间群操作"做二次
-            # 展开 (15R SiC 192 位点 × 192 操作 ≈ 3.7 万候选), 纯 Python
+            # 位点应当是展开全胞 (cod_local.get_phase / user_db / polyDB 出口
+            # 均已保证)。v4.1.1 起这里再做一次**幂等**展开兜底: 旧项目文件
+            # 里可能保存着修复前 polyDB 的"非对称单位"位点, 不展开会给
+            # 高对称相造出假峰 (Corundum 实测 6.8° 假峰 100%)。
+            # 旧路径强制走 CIF 全文 → CifParser, 会对"全胞位点 × 空间群操作"
+            # 做二次展开 (15R SiC 192 位点 × 192 操作 ≈ 3.7 万候选), 纯 Python
             # 匹配去重实测小时级; 直构路径与 get_phase 同一数学, 秒级。
             sites = getattr(phase, "atomic_sites", None)
             if sites and getattr(phase, "lattice", None) is not None:
+                try:
+                    from polyxrd.services.phase_cif import (
+                        expand_sites_by_symmetry,
+                    )
+
+                    sites = expand_sites_by_symmetry(
+                        list(sites), getattr(phase, "space_group", "") or "")
+                except Exception:  # noqa: BLE001 - 展开失败保持原样
+                    pass
                 try:
                     from pymatgen.core import Lattice, Structure
 

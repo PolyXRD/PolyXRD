@@ -365,15 +365,13 @@ class DatabaseManagerDialog(QDialog):
     def _pkg_hint(self, row: dict) -> str:
         spec = DB_KINDS_BY_KEY.get(row["kind"])
         if spec is None:
-            # polyDB 是本项目自有的目录容器, 随 Release 分发 (v4.1.0 起还是默认库):
-            # 必须指到具体那个 zip, 否则用户看着"没有下载包"无从下手。
+            # polyDB 库包统一由独立仓库 PolyXRD-DataBase 发布（v4.1.1 政策：
+            # 主仓库 Release 只发程序、不上传数据库）；默认库已内置, 这里给的是
+            # “扩展库去哪下”的指引, 不再编造主仓库附件名。
             if row["kind"] == "polydb":
-                variant = row.get("variant") or "cod-inorg"
-                tag = "COD-Inorg" if variant == "cod-inorg" else "COD-Full"
                 return tr(
-                    "db_manager.pkg_hint",
-                    pkg=f"PolyXRD-v{_app_version()}-Databases-{tag}-polyDB.zip",
-                    file=f"{tag}-<日期>.polyDB/")
+                    "db_mounts.pkg_polydb_repo",
+                    url="https://github.com/PolyXRD/PolyXRD-DataBase/releases")
             return tr("db_mounts.pkg_free")
         version = _app_version()
         pkg = db_import.release_package_name(spec.key, version)

@@ -185,8 +185,12 @@ translations = {
             "polydb_inorg": "COD inorganics (polyDB)",
             "polydb_full": "COD full (polyDB)",
             "pdf2": "PDF2-2004",
+            "user": "User database",
         },
-        "pkg_free": "This database is generated or managed locally; there is no download package."
+        "pkg_free": "This database is generated or managed locally; there is no download package.",
+        "pkg_polydb_repo": "polyDB libraries are distributed from a separate repository: {url}\n"
+                           "Download and unpack one, then click \"Mount folder...\" "
+                           "(the COD-Inorg default library is already bundled)."
     },
     "user_db": {
         "title": "Manage User Database",

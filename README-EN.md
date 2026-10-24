@@ -4,10 +4,10 @@
   <p>
     <b>Comprehensive Analysis Suite for Polycrystalline X-ray Diffraction (XRD) Patterns</b>
     <br />
-    Peak detection &nbsp;·&nbsp; Multi-phase qualitative search &nbsp;·&nbsp; Rietveld structure refinement &nbsp;·&nbsp; Le Bail cell refinement &nbsp;·&nbsp; Indexing &nbsp;·&nbsp; 3D structure visualization &nbsp;·&nbsp; Three external databases (COD Inorganics / COD Full / PDF2-2004) plus XinMatch-format libraries
+    Peak detection &nbsp;·&nbsp; Multi-phase qualitative search &nbsp;·&nbsp; Rietveld structure refinement &nbsp;·&nbsp; Le Bail cell refinement &nbsp;·&nbsp; Indexing &nbsp;·&nbsp; 3D structure visualization &nbsp;·&nbsp; Bundled COD-Inorg polyDB default library + external COD-Full / PDF2-2004
   </p>
   <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v4.0.0-blue?style=flat-square" /></a>
+    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v4.1.1-blue?style=flat-square" /></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
     &nbsp;
@@ -29,7 +29,7 @@
 Core design philosophy:
 
 - **No Python environment required** — the installer bundles a complete Python 3.10 + PySide6 + pymatgen + scipy stack; target machines work out of the box.
-- **Strict separation of program and databases** — the main program (installer / portable package) ships with no database. Database bodies, builder tools and the format specification live in a **separate repository**, [PolyXRD-DataBase](https://github.com/PolyXRD/PolyXRD-DataBase), and are distributed through its Releases (since v4.0.0 in the **polyDB** format: COD-Inorg 77,500 phases / 48.1 MB, COD-Full 521,361 phases / 710.3 MB). **This repository releases program artifacts only.**
+- **Bundled default library, external extensions** — since v4.1.0 the installer / portable package **bundles the COD-Inorg polyDB default library** (77,500 phases) so search works out of the box; extension libraries (COD-Full etc.), the builder tools and the format specification live in a **separate repository**, [PolyXRD-DataBase](https://github.com/PolyXRD/PolyXRD-DataBase), distributed through its Releases. **This repository releases program artifacts only — no databases are uploaded here.** PDF2-2004 is an ICDD commercial library and is never redistributed.
 - **Controllable algorithms + reproducible results** — every preprocessing/fitting step is parameterized, saveable, and replayable; project files (`.polyxrd` JSON) are fully serialized.
 - **UI / algorithm layering** — MVVM architecture; the `services/` layer is pure algorithm code with no Qt dependency and can be unit-tested independently.
 
@@ -38,21 +38,29 @@ Core design philosophy:
 
 ---
 
-## 🆕 Latest Release v4.0.0 (2026-10-23 · in development)
+## 🆕 Latest Release v4.1.1 (2026-10-24 · released)
 
-**polyDB — a purpose-built external phase-database format: smaller, faster, provably safe pruning** (details in Chinese: [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.0.0 and [docs/外挂库格式规范-polyDB-v4.md](docs/外挂库格式规范-polyDB-v4.md)):
+**Hotfix: default-library refinement correctness + external engines on a clean install + reproducible build + release-policy cleanup** (details in Chinese: [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.1.1):
 
-- **New format**: a `.polyDB` directory container = `meta.json` + `index.sqlite` + columnar binaries (`peaks_d.f32` / `peaks_i.u16`) + a d-bin bitmap inverted index (`bins.u8`) + element bitmaps (`elem.u8`) + an atomic-site sidecar (`sites.bin` / `sites_off.i64`). Opened read-only via mmap with zero startup parsing; the retrieval path never writes.
-- **Two measured libraries**: `COD-Inorg-20261021.polyDB` **77,500 phases / 89.9 MB** (the old sqlite inorganic library was 1,194.5 MB / 71,199 phases → **13.9x** smaller with more phases); `COD-Full-20261021.polyDB` **521,361 phases / 1,107.7 MB**.
-- **Speed**: COD-Inorg end-to-end retrieval **0.5-0.7 s/sample** (old sqlite chain 6.3-11 s); COD-Full **~2 s** (brute-force scoring on the same library: 45-53 s).
-- **Accuracy**: on all 13 benchmark samples the top-100 returned by `search` is **identical, item by item**, to an unprunded brute-force ranking — including the regression that had dropped 3 true phases on sample 5-1.
-- **List-style database manager**: one row per mounted library, **multiple libraries of the same kind** (one on the internal disk + one on a portable drive, custom subsets, a colleague's export); mount from any folder; "set as current" explicitly selects the search source; the old four config slots migrate with zero action.
-- **Explicit `db_path` on every retrieval entry point** (`polydb` / `cod_inorganics` / `cod_index` / `pdf2` / `xinmatch`), so several libraries of one kind are queried independently; fixes a state leak where an explicit path poisoned the shared identifier instance and later switches kept querying the old library.
-- **Plus a full code assessment** (9 P0/P1 items + a batch of P2, all with regression tests): default peak detection silently ran a joint curve fit (14.2 s → 11 ms), savgol/median windows larger than the pattern crashed, moving-average endpoints lost 45%, European decimals parsed as thousands separators (10x silent error), PDF2 coverage recomputed on every refresh (0.23 s → 0.014 s cached), SVG export NaN/degenerate axes, missing i18n keys, MAUD temp-directory leak, and silent structure loss when the CIF cache directory was not writable.
+- **Fixed wrong simulated peaks from the bundled default library (P1)**: polyDB's `sites.bin` stores **asymmetric-unit** sites, but v4.1.0 fed them to the refiner as a full cell — high-symmetry phases got fake peaks (Corundum measured a 6.8° fake peak at 100% while the true 35.14/43.34 peaks were lost). v4.1.1 expands sites by space group at the polyDB exit (idempotent) and adds a defensive expansion in the refiner; Corundum now gives **57.49/43.34/35.14**.
+- **GSAS-II / MAUD available on a clean install (P1)**: when only the bundled polyDB is present (no CIF file), the resolver now synthesizes a CIF from atomic sites into the CIF cache and back-fills `cif_path` (1.3 ms → 4 ms, `structure match 1/1`); CIF export has the same fallback.
+- **Reproducible build (P0)**: `scripts/_build_post.py` had been silently ignored by `.gitignore` and was never committed (a fresh clone could not bundle the default library, write VERSION.txt or portable extras). It is now tracked, guarded by a test, and every critical build step fails hard on error.
+- **Release policy cleanup**: this repository's Releases ship **program artifacts only (3 assets)** — no database packages; the default library is bundled and extension libraries are distributed by [PolyXRD-DataBase](https://github.com/PolyXRD/PolyXRD-DataBase/releases).
+- **Documentation errata**: bundled library phase count is **77,500** (matching the bundled `meta.json`); English README synced to v4.1.1.
 
-> 📦 Databases are not distributed from this repository; download them from [PolyXRD-DataBase Releases](https://github.com/PolyXRD/PolyXRD-DataBase/releases). PDF2-2004 is a commercial ICDD library and never appears in any Release.
+| Asset | Size | SHA-256 (first 16) | Notes |
+|---|---|---|---|
+| `PolyXRD-Setup-v4.1.1.exe` | {{SETUP_SIZE}} | `{{SETUP_SHA12}}…` | Release installer (registration enabled), bundles COD-Inorg |
+| `PolyXRD-v4.1.1-Portable.zip` | {{PORT_SIZE}} | `{{PORT_SHA12}}…` | Portable package (**internal evaluation build**, red "Internal Evaluation" badge), bundles COD-Inorg |
+| `SHA256-v4.1.1.txt` | — | — | SHA-256 of the two program artifacts |
 
-👉 **Released**: [Release v4.0.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v4.0.0) — 3 assets (Setup 249.1 MB / Portable 389.0 MB / SHA256), uploaded and verified (remote digests match the local checksums). Databases live in [PolyXRD-DataBase](https://github.com/PolyXRD/PolyXRD-DataBase).
+👉 **Released**: [Release v4.1.1](https://github.com/PolyXRD/PolyXRD/releases/tag/v4.1.1) — 3 assets; remote digests verified against the local checksums.
+
+> PDF2-2004 is an ICDD commercial library and never appears in any Release. COD-Full and other extension libraries are distributed by [PolyXRD-DataBase Releases](https://github.com/PolyXRD/PolyXRD-DataBase/releases).
+
+## 📚 Previous Release v4.0.0 (2026-10-23 · released)
+
+**polyDB — a purpose-built external phase-database format** (sites expanded, 77,500-phase inorganics library; details in [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.0.0). This repository releases program artifacts only; databases live in [PolyXRD-DataBase](https://github.com/PolyXRD/PolyXRD-DataBase).
 
 ## 📚 Previous Release v3.2.0 (2026-10-20)
 
@@ -153,8 +161,8 @@ Core design philosophy:
 - Path priority: **persistent path imported via GUI (`~/.polyxrd/user_db_paths.json`) > default location (used only if it exists) > `~/.polyxrd/cif_db/` fallback**
 - **Database-type validation on import**: the three databases share table names (COD Inorganics and PDF2 both use `phases`), so picking the wrong slot raises a prompt instead of failing silently
 - Effective immediately after import, **no restart**; the "database source" dropdown in the phase-analysis panel refreshes in sync; unmounted sources are greyed out
-- The databases are fully independent — you can mount just one; with none mounted, the built-in **106 reference phases** still work
-- **Where to download databases** (since v4.0.0): this repository and its Releases ship **program artifacts only**; the two polyDB libraries are published in [PolyXRD-DataBase Releases](https://github.com/PolyXRD/PolyXRD-DataBase/releases) (current tag `20261021`; **see that repository's Releases page for what is currently uploaded**), together with the builder tools and format spec
+- The databases are fully independent — you can mount just one; the bundled COD-Inorg library (77,500 phases) is available out of the box, and the built-in **106 reference phases** still work
+- **Where to download databases** (since v4.1.1): this repository and its Releases ship **program artifacts only (3 assets)**; the bundled COD-Inorg library needs no download; extension libraries are published in [PolyXRD-DataBase Releases](https://github.com/PolyXRD/PolyXRD-DataBase/releases) (current tag `20261021`; see that repository's Releases page for what is currently uploaded), together with the builder tools and format spec
 
 ---
 
@@ -190,7 +198,7 @@ Core design philosophy:
 > Users with a valid license may prepare `PDF2_2004.sqlite` themselves and import it into the PDF2 slot via "External Database Manager…";
 > if unlicensed, simply leave the slot empty — all other features are unaffected.
 
-> Even with no database mounted, the program still works with its built-in **106** common reference phases.
+> The COD-Inorg polyDB default library (77,500 phases) is bundled; the program also works with its built-in **106** common reference phases.
 > Detailed instructions and troubleshooting: see the paragraphs above (the "External Database Manager" dialog describes each slot).
 
 ### Option B · Developers / secondary development (run from source)

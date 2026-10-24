@@ -185,8 +185,11 @@ translations = {
             "polydb_inorg": "COD 无机物库（polyDB）",
             "polydb_full": "COD 全库（polyDB）",
             "pdf2": "PDF2-2004 库",
+            "user": "用户数据库",
         },
-        "pkg_free": "本库由用户自行生成或管理，没有下载包。"
+        "pkg_free": "本库由用户自行生成或管理，没有下载包。",
+        "pkg_polydb_repo": "polyDB 库由独立仓库统一发布：{url}\n"
+                           "下载解压后点「挂载文件夹…」指过去即可（本程序已内置 COD-Inorg 默认库）。"
     },
     "user_db": {
         "title": "用户数据库管理",

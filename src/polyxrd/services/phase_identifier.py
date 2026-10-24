@@ -1762,11 +1762,15 @@ class PhaseIdentifier:
     @staticmethod
     def _make_polydb_phase(detail: dict, cand: dict, ref_peaks: list,
                            db=None) -> Phase:
-        """polyDB 候选 → Phase (带晶胞 + 非对称单位位点)。
+        """polyDB 候选 → Phase (带晶胞 + **已展开全胞**原子位点)。
 
-        polyDB 的 ``sites.bin`` 侧车存的是 CIF 原样的非对称单位位点，与
-        ``user_db.cod_atomic_sites`` 同构，因此候选**可以直接进精修**；
-        位点读取失败时退化成"只有晶胞"（与 XinMatch 库同等能力）。
+        polyDB 的 ``sites.bin`` 侧车存的是 CIF 原样的**非对称单位**位点，
+        而精修链路（pymatgen ``Structure`` 直构 / ``_cif_reference_peaks``
+        路径 1）按"已是完整晶胞"使用 —— 必须先按空间群展开，否则高对称相
+        会造出假峰（v4.1.1 实测 Corundum R-3c：2 位点直构 → 6.8° 假峰
+        100%，真主峰 35.14/43.34 丢失或强度塌到 15.9%）。
+        展开用 :func:`phase_cif.expand_sites_by_symmetry`（幂等，已展开的
+        位点原样通过）。位点读取/展开失败时退化为"只有晶胞"，不阻断检索。
         """
         from polyxrd.models.phase import LatticeParams
 
@@ -1788,6 +1792,15 @@ class PhaseIdentifier:
                 sites = db.get_atomic_sites(eid)
             except Exception:  # noqa: BLE001 - 侧车缺失不该拖垮检索
                 sites = []
+        if sites:
+            # 侧车 = 非对称单位 → 展开成完整晶胞（幂等；失败保持原样）
+            try:
+                from polyxrd.services.phase_cif import expand_sites_by_symmetry
+
+                sites = expand_sites_by_symmetry(
+                    sites, detail.get("space_group", "") or "")
+            except Exception:  # noqa: BLE001 - 展开失败不影响检索本身
+                pass
         els = {e for e in detail.get("elements_list") or [] if e}
         return Phase(
             name=f"{label} (COD {eid})",

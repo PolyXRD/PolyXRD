@@ -188,8 +188,8 @@ def test_two_databases_of_same_kind_coexist(qapp, isolated, tmp_path):
 def test_each_row_shows_its_own_package(qapp, isolated, tmp_path):
     """详情区写明该行对应哪个下载包 / 解压出什么。
 
-    polyDB 随 Release 分发 (v4.1.0 起是默认库), 必须指到具体 zip;
-    PDF2-2004 受 ICDD 版权限制永不随 Release 发布 —— 绝不能提示下载。
+    v4.1.1 政策: 数据库由独立仓库 PolyXRD-DataBase 发布 (主仓库 Release 只发程序),
+    polyDB 行必须指到该仓库 Releases; PDF2-2004 受 ICDD 版权限制永不随任何包发布。
     """
     poly = _make_polydb(tmp_path, "COD-Inorg-Mine.polyDB")
     pdf = _make_db(tmp_path / "p.sqlite", PDF2_DDL, PDF2_ROW, PDF2_INS)
@@ -202,8 +202,9 @@ def test_each_row_shows_its_own_package(qapp, isolated, tmp_path):
     poly_pkg = dlg._pkg_hint(poly_row)
     pdf_pkg = dlg._pkg_hint(pdf_row)
 
-    assert "Databases-COD-Inorg-polyDB.zip" in poly_pkg
-    assert "COD-Inorg" in poly_pkg
+    assert "PolyXRD-DataBase" in poly_pkg
+    assert "releases" in poly_pkg.lower()
+    assert ".zip" not in poly_pkg, "数据库包不再从主仓库下载, 不应给 zip 文件名"
     assert ".zip" not in pdf_pkg, "PDF2 不得提示下载 —— 该库不上传 Release"
     assert "PDF2_2004.sqlite" in pdf_pkg
     assert poly_pkg != pdf_pkg, "各行文案不能雷同, 否则用户看不出区别"

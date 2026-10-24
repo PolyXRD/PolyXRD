@@ -11,9 +11,11 @@
 #      PDF2-2004 为 ICDD 版权库, 任何情况下都**不**进 Release 上传清单。
 #   3. 打印所有产物的 SHA-256 到 installer_output\SHA256-v<ver>.txt
 #
-# ★ 政策（2026-10-23）：**数据库不在本仓库上传/发布**。本脚本只在本地生成并校验
-#   polyDB 库包（供 SHA256 记录与发布前检查）；对外分发统一在独立仓库
+# ★ 政策：**数据库不在本仓库上传/发布**。默认**不**生成数据库包（-PackDbPackages
+#   仅用于本地归档/对账）；对外分发统一在独立仓库
 #   https://github.com/PolyXRD/PolyXRD-DataBase 的 Releases。主仓库 Release 恒 3 附件。
+# ★ v4.1.1：新增 Setup 存在性/版本/新鲜度校验（此前 ISCC 失败会拿旧 Setup 算 SHA），
+#   并支持 -SkipSetup / -SkipPortable 由 flavor 决定（不再靠"文件不存在"自证跳过）。
 #
 # 为什么把"含不含 .sqlite"当成断言: 0.10.0 的核心约束就是数据库外挂,
 # 一旦 spec 的 datas 被谁改回去, 便携包会悄悄胖 700 MB —— 必须让构建自己喊出来。
@@ -31,7 +33,12 @@ param(
     # v4.1.0: Setup(正式安装包) 与便携包是**两个不同变体**的两个产物, 由两次
     #   独立构建分别产出。release 那次构建里便携包尚不存在, 属正常 —— 用
     #   -SkipPortable 跳过该项, 不要误报 FAIL。
-    [switch]$SkipPortable
+    [switch]$SkipPortable,
+    # release 构建只需要校验本变体产物；internal 构建校验便携包
+    [switch]$SkipSetup,
+    # v4.1.1: 默认不生成数据库包（政策：数据库不在本仓库发布）；
+    #   需要本地归档/对账时显式加本开关。
+    [switch]$PackDbPackages
 )
 
 $ErrorActionPreference = 'Stop'
@@ -64,8 +71,39 @@ $dbKinds = @(
     [pscustomobject]@{ Name = 'PDF2';            Src = 'cod_data\PDF2_2004.sqlite';           File = 'PDF2_2004.sqlite' }
 )
 
+# v4.1.1: 政策默认不生成数据库包（含旧 sqlite 兼容包）；本地归档才显式打开。
+if (-not $PackDbPackages) { $dbKinds = @() }
+
+# ── 1a. Setup 校验（v4.1.1 新增）────────────────────────────
+$setup = Join-Path $outDir "PolyXRD-Setup-v$Version.exe"
+Write-Output "[1a/3] Setup 校验: $([IO.Path]::GetFileName($setup))"
+if ($SkipSetup) {
+    Write-Output '      (本次为 internal 构建, Setup 由 release 变体那次构建产出 —— 本次跳过)'
+} elseif (-not (Test-Path -LiteralPath $setup)) {
+    Fail 'Setup 不存在（release 构建必须产出正式安装包）'
+} else {
+    $setupItem = Get-Item -LiteralPath $setup
+    Write-Output ('      体积 ' + (MiB $setupItem.Length))
+    $vi = $setupItem.VersionInfo
+    if ($vi.FileVersion -notlike "$Version*") {
+        Fail ("Setup FileVersion=$($vi.FileVersion) 与版本 $Version 不一致")
+    } else {
+        Write-Output ("      OK: FileVersion=$($vi.FileVersion), ProductVersion=$($vi.ProductVersion)")
+    }
+    $distExe = Join-Path $Root 'dist\PolyXRD\PolyXRD.exe'
+    if (Test-Path -LiteralPath $distExe) {
+        if ($setupItem.LastWriteTime -lt (Get-Item -LiteralPath $distExe).LastWriteTime) {
+            # 两次独立构建（release Setup / internal Portable）先后会刷新 dist，
+            # 因此 mtime 只作提示，不硬失败；ISCC 失败已在 build.bat 里硬失败。
+            Write-Output '      [提示] Setup mtime 早于当前 dist EXE（两次构建的先后关系），新鲜度按版本号判定'
+        } else {
+            Write-Output '      OK: Setup 晚于本次 dist EXE（不是旧包）'
+        }
+    }
+}
+
 # ── 1. 便携包校验 ────────────────────────────────────────────
-Write-Output "[1/3] 便携包校验: $([IO.Path]::GetFileName($portable))"
+Write-Output "[1b/3] 便携包校验: $([IO.Path]::GetFileName($portable))"
 if ($SkipPortable) {
     Write-Output '      (本次为 release 构建, 便携包由 internal 变体那次构建产出 —— 本次跳过)'
 } elseif (-not (Test-Path -LiteralPath $portable)) {
@@ -148,7 +186,9 @@ $polyBuilt = $false
 $polyRoot = if ($PolyDbRoot) { $PolyDbRoot } else {
     Join-Path (Split-Path -Parent $Root) 'PolyXRD-DataBase\polydb'
 }
-if (Test-Path -LiteralPath $polyRoot) {
+if (-not $PackDbPackages) {
+    Write-Output '      (v4.1.1 政策: 数据库包不上传主仓库, 默认不打包; 本地归档请加 -PackDbPackages)'
+} elseif (Test-Path -LiteralPath $polyRoot) {
     Write-Output ('      polyDB 根目录: ' + $polyRoot)
     foreach ($pk in @(
         [pscustomobject]@{ Name = 'COD-inorg-polyDB'; Glob = 'COD-Inorg-*.polyDB' },
@@ -230,7 +270,7 @@ foreach ($k in $dbKinds) {
     }
 }
 
-if ($builtPkgs.Count -eq 0) { Fail '没有生成任何数据库包' }
+if ($PackDbPackages -and $builtPkgs.Count -eq 0) { Fail '没有生成任何数据库包' }
 if ($polyBuilt) {
     Write-Output '      注意: 库包仅本地生成/校验; 对外发布在 PolyXRD-DataBase 仓库的 Releases (本仓库 Release 不含数据库)。'
 }

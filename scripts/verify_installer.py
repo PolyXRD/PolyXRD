@@ -76,6 +76,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -88,8 +89,8 @@ from pathlib import Path
 POLYDB_SEGMENTS = ('meta.json', 'index.sqlite', 'peaks_d.f32', 'peaks_i.u16',
                    'bins.u8', 'elem.u8', 'sites.bin', 'sites_off.i64')
 
-#: 内置默认库名（v4.1.0 起）
-BUNDLED_LIB = 'COD-Inorg-20261021.polyDB'
+#: 内置默认库的目录名模式（v4.1.1：动态匹配，换库不再误报）
+BUNDLED_LIB_GLOB = 'COD-Inorg-*.polyDB'
 
 #: 内部评估版的 flavor marker 模块（PyInstaller hiddenimports 才会收进 PYZ）
 FLAVOR_MARKER_MOD = 'polyxrd._build_flavor'
@@ -355,16 +356,25 @@ def verify_setup(setup: Path, scratch: Path | None = None) -> Report:
     if not rep.check('PolyXRD.exe 已落盘', exe.exists(),
                      f'{exe.stat().st_size if exe.exists() else 0:,} B'):
         rep.dump()
+        # v4.1.1: 失败路径也要清理临时副本/安装目录，避免在临时区留几百 MB
+        shutil.rmtree(inst, ignore_errors=True)
+        log.unlink(missing_ok=True)
+        staged.unlink(missing_ok=True)
         return rep
 
     files = [p for p in inst.rglob('*') if p.is_file()]
     rep.check('落盘文件数 > 10000', len(files) > 10000, f'{len(files):,} 个')
 
-    # ── 内置库 8/8 ──────────────────────────────────────────────────────
-    lib = inst / 'databases' / BUNDLED_LIB
-    have = [s for s in POLYDB_SEGMENTS if (lib / s).is_file()]
-    rep.check(f'内置库 {BUNDLED_LIB} 8/8 分段齐全', len(have) == len(POLYDB_SEGMENTS),
-              f'{len(have)}/8')
+    # ── 内置库 8/8（v4.1.1：动态取库名，换库不再误报）────────────────────
+    libs = sorted((inst / 'databases').glob(BUNDLED_LIB_GLOB))         if (inst / 'databases').is_dir() else []
+    if not rep.check('安装包含内置 polyDB 默认库', bool(libs),
+                     f'{len(libs)} 个'):
+        rep.dump()
+        return rep
+    for lib in libs:
+        have = [s for s in POLYDB_SEGMENTS if (lib / s).is_file()]
+        rep.check(f'内置库 {lib.name} 8/8 分段齐全',
+                  len(have) == len(POLYDB_SEGMENTS), f'{len(have)}/8')
 
     # 意外业务库：polyDB 容器**自身**的 index.sqlite 是它的合法分段，不能算；
     # pymatgen 的对称性数据表是依赖的一部分，也放行。
@@ -413,8 +423,16 @@ def verify_portable(zpath: Path, scratch: Path | None = None) -> Report:
         tmp = scratch / f'_port_{uuid.uuid4().hex[:8]}.exe'
         with zf.open(exe_entries[0]) as src, open(tmp, 'wb') as dst:
             shutil.copyfileobj(src, dst)
-        seg = [s for s in POLYDB_SEGMENTS
-               if any(n.endswith(f'databases/{BUNDLED_LIB}/{s}') for n in names)]
+        # v4.1.1: 动态取库名（换库不再误报）
+        lib_dirs = sorted({
+            m.group(1) for n in names
+            for m in [re.match(r'.*databases/([^/]+\.polyDB)/', n)] if m
+        })
+        best = 0
+        for lib in lib_dirs:
+            got = sum(1 for s in POLYDB_SEGMENTS
+                      if any(n.endswith(f'databases/{lib}/{s}') for n in names))
+            best = max(best, got)
         helpers = [n for n in PORTABLE_ONLY_FILES
                    if any(x.endswith(n) for x in names)]
     try:
@@ -423,7 +441,7 @@ def verify_portable(zpath: Path, scratch: Path | None = None) -> Report:
         tmp.unlink(missing_ok=True)
 
     rep.check('便携包 exe 为 **internal** 变体', fl == 'internal', f'flavor={fl}')
-    rep.check('便携包内置库 8/8 分段齐全', len(seg) == len(POLYDB_SEGMENTS), f'{len(seg)}/8')
+    rep.check('便携包内置库 8/8 分段齐全', best == len(POLYDB_SEGMENTS), f'{best}/8')
     rep.check('便携包带便携版辅助文件', len(helpers) == len(PORTABLE_ONLY_FILES), f'{helpers}')
     return rep
 
