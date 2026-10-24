@@ -171,6 +171,8 @@ translations = {
         "mount_ok_body": "{n} 個のデータベースをマウントしました:\n{detail}",
         "mount_failed": "マウントできません",
         "mount_failed_body": "このパスに使用可能なデータベースがありません。\n\nパス: {path}\n理由: {error}",
+        "mount_partial_title": "一部のデータベースはマウントされませんでした",
+        "mount_partial_body": "{n} 個をマウントしました。{skipped} 件はスキップされました:\n{detail}",
         "unmount_confirm": "「{name}」をアンマウントしますか？\nこの行とマウント記録を削除するだけで、データベースファイルは削除されません。",
         "set_active_unavailable": "「{name}」は現在使用できません（未マウントまたはファイル破損）。同定のデータソースには指定できません。",
         "current_source": "現在の相同定データソース: {name}",

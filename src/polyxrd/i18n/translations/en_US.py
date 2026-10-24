@@ -171,6 +171,8 @@ translations = {
         "mount_ok_body": "Mounted {n} database(s):\n{detail}",
         "mount_failed": "Cannot Mount",
         "mount_failed_body": "No usable database at this path.\n\nPath: {path}\nReason: {error}",
+        "mount_partial_title": "Some databases were not mounted",
+        "mount_partial_body": "Mounted {n} database(s); {skipped} item(s) were skipped:\n{detail}",
         "unmount_confirm": "Unmount “{name}”?\nThis only removes the row (and its mount record); the database file itself is never deleted.",
         "set_active_unavailable": "“{name}” is currently unavailable (not mounted or the file is damaged) and cannot be used for identification.",
         "current_source": "Current identification source: {name}",

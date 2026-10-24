@@ -1,19 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""S3 / S17 polyDB 检索 A/B 基准：旧 COD 无机库 vs polyDB。
+"""polyDB 检索召回 / 耗时基准（v4.1.2：旧 COD sqlite 后端已删除，不再 A/B）。
 
-对 13 个基准试样逐个跑**两条后端的完整检索链路**（同 top_n / 同 tolerance，
-同一套 FOM 排序），比对三件事：
+对 13 个基准试样逐个跑 polyDB 的完整检索链路，报告：
 
   1. **召回**（准确性第一）：真值相在候选列表里的名次 → top1/top3/top10、
      MRR、MISS，两级口径（A 级 = 真值元素约束 / B 级 = 无约束）；
-  2. **一致性**（G1 打分口径零改动）：旧库 top-10 的 eid 是否全部出现在
-     polyDB 的候选池里（顺序可不同）、top-10 id 交集大小；
-  3. **耗时**：检索墙钟时间（polyDB 先跑一次预热 mmap，报第二次）。
+  2. **耗时**：检索墙钟时间（先跑一次预热 mmap，报第二次）。
 
-判据（线路图 §G1 / S17）：
-  · 召回指标逐项不得低于旧库（top1 / top10 / MRR）；
-  · 旧库 top-10 的 eid ⊆ polyDB 候选池（召回不因位图预筛而丢失）。
+说明：v4.1.0 已删除旧格式 COD sqlite 检索入口，原先的 "旧库 vs polyDB"
+对照基准不再可跑；本脚本保留为**回归基准**（召回 + 耗时），用于换库/改
+打分后的横向比较。
 
 用法：
     python scripts/bench_polydb_search.py <db.polyDB>
@@ -58,12 +55,7 @@ _COD_ID = re.compile(r"\(COD\s*(\d+)\)")
 
 
 def _eid_of(match) -> int | None:
-    """从候选里取 COD 编号。
-
-    ``identify_with_cod_inorganics`` 的 Phase 不带 ``db_id``（历史原因），
-    但两侧的展示名都写成 ``"<formula> (COD 1234567)"``，所以统一从名字里
-    抽编号 —— 这样 A/B 两侧可以逐条对得上，不依赖某一侧是否填了 db_id。
-    """
+    """从候选取 COD 编号（优先 db_id，其次展示名里的 ``(COD …)``）。"""
     if match.phase.db_id is not None:
         try:
             return int(match.phase.db_id)
@@ -102,7 +94,7 @@ def _truth_elements(pi, want: list[str]) -> set:
     return out
 
 
-def run_backend(pi, name: str, db, sample: str, level: str, warm: bool) -> dict:
+def run_backend(pi, db, sample: str, level: str) -> dict:
     from polyxrd.services.data_loader import DataLoader
     from polyxrd.services.phase_identifier import default_peak_list
 
@@ -118,26 +110,20 @@ def run_backend(pi, name: str, db, sample: str, level: str, warm: bool) -> dict:
         ef = {"must": [], "maybe": sorted(els), "exclude": []} if els else None
 
     t0 = time.perf_counter()
-    if name == "cod-old":
-        matches = pi.identify_with_cod_inorganics(
-            data, peaks=peaks, element_filter=ef, top_n=TOP_N, tolerance=TOL)
-    else:
-        matches = pi.identify_with_polydb(
-            data, peaks=peaks, element_filter=ef, top_n=TOP_N, tolerance=TOL,
-            db=db)
+    matches = pi.identify_with_polydb(
+        data, peaks=peaks, element_filter=ef, top_n=TOP_N, tolerance=TOL,
+        db=db)
     dt = time.perf_counter() - t0
 
-    ids = [_eid_of(m) for m in matches]
-    names = [m.phase.name or "" for m in matches]
     return {
-        "backend": name,
         "sample": sample,
         "level": level,
         "elapsed_s": round(dt, 2),
         "n": len(matches),
-        "ids": ids,
-        "names": names,
-        "ranks": {tw: _rank_of(names, tw) for tw in want},
+        "ids": [_eid_of(m) for m in matches],
+        "names": [m.phase.name or "" for m in matches],
+        "ranks": {tw: _rank_of([m.phase.name or "" for m in matches], tw)
+                  for tw in want},
     }
 
 
@@ -190,65 +176,38 @@ def main() -> int:
         return 2
     pi = PhaseIdentifier()
 
-    report: dict = {"db": args.db, "top_n": TOP_N, "tol": TOL, "levels": {}}
+    report: dict = {"db": args.db, "top_n": TOP_N, "tol": TOL,
+                    "levels": {}, "verdict": "PASS"}
     ok_all = True
 
     for level in levels:
         print("=== level %s（%s）===" % (
             level, "真值元素约束" if level == "A" else "无约束"), flush=True)
-        # 预热：polyDB 的 mmap 首读要落页缓存，别算进对比时间
-        run_backend(pi, "polydb", db, samples[0], level, warm=False)
+        # 预热：polyDB 的 mmap 首读要落页缓存，别算进计时
+        run_backend(pi, db, samples[0], level)
 
-        old_rows, new_rows = [], []
-        pairs = []
+        rows = []
         for s in samples:
-            o = run_backend(pi, "cod-old", db, s, level, warm=True)
-            nw = run_backend(pi, "polydb", db, s, level, warm=True)
-            old_rows.append(o)
-            new_rows.append(nw)
-            old_top10 = [x for x in o["ids"][:10] if x is not None]
-            new_ids = {x for x in nw["ids"] if x is not None}
-            missing = [x for x in old_top10 if x not in new_ids]
-            pairs.append({
-                "sample": s,
-                "old_ranks": o["ranks"], "new_ranks": nw["ranks"],
-                "old_top10_missing_in_new": missing,
-                "top10_id_overlap": len(set(old_top10) & new_ids),
-                "old_n": o["n"], "new_n": nw["n"],
-                "old_s": o["elapsed_s"], "new_s": nw["elapsed_s"],
-            })
-            print("  %-6s old %.2fs / new %.2fs · top10 交集 %d/10 · 缺 %s"
-                  % (s, o["elapsed_s"], nw["elapsed_s"],
-                     len(set(old_top10) & new_ids), missing or "无"), flush=True)
+            row = run_backend(pi, db, s, level)
+            rows.append(row)
+            print("  %-6s %.2fs · ranks %s"
+                  % (s, row["elapsed_s"],
+                     {k: v for k, v in row["ranks"].items()}), flush=True)
 
-        mo, mn = _agg(old_rows), _agg(new_rows)
-        print(_fmt("cod-old", mo))
-        print(_fmt("polydb", mn))
-
-        # ── 判据 ──
-        fails = []
-        if mn["top1"] < mo["top1"]:
-            fails.append("top1 下降 %d → %d" % (mo["top1"], mn["top1"]))
-        if mn["top10"] < mo["top10"]:
-            fails.append("top10 下降 %d → %d" % (mo["top10"], mn["top10"]))
-        if mn["mrr"] + 1e-6 < mo["mrr"]:
-            fails.append("MRR 下降 %.3f → %.3f" % (mo["mrr"], mn["mrr"]))
-        holes = {p["sample"]: p["old_top10_missing_in_new"]
-                 for p in pairs if p["old_top10_missing_in_new"]}
-        if holes:
-            fails.append("旧库 top10 有候选未进 polyDB 池: %s" % holes)
-        if fails:
+        m = _agg(rows)
+        print(_fmt("polydb", m))
+        if m["miss"]:
             ok_all = False
-        print("  → %s%s" % ("PASS" if not fails else "FAIL",
-                            "" if not fails else "：" + "; ".join(fails)))
+            print("  → FAIL：%d 个真值相未被召回（MISS）" % m["miss"])
+        else:
+            print("  → PASS：全部真值相均被召回")
         report["levels"][level] = {
-            "cod_old": mo, "polydb": mn,
-            "verdict": "PASS" if not fails else "FAIL",
-            "failures": fails,
-            "pairs": pairs,
+            "metrics": m,
+            "rows": rows,
+            "verdict": "PASS" if not m["miss"] else "FAIL",
         }
 
-    report["ok"] = ok_all
+    report["verdict"] = "PASS" if ok_all else "FAIL"
     if args.json:
         p = Path(args.json)
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -257,9 +216,9 @@ def main() -> int:
         print("已写出 %s" % p)
     if args.detail:
         for level, blk in report["levels"].items():
-            for pr in blk["pairs"]:
-                print(level, pr["sample"], pr["old_ranks"], "→", pr["new_ranks"])
-    print("polyDB search A/B: %s" % ("PASS" if ok_all else "FAIL"))
+            for row in blk["rows"]:
+                print(level, row["sample"], row["ranks"])
+    print("polyDB search benchmark: %s" % ("PASS" if ok_all else "FAIL"))
     return 0 if ok_all else 1
 
 

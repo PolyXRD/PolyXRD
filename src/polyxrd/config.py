@@ -260,7 +260,11 @@ class AppConfig:
             roots.append(Path(env))
         if getattr(sys, "frozen", False):
             try:
-                roots.append(Path(sys.executable).resolve().parent / "databases")
+                base = Path(sys.executable).resolve().parent
+                roots.append(base / "databases")
+                # PyInstaller 6 的 datas 落在 _internal/；spec 的
+                # POLYXRD_WITH_POLYDB=1 分支会收进那里，也一并认。
+                roots.append(base / "_internal" / "databases")
             except OSError:
                 pass
         else:
@@ -277,27 +281,32 @@ class AppConfig:
             variant: ``cod-inorg`` / ``cod-full``。
 
         Returns:
-            polyDB 目录；同一目录下有多份时取**目录名最大**的那份
-            （产物名带快照日期，如 ``COD-Inorg-20261021.polyDB``，字符串序即时间序）。
+            polyDB 目录；**按 root 顺序取第一个命中的根目录**，根内多份时取
+            目录名最大者（产物名带快照日期，字符串序即时间序）。
+
+        v4.1.2：此前跨 root 全局按名字排序，``POLYXRD_POLYDB_DIR`` 钉住的库
+        会被别处更新的目录顶掉，与 docstring 的"顺序即优先级"矛盾（实测
+        ``explicit_wins=False``）。现改为 root 优先：显式指定 > 打包目录 >
+        仓库 databases/ > 同级构建仓库；只有同一 root 内才比较快照新旧。
         """
         hints = self._POLYDB_NAME_HINTS.get(variant)
         if not hints:
             return None
-        found: list[Path] = []
         for root in self._polydb_search_roots():
+            found: list[Path] = []
             for cand in self._iter_polydb_dirs(root):
                 meta_variant = self._read_polydb_variant(cand)
                 if meta_variant:
                     if meta_variant == variant:
                         found.append(cand)
                     continue
-                # meta 读不出来时退回文件名判据
+                # meta 读不出来（损坏/缺字段）时退回文件名判据
                 low = cand.name.lower()
                 if any(h in low for h in hints):
                     found.append(cand)
-        if not found:
-            return None
-        return sorted(found, key=lambda p: p.name)[-1]
+            if found:
+                return sorted(found, key=lambda p: p.name)[-1]
+        return None
 
     @staticmethod
     def _iter_polydb_dirs(root: Path) -> list[Path]:

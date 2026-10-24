@@ -171,6 +171,8 @@ translations = {
         "mount_ok_body": "已挂载 {n} 个数据库：\n{detail}",
         "mount_failed": "无法挂载",
         "mount_failed_body": "这个路径上没有可用的数据库。\n\n路径：{path}\n原因：{error}",
+        "mount_partial_title": "部分数据库未挂载",
+        "mount_partial_body": "已挂载 {n} 个数据库；另有 {skipped} 项被跳过：\n{detail}",
         "unmount_confirm": "确定要卸载「{name}」吗？\n卸载只是从列表里去掉这一行（并清掉它的挂载记录），不会删除库文件本身。",
         "set_active_unavailable": "「{name}」当前不可用（未挂载或库文件已损坏），不能设为检索数据源。",
         "current_source": "当前物相检索使用：{name}",

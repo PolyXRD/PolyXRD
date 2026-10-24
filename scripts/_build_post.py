@@ -58,6 +58,45 @@ POLYDB_SEGMENTS = ('meta.json', 'index.sqlite', 'peaks_d.f32', 'peaks_i.u16',
                    'bins.u8', 'elem.u8', 'sites.bin', 'sites_off.i64')
 
 
+def _read_polydb_meta(path) -> dict:
+    """读 polyDB 的 meta.json（失败返回空 dict，由调用方报错）。"""
+    import json
+    import pathlib
+
+    try:
+        meta = json.loads((pathlib.Path(path) / 'meta.json').read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return {}
+    return meta if isinstance(meta, dict) else {}
+
+
+def _validate_polydb_meta(meta: dict, want_variant: str = 'cod-inorg') -> list[str]:
+    """v4.1.2：只校验"8 个文件存在"不够 —— 损坏/错变体的库也会通过。
+
+    要求 ``format=polyDB``、``schema_version=1``、``variant`` 匹配、
+    ``counts.phases > 0``；返回问题列表（空 = 合格）。
+    """
+    problems: list[str] = []
+    if str(meta.get('format') or '') != 'polyDB':
+        problems.append(f"meta.format={meta.get('format')!r} != 'polyDB'")
+    try:
+        schema = int(meta.get('schema_version') or 0)
+    except (TypeError, ValueError):
+        schema = 0
+    if schema != 1:
+        problems.append(f"meta.schema_version={meta.get('schema_version')!r} != 1")
+    if str(meta.get('variant') or '') != want_variant:
+        problems.append(f"meta.variant={meta.get('variant')!r} != {want_variant!r}")
+    counts = meta.get('counts') or {}
+    try:
+        phases = int(counts.get('phases') or 0)
+    except (TypeError, ValueError):
+        phases = 0
+    if phases <= 0:
+        problems.append(f"meta.counts.phases={counts.get('phases')!r} <= 0")
+    return problems
+
+
 def _polydb_source_roots() -> list[str]:
     """检索 COD-Inorg polyDB 的候选父目录 (顺序即优先级)。"""
     import pathlib
@@ -97,12 +136,21 @@ def bundle_polydb() -> int:
             if d.is_dir() and (d / 'meta.json').is_file() and 'inorg' in d.name.lower()
         ]
         for c in cands:
-            if all((c / seg).is_file() for seg in POLYDB_SEGMENTS):
-                found.append(c)
+            if not all((c / seg).is_file() for seg in POLYDB_SEGMENTS):
+                print(f'  [警告] {c.name}: 分段文件不全，跳过')
+                continue
+            meta = _read_polydb_meta(c)
+            problems = _validate_polydb_meta(meta, 'cod-inorg')
+            if problems:
+                print(f'  [警告] {c.name}: meta 校验失败，跳过 ({"; ".join(problems)})')
+                continue
+            found.append(c)
     if not found:
-        print('  [警告] 未找到任何 COD-Inorg polyDB, 便携包将不含默认库')
+        print('  [错误] 未找到任何合格的 COD-Inorg polyDB（默认库是 v4.1.0+ 的核心功能）')
         print('         候选父目录: ' + ', '.join(_polydb_source_roots()))
-        return 0
+        print('         修复: 设置 POLYXRD_POLYDB_DIR 指向库目录，或跳过本步用 '
+              'set POLYXRD_NO_BUNDLE_DB=1（纯客户端小包）')
+        return 1
 
     src = sorted(found, key=lambda d: d.name)[-1]
     dst_dir = pathlib.Path(DIST) / 'databases'
@@ -116,7 +164,10 @@ def bundle_polydb() -> int:
     for seg in POLYDB_SEGMENTS:
         shutil.copyfile(src / seg, dst / seg)
         total += (dst / seg).stat().st_size
-    print(f'  bundle-polydb: {src.name} -> {dst}  ({total / 2**20:.0f} MiB, 8/8 段)')
+    meta = _read_polydb_meta(src)
+    phases = int((meta.get('counts') or {}).get('phases') or 0)
+    print(f'  bundle-polydb: {src.name} -> {dst}  '
+          f'({total / 2**20:.0f} MiB, 8/8 段, {phases:,} 相)')
     return 0
 
 
@@ -139,6 +190,13 @@ def assert_db_layout() -> int:
         missing = [seg for seg in POLYDB_SEGMENTS if not (lib / seg).is_file()]
         if missing:
             problems.append(f'{lib.name} 缺分段文件: {", ".join(missing)}')
+        extra = [p.name for p in lib.iterdir()
+                 if p.is_file() and p.name not in POLYDB_SEGMENTS]
+        if extra:
+            problems.append(f'{lib.name} 含非分段文件: {", ".join(extra[:5])}')
+        meta = _read_polydb_meta(lib)
+        problems.extend(f'{lib.name}: {p}' for p in
+                        _validate_polydb_meta(meta, 'cod-inorg'))
 
     stray = []
     for pat in ('**/*.sqlite', '**/*.sqlite3', '**/*.db', '**/*.tar.xz'):

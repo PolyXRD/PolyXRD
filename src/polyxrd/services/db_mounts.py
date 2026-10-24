@@ -36,6 +36,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -394,6 +395,11 @@ def detect_kind(path: str | Path, expect: str | None = None) -> tuple[str, str]:
 
     ins = inspect_db_file(p)
     if not ins.ok:
+        if _looks_like_legacy_cod(p):
+            return "", (
+                "旧格式 COD / XinMatch sqlite 检索库：自 v4.1.0 起只支持 polyDB 检索"
+                "（旧库不再兼容）。请改用 PolyXRD-DataBase 的 polyDB 库；"
+                "PDF2-2004 仍可挂载。")
         detail = ins.error + (f" ({ins.hint})" if ins.hint else "")
         return "", f"不是可用的数据库文件: {detail}"
     if expect and ins.kind != expect:
@@ -632,23 +638,35 @@ def _iter_polydb_dirs(path: Path) -> list[Path]:
     return out
 
 
-def mount_any(path: str | Path) -> list[Mount]:
-    """挂载一个路径下**全部**合格的库, 一次挂全 (幂等)。
+def _looks_like_legacy_cod(p: Path) -> bool:
+    """判断一个 sqlite 文件是否更像 v4.1.0 之前的 COD / XinMatch 检索库。
 
-    判据只有"内容合格", 与放在哪个文件夹无关:
+    只读打开，仅用于把 "no_matching_table" 翻译成可执行的迁移指引；
+    不参与挂载判定（旧库无论如何都不再支持）。
+    """
+    try:
+        conn = sqlite3.connect(f"file:{p}?mode=ro", uri=True)
+    except sqlite3.Error:
+        return False
+    try:
+        tables = {r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")}
+    except sqlite3.Error:
+        return False
+    finally:
+        conn.close()
+    return bool(tables & {
+        "cod_entries", "cod_atomic_sites", "cod_inorganics",
+        "entries", "peaks", "element_combo", "xinmatch_entries",
+    })
 
-      · 文件: 逐个按 sqlite 库判别 (COD 无机物 / 全库索引 / PDF2 / XinMatch);
-      · 目录: 本层的 sqlite 文件 + 本层/下一层的 polyDB 容器。
 
-    挂载**不改动任何配置槽位** —— 全部记进挂载注册表, 所以同一类型可以挂
-    多份, 也不会把用户原有的槽位设置顶掉 (旧 ``db_import.mount_databases``
-    是"每类覆盖配置槽位"的语义, 只保留给兼容用途)。
+def mount_any_report(path: str | Path) -> tuple[list[Mount], list[str]]:
+    """同 :func:`mount_any`，但把"被跳过的候选 + 原因"也返回给 UI。
 
-    Args:
-        path: 数据库文件, 或含库的文件夹。
-
-    Raises:
-        ValueError: 一个都没挂上, 消息带人工可读原因。
+    v4.1.2：挂一个混合文件夹时，以前只要有一个库成功就静默丢掉失败原因
+    （例如旧 COD sqlite 不再兼容），用户看到"挂载成功"却不知道别的库为何
+    没进来。返回值 ``(mounted, skipped_reasons)``。
     """
     p = Path(path)
     if not p.exists():
@@ -675,13 +693,25 @@ def mount_any(path: str | Path) -> list[Mount]:
     if not mounted:
         raise ValueError(_why_not_mounted(p, reasons))
     clear_probe_cache()
-    return mounted
+    return mounted, reasons
 
+
+def mount_any(path: str | Path) -> list[Mount]:
+    """挂载一个路径下**全部**合格的库, 一次挂全 (幂等)。
+
+    Args:
+        path: 数据库文件, 或含库的文件夹。
+
+    Raises:
+        ValueError: 一个都没挂上, 消息带人工可读原因。
+    """
+    mounted, _skipped = mount_any_report(path)
+    return mounted
 
 __all__ = [
     "KIND_ENGINE", "KIND_LABEL_KEY", "Mount",
     "add_mount", "active_id", "active_mount", "all_mounts", "clear_probe_cache",
     "default_mounts", "describe", "detect_kind", "get_mount", "is_polydb_dir",
-    "mount_any", "probe", "probe_all", "remove_mount", "resolve_mount",
+    "mount_any", "mount_any_report", "probe", "probe_all", "remove_mount", "resolve_mount",
     "resolve_source", "set_active", "source_entries",
 ]

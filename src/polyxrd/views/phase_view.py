@@ -312,7 +312,11 @@ class PhaseView(QWidget):
 
         self._label_db_source.setText(tr("vw.phase_view.label_db_source"))
         # 数据库下拉项本身是本地化的 (「内置 118 相 / COD 无机物 …」) → 整表重建
-        self.refresh_db_sources()
+        # v4.1.2: 首次进入默认选内置 COD-Inorg（开箱即检索），而不是 118 相 builtin。
+        # 之后的 refresh_db_sources() 仍尊重用户显式选过的项（keep 分支）。
+        self._db_combo.setCurrentIndex(self._preferred_db_source_index())
+        self._db_combo.setToolTip(self._db_combo_tooltip())
+        self._mark_unavailable_db_sources()
 
         self._btn_profile_fitting.setText(tr("vw.phase_view.btn_profile_fitting"))
         self._btn_profile_fitting.setToolTip(tr("vw.phase_view.tip_profile_fitting"))
@@ -581,11 +585,40 @@ class PhaseView(QWidget):
                 item.setEnabled(False)
                 item.setToolTip(hint)
 
-        # 当前选中项若刚被置灰 → 退回内置库 (否则用户按"识别"会一无所获)
+        # 当前选中项若刚被置灰 → 退到首选数据源（内置 polyDB，其次内置库）
         idx = self._db_combo.currentIndex()
         item = model.item(idx)
         if idx > 0 and item is not None and not item.isEnabled():
-            self._db_combo.setCurrentIndex(0)
+            self._db_combo.setCurrentIndex(self._preferred_db_source_index())
+
+    def _preferred_db_source_index(self) -> int:
+        """默认数据源下标：内置 COD-Inorg > 任一可用 polyDB > 内置 118 相。
+
+        v4.1.2：v4.1.0 内置了 COD-Inorg 默认库，但首次启动仍选「内置库
+        (118 物相)」，与 README/发布说明的「开箱即检索」矛盾。
+        """
+        try:
+            keys = self._db_source_keys
+            enabled = self._db_enabled
+            # 1) 显式「设为当前」优先
+            from polyxrd.services import db_mounts
+
+            active = db_mounts.active_id()
+            if active and active in keys and keys.index(active) < len(enabled) \
+                    and enabled[keys.index(active)]:
+                return keys.index(active)
+            # 2) 默认内置 polyDB 变体
+            for i, key in enumerate(keys):
+                if (i < len(enabled) and enabled[i]
+                        and key.startswith("polydb:")):
+                    return i
+            # 3) 任一非内置/非 user 的可用库
+            for i, key in enumerate(keys):
+                if i < len(enabled) and enabled[i] and key not in ("builtin", "user"):
+                    return i
+        except Exception:  # noqa: BLE001 - 首选项计算失败退回内置库
+            pass
+        return 0
 
     def refresh_db_sources(self) -> None:
         """重建「数据源」下拉 (挂载变化 / 切语言时调用), 尽量保留当前选择。
@@ -610,8 +643,9 @@ class PhaseView(QWidget):
         elif keep in self._db_source_keys:
             self._db_combo.setCurrentIndex(self._db_source_keys.index(keep))
         else:
-            # 原来选的那份库被卸载了 → 回退到内置库
-            self._db_combo.setCurrentIndex(0)
+            # v4.1.2: 默认选内置 COD-Inorg（开箱即检索），而不是 118 相内置库；
+            # 用户显式选过 builtin 时 keep 会命中上一分支，不受影响。
+            self._db_combo.setCurrentIndex(self._preferred_db_source_index())
         self._db_combo.setToolTip(self._db_combo_tooltip())
         self._db_combo.blockSignals(False)
         self._mark_unavailable_db_sources()

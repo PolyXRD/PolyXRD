@@ -145,6 +145,30 @@ class TestDbSourceRefresh:
 
         return PhaseView(MainViewModel())
 
+    def test_default_source_prefers_bundled_polydb(self, pv, monkeypatch):
+        """v4.1.2：首启数据源应选中内置 COD-Inorg，而不是 118 相 builtin。"""
+        from polyxrd.services import db_mounts
+
+        rows = [{
+            "kind": "polydb", "id": "polydb:cod-inorg",
+            "label_key": "db_mounts.kind.polydb_inorg",
+            "label": "COD-Inorg", "ok": True, "rows": 77500,
+            "variant": "cod-inorg", "path": "", "builtin": True,
+        }]
+        monkeypatch.setattr(db_mounts, "source_entries", lambda: rows)
+        monkeypatch.setattr(db_mounts, "active_id", lambda: "")
+        pv._db_source_labels()  # 用假挂载表重建 keys/enabled
+        idx = pv._preferred_db_source_index()
+        assert pv._db_source_keys[idx] == "polydb:cod-inorg"
+
+    def test_default_source_falls_back_to_builtin(self, pv, monkeypatch):
+        from polyxrd.services import db_mounts
+
+        monkeypatch.setattr(db_mounts, "source_entries", lambda: [])
+        monkeypatch.setattr(db_mounts, "active_id", lambda: "")
+        pv._db_source_labels()
+        assert pv._preferred_db_source_index() == 0
+
     def test_pdf2_coverage_scanned_once_per_db_version(self, pv, tmp_path,
                                                        monkeypatch):
         from polyxrd.config import get_config

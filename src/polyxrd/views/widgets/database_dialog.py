@@ -406,12 +406,20 @@ class DatabaseManagerDialog(QDialog):
         与选文件对话框解耦, 便于单测直接喂路径; 返回是否至少挂上一个。
         """
         try:
-            mounted = db_mounts.mount_any(path)
+            mounted, skipped = db_mounts.mount_any_report(path)
         except Exception as e:  # noqa: BLE001 - 失败原因要如实展示
             QMessageBox.warning(
                 self, tr("db_manager.mount_failed"),
                 tr("db_manager.mount_failed_body", path=path, error=str(e)))
             return False
+        if skipped:
+            # v4.1.2: 混合文件夹里部分库不合格时不再静默丢弃原因
+            # （典型：旧 COD sqlite 自 v4.1.0 起不再兼容）
+            QMessageBox.warning(
+                self, tr("db_manager.mount_partial_title"),
+                tr("db_manager.mount_partial_body",
+                   n=len(mounted), skipped=len(skipped),
+                   detail="\n".join(f"· {s}" for s in skipped[:6])))
         db_import.reload_caches()
         self.reload()
         self.databases_changed.emit()

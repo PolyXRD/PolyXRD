@@ -137,26 +137,32 @@ if ($SkipPortable) {
             } else {
                 Write-Output '      OK: 数据库仅位于 databases\<*.polyDB>\ (v4.1.0 内置默认库)'
             }
-            # 内置库完整性: 8 个分段文件一个都不能少
-            # ⚠ 条目名分隔符不可信: Compress-Archive(.NET Framework) 写出的 zip 里
-            #   ZipArchiveEntry.FullName 用的是**反斜杠**，Python zipfile 读出来却是
-            #   正斜杠 —— 所以一律先归一化再比对，别直接拼 '/xxx' 去比。
-            $segments = @('meta.json', 'index.sqlite', 'peaks_d.f32', 'peaks_i.u16',
-                          'bins.u8', 'elem.u8', 'sites.bin', 'sites_off.i64')
-            $norm = @{}
-            foreach ($e in $entries) { $norm[$e.FullName.Replace('\', '/')] = $e.Length }
-            $metaName = $norm.Keys | Where-Object { $_ -like 'databases/*.polyDB/meta.json' } |
-                        Select-Object -First 1
-            if ($metaName) {
-                $libDir = ($metaName -replace '/meta\.json$', '')
-                foreach ($seg in $segments) {
-                    if (-not $norm.ContainsKey("$libDir/$seg")) {
-                        Fail ("内置 polyDB 缺少分段文件: $libDir/$seg")
-                    }
-                }
-                Write-Output ('      内置库 ' + (Split-Path $libDir -Leaf) + ' 8/8 分段文件齐全')
+            if ($SkipBundledDb) {
+                Write-Output '      (POLYXRD_NO_BUNDLE_DB：纯客户端小包，跳过内置库校验)'
             } else {
-                Fail '便携包内没有 databases\*.polyDB\meta.json —— 解压后无法直接检索'
+                # 内置库完整性: 每个 databases/*.polyDB/ 的 8 个分段都要齐
+                # ⚠ 条目名分隔符不可信: Compress-Archive(.NET Framework) 写出的 zip 里
+                #   ZipArchiveEntry.FullName 用的是**反斜杠**，Python zipfile 读出来却是
+                #   正斜杠 —— 所以一律先归一化再比对，别直接拼 '/xxx' 去比。
+                $segments = @('meta.json', 'index.sqlite', 'peaks_d.f32', 'peaks_i.u16',
+                              'bins.u8', 'elem.u8', 'sites.bin', 'sites_off.i64')
+                $norm = @{}
+                foreach ($e in $entries) { $norm[$e.FullName.Replace('\', '/')] = $e.Length }
+                $metaNames = @($norm.Keys |
+                    Where-Object { $_ -like 'databases/*.polyDB/meta.json' })
+                if ($metaNames.Count -eq 0) {
+                    Fail '便携包内没有 databases\*.polyDB\meta.json —— 解压后无法直接检索'
+                }
+                foreach ($metaName in $metaNames) {
+                    $libDir = ($metaName -replace '/meta\.json$', '')
+                    $lib = Split-Path $libDir -Leaf
+                    foreach ($seg in $segments) {
+                        if (-not $norm.ContainsKey("$libDir/$seg")) {
+                            Fail ("内置 polyDB 缺少分段文件: $libDir/$seg")
+                        }
+                    }
+                    Write-Output ('      内置库 ' + $lib + ' 8/8 分段文件齐全')
+                }
             }
         } finally { $zip.Dispose() }
     } catch {

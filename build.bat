@@ -6,7 +6,7 @@ set PYTHONUTF8=1
 set PYTHONIOENCODING=utf-8
 
 REM APPVER 是版本号唯一真源（标题 / banner / 输出名 / 安装包名都跟随）
-set APPVER=4.1.1
+set APPVER=4.1.2
 
 title PolyXRD v%APPVER% 打包构建器
 echo ========================================
@@ -50,9 +50,12 @@ if %errorlevel% neq 0 (
 echo.
 echo [步骤 1/6] PyInstaller 打包 (EXE 阶段, COLLECT 阶段可能因沙盒 safe-delete 失败)...
 echo.
-echo [信息] 数据库策略: v4.1.0 起**内置**默认库 COD-Inorg (polyDB, ~86 MB)。
-echo        COD-Full 仍为外挂可选包; PDF2-2004 因版权永不随包分发。
-echo        若要做"纯客户端小包", 请先 set POLYXRD_NO_BUNDLE_DB=1 再运行本脚本。
+if defined POLYXRD_NO_BUNDLE_DB (
+    echo [信息] POLYXRD_NO_BUNDLE_DB=1: 纯客户端小包, 不内置默认库; 验收自动加 -SkipBundledDb
+) else (
+    echo [信息] 数据库策略: v4.1.0 起内置默认库 COD-Inorg, polyDB ~86 MB。
+    echo        COD-Full 仍为外挂可选包; PDF2-2004 因版权永不随包分发。
+)
 
 REM 应用图标已由 build_icon.py 生成 (基于 crystal-mark 品牌资产, 7 档多分辨率 ICO).
 REM 如需重新生成: %PYTHON% build_icon.py
@@ -92,6 +95,7 @@ if %errorlevel% neq 0 (
 
 REM v4.1.0: 默认库内置 —— 把 COD-Inorg polyDB 复制进 dist\PolyXRD\databases
 REM (只要是无机物库; 解压即可检索, 无需先下载外挂库)。跳过用 set POLYXRD_NO_BUNDLE_DB=1
+if defined POLYXRD_NO_BUNDLE_DB goto :skip_bundle_db
 echo.
 echo [步骤 2.5/6] 内置默认库 COD-Inorg (polyDB) 复制到 dist\PolyXRD\databases ...
 echo.
@@ -111,6 +115,8 @@ if %errorlevel% neq 0 (
     pause
     exit /b 1
 )
+
+:skip_bundle_db
 
 echo.
 echo [步骤 3/6] 创建 Inno Setup 安装程序...
@@ -236,6 +242,7 @@ REM 不再用"文件是否存在"自证跳过 (zip 生成失败也会被跳过�
 set VERIFY_EXTRA=
 if /i "%POLYXRD_FLAVOR%"=="internal" set VERIFY_EXTRA=-SkipSetup
 if /i not "%POLYXRD_FLAVOR%"=="internal" set VERIFY_EXTRA=-SkipPortable
+if defined POLYXRD_NO_BUNDLE_DB set VERIFY_EXTRA=%VERIFY_EXTRA% -SkipBundledDb
 %PWSH% -NoProfile -ExecutionPolicy Bypass -File "scripts\verify_release.ps1" -Version %APPVER% %VERIFY_EXTRA%
 if %errorlevel% neq 0 (
     echo.

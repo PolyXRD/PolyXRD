@@ -308,8 +308,9 @@ class Report:
 
 
 # ── 安装包验收 ─────────────────────────────────────────────────────────────
-def verify_setup(setup: Path, scratch: Path | None = None) -> Report:
-    """静默安装并验收正式安装包。"""
+def verify_setup(setup: Path, scratch: Path | None = None,
+                 expect_bundled: bool = True) -> Report:
+    """静默安装并验收正式安装包（expect_bundled=False 用于纯客户端小包）。"""
     rep = Report()
     setup = setup.resolve()
     print(f'\n安装包 : {setup}  ({setup.stat().st_size:,} B)')
@@ -365,16 +366,22 @@ def verify_setup(setup: Path, scratch: Path | None = None) -> Report:
     files = [p for p in inst.rglob('*') if p.is_file()]
     rep.check('落盘文件数 > 10000', len(files) > 10000, f'{len(files):,} 个')
 
-    # ── 内置库 8/8（v4.1.1：动态取库名，换库不再误报）────────────────────
-    libs = sorted((inst / 'databases').glob(BUNDLED_LIB_GLOB))         if (inst / 'databases').is_dir() else []
-    if not rep.check('安装包含内置 polyDB 默认库', bool(libs),
-                     f'{len(libs)} 个'):
-        rep.dump()
-        return rep
-    for lib in libs:
-        have = [s for s in POLYDB_SEGMENTS if (lib / s).is_file()]
-        rep.check(f'内置库 {lib.name} 8/8 分段齐全',
-                  len(have) == len(POLYDB_SEGMENTS), f'{len(have)}/8')
+    # ── 内置库 8/8（v4.1.1 动态取库名；v4.1.2 支持纯客户端小包）──────────
+    if not expect_bundled:
+        db_files = [p for p in (inst / 'databases').rglob('*')
+                    if p.is_file()] if (inst / 'databases').is_dir() else []
+        rep.check('纯客户端小包（无内置库）', not db_files, f'{len(db_files)} 个文件')
+    else:
+        libs = sorted((inst / 'databases').glob(BUNDLED_LIB_GLOB)) \
+            if (inst / 'databases').is_dir() else []
+        if not rep.check('安装包含内置 polyDB 默认库', bool(libs),
+                         f'{len(libs)} 个'):
+            rep.dump()
+            return rep
+        for lib in libs:
+            have = [s for s in POLYDB_SEGMENTS if (lib / s).is_file()]
+            rep.check(f'内置库 {lib.name} 8/8 分段齐全',
+                      len(have) == len(POLYDB_SEGMENTS), f'{len(have)}/8')
 
     # 意外业务库：polyDB 容器**自身**的 index.sqlite 是它的合法分段，不能算；
     # pymatgen 的对称性数据表是依赖的一部分，也放行。
@@ -406,7 +413,8 @@ def verify_setup(setup: Path, scratch: Path | None = None) -> Report:
 
 
 # ── 便携包对照 ─────────────────────────────────────────────────────────────
-def verify_portable(zpath: Path, scratch: Path | None = None) -> Report:
+def verify_portable(zpath: Path, scratch: Path | None = None,
+                    expect_bundled: bool = True) -> Report:
     """便携包必须是 internal 变体，且带便携版辅助文件。"""
     rep = Report()
     zpath = zpath.resolve()
@@ -433,6 +441,8 @@ def verify_portable(zpath: Path, scratch: Path | None = None) -> Report:
             got = sum(1 for s in POLYDB_SEGMENTS
                       if any(n.endswith(f'databases/{lib}/{s}') for n in names))
             best = max(best, got)
+        if not expect_bundled:
+            best = len(POLYDB_SEGMENTS) if not lib_dirs else -1
         helpers = [n for n in PORTABLE_ONLY_FILES
                    if any(x.endswith(n) for x in names)]
     try:
@@ -453,14 +463,17 @@ def main(argv: list[str] | None = None) -> int:
                     help='按「便携包」口径验收（期望 internal 变体 + 便携版辅助文件）')
     ap.add_argument('--scratch', type=Path, default=None,
                     help='临时工作目录（默认 %%TEMP%%；**不要**指向带 safe-delete ACE 的目录）')
+    ap.add_argument('--no-bundled-db', action='store_true',
+                    help='按纯客户端小包验收（POLYXRD_NO_BUNDLE_DB=1 构建，应无内置库）')
     args = ap.parse_args(argv)
 
     if not args.target.is_file():
         print(f'文件不存在: {args.target}', file=sys.stderr)
         return 2
 
-    rep = verify_portable(args.target, args.scratch) if args.portable \
-        else verify_setup(args.target, args.scratch)
+    expect_bundled = not args.no_bundled_db
+    rep = verify_portable(args.target, args.scratch, expect_bundled) \
+        if args.portable else verify_setup(args.target, args.scratch, expect_bundled)
     rep.dump()
     print('\nRESULT:', 'OK' if rep.ok else 'FAIL')
     return 0 if rep.ok else 1
