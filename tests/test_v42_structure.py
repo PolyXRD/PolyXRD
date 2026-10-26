@@ -30,10 +30,6 @@ _ALLOWLIST = {
     "services/cod_local.py",
     # P2 待迁消费者
     "services/__init__.py",
-    "services/phase_identifier.py",          # P2.1
-    "services/pdf2_database.py",             # P2.2
-    "services/polydb.py",                    # P2.3
-    "services/user_db.py",                   # P2.4
     "services/phase_structure_resolver.py",  # P2.5
     "services/phase_cif_export.py",          # P2.6
     "services/rietveld_refiner.py",          # P2.7

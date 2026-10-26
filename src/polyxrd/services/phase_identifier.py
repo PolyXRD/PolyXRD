@@ -1536,7 +1536,7 @@ class PhaseIdentifier:
         """预筛候选 → Phase → 统一 FOM 评分 → 排序。
 
         COD 无机库与用户库**表结构同构**, 预筛之后的这一段完全共用:
-          - ``fetch(cod_id)`` → 详情 dict (``get_cod_phase``, 可带外部 conn)
+          - ``fetch(cod_id)`` → 详情 dict（``phase_search.fetch_phase_record``，同一 conn）
           - ``make_phase(detail, cand, ref_peaks)`` → Phase (两库命名/附带字段不同)
 
         排序以 Hanawalt 预筛质量为主 (主峰原则/强峰精确率/加权召回),
@@ -1603,7 +1603,7 @@ class PhaseIdentifier:
     ) -> list[PhaseMatchResult]:
         """物相识别: 用户自建库 (``user_phases.sqlite``, v2.6.0)。
 
-        流程与 ``identify_with_cod_inorganics`` 完全一致 (同一套 d-I 预筛 +
+        流程与 COD 无机库检索完全一致 (同一套 d-I 预筛 +
         同一套 FOM 排序), 差别只有两点:
           1. 数据源换成用户库只读连接;
           2. 返回的 Phase **带晶胞与全胞原子位点**, 可直接进内置引擎精修
@@ -1614,7 +1614,10 @@ class PhaseIdentifier:
 
         try:
             from polyxrd.services import user_db
-            from polyxrd.services.cif_database import CIFDatabase
+            from polyxrd.services.phase_search import (
+                fetch_phase_record,
+                search_phases_by_d_peaks,
+            )
         except Exception:
             return []
 
@@ -1623,7 +1626,6 @@ class PhaseIdentifier:
             return []
 
         try:
-            cdb = CIFDatabase(enable_cod_local=False)
             wavelength = self._effective_wavelength(data)
 
             # 1. 实验峰 2θ → d 值
@@ -1643,14 +1645,15 @@ class PhaseIdentifier:
             allowed_pool = (set(ef["must_have"]) | set(ef["has"]) | set(ef["maybe"])
                             if ef else set())
             elements_allowed = allowed_pool if allowed_pool else None
-            cands = cdb.search_cod_by_d_peaks(
-                d_list, i_list, tolerance=prefilter_tolerance,
+            cands = search_phases_by_d_peaks(
+                conn,
+                d_list, i_list,
+                tolerance=prefilter_tolerance,
                 tolerance_rel=prefilter_tolerance_rel,
                 min_match=prefilter_min_match,
                 max_ref_peaks=prefilter_max_ref_peaks,
                 limit=prefilter_limit,
                 elements_allowed=elements_allowed,
-                conn=conn,
             )
             if not cands:
                 return []
@@ -1658,7 +1661,7 @@ class PhaseIdentifier:
             # 3. 候选 → Phase (带晶胞/位点) → FOM 评分
             return self._rank_candidates(
                 cands,
-                fetch=lambda cid: cdb.get_cod_phase(cid, conn=conn),
+                fetch=lambda cid: fetch_phase_record(conn, cid),
                 make_phase=self._make_user_phase,
                 ef=ef, data=data, peaks=peaks, top_n=top_n,
                 tolerance=tolerance, wavelength=wavelength,
@@ -1697,7 +1700,7 @@ class PhaseIdentifier:
             element_filter: 三态元素过滤 (预筛层 + 判定层都会用)
             top_n: 返回候选数
             tolerance: 2θ 容差 (FOM 匹配用)
-            prefilter_*: d-I 预筛参数, 语义与 ``identify_with_cod_inorganics``
+            prefilter_*: d-I 预筛参数, 语义与 COD 无机库检索
                 逐项相同
             db: 可选的既有 :class:`PolyDatabase` 实例 (A/B 对照/复用 mmap 用)
             db_path: 显式库目录; 省略时取配置里挂载的 polyDB
@@ -1861,7 +1864,7 @@ class PhaseIdentifier:
     ) -> list[PhaseMatchResult]:
         """物相识别: PDF2-2004 数据库 (ICDD PDF-2 2004 版)。
 
-        与 identify_with_cod_inorganics 流程完全一致, 唯一区别是
+        与 COD 无机库检索流程完全一致, 唯一区别是
         数据源从 COD 无机物库切换为 PDF2-2004 SQLite 索引。
         用于自用验证: 对照 COD 库结果与 PDF2 商用数据库的差异。
 

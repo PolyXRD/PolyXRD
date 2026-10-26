@@ -7,7 +7,7 @@ polyDB 是 PolyXRD 自有的外挂物相库格式（规范见
 本模块只做三件事：
   · :func:`probe` —— 轻量判别"这个目录是不是一个可用的 polyDB"；
   · :class:`PolyDatabase` —— mmap 只读访问：位图预筛 / 取峰 / 取位点 / 统计；
-  · 与 ``cif_database.get_cod_phase`` **同构**的返回字典，便于上游
+  · 与 ``phase_search.fetch_phase_record`` **同构**的返回字典，便于上游
     :meth:`PhaseIdentifier._rank_candidates` 原样复用（打分口径一字不改）。
 
 设计要点
@@ -33,11 +33,11 @@ from typing import Iterable, Optional
 
 import numpy as np
 
-#: 打分原子直接复用 COD 库实现 —— 同一口径, 不允许第二套
-from polyxrd.services.cif_database import (
-    _dedupe_by_tol,
-    _interval_hit,
-    _match_positions,
+#: 打分原子直接复用 phase_search —— 同一口径, 不允许第二套
+from polyxrd.services.phase_search import (
+    dedupe_by_tol,
+    interval_hit,
+    match_positions,
 )
 
 _logger = logging.getLogger(__name__)
@@ -450,7 +450,7 @@ class PolyDatabase:
 
         现在改为精确复刻 :func:`_hanawalt_metric` 的前三个分量：
 
-        * **贪心去重**：与 :func:`_dedupe_by_tol` 同规则（只与已保留项比、容差取
+        * **贪心去重**：与 :func:`dedupe_by_tol` 同规则（只与已保留项比、容差取
           候选自身 ``_tol(d)``、``<=`` 判据、顺序敏感）；
         * **窗口并集**：对前 5 个去重峰的容差窗做差分数组并集，得到 ``obs``
           （= ``n_top_observed``）与强度权重和；
@@ -590,7 +590,7 @@ class PolyDatabase:
         return int(r[0]) if r and r[0] is not None else -1
 
     def get_phase(self, eid: int) -> Optional[dict]:
-        """取一条相详情，键与 ``cif_database.get_cod_phase`` 同构。"""
+        """取一条相详情，键与 ``phase_search.fetch_phase_record`` 同构。"""
         conn = self._get_conn()
         arr = self._get_arrays()
         if conn is None or arr is None:
@@ -677,7 +677,7 @@ class PolyDatabase:
             })
         return out
 
-    # ── 检索主入口（与 search_cod_by_d_peaks 同签名/同排序口径） ──
+    # ── 检索主入口（与 search_phases_by_d_peaks 同签名/同排序口径） ──
     def search_by_d_peaks(
         self,
         measured_d: list[float],
@@ -694,7 +694,7 @@ class PolyDatabase:
     ) -> list[dict]:
         """Hanawalt d-I 预筛 + 精确打分，返回候选 dict 列表。
 
-        语义与 :meth:`cif_database.CIFDatabase.search_cod_by_d_peaks` 对齐
+        语义与 :func:`phase_search.search_phases_by_d_peaks` 对齐
         （同样的容差规则、排序主键、返回字段），差异只在候选生成方式。
         """
         arr = self._get_arrays()
@@ -874,7 +874,7 @@ def _hanawalt_metric(
     use_rel: bool,
     max_ref_peaks: int,
 ) -> Optional[dict]:
-    """单相 Hanawalt 度量 —— 逐行对齐 ``cif_database.search_cod_by_d_peaks``。
+    """单相 Hanawalt 度量 —— 逐行对齐 :func:`phase_search.search_phases_by_d_peaks`。
 
     只依赖数据数组，不碰数据库；因此 polyDB / 旧库共用同一套打分。
     """
@@ -889,18 +889,18 @@ def _hanawalt_metric(
         return None
     t_ref = (np.maximum(tol_abs, trel * ref_d) if use_rel
              else np.full(n_ref_used, tol_abs))
-    hit_ref, pos_ref = _match_positions(md, ref_d - t_ref, ref_d + t_ref)
+    hit_ref, pos_ref = match_positions(md, ref_d - t_ref, ref_d + t_ref)
     n_matched_ref = int(hit_ref.sum())
     n_matched_meas = int(np.unique(pos_ref[hit_ref]).size)
 
     n_top = min(n_i, max(n_meas + 2, 8), 12)
     top_d = d_np[order[:n_top]]
-    unique_top_d = _dedupe_by_tol(top_d, tol_abs, trel, use_rel)
+    unique_top_d = dedupe_by_tol(top_d, tol_abs, trel, use_rel)
     if not unique_top_d:
         return None
     ud = np.asarray(unique_top_d, dtype=np.float64)
     t_md = (np.maximum(tol_abs, trel * md) if use_rel else np.full(n_meas, tol_abs))
-    hit_m = _interval_hit(np.sort(ud), md - t_md, md + t_md)
+    hit_m = interval_hit(np.sort(ud), md - t_md, md + t_md)
     n_meas_in_top = int(hit_m.sum())
     covered_i_sum = float(mi[hit_m].sum()) if mi is not None else 0.0
 
@@ -909,7 +909,7 @@ def _hanawalt_metric(
         phase_main_d = float(ud[0])
         for mdk in main_meas_d_topk:
             # 相对容差时取"物相主峰 tol"与"测量主峰 tol"的较大值 —— 与
-            # cif_database.search_cod_by_d_peaks 的 max(_tol(phase), _tol(md))
+            # phase_search.search_phases_by_d_peaks 的 max(tol(phase), tol(md))
             # 逐字一致（旧实现只取物相侧，trel>0 时两条链路的 mh 会分叉）。
             if use_rel:
                 t_main = max(max(tol_abs, trel * phase_main_d),
@@ -921,7 +921,7 @@ def _hanawalt_metric(
                 break
     k5 = ud[:5]
     t5 = (np.maximum(tol_abs, trel * k5) if use_rel else np.full(k5.size, tol_abs))
-    n_top_observed = int(_interval_hit(md, k5 - t5, k5 + t5).sum())
+    n_top_observed = int(interval_hit(md, k5 - t5, k5 + t5).sum())
 
     total_i = float(mi.sum()) if mi is not None else 0.0
     top_recall = n_meas_in_top / n_meas if n_meas else 0.0

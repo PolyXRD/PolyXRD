@@ -35,6 +35,7 @@ __all__ = [
     "PEAK_TOP_N",
     "TOP_PEAK_COLUMNS",
     "dedupe_by_tol",
+    "fetch_phase_record",
     "has_top_peak_columns",
     "interval_hit",
     "match_positions",
@@ -506,6 +507,58 @@ def search_phases_by_d_peaks(
         reverse=True,
     )
     return results[:limit]
+
+
+# ──────────────────────────────────────────────────────────────
+# 单相行读取（检索结果的"详情"半边）
+# ──────────────────────────────────────────────────────────────
+#
+# 预筛拿到候选 cod_id 后，上层还要取该相的晶胞/峰表才能造 Phase 并做 FOM。
+# 这张表同样由调用方给连接（COD 无机库 / 用户库 / PDF2 同构），本模块只负责
+# 取一行的 SQL 与"峰串 → float 列表"的展开，**不做任何库定位**。
+
+_PHASE_RECORD_SQL = (
+    "SELECT cod_id, ref_id, display_id, formula, space_group, "
+    "cell_a, cell_b, cell_c, cell_alpha, cell_beta, cell_gamma, "
+    "n_peaks, peaks_d, peaks_i "
+    "FROM phases WHERE cod_id = ?"
+)
+
+
+def fetch_phase_record(conn, cod_id) -> dict | None:
+    """按主键取一相的完整记录（晶胞 + 峰表），供上层造 ``Phase``。
+
+    Args:
+        conn: 已打开的 sqlite 连接（表 ``phases``）
+        cod_id: 相主键（列名沿用上游，用户库用 ``>= 9 亿`` 的号段）
+
+    Returns:
+        记录 dict，额外带 ``peaks_d_list`` / ``peaks_i_list``（已解析为 float
+        列表）与 ``source="match"``；无此条返回 None。
+
+    Note:
+        旧实现的同位置方法会在此对 ``cod_id < 9e8`` 的行做一次
+        "formula 被写成空间群符号" 的 CIF 回退（COD 无机物库建库 bug）。
+        该回退依赖旧 COD 无机库独有的 ``cif_gz`` 列，随旧库在 v4.2 一并退役；
+        用户库/PDF2 的连接上它本来就是必然失败的 no-op，故此处不再保留。
+    """
+    if conn is None:
+        return None
+    cur = conn.execute(_PHASE_RECORD_SQL, (cod_id,))
+    row = cur.fetchone()
+    if row is None:
+        return None
+    # 不依赖 row_factory：tuple 与 sqlite3.Row 都能这样取值
+    cols = [d[0] for d in cur.description]
+    data = dict(zip(cols, tuple(row)))
+    for side in ("d", "i"):
+        raw = data.get(f"peaks_{side}")
+        # 与 parse_float_csv 同口径；空串/None → 空列表
+        data[f"peaks_{side}_list"] = (
+            [float(x) for x in raw.split(",") if x.strip()] if raw else []
+        )
+    data["source"] = "match"
+    return data
 
 
 # ──────────────────────────────────────────────────────────────

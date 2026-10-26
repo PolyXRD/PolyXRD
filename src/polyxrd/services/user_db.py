@@ -37,7 +37,7 @@ DEFAULT_TT_RANGE = (5.0, 100.0)
 #: 位点密度上限 (atoms/Å³)。真实晶体极限 ~0.20 (锇 0.14 / 金刚石 0.176),
 #: 取 0.22 留余量。**这条主要拦"均匀过度展开"** —— 例如 ``R -3 c :R`` 菱形
 #: 设置被按六方 36 操作展开时整胞等倍放大, 元素配比仍然正确, 只有密度能识破
-#: (cod_local.get_phase 的同类保险丝为 0.5, 这里收得更紧)。
+#: (旧 COD 本地库 get_phase 的同类保险丝为 0.5, 这里收得更紧)。
 _DENSITY_MAX = 0.22
 #: 化学式配比容差 (摩尔分数 L1 距离)。实测正确候选 ≤0.001, 错误候选 ≥0.12
 _COMP_TOL = 0.03
@@ -106,7 +106,7 @@ def _connect_write() -> sqlite3.Connection:
 
 
 def user_conn() -> sqlite3.Connection | None:
-    """只读连接 (与 CIFDatabase._get_cod_conn 同风格); 库不存在返回 None。"""
+    """只读连接 (与 COD 无机库只读连接同风格); 库不存在返回 None。"""
     p = user_db_path()
     if not p.exists():
         return None
@@ -360,8 +360,7 @@ def _entry_from_cif(text: str, name: str):
         展开, 整胞被等倍放大 (元素配比仍对, 只有密度能识破);
       · pymatgen 把非 P1 误判为 P1 时 (手写 CIF 常见) B 未展开。
     """
-    from polyxrd.services.cod_local import parse_atom_sites_from_cif
-    from polyxrd.services.cod_local import parse_cif_text
+    from polyxrd.services.cif_utils import parse_atom_sites_from_cif, parse_cif_text
     from polyxrd.services.phase_cif import expand_sites_by_symmetry
 
     entry = parse_cif_text(text, file_rel=name, cod_id=0)

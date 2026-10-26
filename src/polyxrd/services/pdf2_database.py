@@ -5,7 +5,7 @@ PDF2-2004 数据库服务
 将 ICDD PDF-2 2004 版二进制/定宽文本数据库 (pdf2 - 2004.dat + codens.dat)
 解析为 SQLite 索引，提供与 COD 无机物库相同的检索接口
 (search_by_d_peaks / get_phase / search_phases)，可直接接入
-CIFDatabase 的热切换机制和 PhaseIdentifier 的物相识别流程。
+PhaseIdentifier 的物相识别流程。
 
 PDF-2 2004 定宽格式 (每行 80 字符 ASCII):
     每个物相记录由若干子记录组成，以 PddddddX<code> 标识:
@@ -670,8 +670,8 @@ class PDF2DatabaseBuilder:
 class PDF2Database:
     """PDF2-2004 SQLite 查询服务 (只读)。
 
-    提供与 CIFDatabase 的 COD 查询相同的接口,
-    可直接接入 PhaseIdentifier 物相识别流程。
+    检索接口与 COD 无机库 / 用户库同构（打分核心统一在
+    :mod:`polyxrd.services.phase_search`），可直接接入 PhaseIdentifier。
     """
 
     def __init__(self, db_path: Optional[Path] = None):
@@ -773,7 +773,7 @@ class PDF2Database:
     def get_phase(self, cod_id: int) -> Optional[dict]:
         """获取指定物相详情 (含 d-I 峰与对称性信息)。
 
-        与 CIFDatabase.get_cod_phase 接口一致, 并额外提供 PDF2 独有的
+        与 :func:`phase_search.fetch_phase_record` 的字段同构, 并额外提供 PDF2 独有的
         name / mineral / space_group_num / pearson / 约化晶胞 / 密度 等字段。
         """
         conn = self._get_conn()
@@ -831,7 +831,7 @@ class PDF2Database:
     def search_phases(self, query: str, *, limit: int = 50) -> list[dict]:
         """按化学式 / 名称 / 矿物名 / PDF2 ID 搜索物相。
 
-        与 CIFDatabase.search_cod_phases 接口一致 (额外带 name/mineral)。
+        与 COD 无机库 / 用户库的同名搜索接口一致 (额外带 name/mineral)。
         """
         conn = self._get_conn()
         if conn is None:
@@ -873,28 +873,22 @@ class PDF2Database:
     ) -> list[dict]:
         """用测得的 d 值列表搜索匹配物相。
 
-        与 CIFDatabase.search_cod_by_d_peaks 算法一致:
-        Hanawalt 主峰原则 + 强度加权召回 + 双向匹配。
-        复用同一实现以保持口径统一。
+        打分口径与 COD 无机库 / 用户库 / polyDB 完全一致（同一套 Hanawalt
+        主峰原则 + 强度加权召回 + 双向匹配），实现集中在
+        :mod:`polyxrd.services.phase_search`，本方法只把本库的连接递进去。
         """
-        from polyxrd.services.cif_database import CIFDatabase
+        from polyxrd.services.phase_search import search_phases_by_d_peaks
 
-        # 用正常构造器而非 __new__ 裸实例: 后者跳过 __init__, 一旦
-        # search_cod_by_d_peaks 触碰 _cod_enabled/_cod_db 就会 AttributeError。
-        cdb = CIFDatabase(enable_cod_local=False)
-        cdb._cod_conn = self._get_conn()
-        try:
-            return cdb.search_cod_by_d_peaks(
-                measured_d, measured_i,
-                tolerance=tolerance,
-                tolerance_rel=tolerance_rel,
-                min_match=min_match,
-                limit=limit,
-                max_ref_peaks=max_ref_peaks,
-                elements_allowed=elements_allowed,
-            )
-        finally:
-            cdb._cod_conn = None
+        return search_phases_by_d_peaks(
+            self._get_conn(),
+            measured_d, measured_i,
+            tolerance=tolerance,
+            tolerance_rel=tolerance_rel,
+            min_match=min_match,
+            limit=limit,
+            max_ref_peaks=max_ref_peaks,
+            elements_allowed=elements_allowed,
+        )
 
 
 # ──────────────────────────────────────────────────────────────
