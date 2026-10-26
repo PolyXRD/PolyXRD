@@ -69,15 +69,15 @@ def test_mcp_server_metadata():
 
 
 def test_mcp_server_registers_all_tools():
-    """20 个 @mcp.tool() 装饰函数应在 server 模块可见.
+    """21 个 @mcp.tool() 装饰函数应在 server 模块可见.
 
     用模块属性而非 dir(mcp) 验证, 因为 mcp 实例有 lazy property (session_manager)
     在 streamable_http_app() 调用前访问会抛 RuntimeError.
 
     v4.2.0: polyDB 原生工具 ``search_phases_polydb`` / ``get_phase_details``
-    新增; ``search_cod_phases`` / ``get_cod_phase_details`` 降级为它们的
-    转调别名 (旧 MCP 客户端不断), ``search_cod_by_d_peaks`` 保留签名但返回
-    deprecated 提示 (d 峰检索 v4.2.1 在 polyDB 上重建)。
+    新增; ``search_cod_phases`` / ``get_cod_phase_details`` 降级为别名。
+    v4.3.0: ``search_phases_by_d_peaks`` 新增 (polyDB Hanawalt 检索),
+    ``search_cod_by_d_peaks`` 保留旧签名并转调 polyDB (不再 deprecated)。
     """
     from polyxrd.mcp_server import server
     # 关键工具名应作为模块级属性存在 (经 @mcp.tool() 装饰后仍是普通函数)
@@ -85,8 +85,9 @@ def test_mcp_server_registers_all_tools():
         "load_xrd_data", "get_data_summary", "preprocess_data",
         "find_peaks", "list_peaks", "fit_peaks",
         "search_phases",
-        # polyDB 原生 (v4.2.0 新增)
+        # polyDB 原生 (v4.2.0 / v4.3.0 新增)
         "search_phases_polydb", "get_phase_details",
+        "search_phases_by_d_peaks",
         # COD sqlite 时代保留的名字 (v4.2.0 起为别名 / deprecated)
         "search_cod_phases", "search_cod_by_d_peaks",
         "get_cod_phase_details", "search_cod_online",
@@ -104,14 +105,17 @@ def test_search_cod_phases_is_alias_of_polydb():
     assert search_cod_phases("SiO2", 5) == search_phases_polydb("SiO2", 5)
 
 
-def test_search_cod_by_d_peaks_is_deprecated_stub():
-    """v4.2.0 起 d 峰检索返回 deprecated 结构, 不再访问任何本地库."""
-    from polyxrd.mcp_server.server import search_cod_by_d_peaks
-    out = json.loads(search_cod_by_d_peaks([3.343, 1.817], min_match=2))
-    assert out["deprecated"] is True
-    assert out["removed_in"] == "4.2.0"
-    assert out["n_results"] == 0 and out["matches"] == []
-    assert "hint" in out and out["hint"]
+def test_search_by_d_peaks_tools_return_json():
+    """v4.3.0: 原生与旧名 d 峰工具均可用（无库时返回 mounted=false 而非抛异常）."""
+    from polyxrd.mcp_server.server import (
+        search_cod_by_d_peaks, search_phases_by_d_peaks,
+    )
+    out = json.loads(search_phases_by_d_peaks([3.343, 1.817], min_match=2))
+    assert "n_results" in out and "matches" in out
+    old = json.loads(search_cod_by_d_peaks([3.343, 1.817], min_match=2))
+    assert old["n_results"] == out["n_results"]
+    assert [r["cod_id"] for r in old["matches"]] == \
+        [r["cod_id"] for r in out["matches"]]
 
 
 def test_search_cod_online_requires_a_criterion():

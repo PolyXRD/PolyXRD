@@ -7,7 +7,7 @@
     Peak detection &nbsp;·&nbsp; Multi-phase qualitative search &nbsp;·&nbsp; Rietveld structure refinement &nbsp;·&nbsp; Le Bail cell refinement &nbsp;·&nbsp; Indexing &nbsp;·&nbsp; 3D structure visualization &nbsp;·&nbsp; Bundled COD-Inorg polyDB default library + external COD-Full / PDF2-2004
   </p>
   <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v4.2.1-blue?style=flat-square" /></a>
+    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v4.3.0-blue?style=flat-square" /></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
     &nbsp;
@@ -38,7 +38,26 @@ Core design philosophy:
 
 ---
 
-## 🆕 Latest Release v4.2.1 (2026-10-26 · released)
+## 🆕 Latest Release v4.3.0 (2026-10-27 · released)
+
+**polyDB d-spacing search returns to MCP** — closes the v4.2.1 leftover (details in Chinese: [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.3.0 and [docs/RELEASE-NOTES-v4.3.0.md](docs/RELEASE-NOTES-v4.3.0.md)):
+
+- **New MCP tool `search_phases_by_d_peaks`**: Hanawalt search from measured d-spacings/intensities with `tolerance`/`tolerance_rel`/`min_match`/`limit`/`elements`/`max_ref_peaks`, backed by the polyDB bitmap inverted index + exact scoring.
+- **Legacy `search_cod_by_d_peaks` works again**: keeps its old signature and forwards to polyDB; no more `deprecated`; adds `display_id`/`ref_id` compatibility fields and `mounted` state.
+- **Same scoring path as the UI**: shares `phase_search` semantics with polyDB identification / PDF2 / user database d-peak search; no-mount, corrupted-layout and invalid-input cases return JSON errors instead of raising.
+- **Tests**: new v4.3.0 MCP d-peak regression (real-library quartz search, element filter, no-mount/error paths); MCP tool count 20 → 21.
+
+| Asset | Size | SHA-256 (first 16) | Notes |
+|---|---|---|---|
+| `PolyXRD-Setup-v4.3.0.exe` | 286.8 MB | `59c62ce98970…` | Release installer (registration enabled), bundles COD-Inorg |
+| `PolyXRD-v4.3.0-Portable.zip` | 428.1 MB | `cb1ad1b6eed7…` | Portable package (**internal evaluation build**), bundles COD-Inorg |
+| `SHA256-v4.3.0.txt` | — | — | SHA-256 of the two program artifacts |
+
+👉 **Released**: [Release v4.3.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v4.3.0) — 3 assets, no databases.
+
+---
+
+## 📚 Previous Release v4.2.1 (2026-10-26 · released)
 
 **Acceptance-fix release for v4.2.0** — 4 P1 compatibility/UX fixes + documentation corrections + build/verification hardening (details in Chinese: [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.2.1):
 

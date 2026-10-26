@@ -7,7 +7,7 @@
     峰检测 &nbsp;·&nbsp; 多物相定性检索 &nbsp;·&nbsp; Rietveld 结构精修 &nbsp;·&nbsp; Le Bail 晶胞精修 &nbsp;·&nbsp; 指标化 &nbsp;·&nbsp; 3D 结构可视化 &nbsp;·&nbsp; 内置 COD 无机物库 (polyDB) + 多库外挂检索
   </p>
   <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v4.2.1-blue?style=flat-square" /></a>
+    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v4.3.0-blue?style=flat-square" /></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
     &nbsp;
@@ -43,7 +43,26 @@
 
 ---
 
-## 🆕 最新版本 v4.2.1（2026-10-26 · 已发布）
+## 🆕 最新版本 v4.3.0（2026-10-27 · 已发布）
+
+**polyDB d 峰检索回到 MCP** —— 兑现 v4.2.1 遗留项（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.3.0 与 [docs/RELEASE-NOTES-v4.3.0.md](docs/RELEASE-NOTES-v4.3.0.md)）：
+
+- **新增 MCP 工具 `search_phases_by_d_peaks`**：按实测 d 值 / 强度做 Hanawalt 检索，支持 `tolerance`/`tolerance_rel`/`min_match`/`limit`/`elements`/`max_ref_peaks`，底层为 polyDB 位图倒排 + 精确打分。
+- **旧名 `search_cod_by_d_peaks` 恢复功能**：保留旧签名转调 polyDB，不再返回 `deprecated`；补 `display_id`/`ref_id` 兼容字段与 `mounted` 状态。
+- **同一套算法**：与 UI 物相识别、PDF2/用户库 d 峰检索共用 `phase_search` 打分口径；无挂载/损坏库/非法输入一律返回 JSON 错误而非抛异常。
+- **测试**：新增 v4.3.0 MCP d 峰回归（真实库石英检索、元素过滤、无挂载/异常路径），MCP 工具数 20 → 21。
+
+| 产物 | 体积 | SHA-256（前 16 位） | 说明 |
+|---|---|---|---|
+| `PolyXRD-Setup-v4.3.0.exe` | 286.8 MB | `59c62ce98970…` | 正式版安装包（带注册），内置 COD-Inorg 默认库 |
+| `PolyXRD-v4.3.0-Portable.zip` | 428.1 MB | `cb1ad1b6eed7…` | 便携包（**内部评估版**），内置 COD-Inorg |
+| `SHA256-v4.3.0.txt` | — | — | 以上两个产物的 SHA-256 |
+
+👉 **已发布**：[Release v4.3.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v4.3.0)（3 附件，不含数据库）。
+
+---
+
+## 上一版 v4.2.1（2026-10-26 · 已发布）
 
 **v4.2.0 验收修复版** —— 4 项 P1 兼容/UX 修复 + 文档事实修正 + 构建/验收加固（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.2.1 与 [docs/验收报告-v4.2.0.md](docs/验收报告-v4.2.0.md)）：
 

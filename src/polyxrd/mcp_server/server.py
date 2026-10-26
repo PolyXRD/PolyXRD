@@ -5,7 +5,7 @@ Exposes PolyXRD's XRD analysis pipeline as MCP tools so that any
 MCP-compatible AI client (Claude Desktop, TraeCode, etc.) can:
   - Load & preprocess XRD data
   - Detect & fit peaks
-  - Search the COD inorganic database (71,199 phases)
+  - Search phases in the mounted polyDB by formula / name / space group / d-spacings
   - Identify phases
   - Run Rietveld refinement
   - Simulate patterns from CIF structures
@@ -17,6 +17,7 @@ Transport: stdio (default) or SSE/HTTP.
 from __future__ import annotations
 
 import json
+import math
 import sys
 from pathlib import Path
 from typing import Optional
@@ -365,7 +366,8 @@ def search_phases(
 #   · search_phases_polydb / get_phase_details  → polyDB 外挂库（新名字）
 #   · search_cod_phases / get_cod_phase_details → 同名保留，转调 polyDB
 #     （不破坏已有外部客户端；条目 ID 自 v4.0.0 起就是 polyDB 的 eid）
-#   · search_cod_by_d_peaks → 明确返回 deprecated（v4.2.1 用 polyDB 重建）
+#   · search_cod_by_d_peaks → v4.3.0 起转调 polyDB 原生 d 峰检索（旧签名不变）
+#   · search_phases_by_d_peaks → v4.3.0 新增原生 d 峰检索（含元素过滤/相对容差）
 #   · search_cod_online → 走 COD REST（本来就不依赖本地库）
 
 
@@ -479,6 +481,177 @@ def get_cod_phase_details(cod_id: int) -> str:
     return get_phase_details(eid=cod_id)
 
 
+def _polydb_d_peak_search(
+    d_values,
+    intensities=None,
+    *,
+    tolerance: float = 0.02,
+    tolerance_rel: float = 0.0,
+    min_match: int = 3,
+    limit: int = 20,
+    elements=None,
+    max_ref_peaks: int = 40,
+    main_peak_topk: int = 1,
+) -> dict:
+    """MCP d 峰检索公共实现：校验 → polyDB 检索 → 统一 JSON 字段。
+
+    v4.3.0 起 d 峰检索回到 MCP 工具面，但底层不再是已删除的 COD sqlite，
+    而是 polyDB 的位图倒排 + Hanawalt 精确打分（与 UI 的 polyDB 识别同源）。
+    """
+    # ── 入参校验（MCP 工具必须返回 JSON，不能抛给客户端）──
+    try:
+        ds = [float(x) for x in (d_values or [])]
+    except (TypeError, ValueError):
+        return {"error": "d_values must be a list of numbers",
+                "n_results": 0, "matches": []}
+    if not ds:
+        return {"error": "d_values is empty", "n_results": 0, "matches": []}
+    if any((not math.isfinite(v)) or v <= 0.0 for v in ds):
+        return {"error": "d_values must be finite and > 0",
+                "n_results": 0, "matches": []}
+    if len(ds) > 500:
+        return {"error": "too many d values (max 500)",
+                "n_results": 0, "matches": []}
+    iis = None
+    if intensities is not None:
+        try:
+            iis = [float(v) for v in intensities]
+        except (TypeError, ValueError):
+            return {"error": "intensities must be a list of numbers",
+                    "n_results": 0, "matches": []}
+        if len(iis) != len(ds):
+            return {"error": "intensities and d_values must have the same length",
+                    "n_results": 0, "matches": []}
+        if any((not math.isfinite(v)) or v < 0.0 for v in iis):
+            return {"error": "intensities must be finite and >= 0",
+                    "n_results": 0, "matches": []}
+    try:
+        tol = float(tolerance)
+        trel = float(tolerance_rel)
+        minm = int(min_match)
+        lim = int(limit)
+        max_ref = int(max_ref_peaks)
+        topk = int(main_peak_topk)
+    except (TypeError, ValueError):
+        return {"error": "invalid numeric option", "n_results": 0, "matches": []}
+    if not math.isfinite(tol) or tol <= 0 or not math.isfinite(trel) or trel < 0:
+        return {"error": "tolerance must be > 0 and tolerance_rel >= 0",
+                "n_results": 0, "matches": []}
+    minm = max(1, min(minm, len(ds)))
+    lim = max(1, min(lim, 200))
+    max_ref = max(1, min(max_ref, 1000))
+    topk = max(1, min(topk, 20))
+
+    elems = None
+    if elements:
+        elems = {str(e).strip().title() for e in elements if str(e).strip()}
+        if not elems:
+            elems = None
+
+    from polyxrd.services.polydb import PolyDatabase, Z_OF
+
+    if elems:
+        unknown = sorted(e for e in elems if e not in Z_OF)
+        if unknown:
+            return {"error": f"unknown element(s): {', '.join(unknown)}",
+                    "n_results": 0, "matches": []}
+
+    db = PolyDatabase()
+    if not db.available:
+        return {
+            "mounted": False,
+            "n_results": 0,
+            "matches": [],
+            "hint": (
+                "No polyDB mounted. Download a PolyXRD-DataBase release and "
+                "mount it in the app (or ship the bundled COD-Inorg library)."
+            ),
+        }
+    if not db.is_ready():
+        return {
+            "mounted": True,
+            "error": "polyDB layout is incomplete/corrupted "
+                     "(meta.json/index.sqlite or segments missing).",
+            "n_results": 0,
+            "matches": [],
+        }
+    try:
+        matches = db.search_by_d_peaks(
+            ds, iis, tolerance=tol, tolerance_rel=trel, min_match=minm,
+            limit=lim, max_ref_peaks=max_ref, main_peak_topk=topk,
+            elements_allowed=elems,
+        )
+    except Exception as exc:  # noqa: BLE001 - MCP 边界必须返回 JSON
+        return {
+            "mounted": True,
+            "error": f"polyDB d-peak search failed: {type(exc).__name__}: {exc}",
+            "n_results": 0,
+            "matches": [],
+        }
+
+    # 与 search_phases_polydb 的字段口径一致：display/ref 用旧 COD 字符串格式
+    for m in matches:
+        cid = int(m.get("cod_id", 0))
+        m["cod_id"] = cid
+        m["display_id"] = f"97-{cid:07d}"
+        m["ref_id"] = f"96-{cid // 10000:03d}-{cid % 10000:04d}"
+
+    return {
+        "mounted": True,
+        "n_results": len(matches),
+        "matches": matches,
+        "query": {
+            "d_values": ds,
+            "intensities": iis,
+            "tolerance": tol,
+            "tolerance_rel": trel,
+            "min_match": minm,
+            "elements": sorted(elems) if elems else None,
+        },
+    }
+
+
+@mcp.tool()
+def search_phases_by_d_peaks(
+    d_values: list[float],
+    intensities: Optional[list[float]] = None,
+    tolerance: float = 0.02,
+    tolerance_rel: float = 0.0,
+    min_match: int = 3,
+    limit: int = 20,
+    elements: Optional[list[str]] = None,
+    max_ref_peaks: int = 40,
+    main_peak_topk: int = 1,
+) -> str:
+    """Search the mounted polyDB by measured d-spacings (Hanawalt-style).
+
+    Args:
+        d_values: Measured d-spacings in Angstrom (e.g. quartz: 3.343, 4.255).
+        intensities: Optional matching peak intensities (enables weighted
+            recall + main-peak criterion; strongly recommended).
+        tolerance: Absolute d-matching tolerance in Angstrom (default 0.02).
+        tolerance_rel: Relative tolerance (fraction of d; 0 = absolute only).
+        min_match: Minimum matched peaks for a phase to be returned.
+        limit: Maximum number of ranked matches (1..200).
+        elements: Optional element whitelist (e.g. ["Si", "O"]) — phases
+            containing elements outside the whitelist are filtered out.
+        max_ref_peaks: Only the strongest N reference peaks per phase are used.
+        main_peak_topk: Measured strongest peaks checked by main-peak match.
+
+    Returns:
+        JSON with mounted/n_results/matches. Each match has cod_id, formula,
+        mineral_name, space_group, cell/peak counts and Hanawalt scores.
+        ``mounted=false`` when no polyDB is mounted.
+    """
+    payload = _polydb_d_peak_search(
+        d_values, intensities, tolerance=tolerance,
+        tolerance_rel=tolerance_rel, min_match=min_match, limit=limit,
+        elements=elements, max_ref_peaks=max_ref_peaks,
+        main_peak_topk=main_peak_topk,
+    )
+    return json.dumps(payload, ensure_ascii=False, default=str)
+
+
 @mcp.tool()
 def search_cod_by_d_peaks(
     d_values: list[float],
@@ -487,26 +660,17 @@ def search_cod_by_d_peaks(
     min_match: int = 3,
     limit: int = 20,
 ) -> str:
-    """Deprecated in v4.2.0 — d-spacing (Hanawalt) search is being rebuilt on polyDB.
+    """Deprecated-name alias of ``search_phases_by_d_peaks`` (polyDB-backed).
 
-    The local COD sqlite index that backed this tool was removed from the
-    release in v4.2.0. Use ``search_phases_polydb`` or ``search_cod_online``
-    meanwhile; d-peak search returns in v4.2.1.
+    v4.3.0: the old COD sqlite backing is gone, but the legacy signature is
+    kept and now searches the mounted polyDB — existing MCP clients keep
+    working without parameter changes.
     """
-    return json.dumps(
-        {
-            "deprecated": True,
-            "removed_in": "4.2.0",
-            "n_results": 0,
-            "matches": [],
-            "hint": (
-                "d-spacing search moved to polyDB and ships in v4.2.1. "
-                "Use search_phases_polydb (formula / name / space group) or "
-                "search_cod_online in the meantime."
-            ),
-        },
-        ensure_ascii=False,
+    payload = _polydb_d_peak_search(
+        d_values, intensities, tolerance=tolerance, min_match=min_match,
+        limit=limit,
     )
+    return json.dumps(payload, ensure_ascii=False, default=str)
 
 
 @mcp.tool()
