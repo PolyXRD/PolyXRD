@@ -10,7 +10,7 @@
 删除说明
 --------
 旧 ``cod_local`` 中与数据库连接相关的能力（``formula_sum_from_inorg_cif`` /
-``recover_inorg_formula`` 的 CIF 回退 / ``CODLocalDatabase`` / 索引器）属旧 sqlite
+``recover_inorg_formula`` 的 CIF 回退 / 旧本地库类 取相-取CIF / 索引器）属旧 sqlite
 专用，随旧模块在 v4.2.0 删除，不迁入本模块（见 ``docs/v4.2-结构清理方案.md`` §3.1）。
 """
 
