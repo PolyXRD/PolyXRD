@@ -7,7 +7,7 @@
     峰检测 &nbsp;·&nbsp; 多物相定性检索 &nbsp;·&nbsp; Rietveld 结构精修 &nbsp;·&nbsp; Le Bail 晶胞精修 &nbsp;·&nbsp; 指标化 &nbsp;·&nbsp; 3D 结构可视化 &nbsp;·&nbsp; 内置 COD 无机物库 (polyDB) + 多库外挂检索
   </p>
   <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v4.1.2-blue?style=flat-square" /></a>
+    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v4.2.0-blue?style=flat-square" /></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
     &nbsp;
@@ -34,35 +34,38 @@
 - **UI 与算法分层** — MVVM 架构，`services/` 层是纯算法、不依赖 Qt，可独立单元测试。
 
 > 📋 **版本变更记录**：见 [docs/CHANGELOG.md](docs/CHANGELOG.md)。
-> ✅ **v4.1.1 发布检查清单（构建/产物/验收记录）**：见 [docs/发布检查清单-v4.1.1.md](docs/发布检查清单-v4.1.1.md)。
+> ✅ **v4.2.0 发布检查清单（构建/产物/验收记录）**：见 [docs/发布检查清单-v4.2.0.md](docs/发布检查清单-v4.2.0.md)。
+> ✅ v4.1.1 发布检查清单：见 [docs/发布检查清单-v4.1.1.md](docs/发布检查清单-v4.1.1.md)。
 > ✅ v4.1.0 发布检查清单：见 [docs/发布检查清单-v4.1.0.md](docs/发布检查清单-v4.1.0.md)。
 > ✅ v4.0.0 发布检查清单：见 [docs/发布检查清单-v4.0.0.md](docs/发布检查清单-v4.0.0.md)。
 > 🏗️ **代码结构与分层说明**：见 [docs/代码结构说明.md](docs/代码结构说明.md)。
-> 🧭 **下一阶段执行计划（v4.2 结构清理）**：见 [docs/下一步执行计划-v4.2.md](docs/下一步执行计划-v4.2.md)（设计依据 [docs/v4.2-结构清理方案.md](docs/v4.2-结构清理方案.md)）。
+> ✅ **v4.2 结构清理（旧 COD sqlite 运行时退役）已执行完毕**：设计依据 [docs/v4.2-结构清理方案.md](docs/v4.2-结构清理方案.md)，执行记录/验收数据 [docs/下一步执行计划-v4.2.md](docs/下一步执行计划-v4.2.md)。
 
 ---
 
-## 🆕 最新版本 v4.1.2（2026-10-24 · 已发布）
+## 🆕 最新版本 v4.2.0（2026-10-26）
 
-**易用性与构建健壮性（v4.1.0 评估报告剩余 P2 批次）**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.1.2）：
+**结构清理：旧 COD sqlite 运行时退役**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.2.0 与 [docs/RELEASE-NOTES-v4.2.0.md](docs/RELEASE-NOTES-v4.2.0.md)）：
 
-- **开箱即检索真正生效**：首次启动数据源默认选中内置 COD-Inorg（此前仍停在内置库 118 相）；用户显式选过的项仍会保留。
-- **默认库发现优先级修正**：`POLYXRD_POLYDB_DIR` / 打包目录 / 仓库目录按 **root 顺序**优先，不再被别处更新的快照顶掉；冻结态也认 `_internal/databases`。
-- **旧库迁移提示**：旧格式 COD/XinMatch sqlite 检索库会明确提示「自 v4.1.0 起只支持 polyDB」；混合文件夹部分挂载失败时列出被跳过项与原因。
-- **纯客户端小包可验收**：`POLYXRD_NO_BUNDLE_DB=1` 构建自动套用 `-SkipBundledDb` / `--no-bundled-db`，不再被自身验收链误判 FAIL。
-- **构建/验收加固**：内置库打包校验 `meta`（格式/版本/变体/相数）；便携包遍历全部内置库逐库核对 8/8 段；bench 脚本改为 polyDB-only（旧 API 已删除，原脚本必崩）。
+- **旧运行时删除**：`services/cif_database.py`（2,421 行）与 `services/cod_local.py`（2,410 行）删除，`config` 的 `cod_db_path`/`cod_index_db_path`/`cod_svn_path` 字段与 6 个 getter/setter 一并移除。运行期只保留 **polyDB + PDF2 + 用户自建库**。
+- **抽出三个纯模块**：`cif_utils`（CIF 解析/位点/元素判定）、`phase_search`（Hanawalt 打分 + 预筛）、`cif_minerals`（12 种内置矿物库）。三者不 import `sqlite3`/`PySide6`、不读配置路径（AST 断言），可直接单测。
+- **行为零漂移**：`phase_search` 有搬迁**前**录制的 71 KB golden（12 用例，0 mismatch）；polyDB 检索基准与 v4.1.2 **逐样本等价**（13 试样候选 ids/names/名次全同，top1 9/49·top10 16·MRR 0.213，96.0 s vs 96.6 s）。
+- **MCP 工具面**：新增 `search_phases_polydb` / `get_phase_details`；`search_cod_phases` / `get_cod_phase_details` 降级为转调别名（旧客户端不用改）；`search_cod_by_d_peaks` 返回 deprecated 提示（d 峰检索 2026-Q4 在 polyDB 上重建）。
+- **测试收敛**：删 9 个旧库专用测试、迁 3 个，总数 1809 → **1628**；新增静态守卫 `tests/test_v42_structure.py` 防旧模块复活。12 个旧库维护脚本归档到 `tools/legacy_sqlite/`。
 
 | 产物 | 体积 | SHA-256（前 16 位） | 说明 |
 |---|---|---|---|
-| `PolyXRD-Setup-v4.1.2.exe` | 286.8 MB | `bb43ecc12d2d…` | 正式版安装包（带注册），内置 COD-Inorg 默认库 |
-| `PolyXRD-v4.1.2-Portable.zip` | 428.2 MB | `09da5ecc35be…` | 便携包（**内部评估版**），内置 COD-Inorg |
-| `SHA256-v4.1.2.txt` | — | — | 以上两个产物的 SHA-256 |
+| `PolyXRD-Setup-v4.2.0.exe` | 待构建 | 待构建 | 正式版安装包（带注册），内置 COD-Inorg 默认库 |
+| `PolyXRD-v4.2.0-Portable.zip` | 待构建 | 待构建 | 便携包（**内部评估版**），内置 COD-Inorg |
+| `SHA256-v4.2.0.txt` | — | — | 以上两个产物的 SHA-256 |
 
-👉 **已发布**：[Release v4.1.2](https://github.com/PolyXRD/PolyXRD/releases/tag/v4.1.2)（3 附件，不含数据库）。
+👉 **Release**：[v4.2.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v4.2.0)（3 附件，不含数据库）。
+
+> 上一版 v4.1.2（开箱即检索 / 默认库发现优先级 / 旧库迁移提示 / 纯客户端小包验收）详见 [CHANGELOG §4.1.2](docs/CHANGELOG.md)。
 
 ---
 
-## 上一版 v4.1.1（2026-10-24 · 已发布）
+## 更早版本 v4.1.1（2026-10-24 · 已发布）
 
 **hotfix：默认库精修正确性 + 干净安装外部引擎 + 构建可复现 + 发布政策收口**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.1.1 与 [docs/代码评估-v4.1.0.md](docs/代码评估-v4.1.0.md)）：
 

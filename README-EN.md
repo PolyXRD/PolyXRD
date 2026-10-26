@@ -7,7 +7,7 @@
     Peak detection &nbsp;·&nbsp; Multi-phase qualitative search &nbsp;·&nbsp; Rietveld structure refinement &nbsp;·&nbsp; Le Bail cell refinement &nbsp;·&nbsp; Indexing &nbsp;·&nbsp; 3D structure visualization &nbsp;·&nbsp; Bundled COD-Inorg polyDB default library + external COD-Full / PDF2-2004
   </p>
   <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v4.1.2-blue?style=flat-square" /></a>
+    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v4.2.0-blue?style=flat-square" /></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
     &nbsp;
@@ -38,23 +38,27 @@ Core design philosophy:
 
 ---
 
-## 🆕 Latest Release v4.1.2 (2026-10-24 · released)
+## 🆕 Latest Release v4.2.0 (2026-10-26)
 
-**Usability + build robustness (remaining P2 batch from the v4.1.0 assessment)** (details in Chinese: [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.1.2):
+**Structural cleanup: the legacy COD sqlite runtime is retired** (details in Chinese: [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.2.0 and [docs/RELEASE-NOTES-v4.2.0.md](docs/RELEASE-NOTES-v4.2.0.md)):
 
-- **Out-of-the-box search actually on by default**: the initial data source now selects the bundled COD-Inorg library (previously it stayed on the 118-phase builtin); an explicitly chosen source is still preserved on refresh.
-- **Default-library discovery priority fixed**: `POLYXRD_POLYDB_DIR` / packaged dir / repo dir are honoured in **root order** and can no longer be overridden by a newer snapshot elsewhere; frozen builds also accept `_internal/databases`.
-- **Legacy migration hints**: old-format COD/XinMatch sqlite retrieval libraries now get an explicit "since v4.1.0 only polyDB is supported" message; partially mounted folders list skipped items and reasons.
-- **Minimal client builds verifiable**: `POLYXRD_NO_BUNDLE_DB=1` builds automatically use `-SkipBundledDb` / `--no-bundled-db` in the verification chain instead of failing their own gates.
-- **Build/verification hardening**: bundled libraries are validated against `meta` (format/schema/variant/phase count); the portable package checks every bundled library for 8/8 segments; the benchmark script is now polyDB-only (the removed legacy API made it crash).
+- **Legacy runtime removed**: `services/cif_database.py` (2,421 lines) and `services/cod_local.py` (2,410 lines) are gone, together with `cod_db_path` / `cod_index_db_path` / `cod_svn_path` and six getters/setters in `config`. Only **polyDB + PDF2 + user-built libraries** remain at runtime.
+- **Three pure modules extracted**: `cif_utils` (CIF parsing / sites / element checks), `phase_search` (Hanawalt scoring + pre-screening), `cif_minerals` (12 built-in mineral CIFs). None imports `sqlite3` or `PySide6`, none reads config paths (AST-asserted), so all are directly unit-testable.
+- **Zero behavioural drift**: `phase_search` ships a 71 KB golden fixture recorded **before** the move (12 cases, 0 mismatch); the polyDB retrieval benchmark is **per-sample identical** to v4.1.2 (13 samples: same candidate IDs/names/ranks, top1 9/49 · top10 16 · MRR 0.213, 96.0 s vs 96.6 s).
+- **MCP surface**: new `search_phases_polydb` / `get_phase_details`; `search_cod_phases` / `get_cod_phase_details` become thin aliases (existing clients keep working); `search_cod_by_d_peaks` returns a deprecated notice (d-spacing search is being rebuilt on polyDB).
+- **Test suite tightened**: 9 legacy-only test files removed and 3 migrated, total 1809 → **1628**; a new static guard (`tests/test_v42_structure.py`) prevents the old modules from coming back. 12 legacy maintenance scripts archived under `tools/legacy_sqlite/`.
 
 | Asset | Size | SHA-256 (first 16) | Notes |
 |---|---|---|---|
-| `PolyXRD-Setup-v4.1.2.exe` | 286.8 MB | `bb43ecc12d2d…` | Release installer (registration enabled), bundles COD-Inorg |
-| `PolyXRD-v4.1.2-Portable.zip` | 428.2 MB | `09da5ecc35be…` | Portable package (**internal evaluation build**), bundles COD-Inorg |
-| `SHA256-v4.1.2.txt` | — | — | SHA-256 of the two program artifacts |
+| `PolyXRD-Setup-v4.2.0.exe` | TBD | TBD | Release installer (registration enabled), bundles COD-Inorg |
+| `PolyXRD-v4.2.0-Portable.zip` | TBD | TBD | Portable package (**internal evaluation build**), bundles COD-Inorg |
+| `SHA256-v4.2.0.txt` | — | — | SHA-256 of the two program artifacts |
 
-👉 **Released**: [Release v4.1.2](https://github.com/PolyXRD/PolyXRD/releases/tag/v4.1.2) — 3 assets, no databases.
+👉 **Release**: [v4.2.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v4.2.0) — 3 assets, no databases.
+
+> Previous release v4.1.2 (out-of-the-box search / discovery priority / legacy migration hints / minimal builds) — see [CHANGELOG §4.1.2](docs/CHANGELOG.md).
+
+## 📚 Earlier Release v4.1.1 (2026-10-24 · released)
 
 ## 📚 Previous Release v4.1.1 (2026-10-24 · released)
 
