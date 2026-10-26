@@ -69,17 +69,26 @@ def test_mcp_server_metadata():
 
 
 def test_mcp_server_registers_all_tools():
-    """18 个 @mcp.tool() 装饰函数应在 server 模块可见.
+    """20 个 @mcp.tool() 装饰函数应在 server 模块可见.
 
     用模块属性而非 dir(mcp) 验证, 因为 mcp 实例有 lazy property (session_manager)
     在 streamable_http_app() 调用前访问会抛 RuntimeError.
+
+    v4.2.0: polyDB 原生工具 ``search_phases_polydb`` / ``get_phase_details``
+    新增; ``search_cod_phases`` / ``get_cod_phase_details`` 降级为它们的
+    转调别名 (旧 MCP 客户端不断), ``search_cod_by_d_peaks`` 保留签名但返回
+    deprecated 提示 (d 峰检索 v4.2.1 在 polyDB 上重建)。
     """
     from polyxrd.mcp_server import server
     # 关键工具名应作为模块级属性存在 (经 @mcp.tool() 装饰后仍是普通函数)
     expected = [
         "load_xrd_data", "get_data_summary", "preprocess_data",
         "find_peaks", "list_peaks", "fit_peaks",
-        "search_phases", "search_cod_phases", "search_cod_by_d_peaks",
+        "search_phases",
+        # polyDB 原生 (v4.2.0 新增)
+        "search_phases_polydb", "get_phase_details",
+        # COD sqlite 时代保留的名字 (v4.2.0 起为别名 / deprecated)
+        "search_cod_phases", "search_cod_by_d_peaks",
         "get_cod_phase_details", "search_cod_online",
         "simulate_pattern", "refine_rietveld",
         "export_results", "save_project", "load_project",
@@ -87,6 +96,30 @@ def test_mcp_server_registers_all_tools():
     ]
     missing = [name for name in expected if not callable(getattr(server, name, None))]
     assert not missing, f"缺失工具: {missing}"
+
+
+def test_search_cod_phases_is_alias_of_polydb():
+    """``search_cod_phases`` 与 ``search_phases_polydb`` 返回完全一致的 JSON."""
+    from polyxrd.mcp_server.server import search_cod_phases, search_phases_polydb
+    assert search_cod_phases("SiO2", 5) == search_phases_polydb("SiO2", 5)
+
+
+def test_search_cod_by_d_peaks_is_deprecated_stub():
+    """v4.2.0 起 d 峰检索返回 deprecated 结构, 不再访问任何本地库."""
+    from polyxrd.mcp_server.server import search_cod_by_d_peaks
+    out = json.loads(search_cod_by_d_peaks([3.343, 1.817], min_match=2))
+    assert out["deprecated"] is True
+    assert out["removed_in"] == "4.2.0"
+    assert out["n_results"] == 0 and out["matches"] == []
+    assert "hint" in out and out["hint"]
+
+
+def test_search_cod_online_requires_a_criterion():
+    """不传 formula/mineral_name/space_group 时应返回 error 而非抛异常."""
+    from polyxrd.mcp_server.server import search_cod_online
+    out = json.loads(search_cod_online())
+    assert out["n_results"] == 0
+    assert "error" in out
 
 
 # ── 2. 会话管理工具 ─────────────────────────────────────────────────

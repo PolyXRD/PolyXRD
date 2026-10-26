@@ -187,28 +187,6 @@ def _removed_legacy_identifier_tests() -> None:
 
 # ── RietveldRefiner 扩展 tests ──────────────────────────────
 
-def test_rietveld_cod_quick_search(cod_index):
-    db_path, root = cod_index
-    from polyxrd.services.cod_local import CODLocalDatabase
-    from polyxrd.services.rietveld_refiner import RietveldRefiner
-
-    refiner = RietveldRefiner()
-    # The global default COD path is different; monkeypatch by creating
-    # a helper path that points at our fake root
-    import polyxrd.services.cod_local as cod_mod
-    _orig_get_cod_root = cod_mod.get_cod_root
-    _orig_index = cod_mod._index_db_path
-    # We cannot easily change module path lookups; only test the internal search.
-    # Instead, directly call cod_quick_search.  It instantiates a new CODLocalDatabase
-    # using global paths, which will not find fake data. So we skip unless global
-    # matches -> ensure with temp copy of approach below:
-    results_fallback = refiner.cod_quick_search(formula="SiO2")  # uses global path, likely empty
-    # Do a direct test using manual DB
-    db = CODLocalDatabase(cod_root=root, db_path=db_path)
-    direct_hits = db.search(formula="SiO2")
-    assert len(direct_hits) >= 1
-
-
 def test_rietveld_load_phase_from_cod(cod_index):
     db_path, root = cod_index
     from polyxrd.services.cod_local import CODLocalDatabase

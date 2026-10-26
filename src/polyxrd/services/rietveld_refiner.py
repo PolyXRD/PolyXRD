@@ -1069,7 +1069,7 @@ class RietveldRefiner:
         M23/M24 结构匹配链路已把 CIF (``phase.cif_path`` 文件或
         ``phase.atomic_sites``) 送到物相上; 本方法在内置精修启动时把它们
         现算成参考峰表 (空间群对称性展开 + Cromer-Mann 散射因子 + LP 校正,
-        与 cod_local.get_phase(use_pymatgen_peaks=True) 同一条数学路径),
+        与 reference_peaks 的生成口径同一条数学路径),
         取代库内静态峰表 —— 内置引擎由此获得基于结构的强度模型。
 
         优先级: cif_path 文件全文 → atomic_sites 反生成 CIF 文本。
@@ -1147,7 +1147,7 @@ class RietveldRefiner:
             calc = XRDCalculator(wavelength=float(wavelength))
 
             # ── 路径 1 (v0.15.2): atomic_sites 直构 Structure ──────────
-            # 位点应当是展开全胞 (cod_local.get_phase / user_db / polyDB 出口
+            # 位点应当是展开全胞 (user_db / polyDB 出口
             # 均已保证)。v4.1.1 起这里再做一次**幂等**展开兜底: 旧项目文件
             # 里可能保存着修复前 polyDB 的"非对称单位"位点, 不展开会给
             # 高对称相造出假峰 (Corundum 实测 6.8° 假峰 100%)。
@@ -3746,74 +3746,6 @@ class RietveldRefiner:
             except Exception:
                 refined.append(phase)
         return refined
-
-    # ── COD 本地条目加载 ──────────────────────────────────────
-
-    def load_phase_from_cod(self, cod_id: int,
-                           wavelength: float = 1.5406,
-                           two_theta_range: tuple[float, float] = (10.0, 80.0)
-                           ) -> Optional[Phase]:
-        """从本地 COD 数据库加载物相 (Phase)，用于精修。
-
-        等价于 ``CODLocalDatabase.get_phase()`` 的便捷封装。
-        - atomic_sites 保证可导入到内置引擎（已 CIF 解析后的 dict）
-        - reference_peaks 由 pymatgen XRDCalculator 计算
-        - cif_path 指向磁盘上的 .cif 文件 (GSAS-II / powerxrd 直接可用)
-
-        Args:
-            cod_id: COD 条目编号
-            wavelength: X 射线波长 (Cu Kα = 1.5406 Å)
-            two_theta_range: reference_peaks 计算范围
-
-        Returns:
-            Phase 实例；失败返回 None
-        """
-        try:
-            from polyxrd.services.cod_local import CODLocalDatabase
-        except Exception:
-            return None
-        db = CODLocalDatabase()
-        return db.get_phase(
-            cod_id,
-            wavelength=wavelength,
-            two_theta_range=two_theta_range,
-            use_pymatgen_peaks=True,
-        )
-
-    def cod_quick_search(
-        self,
-        formula: Optional[str] = None,
-        elements: Optional[list[str]] = None,
-        space_group: Optional[str] = None,
-        limit: int = 20,
-    ) -> list[dict]:
-        """快速查询 COD 本地索引，返回可用于精修的候选条目列表。"""
-        try:
-            from polyxrd.services.cod_local import CODLocalDatabase
-        except Exception:
-            return []
-        db = CODLocalDatabase()
-        if not db.is_ready():
-            return []
-        entries = db.search(
-            formula=formula,
-            elements=elements,
-            space_group=space_group,
-            limit=limit,
-            parse_ok_only=True,
-        )
-        return [
-            {
-                "cod_id": e.cod_id,
-                "name": e.mineral_name or f"COD_{e.cod_id}",
-                "formula": e.formula,
-                "space_group": e.space_group,
-                "space_group_number": e.space_group_number,
-                "a": e.a, "b": e.b, "c": e.c,
-                "volume": e.volume,
-                "file": e.file,
-            } for e in entries
-        ]
 
     # ─────────────────────────────────────────────────────────────
     # M14: 择优取向 / DoC / 内标定量 / 选项入口

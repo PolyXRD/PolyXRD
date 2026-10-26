@@ -4,21 +4,21 @@
 物相分析里勾选的候选相来自检索库, 多数只有参考峰 (d-I) 与晶胞参数,
 **没有** ``cif_path`` / ``atomic_sites`` —— 而 Rietveld 真结构精修
 (GSAS-II / MAUD) 与 ``_refine_auto`` 的引擎选择都依赖 ``cif_path``。
-本服务在「开始精修」前把已选物相逐一匹配到库内 CIF 并补齐结构:
+本服务在「开始精修」前把已选物相逐一补齐结构:
 
 1. 已带可用结构 (atomic_sites + 磁盘上的 cif_path) 的相**原样保留**;
-2. 名字里带 COD 编号 ("...(COD 1000054)") 的直接按编号取;
-3. 其余按规范化化学式 (必要时加矿物名) 在 COD 库里找结构候选,
-   按空间群一致 + 晶胞接近度排序, 逐个尝试加载;
-4. 命中后把 lattice / atomic_sites / cif_path / reference_peaks
-   (pymatgen 模拟峰) 合并进原物相 —— **保留原 name / formula /
-   match_score**, 勾选集合与谱图叠加的身份不受影响;
-5. cif_path 若只存在于库内 BLOB (无机库 cif_gz), 落盘到
-   ``~/.polyxrd/cif_cache/COD<id>.cif`` —— GSAS-II 桥要求磁盘文件;
-6. v4.1.1: 相**已有展开后的原子位点**但无 cif_path 时 (内置 polyDB 默认库
-   的典型形态), 直接用 :func:`phase_cif.phase_to_cif_text` 反生成 CIF 落盘
-   并回填 cif_path —— 否则干净安装下 ``_phases_have_structure`` 恒 False,
-   GSAS-II/MAUD 会被静默跳过, 与"开箱即用 + 真 Rietveld"承诺不符。
+2. 相**已有展开后的原子位点**但无 cif_path 时 (内置 polyDB / 用户库 /
+   PDF2 候选的典型形态), 用 :func:`phase_cif.phase_to_cif_text` 反生成
+   CIF 落盘到 ``cif_cache_dir()`` 并回填 cif_path —— 否则干净安装下
+   ``_phases_have_structure`` 恒 False, GSAS-II/MAUD 会被静默跳过;
+3. 两者都不满足的相**原样返回**, 以参考峰剖面参与 builtin 精修, 不阻断。
+
+v4.2 变更
+---------
+旧版第 2–3 步是"按名字里的 COD 编号 / 规范化化学式去 COD 本地 sqlite 里找
+结构候选"(约 250 行, 含多形体甄别与 BLOB 落盘)。该库已从发布包移除,
+相应分支在 v4.2 一并删除; 现在所有检索库 (polyDB / PDF2 / 用户库) 的候选
+本来就自带晶胞与全胞位点, 直接走第 2 步即可。
 
 日志用 ``[cif]`` 前缀的技术行 (与引擎的 [start]/[data]/[phase] 同风格,
 不做本地化), 经回调交给精修页的过程日志面板。
@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from polyxrd.models.phase import Phase
-from polyxrd.utils.formula_parser import normalize_cod_formula, parse_formula_detailed
+from polyxrd.utils.formula_parser import normalize_cod_formula
 
 __all__ = [
     "normalize_cod_formula",
@@ -115,72 +115,16 @@ def _candidate_score(cand: dict, phase: Phase) -> float:
     return score
 
 
-def _peak_disagreement(cif_phase: Phase, orig: Phase) -> float:
-    """候选结构模拟峰 vs 库内 d-I 峰的位置失配度 (越小越可信).
-
-    v0.15.2 新增, 用于**多形体甄别**: 方解石 (R-3c) 与文石 (Pmcn) 晶胞
-    参数接近、仅凭"空间群一致 + 晶胞接近度"排序会选错 (2-1 实测把方解石
-    匹配到 Pmcn 文石型 CaCO3, 104 主峰 29.4° 无法拟合 → wR 卡 40%)。
-    位置失配对**衍射花样**敏感, 可把多形体区分开。
-
-    双向加权平均 2θ 距离 (强峰 I≥5 参与权重)。
-    - 库侧 (orig) 无峰: 返回 0 (中性, 所有候选同样无法评判);
-    - 模拟侧 (cif_phase) 无峰: 返回 inf —— 模拟不出的结构对精修毫无
-      价值, 必须输给任何可评判的候选 (COD 1559793 教训: 垃圾位点结构
-      无模拟峰, 曾以 0 分"完美"夺冠)。
-    """
-    lib = [(float(t), float(i)) for _, t, i in
-           (orig.get_reference_peaks() if hasattr(orig, "get_reference_peaks")
-            else orig.reference_peaks) or []]
-    sim = [(float(t), float(i)) for _, t, i in
-           (getattr(cif_phase, "reference_peaks", None) or [])]
-    if not sim:
-        return float("inf")
-    if not lib:
-        return 0.0
-
-    def _one_way(src, dst) -> float:
-        pen = 0.0
-        w = 0.0
-        for t, i in src:
-            if i < 5.0:
-                continue
-            w += i
-            d = min((abs(t - tt2) for tt2, _ in dst), default=5.0)
-            pen += i * min(d, 2.0)
-        return pen / w if w else 0.0
-
-    return _one_way(sim, lib) + _one_way(lib, sim)
-
-
 class PhaseStructureResolver:
     """把检索得到的物相批量匹配到 COD 库 CIF 的解析器。
 
-    实例持有 COD 库连接与 (name, formula) → 解析结果缓存, 供
-    ``MainViewModel`` 复用 —— 同一物相第二次精修不再重复查库。
+    实例持有 (name, formula) → 解析结果缓存, 供 ``MainViewModel`` 复用
+    —— 同一物相第二次精修不再重复生成 CIF 落盘。
     """
 
-    def __init__(self, cod_db=None) -> None:
-        self._db = cod_db
-        self._db_ready: Optional[bool] = None  # None = 未探测
+    def __init__(self) -> None:
+        # (name, formula) → 解析结果；同一物相第二次精修不再重复落盘
         self._cache: dict[tuple[str, str], Phase] = {}
-
-    # ── 库访问 ──────────────────────────────────────────────
-
-    def _get_db(self):
-        if self._db is not None:
-            return self._db
-        if self._db_ready is False:
-            return None
-        try:
-            from polyxrd.services.cod_local import CODLocalDatabase
-
-            db = CODLocalDatabase()
-            ready = bool(db.is_ready()) or db._inorg_db() is not None
-            self._db, self._db_ready = (db, ready) if ready else (None, False)
-        except Exception:
-            self._db, self._db_ready = None, False
-        return self._db
 
     # ── 主入口 ──────────────────────────────────────────────
 
@@ -243,80 +187,9 @@ class PhaseStructureResolver:
                 return phase, f"{name}: 无可用 CIF (缓存命中)"
             return cached, f"{name}: CIF 命中缓存 ({self._describe(cached)})"
 
-        db = self._get_db()
-        if db is None:
-            self._cache[key] = phase
-            return phase, f"{name}: COD 库不可用, 以参考峰剖面参与精修"
-
-        # 1) 名字里的 COD 编号直取
-        cod_id = extract_cod_id(name, formula)
-        if cod_id is not None:
-            cif_phase = self._load_phase(
-                db, cod_id, wavelength, two_theta_range
-            )
-            if cif_phase is not None:
-                merged = self._merge(phase, cif_phase, cod_id)
-                self._cache[key] = merged
-                return merged, f"{name}: 编号 {cod_id} 命中 ({self._describe(cif_phase)})"
-            log_note = f"{name}: 编号 {cod_id} 未取到结构, 改按化学式匹配"
-        else:
-            log_note = None
-
-        # 2) 规范化化学式 (+ 矿物名) 找候选
-        norm = normalize_cod_formula(formula)
-        mineral = self._clean_mineral(name)
-        if not norm and not mineral:
-            self._cache[key] = phase
-            return phase, f"{name}: 无化学式可匹配, 以参考峰剖面参与精修"
-
-        try:
-            cands = db.find_structure_candidates(norm, mineral_name=mineral)
-        except Exception:
-            cands = []
-        # v2.1-C: 元素集宽松回退 —— 固溶体/非整比相 (如 NCM 三元) 的系数
-        # 与库值差一档, 精确式匹配常落空; 按"元素集全部出现"把同系物
-        # 结构候选找回来 (候选带 _fallback 标记, 排序时降权)。
-        if not cands and norm:
-            try:
-                els = list(parse_formula_detailed(formula).keys())
-                cands = db.find_structure_candidates(
-                    "", mineral_name=mineral, elements=els)
-            except Exception:
-                cands = []
-        cands.sort(key=lambda c: _candidate_score(c, phase))
-
-        # v0.15.2: 多形体甄别 —— 候选结构模拟峰与库内 d-I 峰的位置失配度
-        # 参与择优 (旧逻辑取排序后第一个能加载的候选, 多形体易选错)。
-        best: Optional[tuple[float, dict, Phase]] = None
-        for cand in cands[:6]:
-            cif_phase = self._load_phase(
-                db, int(cand["cod_id"]), wavelength, two_theta_range
-            )
-            if cif_phase is None or not cif_phase.atomic_sites:
-                continue
-            score = (_peak_disagreement(cif_phase, phase)
-                     + 0.3 * _candidate_score(cand, phase))
-            if best is None or score < best[0]:
-                best = (score, cand, cif_phase)
-
-        if best is not None:
-            cand, cif_phase = best[1], best[2]
-            merged = self._merge(phase, cif_phase, int(cand["cod_id"]))
-            self._cache[key] = merged
-            note = (
-                f"{name}: {norm or mineral} → COD {cand['cod_id']} "
-                f"({self._describe(cif_phase)})"
-            )
-            if log_note:
-                note = f"{log_note}; {note}"
-            return merged, note
-
-        # 3) 未命中 → 原样返回
+        # 无位点、无 CIF → 只能以参考峰剖面参与 builtin 精修
         self._cache[key] = phase
-        note = f"{name}: 未找到可用 CIF ({norm or mineral or '无化学式'}), 以参考峰剖面参与精修"
-        if log_note:
-            note = f"{log_note}; {note}"
-        return phase, note
+        return phase, f"{name}: 无可用 CIF, 以参考峰剖面参与精修"
 
     # ── 工具 ────────────────────────────────────────────────
 
@@ -324,13 +197,13 @@ class PhaseStructureResolver:
     def _synthesize_cif_from_sites(phase: Phase) -> Optional[Phase]:
         """有位点、无 CIF 文件时反生成 CIF 落盘并回填 ``cif_path``。
 
-        v4.1.1: 内置 polyDB 默认库的候选带完整晶胞 + 原子位点，但没有 CIF
-        文件；旧 COD sqlite 又已从发布包移除。若这里不兜底，干净安装下
-        ``_phases_have_structure`` 恒为 False → auto 引擎永远退回 builtin，
-        GSAS-II/MAUD 装了也用不上（且日志误报"COD 库不可用"）。
+        这是 v4.2 之后**唯一**的结构来源：polyDB / 用户库 / PDF2 三类检索
+        库的候选都自带完整晶胞 + 全胞位点，但没有 CIF 文件。若不兜底，
+        干净安装下 ``_phases_have_structure`` 恒为 False → auto 引擎永远
+        退回 builtin，GSAS-II/MAUD 装了也用不上。
 
         落盘位置 = ``AppConfig.cif_cache_dir()``（可写、可被 GSAS-II 读取）；
-        失败时返回 None（调用方继续走旧的 COD 库/参考峰回退，不劣化）。
+        失败时返回 None（调用方回退参考峰剖面，不劣化）。
         """
         sites = getattr(phase, "atomic_sites", None)
         if not sites or getattr(phase, "lattice", None) is None:
@@ -384,75 +257,3 @@ class PhaseStructureResolver:
         cell = f"a={lat.a:.3f}" if lat is not None else "a=?"
         n = len(cif_phase.atomic_sites or [])
         return f"{sg}, {cell} Å, {n} 位点"
-
-    def _load_phase(self, db, cod_id: int, wavelength: float,
-                    two_theta_range: tuple[float, float]) -> Optional[Phase]:
-        """按编号取带结构的物相 (atomic_sites 必须非空才算命中)。"""
-        try:
-            p = db.get_phase(
-                cod_id,
-                wavelength=wavelength,
-                two_theta_range=two_theta_range,
-                use_pymatgen_peaks=True,
-            )
-        except Exception:
-            return None
-        if p is None or not getattr(p, "atomic_sites", None):
-            return None
-        # v0.15.2: 模拟峰为空的结构无法参与 |F|² 精修也无法评判, 不算命中
-        if not getattr(p, "reference_peaks", None):
-            return None
-        p.cif_path = self._ensure_cif_file(db, cod_id, p.cif_path)
-        return p
-
-    @staticmethod
-    def _ensure_cif_file(db, cod_id: int, cif_path: Optional[str]) -> Optional[str]:
-        """保证 cif_path 是磁盘上真实存在的 .cif (GSAS-II/MAUD 的硬要求)。
-
-        库里只有 BLOB (无机库 cif_gz) 时落盘到 ``cif_cache_dir()``
-        （默认 ``~/.polyxrd/cif_cache``，可用 ``POLYXRD_CIF_CACHE_DIR`` 覆盖）。
-        """
-        if cif_path and Path(cif_path).exists() and Path(cif_path).suffix.lower() == ".cif":
-            return cif_path
-        try:
-            text = db.get_cif(cod_id)
-            if not text:
-                return cif_path
-            from polyxrd.config import get_config
-
-            cache_dir = get_config().cif_cache_dir()
-            cache_dir.mkdir(parents=True, exist_ok=True)
-            out = cache_dir / f"COD{cod_id}.cif"
-            try:
-                out.write_text(text, encoding="utf-8")
-            except OSError:
-                # 缓存目录只读 / 文件被占用时, 已有的缓存文件仍可用;
-                # 实在拿不到磁盘文件才退回原来的 cif_path (可能为 None)。
-                if out.exists() and out.stat().st_size > 0:
-                    return str(out)
-                raise
-            return str(out)
-        except Exception:
-            return cif_path
-
-    @staticmethod
-    def _merge(orig: Phase, cif: Phase, cod_id: int) -> Phase:
-        """以 CIF 结构为基础重建物相; 身份字段 (name/formula/分数) 沿用原相。
-
-        reference_peaks 优先用 CIF 结构模拟峰 (pymatgen, 强度绝对可比),
-        空时回退原相的库 d-I 峰 —— 两者都是 0-100 归一, builtin 引擎通用。
-        """
-        ref_peaks = getattr(cif, "reference_peaks", None) or orig.reference_peaks
-        return Phase(
-            name=orig.name,
-            formula=orig.formula,
-            space_group=(getattr(orig, "space_group", "") or "").strip()
-            or (cif.space_group or ""),
-            lattice=cif.lattice or orig.lattice,
-            atomic_sites=list(cif.atomic_sites or []),
-            reference_peaks=list(ref_peaks),
-            weight_fraction=orig.weight_fraction,
-            match_score=orig.match_score,
-            cif_path=cif.cif_path,
-            elements=orig.elements or cif.elements,
-        )

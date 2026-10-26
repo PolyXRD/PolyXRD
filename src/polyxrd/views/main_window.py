@@ -65,7 +65,8 @@ from polyxrd.views.report_view import ReportView
 from polyxrd.views.widgets.busy_indicator import BusyIndicator, busy
 from polyxrd.views.widgets.database_dialog import DatabaseManagerDialog
 from polyxrd.views.widgets.edition_badge import internal_badge_label
-from polyxrd.services import CIFDatabase, CODSearcher
+from polyxrd.services import CODSearcher
+from polyxrd.services.cif_minerals import CifMineralLibrary
 
 
 #: 背景扣除下拉: (i18n key, 服务层方法名)。
@@ -365,7 +366,7 @@ class CIFBrowserDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(tr("dialog.cif_browser_title"))
         self.setMinimumSize(800, 600)
-        self._cif_db = CIFDatabase()
+        self._cif_db = CifMineralLibrary()
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -498,8 +499,7 @@ class CIFBrowserDialog(QDialog):
             self._info_labels["gamma"].setText(f"{lattice.get('gamma', '--'):.2f}")
             # M17: 渲染该物相的晶体结构
             try:
-                phase = self._cif_db.get_mineral_phase(key) \
-                    if hasattr(self._cif_db, "get_mineral_phase") else None
+                phase = self._cif_db.get_phase(key)
                 if phase is None:
                     from polyxrd.models.phase import LatticeParams, Phase
                     phase = Phase(

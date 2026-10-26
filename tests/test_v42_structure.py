@@ -10,11 +10,12 @@
    消费者）。每完成一个 P2 任务就从中删除一条；P3.1 删除旧模块后应为空集。
 3. import smoke：``import polyxrd.services`` 后 ``sys.modules`` 不含
    ``polyxrd.services.cod_local`` / ``polyxrd.services.cif_database``。
-   P3.1 前旧模块仍被导入 → 暂时 xfail；删除旧模块后去掉 xfail 即为硬断言。
+   在**子进程**里跑，避免同进程内其他测试直接 import 旧模块造成的假阴性。
 """
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -28,17 +29,8 @@ _ALLOWLIST = {
     # 旧模块本身（P3.1 删除）
     "services/cif_database.py",
     "services/cod_local.py",
-    # P2 待迁消费者
-    "services/__init__.py",
-    "services/phase_structure_resolver.py",  # P2.5
-    "services/phase_cif_export.py",          # P2.6
-    "services/rietveld_refiner.py",          # P2.7
-    "views/main_window.py",                  # P2.8
-    "views/refinement_wizard.py",            # P2.9
-    "mcp_server/server.py",                  # P2.10
-    # 其它（config 的 cod_* 路径 / phase_vm 的旧数据源分支，随 P3 一起清）
+    # 其它（config 的 cod_* 路径常量，随 P3.1 一起清）
     "config.py",
-    "viewmodels/phase_vm.py",
 }
 
 _FORBIDDEN = (
@@ -72,12 +64,26 @@ def test_allowlist_files_still_exist() -> None:
     assert not missing, f"白名单含已删除文件，请清理 _ALLOWLIST: {missing}"
 
 
-@pytest.mark.xfail(
-    reason="P3.1 删除旧模块后收紧为硬断言（当前 cod_local/cif_database 仍在）",
-    strict=False,
-)
 def test_import_services_does_not_load_legacy_modules() -> None:
-    import polyxrd.services  # noqa: F401
+    """``import polyxrd.services`` 不得把旧 COD sqlite 模块拉进内存（硬断言）.
 
-    assert "polyxrd.services.cod_local" not in sys.modules
-    assert "polyxrd.services.cif_database" not in sys.modules
+    P2.1–P2.10 迁完后，``services/__init__.py`` 已改为导出
+    ``CifMineralLibrary``；旧模块虽仍在仓库里（P3.1 删除），但**不再被
+    包入口导入**。子进程跑以排除同进程其他测试的 ``sys.modules`` 污染。
+    """
+    code = (
+        "import sys, polyxrd.services\n"
+        "bad = [m for m in ('polyxrd.services.cod_local', "
+        "'polyxrd.services.cif_database') if m in sys.modules]\n"
+        "print(','.join(bad))\n"
+    )
+    out = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=str(_SRC.parents[1]),
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+    assert out.returncode == 0, f"子进程导入失败:\n{out.stderr}"
+    pulled = out.stdout.strip()
+    assert pulled == "", f"import polyxrd.services 仍拉入旧模块: {pulled}"

@@ -184,7 +184,6 @@ def test_resolver_synthesizes_cif_from_sites(tmp_path, monkeypatch):
 
     phase = _nacl_phase()
     resolver = PhaseStructureResolver()
-    monkeypatch.setattr(resolver, "_get_db", lambda: None)  # 干净安装：无旧 COD 库
     logs: list[str] = []
     out = resolver.resolve([phase], log_cb=logs.append)
 
@@ -198,10 +197,10 @@ def test_resolver_synthesizes_cif_from_sites(tmp_path, monkeypatch):
     assert any("由原子位点生成 CIF" in line for line in logs)
 
 
-def test_phase_cif_export_uses_atomic_sites(monkeypatch):
+def test_phase_cif_export_uses_atomic_sites():
     from polyxrd.services import phase_cif_export
 
-    monkeypatch.setattr(phase_cif_export, "_cod_db", lambda: None)
+    # v4.2: 旧 COD 库通道已删除，位点反生成是主路径（无需再屏蔽库）
     text, _cod_id = phase_cif_export.get_phase_cif_text(_nacl_phase())
     assert "_atom_site_fract_x" in text
     assert "Na" in text and "Cl" in text

@@ -358,33 +358,104 @@ def search_phases(
 
 
 # ════════════════════════════════════════════════════════════════
-#  5. COD DATABASE SEARCH
+#  5. PHASE DATABASE SEARCH (polyDB 外挂库 + COD 在线)
 # ════════════════════════════════════════════════════════════════
+#
+# v4.2：本地 COD sqlite 运行时已从发布包移除，原 4 个 COD 工具改成：
+#   · search_phases_polydb / get_phase_details  → polyDB 外挂库（新名字）
+#   · search_cod_phases / get_cod_phase_details → 同名保留，转调 polyDB
+#     （不破坏已有外部客户端；条目 ID 自 v4.0.0 起就是 polyDB 的 eid）
+#   · search_cod_by_d_peaks → 明确返回 deprecated（v4.2.1 用 polyDB 重建）
+#   · search_cod_online → 走 COD REST（本来就不依赖本地库）
+
 
 @mcp.tool()
-def search_cod_phases(
+def search_phases_polydb(
     query: str,
     limit: int = 20,
 ) -> str:
-    """Search the COD inorganic database (71,199 phases) by formula, space group, or COD ID.
+    """Search the mounted polyDB phase database by formula, mineral name, space group, or ID.
 
     Args:
         query: Search keyword. Examples: "SiO2", "quartz", "Fd-3m", "1011097".
         limit: Maximum number of results to return (default 20).
 
     Returns:
-        JSON list of matching phases with cod_id, formula, space group, cell parameters.
+        JSON list of matching phases with cod_id, formula, mineral name,
+        space group and cell parameters. ``mounted=false`` when no polyDB is
+        mounted (the DB ships as a separate optional download).
     """
-    from polyxrd.services.cif_database import CIFDatabase
+    from polyxrd.services.polydb import PolyDatabase
 
-    db = CIFDatabase()
-    results = db.search_cod_phases(query, limit=limit)
-
+    db = PolyDatabase()
+    if not db.available:
+        return json.dumps(
+            {
+                "query": query,
+                "mounted": False,
+                "n_results": 0,
+                "phases": [],
+                "hint": (
+                    "No polyDB mounted. Download a PolyXRD-DataBase release "
+                    "and mount it in the app, or use search_cod_online for "
+                    "structures from crystallography.net."
+                ),
+            },
+            ensure_ascii=False,
+        )
+    results = db.search_entries(query, limit=limit)
     return json.dumps(
-        {"query": query, "n_results": len(results), "phases": results},
+        {"query": query, "mounted": True, "n_results": len(results),
+         "phases": results},
         ensure_ascii=False,
         default=str,
     )
+
+
+@mcp.tool()
+def search_cod_phases(
+    query: str,
+    limit: int = 20,
+) -> str:
+    """Deprecated alias of ``search_phases_polydb`` (searches the mounted polyDB).
+
+    Kept so existing MCP clients keep working after the local COD sqlite
+    runtime was removed in v4.2.0.
+    """
+    return search_phases_polydb(query=query, limit=limit)
+
+
+@mcp.tool()
+def get_phase_details(eid: int) -> str:
+    """Get full details of a polyDB phase including its d-I peaks and structure.
+
+    Args:
+        eid: polyDB entry ID (e.g. 1011097).
+
+    Returns:
+        JSON with phase info: formula, mineral name, space group, cell params,
+        d-I peak list and non-symmetric-unit atomic sites.
+    """
+    from polyxrd.services.polydb import PolyDatabase
+
+    db = PolyDatabase()
+    if not db.available:
+        return json.dumps({
+            "error": "No polyDB mounted.",
+            "hint": "Mount a PolyXRD-DataBase release in the app first.",
+        }, ensure_ascii=False)
+    phase = db.get_phase(int(eid))
+    if phase is None:
+        return json.dumps({"error": f"Entry {eid} not found in polyDB."},
+                          ensure_ascii=False)
+    phase["atomic_sites"] = db.get_atomic_sites(int(eid))
+    return json.dumps(phase, ensure_ascii=False, default=str)
+
+
+@mcp.tool()
+def get_cod_phase_details(eid: int) -> str:
+    """Deprecated alias of ``get_phase_details`` (polyDB-backed since v4.2.0)."""
+    return get_phase_details(eid=eid)
 
 
 @mcp.tool()
@@ -395,55 +466,26 @@ def search_cod_by_d_peaks(
     min_match: int = 3,
     limit: int = 20,
 ) -> str:
-    """Search the COD database by measured d-spacing peaks (Hanawalt-style search).
+    """Deprecated in v4.2.0 — d-spacing (Hanawalt) search is being rebuilt on polyDB.
 
-    Args:
-        d_values: List of measured d-spacing values in Angstroms.
-        intensities: Corresponding peak intensities (optional but recommended).
-        tolerance: d-value matching tolerance in Angstroms.
-        min_match: Minimum number of matched peaks for a phase to be included.
-        limit: Maximum number of results to return.
-
-    Returns:
-        JSON with ranked phase matches: cod_id, formula, match statistics.
+    The local COD sqlite index that backed this tool was removed from the
+    release in v4.2.0. Use ``search_phases_polydb`` or ``search_cod_online``
+    meanwhile; d-peak search returns in v4.2.1.
     """
-    from polyxrd.services.cif_database import CIFDatabase
-
-    db = CIFDatabase()
-    results = db.search_cod_by_d_peaks(
-        measured_d=d_values,
-        measured_i=intensities,
-        tolerance=tolerance,
-        min_match=min_match,
-        limit=limit,
-    )
-
     return json.dumps(
-        {"n_results": len(results), "matches": results},
+        {
+            "deprecated": True,
+            "removed_in": "4.2.0",
+            "n_results": 0,
+            "matches": [],
+            "hint": (
+                "d-spacing search moved to polyDB and ships in v4.2.1. "
+                "Use search_phases_polydb (formula / name / space group) or "
+                "search_cod_online in the meantime."
+            ),
+        },
         ensure_ascii=False,
-        default=str,
     )
-
-
-@mcp.tool()
-def get_cod_phase_details(cod_id: int) -> str:
-    """Get full details of a COD phase including d-I peak list.
-
-    Args:
-        cod_id: COD database entry ID (e.g. 1011097).
-
-    Returns:
-        JSON with phase info: formula, space group, cell params, d-I peak list.
-    """
-    from polyxrd.services.cif_database import CIFDatabase
-
-    db = CIFDatabase()
-    phase = db.get_cod_phase(cod_id)
-
-    if phase is None:
-        return json.dumps({"error": f"COD ID {cod_id} not found in database."})
-
-    return json.dumps(phase, ensure_ascii=False, default=str)
 
 
 @mcp.tool()
@@ -459,23 +501,34 @@ def search_cod_online(
         formula: Chemical formula (e.g. "SiO2").
         mineral_name: Mineral name (e.g. "quartz").
         space_group: Space group symbol (e.g. "Fd-3m").
-        timeout: Request timeout in seconds.
+        timeout: Request timeout in seconds (kept for API compatibility).
 
     Returns:
         JSON list of COD entries with cod_id, name, formula.
     """
-    from polyxrd.services.cif_database import CIFDatabase
+    from polyxrd.services.cod_searcher import CODSearcher
 
-    db = CIFDatabase()
-    results = db.search_cod(
-        formula=formula,
-        mineral_name=mineral_name,
-        space_group=space_group,
-        timeout=timeout,
+    if not any([formula, mineral_name, space_group]):
+        return json.dumps(
+            {"n_results": 0, "entries": [],
+             "error": "give at least one of formula / mineral_name / "
+                      "space_group"},
+            ensure_ascii=False,
+        )
+    result = CODSearcher().search(
+        formula=formula, mineral_name=mineral_name, space_group=space_group,
     )
-
+    entries = [
+        {
+            "cod_id": e.cod_id,
+            "name": e.mineral_name or "",
+            "formula": e.formula or "",
+            "space_group": e.space_group or "",
+        }
+        for e in (getattr(result, "entries", None) or [])
+    ]
     return json.dumps(
-        {"n_results": len(results), "entries": results},
+        {"n_results": len(entries), "entries": entries},
         ensure_ascii=False,
         default=str,
     )

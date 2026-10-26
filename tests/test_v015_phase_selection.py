@@ -50,9 +50,12 @@ def test_export_phase_cif_writes_file(tmp_path):
     assert out.read_text(encoding="utf-8") == "data_x\n"
 
 
-def test_cif_unavailable_raises(monkeypatch):
-    # 断掉库通道 (测试机上真库可用, 会污染"应失败"断言)
-    monkeypatch.setattr(pce, "_cod_db", lambda: None)
+def test_cif_unavailable_raises():
+    """v4.2: 无 cif_path、无位点、非用户库号段 → 直接抛 CifUnavailableError。
+
+    （旧版这里还要 monkeypatch 掉 ``_cod_db`` 才能断言失败 —— 那个库通道已在
+    v4.2 删除，取文路径里不再有"真库可用会污染失败断言"的隐患。）
+    """
     p = Phase(name="NoSuchPhase XYZ", formula="")
     with pytest.raises(pce.CifUnavailableError):
         pce.get_phase_cif_text(p)

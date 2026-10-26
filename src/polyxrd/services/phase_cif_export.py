@@ -4,14 +4,17 @@
 把「已勾选物相」导出为 CIF 文件。取文顺序:
 
 1. ``phase.cif_path`` 指向磁盘真实文件 → 直接读;
-2. 名字 / cif_path 文件名里的 COD 编号 → ``CODLocalDatabase.get_cif()``
-   (五级回退: 本地 cod/cif 目录 → 全库 BLOB → 无机库 BLOB → tar → COD REST);
-3. 化学式 (+ 矿物名) 在 COD 库里找结构候选, 按空间群一致 + 晶胞接近度
-   排序 (复用精修 resolver 的打分), 逐个尝试取文;
+2. 无 CIF 文件但有原子位点 → 由位点反生成 (v4.1.1; polyDB / PDF2 候选);
+3. 条目号落在用户库号段 (≥ 9 亿) → 读 ``user_phases.sqlite`` 的 ``cif_gz``;
 4. 全部失败 → ``CifUnavailableError`` (UI 层弹「未找到该物相的 CIF」)。
 
-纯逻辑、无 Qt 依赖, 便于离屏单测; 瘦身索引库 (cif_gz 全 NULL) 场景
-由 ``cod_local.get_cif`` 的外部 cif/ 目录回退兜底。
+v4.2 变更
+---------
+旧版第 2–3 步是"按 COD 编号走旧本地库的五级回退 / 按化学式在 COD
+库里找结构候选再取文"。该库已从发布包移除, 两个分支在 v4.2 删除 —— 现在
+所有检索库的候选要么自带 cif_path, 要么自带晶胞+位点可反生成, 覆盖完整。
+
+纯逻辑、无 Qt 依赖, 便于离屏单测。
 """
 from __future__ import annotations
 
@@ -20,14 +23,7 @@ from pathlib import Path
 from typing import Optional
 
 from polyxrd.models.phase import Phase
-from polyxrd.services.phase_structure_resolver import (
-    PhaseStructureResolver,
-    _candidate_score,
-    extract_cod_id,
-)
-from polyxrd.utils.formula_parser import normalize_cod_formula
-
-_clean_mineral = PhaseStructureResolver._clean_mineral
+from polyxrd.services.phase_structure_resolver import extract_cod_id
 
 __all__ = [
     "CifUnavailableError",
@@ -39,19 +35,6 @@ __all__ = [
 
 class CifUnavailableError(RuntimeError):
     """无法为该物相取到 CIF 文本 (本地无文件、库内无结构)。"""
-
-
-def _cod_db():
-    """惰性拿 CODLocalDatabase; 库不可用返回 None (不抛)。"""
-    try:
-        from polyxrd.services.cod_local import CODLocalDatabase
-
-        db = CODLocalDatabase()
-        if db.is_ready() or db._inorg_db() is not None:
-            return db
-    except Exception:  # noqa: BLE001
-        pass
-    return None
 
 
 def resolve_cod_id(phase: Phase) -> Optional[int]:
@@ -75,33 +58,6 @@ def resolve_cod_id(phase: Phase) -> Optional[int]:
     return None
 
 
-def _find_cod_id_by_formula(phase: Phase) -> Optional[int]:
-    """按规范化化学式 (+矿物名) 在 COD 库找有 CIF 的候选, 返回第一个 cod_id。"""
-    formula = normalize_cod_formula(getattr(phase, "formula", "") or "")
-    mineral = _clean_mineral(getattr(phase, "name", "") or "")
-    if not formula and not mineral:
-        return None
-    db = _cod_db()
-    if db is None:
-        return None
-    try:
-        cands = db.find_structure_candidates(formula, mineral_name=mineral)
-    except Exception:  # noqa: BLE001
-        return None
-    cands.sort(key=lambda c: _candidate_score(c, phase))
-    for cand in cands[:3]:
-        try:
-            cid = int(cand["cod_id"])
-        except (KeyError, TypeError, ValueError):
-            continue
-        try:
-            if db.get_cif(cid):
-                return cid
-        except Exception:  # noqa: BLE001
-            continue
-    return None
-
-
 def get_phase_cif_text(phase: Phase) -> tuple[str, Optional[int]]:
     """取物相 CIF 文本。成功返回 ``(cif_text, cod_id|None)``, 失败抛
     ``CifUnavailableError``。"""
@@ -116,7 +72,7 @@ def get_phase_cif_text(phase: Phase) -> tuple[str, Optional[int]]:
             return text, resolve_cod_id(phase)
 
     # 1b) 无 CIF 文件但有原子位点 → 由位点反生成 (v4.1.1)
-    #     内置 polyDB 候选就是这种形态；旧 COD sqlite 已不在发布包内。
+    #     polyDB / PDF2 / 用户库候选都是这种形态。
     if getattr(phase, "atomic_sites", None) and getattr(phase, "lattice", None):
         try:
             from polyxrd.services.phase_cif import phase_to_cif_text
@@ -124,13 +80,10 @@ def get_phase_cif_text(phase: Phase) -> tuple[str, Optional[int]]:
             text = phase_to_cif_text(phase)
             if text.strip():
                 return text, resolve_cod_id(phase)
-        except Exception:  # noqa: BLE001 - 反生成失败继续走旧库回退
+        except Exception:  # noqa: BLE001 - 反生成失败走用户库/抛错
             pass
 
-    db = _cod_db()
-
-    # 2) 库编号直取 (五级回退)。用户库条目 (9 亿段 ID) 的 CIF 存在
-    #    user_phases.sqlite 的 cif_gz 里, 与 COD 库不互通, 单独走一支。
+    # 2) 用户库条目 (9 亿段 ID) 的 CIF 存在 user_phases.sqlite 的 cif_gz 里
     cod_id = resolve_cod_id(phase)
     if cod_id is not None and cod_id >= 900_000_000:
         try:
@@ -141,23 +94,6 @@ def get_phase_cif_text(phase: Phase) -> tuple[str, Optional[int]]:
             text = None
         if text and text.strip():
             return text, cod_id
-    if cod_id is not None and db is not None:
-        try:
-            text = db.get_cif(cod_id)
-        except Exception:  # noqa: BLE001
-            text = None
-        if text and text.strip():
-            return text, cod_id
-
-    # 3) 化学式匹配
-    matched = _find_cod_id_by_formula(phase)
-    if matched is not None and db is not None:
-        try:
-            text = db.get_cif(matched)
-        except Exception:  # noqa: BLE001
-            text = None
-        if text and text.strip():
-            return text, matched
 
     name = getattr(phase, "name", "") or getattr(phase, "formula", "") or "?"
     raise CifUnavailableError(f"未找到物相「{name}」的 CIF (可联网后重试)")

@@ -636,6 +636,68 @@ class PolyDatabase:
             "source": "polydb",
         }
 
+    def search_entries(self, query: str, limit: int = 20) -> list[dict]:
+        """按 化学式 / 约化式 / 矿名 / 空间群 / 编号 模糊查相（只读）。
+
+        供 MCP 工具与 UI 的"按文本找相"用（v4.2 起取代原 COD sqlite 的
+        ``search_cod_phases``）。纯 SQL LIKE + 主键等值，不碰 mmap 段，
+        因此不需要加载峰表 —— 十万级库上单次查询为毫秒量级。
+
+        Args:
+            query: 关键词。全数字按 ``eid`` 精确查；否则在
+                ``formula / formula_red / mineral / space_group`` 上做
+                ``%query%`` 不区分大小写匹配。
+            limit: 返回条数上限（1..500）。
+
+        Returns:
+            结果列表，每项含 cod_id(eid), formula, mineral_name, space_group,
+            sg_number, 晶胞参数, volume, density, n_peaks；库未挂载返回 []。
+        """
+        conn = self._get_conn()
+        if conn is None:
+            return []
+        q = (query or "").strip()
+        if not q:
+            return []
+        n = max(1, min(int(limit or 20), 500))
+        cols = ("eid, formula, formula_red, mineral, space_group, sg_number, "
+                "a, b, c, alpha, beta, gamma, volume, density, n_peaks")
+        try:
+            if q.isdigit():
+                rows = conn.execute(
+                    f"SELECT {cols} FROM entries WHERE eid = ?", (int(q),)
+                ).fetchall()
+            else:
+                pat = f"%{q}%"
+                rows = conn.execute(
+                    f"SELECT {cols} FROM entries WHERE formula LIKE ? "
+                    "OR formula_red LIKE ? OR mineral LIKE ? "
+                    "OR space_group LIKE ? LIMIT ?",
+                    (pat, pat, pat, pat, n),
+                ).fetchall()
+        except sqlite3.Error:
+            return []
+        return [
+            {
+                "cod_id": int(r["eid"]),
+                "formula": r["formula"] or "",
+                "formula_red": r["formula_red"] or "",
+                "mineral_name": r["mineral"] or "",
+                "space_group": r["space_group"] or "",
+                "sg_number": int(r["sg_number"] or 0),
+                "cell_a": float(r["a"] or 0.0),
+                "cell_b": float(r["b"] or 0.0),
+                "cell_c": float(r["c"] or 0.0),
+                "cell_alpha": float(r["alpha"] or 90.0),
+                "cell_beta": float(r["beta"] or 90.0),
+                "cell_gamma": float(r["gamma"] or 90.0),
+                "volume": float(r["volume"] or 0.0),
+                "density": float(r["density"] or 0.0),
+                "n_peaks": int(r["n_peaks"] or 0),
+            }
+            for r in rows[:n]
+        ]
+
     def get_atomic_sites(self, eid: int) -> list[dict]:
         """取**非对称单位**原子位点（CIF 原样）。缺失返回空列表。
 
