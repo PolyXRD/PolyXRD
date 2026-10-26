@@ -377,7 +377,7 @@ def search_phases_polydb(
     """Search the mounted polyDB phase database by formula, mineral name, space group, or ID.
 
     Args:
-        query: Search keyword. Examples: "SiO2", "quartz", "Fd-3m", "1011097".
+        query: Search keyword. Examples: "SiO2", "O2 Si", "quartz", "F d -3 m" (spaces optional), "1011097", "97-1011097".
         limit: Maximum number of results to return (default 20).
 
     Returns:
@@ -400,6 +400,18 @@ def search_phases_polydb(
                     "and mount it in the app, or use search_cod_online for "
                     "structures from crystallography.net."
                 ),
+            },
+            ensure_ascii=False,
+        )
+    if not db.is_ready():
+        return json.dumps(
+            {
+                "query": query,
+                "mounted": True,
+                "n_results": 0,
+                "phases": [],
+                "error": "polyDB layout is incomplete/corrupted "
+                         "(meta.json/index.sqlite or segments missing).",
             },
             ensure_ascii=False,
         )
@@ -444,6 +456,11 @@ def get_phase_details(eid: int) -> str:
             "error": "No polyDB mounted.",
             "hint": "Mount a PolyXRD-DataBase release in the app first.",
         }, ensure_ascii=False)
+    if not db.is_ready():
+        return json.dumps({
+            "error": "polyDB layout is incomplete/corrupted.",
+            "hint": "Re-mount a valid PolyXRD-DataBase release.",
+        }, ensure_ascii=False)
     phase = db.get_phase(int(eid))
     if phase is None:
         return json.dumps({"error": f"Entry {eid} not found in polyDB."},
@@ -453,9 +470,13 @@ def get_phase_details(eid: int) -> str:
 
 
 @mcp.tool()
-def get_cod_phase_details(eid: int) -> str:
-    """Deprecated alias of ``get_phase_details`` (polyDB-backed since v4.2.0)."""
-    return get_phase_details(eid=eid)
+def get_cod_phase_details(cod_id: int) -> str:
+    """Deprecated alias of ``get_phase_details`` (polyDB-backed since v4.2.0).
+
+    v4.2.1：保留旧参数名 ``cod_id``（MCP 入参 schema 由函数签名生成），
+    旧客户端按 ``{"cod_id": …}`` 调用不会失效。
+    """
+    return get_phase_details(eid=cod_id)
 
 
 @mcp.tool()
@@ -515,9 +536,22 @@ def search_cod_online(
                       "space_group"},
             ensure_ascii=False,
         )
-    result = CODSearcher().search(
-        formula=formula, mineral_name=mineral_name, space_group=space_group,
-    )
+    try:
+        # v4.2.1: timeout 真正生效；网络异常按旧行为返回 JSON（不抛出）。
+        result = CODSearcher(timeout=timeout).search(
+            formula=formula, mineral_name=mineral_name, space_group=space_group,
+        )
+    except Exception as exc:  # noqa: BLE001 - MCP 工具必须返回可消费 JSON
+        return json.dumps(
+            {
+                "n_results": 0,
+                "entries": [],
+                "error": f"COD online search failed: {type(exc).__name__}: {exc}",
+                "hint": "Check network access / try again later, or use "
+                        "search_phases_polydb for the locally mounted library.",
+            },
+            ensure_ascii=False,
+        )
     entries = [
         {
             "cod_id": e.cod_id,

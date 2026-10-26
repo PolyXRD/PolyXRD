@@ -636,22 +636,44 @@ class PolyDatabase:
             "source": "polydb",
         }
 
+    @staticmethod
+    def _legacy_display_id(eid: int) -> str:
+        """旧 COD 展示编号（v4.2.1 兼容 MCP 老客户端）。"""
+        return f"97-{eid:07d}"
+
+    @staticmethod
+    def _legacy_ref_id(eid: int) -> str:
+        """旧 COD 参考编号（v4.2.1 兼容 MCP 老客户端）。"""
+        return f"96-{eid // 10000:03d}-{eid % 10000:04d}"
+
+    @staticmethod
+    def _parse_eid_query(q: str) -> Optional[int]:
+        """把 ``1011097`` / ``97-1011097`` / ``96-101-1097`` 解析为 eid。
+
+        v4.2.0 的 ``search_entries`` 只认纯数字，导致旧 MCP 客户端常用的
+        两种带前缀编号静默返回空；这里恢复旧行为的兼容解析（v4.2.1）。
+        """
+        compact = (q or "").replace(" ", "").replace("_", "")
+        core = compact.replace("-", "")
+        if not core.isdigit():
+            return None
+        if len(core) == 9 and core[:2] in ("96", "97"):
+            return int(core[2:])
+        if len(core) == 7:
+            return int(core)
+        return None
+
     def search_entries(self, query: str, limit: int = 20) -> list[dict]:
         """按 化学式 / 约化式 / 矿名 / 空间群 / 编号 模糊查相（只读）。
 
         供 MCP 工具与 UI 的"按文本找相"用（v4.2 起取代原 COD sqlite 的
-        ``search_cod_phases``）。纯 SQL LIKE + 主键等值，不碰 mmap 段，
-        因此不需要加载峰表 —— 十万级库上单次查询为毫秒量级。
+        ``search_cod_phases``）。SQL LIKE + 主键等值，不碰 mmap 段。
 
-        Args:
-            query: 关键词。全数字按 ``eid`` 精确查；否则在
-                ``formula / formula_red / mineral / space_group`` 上做
-                ``%query%`` 不区分大小写匹配。
-            limit: 返回条数上限（1..500）。
-
-        Returns:
-            结果列表，每项含 cod_id(eid), formula, mineral_name, space_group,
-            sg_number, 晶胞参数, volume, density, n_peaks；库未挂载返回 []。
+        v4.2.1 兼容增强：
+          * ``1011097`` / ``97-1011097`` / ``96-101-1097`` 均按 eid 精确查；
+          * 返回值补 ``ref_id`` / ``display_id``（旧客户端字段契约）；
+          * 化学式查询先用 :func:`normalize_cod_formula` 规范化（``SiO2`` →
+            ``O2 Si``），空间群比较忽略空格（``Fd-3m`` ↔ ``F d -3 m``）。
         """
         conn = self._get_conn()
         if conn is None:
@@ -662,24 +684,54 @@ class PolyDatabase:
         n = max(1, min(int(limit or 20), 500))
         cols = ("eid, formula, formula_red, mineral, space_group, sg_number, "
                 "a, b, c, alpha, beta, gamma, volume, density, n_peaks")
+        eid = self._parse_eid_query(q)
         try:
-            if q.isdigit():
+            if eid is not None:
                 rows = conn.execute(
-                    f"SELECT {cols} FROM entries WHERE eid = ?", (int(q),)
+                    f"SELECT {cols} FROM entries WHERE eid = ?", (eid,)
                 ).fetchall()
             else:
                 pat = f"%{q}%"
+                clauses = [
+                    "formula LIKE ?", "formula_red LIKE ?", "mineral LIKE ?",
+                    "REPLACE(space_group, ' ', '') LIKE ?",
+                ]
+                params = [pat, pat, pat, f"%{q.replace(' ', '')}%"]
+                norm = ""
+                try:
+                    from polyxrd.utils.formula_parser import normalize_cod_formula
+
+                    norm = normalize_cod_formula(q) or ""
+                except Exception:  # noqa: BLE001 - 规范化失败退回原 LIKE
+                    norm = ""
+                order = "ORDER BY n_peaks DESC"
+                order_params: list = []
+                if norm:
+                    flat = norm.replace(" ", "")
+                    clauses += [
+                        "REPLACE(formula, ' ', '') = ?",
+                        "REPLACE(formula, ' ', '') LIKE ?",
+                    ]
+                    params += [flat, f"%{flat}%"]
+                    # 精确化学式（如 SiO2 -> O2 Si）必须排在模糊命中之前，
+                    # 否则 n_peaks 高的杂相会把真物相挤出 limit。
+                    order = ("ORDER BY (REPLACE(formula, ' ', '') = ?) DESC, "
+                             "n_peaks DESC")
+                    order_params = [flat]
                 rows = conn.execute(
-                    f"SELECT {cols} FROM entries WHERE formula LIKE ? "
-                    "OR formula_red LIKE ? OR mineral LIKE ? "
-                    "OR space_group LIKE ? LIMIT ?",
-                    (pat, pat, pat, pat, n),
+                    f"SELECT {cols} FROM entries WHERE (" + " OR ".join(clauses)
+                    + ") " + order + " LIMIT ?",
+                    (*params, *order_params, n),
                 ).fetchall()
         except sqlite3.Error:
             return []
-        return [
-            {
-                "cod_id": int(r["eid"]),
+        out: list[dict] = []
+        for r in rows[:n]:
+            eid_i = int(r["eid"])
+            out.append({
+                "cod_id": eid_i,
+                "ref_id": self._legacy_ref_id(eid_i),
+                "display_id": self._legacy_display_id(eid_i),
                 "formula": r["formula"] or "",
                 "formula_red": r["formula_red"] or "",
                 "mineral_name": r["mineral"] or "",
@@ -694,9 +746,8 @@ class PolyDatabase:
                 "volume": float(r["volume"] or 0.0),
                 "density": float(r["density"] or 0.0),
                 "n_peaks": int(r["n_peaks"] or 0),
-            }
-            for r in rows[:n]
-        ]
+            })
+        return out
 
     def get_atomic_sites(self, eid: int) -> list[dict]:
         """取**非对称单位**原子位点（CIF 原样）。缺失返回空列表。

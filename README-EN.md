@@ -7,7 +7,7 @@
     Peak detection &nbsp;·&nbsp; Multi-phase qualitative search &nbsp;·&nbsp; Rietveld structure refinement &nbsp;·&nbsp; Le Bail cell refinement &nbsp;·&nbsp; Indexing &nbsp;·&nbsp; 3D structure visualization &nbsp;·&nbsp; Bundled COD-Inorg polyDB default library + external COD-Full / PDF2-2004
   </p>
   <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v4.2.0-blue?style=flat-square" /></a>
+    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v4.2.1-blue?style=flat-square" /></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
     &nbsp;
@@ -38,7 +38,26 @@ Core design philosophy:
 
 ---
 
-## 🆕 Latest Release v4.2.0 (2026-10-26)
+## 🆕 Latest Release v4.2.1 (2026-10-26 · released)
+
+**Acceptance-fix release for v4.2.0** — 4 P1 compatibility/UX fixes + documentation corrections + build/verification hardening (details in Chinese: [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.2.1):
+
+- **MCP old-name compatibility restored**: `search_cod_phases` accepts `97-1011097` / `96-101-1097` and restores `ref_id` / `display_id`; formulas are normalized (`SiO2` → `O2 Si`) and space groups ignore spaces (`Fd-3m`); `get_cod_phase_details(cod_id)` keeps the legacy argument name; `search_cod_online` returns JSON on network errors and honours `timeout`.
+- **Wizard dead UI removed**: the retired local-CIF search box/button and its dead chain/i18n keys are gone; built-in 12 minerals + external CIF import, COD online search, and polyDB/PDF2/user-database structure auto-fill remain.
+- **Documentation corrections**: baseline commit, tag/HEAD, net line count, import timing and "no UI change" claims fixed; design/execution plan statuses back-filled.
+- **Build/verification hardening**: `verify_release.ps1` now has the missing `-SkipBundledDb` parameter, a stable SHA timestamp, and `-ExpectedFlavor` / `-CheckDistVersion` hard checks for dist flavour/version; the internal build cleans the flavour marker; MCP/fail-open/startup-log/golden tests added.
+
+| Asset | Size | SHA-256 (first 16) | Notes |
+|---|---|---|---|
+| `PolyXRD-Setup-v4.2.1.exe` | 286.8 MB | `22ca6501cf39…` | Release installer (registration enabled), bundles COD-Inorg |
+| `PolyXRD-v4.2.1-Portable.zip` | 428.1 MB | `8a6bbc6ba756…` | Portable package (**internal evaluation build**), bundles COD-Inorg |
+| `SHA256-v4.2.1.txt` | — | — | SHA-256 of the two program artifacts |
+
+👉 **Released**: [Release v4.2.1](https://github.com/PolyXRD/PolyXRD/releases/tag/v4.2.1) — 3 assets, no databases.
+
+---
+
+## 📚 Previous Release v4.2.0 (2026-10-26 · released)
 
 **Structural cleanup: the legacy COD sqlite runtime is retired** (details in Chinese: [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.2.0 and [docs/RELEASE-NOTES-v4.2.0.md](docs/RELEASE-NOTES-v4.2.0.md)):
 

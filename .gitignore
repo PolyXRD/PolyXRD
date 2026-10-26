@@ -32,10 +32,8 @@ _*.py
 # 白名单必须放在 `_*.py` 之后，否则会被后续排除规则覆盖。
 !scripts/_build_post.py
 !scripts/_pyinst_collect.py
-# v2.1 P2-4: tests/_cif_old_ref.py 曾被约 41 个用例导入(缺失时静默 skip),
-# 必须随测试套件入库; _baseline_* 为开发机指标快照, 不入库。
-# v4.2.0: _cif_old_ref.py（旧 COD sqlite 参考实现）随旧运行时一并删除，
-# 白名单条目同时移除 —— 否则将来同名文件会被意外收进仓库。
+# v4.2.0: tests/_cif_old_ref.py（旧 COD sqlite 参考实现）随旧运行时删除，
+# 白名单条目同时移除；_baseline_* 为开发机指标快照，不入库。
 tests/_baseline_metrics.py
 tests/_baseline_metrics.json
 

@@ -38,7 +38,12 @@ param(
     [switch]$SkipSetup,
     # v4.1.1: 默认不生成数据库包（政策：数据库不在本仓库发布）；
     #   需要本地归档/对账时显式加本开关。
-    [switch]$PackDbPackages
+    [switch]$PackDbPackages,
+    # v4.1.2: 纯客户端小包（POLYXRD_NO_BUNDLE_DB=1）没有内置库
+    [switch]$SkipBundledDb,
+    # v4.2.1: 构建后核对 dist flavor / VERSION.txt，防止变体串味
+    [ValidateSet('', 'release', 'internal')][string]$ExpectedFlavor = '',
+    [switch]$CheckDistVersion
 )
 
 $ErrorActionPreference = 'Stop'
@@ -98,6 +103,45 @@ if ($SkipSetup) {
             Write-Output '      [提示] Setup mtime 早于当前 dist EXE（两次构建的先后关系），新鲜度按版本号判定'
         } else {
             Write-Output '      OK: Setup 晚于本次 dist EXE（不是旧包）'
+        }
+    }
+}
+
+# ── 1a2. dist 版本与 flavor（v4.2.1）────────────────────────
+$distExe = Join-Path $Root 'dist\PolyXRD\PolyXRD.exe'
+if ($CheckDistVersion) {
+    $verFile = Join-Path $Root 'dist\PolyXRD\VERSION.txt'
+    Write-Output "[1a2/3] dist VERSION.txt 校验"
+    if (-not (Test-Path -LiteralPath $verFile)) {
+        Fail 'dist/PolyXRD/VERSION.txt 不存在'
+    } else {
+        $vt = Get-Content -LiteralPath $verFile -Raw
+        if ($vt -notmatch "Version\s*:\s*$([regex]::Escape($Version))") {
+            Fail "dist/VERSION.txt 版本号与 $Version 不一致"
+        } else {
+            Write-Output '      OK: VERSION.txt 版本号一致'
+        }
+    }
+}
+if ($ExpectedFlavor -ne '') {
+    Write-Output "[1a3/3] dist EXE flavor 校验 (期望 $ExpectedFlavor)"
+    if (-not (Test-Path -LiteralPath $distExe)) {
+        Fail 'dist/PolyXRD/PolyXRD.exe 不存在，无法校验 flavor'
+    } else {
+        $py = Join-Path $Root 'venv\Scripts\python.exe'
+        if (-not (Test-Path -LiteralPath $py)) { $py = 'python' }
+        $code = @'
+import sys
+from pathlib import Path
+sys.path.insert(0, r"scripts")
+from verify_installer import flavor_of_exe
+print(flavor_of_exe(Path(sys.argv[1])))
+'@
+        $flavor = (& $py -c $code $distExe 2>$null | Select-Object -Last 1).Trim()
+        if ($flavor -ne $ExpectedFlavor) {
+            Fail "dist EXE flavor=$flavor != 期望 $ExpectedFlavor"
+        } else {
+            Write-Output "      OK: dist EXE flavor=$flavor"
         }
     }
 }
@@ -287,7 +331,18 @@ if ($SkipHash) {
     Write-Output '      (已跳过)'
 } else {
     $hashFile = Join-Path $outDir "SHA256-v$Version.txt"
-    $stamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+    # v4.2.1: 时间戳取产物 mtime 而非当前时间 —— 发布后重复校验不会改写
+    # SHA 文件（v4.2.0 曾因重新生成时间行导致本地 digest 与远端漂移）。
+    $mtimes = @(
+        @((Join-Path $outDir "PolyXRD-Setup-v$Version.exe"), $portable) |
+            Where-Object { Test-Path -LiteralPath $_ } |
+            ForEach-Object { (Get-Item -LiteralPath $_).LastWriteTime }
+    )
+    $stamp = if ($mtimes.Count -gt 0) {
+        ($mtimes | Sort-Object | Select-Object -Last 1).ToString('yyyy-MM-dd HH:mm:ss')
+    } else {
+        (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
+    }
     $lines = @(
         "PolyXRD v$Version 发布产物校验值 (SHA-256)",
         "生成时间: $stamp",

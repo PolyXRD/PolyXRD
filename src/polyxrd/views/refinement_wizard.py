@@ -254,21 +254,6 @@ class RefinementWizard(QWidget):
         cif_page = QWidget()
         cif_layout = QVBoxLayout(cif_page)
 
-        # 结构检索: 化学式 / 矿物名 / COD 编号 (后台线程, 同一物相
-        # 可能有多条 CIF, 全部列出供挑选)
-        cif_search_layout = QHBoxLayout()
-        self._cif_search_input = QLineEdit()
-        self._cif_search_input.setPlaceholderText(
-            tr("wizard.phase_page.cif_search_placeholder")
-        )
-        self._cif_search_input.returnPressed.connect(self._on_cif_search)
-        cif_search_layout.addWidget(self._cif_search_input, stretch=1)
-
-        self._btn_cif_search = QPushButton(tr("wizard.phase_page.btn_cod_search"))
-        self._btn_cif_search.clicked.connect(self._on_cif_search)
-        cif_search_layout.addWidget(self._btn_cif_search)
-        cif_layout.addLayout(cif_search_layout)
-
         self._cif_hint = QLabel(tr("wizard.phase_page.cif_list_hint"))
         self._cif_hint.setWordWrap(True)
         self._cif_hint.setStyleSheet("color: #666;")
@@ -641,90 +626,15 @@ class RefinementWizard(QWidget):
         if label is not None:
             label.setText(text)
 
-    def _on_cif_search(self) -> None:
-        """按化学式 / 矿物名检索 CIF。
-
-        v4.2: 挂载 COD sqlite 结构库的检索已下线（该库从发布包移除）。
-        向导这里只提供内置矿物 + 已导入的外部 CIF；「从检索库找结构」改由
-        主窗口的 polyDB/PDF2/用户库检索承担（候选自带晶胞与位点，加相后
-        ``_cif_resolver`` 会自动落盘成 CIF）。在线 COD 检索仍在下一页。
-        """
-        query = self._cif_search_input.text().strip()
-        if not query:
-            self._populate_cif_list()  # 清空 = 回到内置列表
-            return
-        QMessageBox.information(
-            self, tr("dialog.info"),
-            tr("wizard.phase_page.cif_db_unavailable"),
-        )
-        self._cif_search_input.clear()
-        self._populate_cif_list()
-
     # ── 已选物相 → 候选 CIF 预填 ─────────────────────────────
 
     def _browse_cifs_for_phases(self) -> None:
-        """已选物相 → 上列表只展示内置矿物（v4.2 起无库内候选可预填）。
+        """已选物相 → 上列表只展示内置/外部 CIF 库（v4.2 起无库内候选可预填）。
 
         已勾选物相的结构补齐由 ``_cif_resolver`` 在开始精修时完成（位点 →
         CIF 落盘），无需在此挑库内 CIF。
         """
         self._populate_cif_list()
-
-    def _fill_cif_list(self, results: list) -> None:
-        """把候选结构渲染进上列表 (搜索与预填共用)。"""
-        self._cif_list.clear()
-        if not results:
-            self._cif_list.addItem(QListWidgetItem(
-                tr("wizard.phase_page.cod_no_results")))
-            return
-        for cand in results:
-            cod_id = cand["cod_id"]
-            mineral = self._clean_mineral_name(cand.get("mineral_name"), cod_id)
-            formula = cand.get("formula") or ""
-            display = mineral or formula or f"COD {cod_id}"
-            sg = cand.get("space_group") or ""
-            cell = self._cell_summary(cand)
-            cif_mark = "✓" if cand.get("has_cif") else "⤓"  # ⤓ = 需联网下载
-            # 无机库多数条目没有矿名 (或矿名就是编号), display 退回 formula
-            # → 此时不再追加 (式), 免得出现 "H2 Mg O2 (H2 Mg O2)"
-            head = f"{display} ({formula})" if mineral and formula else display
-            for_phase = cand.get("_for_phase") or ""
-            if for_phase:
-                head = tr("wizard.phase_page.cif_for_phase",
-                          phase=for_phase, cif=head)
-            parts = [head] + [p for p in (sg, cell) if p]
-            label = f"{' · '.join(parts)} · COD {cod_id} {cif_mark}"
-            item = QListWidgetItem(label)
-            item.setData(Qt.ItemDataRole.UserRole, ("cod", cand))
-            self._cif_list.addItem(item)
-
-    @staticmethod
-    def _clean_mineral_name(mineral: Optional[str], cod_id) -> str:
-        """过滤 COD 库里的「伪矿名」。
-
-        全库索引的 mineral_name 取自 CIF 的 ``data_`` 行, 不少条目这一行
-        就是 COD 编号本身 (如 "2101438") —— 当矿名展示毫无信息量, 还会
-        让列表出现 "2101438 (H2 Mg O2)" 这种噪声。
-        """
-        name = (mineral or "").strip()
-        if not name:
-            return ""
-        if name.isdigit() or name == str(cod_id):
-            return ""
-        if name.upper() in ("UNKNOWN", "N/A", "NA", "NONE"):
-            return ""
-        return name
-
-    @staticmethod
-    def _cell_summary(cand: dict) -> str:
-        """候选条目的晶胞短摘要 (脏数据容错)。"""
-        try:
-            a, c = float(cand.get("a")), float(cand.get("c"))
-            if 0.5 <= a <= 200 and 0.5 <= c <= 200:
-                return f"a={a:.3f} c={c:.3f} Å"
-        except (TypeError, ValueError):
-            pass
-        return "cell=?"
 
     def _on_add_cif_phase(self) -> None:
         items = self._cif_list.selectedItems()
@@ -738,30 +648,15 @@ class RefinementWizard(QWidget):
                 if not payload:
                     continue
                 kind, data = payload
-                if kind == "cod":
-                    phase = self._load_cod_cif_phase(data)
-                else:
-                    phase = self._add_builtin_mineral_phase(data)
+                if kind != "builtin":
+                    continue
+                phase = self._add_builtin_mineral_phase(data)
                 if phase is not None:
                     self._add_phase(phase)
 
     # ------------------------------------------------------------------
     # CIF → Phase 装载 (库内优先, 官网下载兜底)
     # ------------------------------------------------------------------
-
-    def _load_cod_cif_phase(self, cand: dict) -> Optional[Phase]:
-        """把一条 COD 结构候选装载成带结构的 Phase。
-
-        链路: COD 官网下载 (落盘 cif_cache) → cif_to_phase 解析位点。
-        """
-        cod_id = int(cand["cod_id"])
-        mineral = self._clean_mineral_name(cand.get("mineral_name"), cod_id)
-        formula = cand.get("formula") or ""
-        display = mineral or formula or f"COD {cod_id}"
-        name = f"{display} [COD {cod_id}]"
-
-        # v4.2: 本地结构库已下线 → 直接走 COD 官网下载（带本地缓存）
-        return self._download_cif_phase(cod_id, name, formula)
 
     def _download_cif_phase(self, cod_id: int, name: str,
                             formula_hint: str = "") -> Optional[Phase]:
@@ -975,7 +870,6 @@ class RefinementWizard(QWidget):
 
     def set_phases(self, phases: list[Phase]) -> None:
         """设置已选物相 (下表), 并按这些物相预填上表的候选 CIF。"""
-        self._cif_search_input.clear()
         self._selected_phases = list(phases)
         self._refresh_selected_phases_table()
         self._browse_cifs_for_phases()

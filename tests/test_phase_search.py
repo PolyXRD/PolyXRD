@@ -214,6 +214,9 @@ def test_matches_golden(synth, golden, case, kw, with_i):
 
     assert len(got) == len(expect), f"{case}: 行数 {len(got)} != {len(expect)}"
     for i, (a, b) in enumerate(zip(expect, got)):
+        # v4.2.1: cod_id 也纳入比对 —— 并列指标完全相同、顺序互换时也能发现
+        assert a.get("cod_id") == b.get("cod_id"), (
+            f"{case}: #{i} cod_id {a.get('cod_id')!r} != {b.get('cod_id')!r}")
         for f in golden["compare_fields"]:
             va, vb = a[f], b[f]
             if isinstance(va, float):

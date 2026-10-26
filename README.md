@@ -7,7 +7,7 @@
     峰检测 &nbsp;·&nbsp; 多物相定性检索 &nbsp;·&nbsp; Rietveld 结构精修 &nbsp;·&nbsp; Le Bail 晶胞精修 &nbsp;·&nbsp; 指标化 &nbsp;·&nbsp; 3D 结构可视化 &nbsp;·&nbsp; 内置 COD 无机物库 (polyDB) + 多库外挂检索
   </p>
   <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v4.2.0-blue?style=flat-square" /></a>
+    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v4.2.1-blue?style=flat-square" /></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
     &nbsp;
@@ -43,7 +43,26 @@
 
 ---
 
-## 🆕 最新版本 v4.2.0（2026-10-26）
+## 🆕 最新版本 v4.2.1（2026-10-26 · 已发布）
+
+**v4.2.0 验收修复版** —— 4 项 P1 兼容/UX 修复 + 文档事实修正 + 构建/验收加固（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.2.1 与 [docs/验收报告-v4.2.0.md](docs/验收报告-v4.2.0.md)）：
+
+- **MCP 旧名兼容恢复**：`search_cod_phases` 支持 `97-1011097`/`96-101-1097` 编号并回填 `ref_id`/`display_id`；`SiO2` 等化学式先规范化（→`O2 Si`）、空间群忽略空格（`Fd-3m`）；`get_cod_phase_details(cod_id)` 保留旧参数名；`search_cod_online` 网络异常返回 JSON 且 `timeout` 生效。
+- **精修向导死 UI 清理**：删除已下线的 CIF 搜索框/按钮与死链路、三语死键；内置 12 矿物 + 外部 CIF 导入、COD 在线搜索、polyDB/PDF2/用户库候选结构补齐均保留。
+- **文档修正**：基线 commit、tag/HEAD、净减行数、import 耗时、无改动表述等 10 项事实错误全部改正；设计与执行计划状态回填。
+- **构建/验收加固**：`verify_release.ps1` 修复 `-SkipBundledDb` 参数缺失、SHA 时间稳定、新增 `-ExpectedFlavor`/`-CheckDistVersion` 硬校验 dist flavor/版本；internal 构建后自动清理 flavor marker；补 MCP/fail-open/启动日志/golden 测试。
+
+| 产物 | 体积 | SHA-256（前 16 位） | 说明 |
+|---|---|---|---|
+| `PolyXRD-Setup-v4.2.1.exe` | 286.8 MB | `22ca6501cf39…` | 正式版安装包（带注册），内置 COD-Inorg 默认库 |
+| `PolyXRD-v4.2.1-Portable.zip` | 428.1 MB | `8a6bbc6ba756…` | 便携包（**内部评估版**），内置 COD-Inorg |
+| `SHA256-v4.2.1.txt` | — | — | 以上两个产物的 SHA-256 |
+
+👉 **已发布**：[Release v4.2.1](https://github.com/PolyXRD/PolyXRD/releases/tag/v4.2.1)（3 附件，不含数据库）。
+
+---
+
+## 上一版 v4.2.0（2026-10-26 · 已发布）
 
 **结构清理：旧 COD sqlite 运行时退役**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.2.0 与 [docs/RELEASE-NOTES-v4.2.0.md](docs/RELEASE-NOTES-v4.2.0.md)）：
 

@@ -6,7 +6,7 @@ set PYTHONUTF8=1
 set PYTHONIOENCODING=utf-8
 
 REM APPVER 是版本号唯一真源（标题 / banner / 输出名 / 安装包名都跟随）
-set APPVER=4.2.0
+set APPVER=4.2.1
 
 title PolyXRD v%APPVER% 打包构建器
 echo ========================================
@@ -243,13 +243,16 @@ set VERIFY_EXTRA=
 if /i "%POLYXRD_FLAVOR%"=="internal" set VERIFY_EXTRA=-SkipSetup
 if /i not "%POLYXRD_FLAVOR%"=="internal" set VERIFY_EXTRA=-SkipPortable
 if defined POLYXRD_NO_BUNDLE_DB set VERIFY_EXTRA=%VERIFY_EXTRA% -SkipBundledDb
-%PWSH% -NoProfile -ExecutionPolicy Bypass -File "scripts\verify_release.ps1" -Version %APPVER% %VERIFY_EXTRA%
+%PWSH% -NoProfile -ExecutionPolicy Bypass -File "scripts\verify_release.ps1" -Version %APPVER% %VERIFY_EXTRA% -ExpectedFlavor %POLYXRD_FLAVOR% -CheckDistVersion
 if %errorlevel% neq 0 (
     echo.
     echo [错误] 发布产物校验未通过; 见上方 FAIL 项; 构建中止!
     pause
     exit /b 1
 )
+
+REM v4.2.1: internal 构建结束后清掉 flavor marker，避免源码树/测试被误判为内部版
+if /i "%POLYXRD_FLAVOR%"=="internal" if exist "src\polyxrd\_build_flavor.py" del /q "src\polyxrd\_build_flavor.py"
 
 echo.
 echo [步骤 6/6] VERSION.txt 已在前置步骤写入, 此步仅核对...
