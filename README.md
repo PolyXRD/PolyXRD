@@ -55,8 +55,8 @@
 
 | 产物 | 体积 | SHA-256（前 16 位） | 说明 |
 |---|---|---|---|
-| `PolyXRD-Setup-v4.2.0.exe` | 待构建 | 待构建 | 正式版安装包（带注册），内置 COD-Inorg 默认库 |
-| `PolyXRD-v4.2.0-Portable.zip` | 待构建 | 待构建 | 便携包（**内部评估版**），内置 COD-Inorg |
+| `PolyXRD-Setup-v4.2.0.exe` | 288.3 MB | `e46bfa79b53c47b4…` | 正式版安装包（带注册），内置 COD-Inorg 默认库 |
+| `PolyXRD-v4.2.0-Portable.zip` | 430.7 MB | `7d9e504d7dda8c42…` | 便携包（**内部评估版**），内置 COD-Inorg |
 | `SHA256-v4.2.0.txt` | — | — | 以上两个产物的 SHA-256 |
 
 👉 **Release**：[v4.2.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v4.2.0)（3 附件，不含数据库）。

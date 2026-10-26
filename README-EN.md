@@ -50,8 +50,8 @@ Core design philosophy:
 
 | Asset | Size | SHA-256 (first 16) | Notes |
 |---|---|---|---|
-| `PolyXRD-Setup-v4.2.0.exe` | TBD | TBD | Release installer (registration enabled), bundles COD-Inorg |
-| `PolyXRD-v4.2.0-Portable.zip` | TBD | TBD | Portable package (**internal evaluation build**), bundles COD-Inorg |
+| `PolyXRD-Setup-v4.2.0.exe` | 288.3 MB | `e46bfa79b53c47b4…` | Release installer (registration enabled), bundles COD-Inorg |
+| `PolyXRD-v4.2.0-Portable.zip` | 430.7 MB | `7d9e504d7dda8c42…` | Portable package (**internal evaluation build**), bundles COD-Inorg |
 | `SHA256-v4.2.0.txt` | — | — | SHA-256 of the two program artifacts |
 
 👉 **Release**: [v4.2.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v4.2.0) — 3 assets, no databases.
