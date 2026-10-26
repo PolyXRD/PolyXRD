@@ -12,7 +12,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from polyxrd.services.cif_database import _extract_atomic_sites
+from polyxrd.services.cif_minerals import _extract_atomic_sites
 
 CIF_U = """data_test
 _cell_length_a 5.431

@@ -21,6 +21,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from polyxrd.services.phase_search import search_phases_by_d_peaks
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 
@@ -226,11 +228,13 @@ def test_default_backend_exposes_prefilter_knobs():
 
 # ── 5. search_cod_by_d_peaks 相对容差 ───────────────────────
 
-def _fake_db(rows: list[tuple]) -> "object":
-    """构造只含 phases 表的 CIFDatabase (注入内存 sqlite 连接)。"""
-    from polyxrd.services.cif_database import CIFDatabase
+def _fake_db(rows: list[tuple]) -> sqlite3.Connection:
+    """构造只含 phases 表的内存 sqlite 连接 (phase_search 的唯一检索入参)。
 
-    db = CIFDatabase(enable_cod_local=False)
+    v4.2.0: 旧 ``CIFDatabase(enable_cod_local=False)`` + 注入 ``_cod_conn``
+    的写法已随本地 COD sqlite 运行时删除; ``search_phases_by_d_peaks`` 直接
+    接连接对象, 语义与旧 ``CIFDatabase.search_cod_by_d_peaks`` 逐字一致。
+    """
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
     conn.execute(
@@ -240,8 +244,7 @@ def _fake_db(rows: list[tuple]) -> "object":
     conn.executemany(
         "INSERT INTO phases VALUES (?,?,?,?,?,?,?,?)", rows)
     conn.commit()
-    db._cod_conn = conn
-    return db
+    return conn
 
 
 def _row(cod_id: str, formula: str, ds: list[float], is_: list[float]):
@@ -261,11 +264,11 @@ def test_tolerance_rel_widens_low_angle_window():
     ])
     measured = [4.045, 2.53, 2.12]
 
-    strict = db.search_cod_by_d_peaks(measured, [100.0, 60.0, 30.0],
+    strict = search_phases_by_d_peaks(db, measured, [100.0, 60.0, 30.0],
                                       tolerance=0.02, min_match=3)
     assert strict == []
 
-    loose = db.search_cod_by_d_peaks(measured, [100.0, 60.0, 30.0],
+    loose = search_phases_by_d_peaks(db, measured, [100.0, 60.0, 30.0],
                                      tolerance=0.02, tolerance_rel=0.02,
                                      min_match=3)
     assert len(loose) == 2
@@ -278,12 +281,12 @@ def test_tolerance_rel_keeps_absolute_floor_at_high_angle():
     ])
     # 偏差 0.025 Å: 绝对 0.02 容不下; tol_rel=0.005 时 0.005*1.0=0.005 < 0.02
     # → 实际容差仍为 0.02, 不应命中
-    got = db.search_cod_by_d_peaks([1.025, 0.90, 0.80], None,
+    got = search_phases_by_d_peaks(db, [1.025, 0.90, 0.80], None,
                                    tolerance=0.02, tolerance_rel=0.005,
                                    min_match=3)
     assert got == []
     # 提到 0.03 的相对分量 (0.03*1.0=0.03 > 0.02) 才应命中
-    got2 = db.search_cod_by_d_peaks([1.025, 0.90, 0.80], None,
+    got2 = search_phases_by_d_peaks(db, [1.025, 0.90, 0.80], None,
                                     tolerance=0.02, tolerance_rel=0.03,
                                     min_match=3)
     assert len(got2) == 1
@@ -293,9 +296,9 @@ def test_tolerance_rel_default_is_pure_absolute():
     db = _fake_db([
         _row("A", "Zn1 O1", [4.00, 2.50, 2.10], [100.0, 60.0, 30.0]),
     ])
-    a = db.search_cod_by_d_peaks([4.045, 2.53, 2.12], None, tolerance=0.02,
+    a = search_phases_by_d_peaks(db, [4.045, 2.53, 2.12], None, tolerance=0.02,
                                  min_match=3)
-    b = db.search_cod_by_d_peaks([4.045, 2.53, 2.12], None, tolerance=0.02,
+    b = search_phases_by_d_peaks(db, [4.045, 2.53, 2.12], None, tolerance=0.02,
                                  tolerance_rel=0.0, min_match=3)
     assert a == b == []
 
@@ -307,7 +310,7 @@ def test_tolerance_rel_affects_main_peak_match_and_precision():
     ])
     # 各峰偏差 0.05 / 0.03 / 0.02 Å, 均超出绝对容差 0.02, 但在
     # max(0.02, 0.02·d) 的相对窗口 (0.080 / 0.050 / 0.042) 内
-    got = db.search_cod_by_d_peaks(
+    got = search_phases_by_d_peaks(db, 
         [4.05, 2.53, 2.12], [100.0, 60.0, 30.0],
         tolerance=0.02, tolerance_rel=0.02, min_match=3)
     assert len(got) == 1
@@ -322,8 +325,8 @@ def test_max_ref_peaks_limits_reference_pool():
     ds = [4.0 - 0.05 * i for i in range(10)]
     is_ = [100.0 - 5.0 * i for i in range(10)]
     db = _fake_db([_row("A", "Zn1 O1", ds, is_)])
-    r40 = db.search_cod_by_d_peaks(ds[:3], None, max_ref_peaks=40, min_match=3)
-    r2 = db.search_cod_by_d_peaks(ds[:3], None, max_ref_peaks=2, min_match=3)
+    r40 = search_phases_by_d_peaks(db, ds[:3], None, max_ref_peaks=40, min_match=3)
+    r2 = search_phases_by_d_peaks(db, ds[:3], None, max_ref_peaks=2, min_match=3)
     assert r40 and r40[0]["n_ref_used"] == 10
     assert r2 == [] or r2[0]["n_ref_used"] == 2
 
@@ -333,6 +336,6 @@ def test_elements_allowed_pushes_down_chemical_filter():
         _row("A", "Zn1 O1", [4.0, 2.5, 2.1], [100.0, 60.0, 30.0]),
         _row("B", "Ca1 O1", [4.0, 2.5, 2.1], [100.0, 60.0, 30.0]),
     ])
-    got = db.search_cod_by_d_peaks([4.0, 2.5, 2.1], None, min_match=3,
+    got = search_phases_by_d_peaks(db, [4.0, 2.5, 2.1], None, min_match=3,
                                    elements_allowed={"Zn", "O"})
     assert [r["cod_id"] for r in got] == ["A"]

@@ -1,13 +1,12 @@
-"""v4.2 结构清理静态守卫（P0.2 骨架；P3.1 收紧为硬断言）。
+"""v4.2 结构清理静态守卫（P3.1 已收紧为硬断言，白名单为空集）。
 
 作用
 ----
-1. 扫描 ``src/polyxrd/**/*.py``：**非白名单**文件不得出现旧 COD sqlite 运行时符号
+1. 扫描 ``src/polyxrd/**/*.py``：任何文件都不得出现旧 COD sqlite 运行时符号
    （``CODLocalDatabase`` / ``CIFDatabase`` / ``CODLocalIndexer`` /
    ``identify_with_cod_inorganics`` / ``identify_with_cod_local`` /
    ``cod_index.sqlite`` / ``COD_inorganics.sqlite``）。
-2. 白名单 ``_ALLOWLIST`` 初始 = 当前仍合法持有这些符号的文件（旧模块本身 + P2 未迁完的
-   消费者）。每完成一个 P2 任务就从中删除一条；P3.1 删除旧模块后应为空集。
+2. 旧模块文件本身必须不存在（P3.1 已 ``git rm``，防止被复活）。
 3. import smoke：``import polyxrd.services`` 后 ``sys.modules`` 不含
    ``polyxrd.services.cod_local`` / ``polyxrd.services.cif_database``。
    在**子进程**里跑，避免同进程内其他测试直接 import 旧模块造成的假阴性。
@@ -23,15 +22,9 @@ import pytest
 
 _SRC = Path(__file__).resolve().parents[1] / "src" / "polyxrd"
 
-# P0.2 初始白名单（相对 src/polyxrd 的 posix 路径）。
-# 顺序按 P2 迁移计划排列；迁移完成一项就从这里删一行。
-_ALLOWLIST = {
-    # 旧模块本身（P3.1 删除）
-    "services/cif_database.py",
-    "services/cod_local.py",
-    # 其它（config 的 cod_* 路径常量，随 P3.1 一起清）
-    "config.py",
-}
+# P0.2 引入的白名单，P2 期间逐条递减，P3.1 起为空集。
+# 保留变量（而非直接删掉判断分支）是为了将来若需临时豁免时有地方可写。
+_ALLOWLIST: set[str] = set()
 
 _FORBIDDEN = (
     "CODLocalDatabase",
@@ -62,6 +55,17 @@ def test_allowlist_files_still_exist() -> None:
     """白名单里的文件必须仍存在（防止删文件后忘记清白名单）。"""
     missing = [rel for rel in _ALLOWLIST if not (_SRC / rel).exists()]
     assert not missing, f"白名单含已删除文件，请清理 _ALLOWLIST: {missing}"
+
+
+@pytest.mark.parametrize(
+    "rel", ["services/cif_database.py", "services/cod_local.py"]
+)
+def test_legacy_modules_are_gone(rel: str) -> None:
+    """P3.1 已删除旧 COD sqlite 运行时模块，不得被恢复。"""
+    assert not (_SRC / rel).exists(), (
+        f"{rel} 仍存在；v4.2 已用 phase_search / cif_utils / cif_minerals 取代它，"
+        "如需功能请在新模块上扩展"
+    )
 
 
 def test_import_services_does_not_load_legacy_modules() -> None:

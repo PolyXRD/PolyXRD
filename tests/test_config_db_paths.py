@@ -1,13 +1,16 @@
 """
 AppConfig 数据库路径持久化测试
 =============================
-COD 与 PDF2-2004 两个库的路径**共用** ~/.polyxrd/user_db_paths.json。
-PDF2 键是后加的, 曾暴露两个真实缺陷:
+PDF2-2004 sqlite、polyDB 挂载点等多个库的路径**共用**
+``~/.polyxrd/user_db_paths.json``。历史上暴露过两个真实缺陷：
 
-1. set_cod_db_path() 整体覆盖写文件 → 抹掉 pdf2_db_path
-2. get_pdf2_db_path() 不回读用户设置 → set_pdf2_db_path() 是死 setter
+1. 某个库的 setter 整体覆盖写文件 → 抹掉别的库已保存的键；
+2. ``get_pdf2_db_path()`` 不回读用户设置 → ``set_pdf2_db_path()`` 是死 setter。
 
-本文件把这两条钉成回归守卫。
+本文件把这两条钉成回归守卫。v4.2.0 起本地 COD sqlite 运行时被删除
+（``cod_db_path`` / ``cod_index_db_path`` 两个键不再存在），"多键共存"
+的验证改用 polyDB 挂载槽位（``polydb_inorg_path``）承担 —— 它同样走
+``_update_user_db_path`` 的增量合并路径，语义完全一致。
 """
 from __future__ import annotations
 
@@ -53,7 +56,7 @@ def test_pdf2_falls_back_to_default_when_unset(cfg):
 
 
 def test_pdf2_falls_back_when_persisted_path_missing(cfg, tmp_path):
-    """持久化路径已不存在 → 回退默认 (与 COD 行为一致)。"""
+    """持久化路径已不存在 → 回退默认。"""
     cfg.set_pdf2_db_path(tmp_path / "gone.sqlite")
     assert cfg.get_pdf2_db_path() == cfg.pdf2_db_path
 
@@ -67,52 +70,52 @@ def test_pdf2_clear_reverts_to_default(cfg, tmp_path):
     assert "pdf2_db_path" not in _read(cfg)
 
 
-# ── 两个 key 共存 (核心回归) ─────────────────────────────────
+# ── 多个 key 共存 (核心回归) ─────────────────────────────────
 
-def test_set_cod_does_not_wipe_pdf2(cfg, tmp_path):
-    """回归: 设置 COD 路径不得抹掉已保存的 PDF2 路径。"""
+def test_set_polydb_does_not_wipe_pdf2(cfg, tmp_path):
+    """回归: 挂载 polyDB 不得抹掉已保存的 PDF2 路径。"""
     pdf2 = tmp_path / "pdf2.sqlite"
     pdf2.write_bytes(b"x")
-    cod = tmp_path / "cod.sqlite"
-    cod.write_bytes(b"y")
+    polydb = tmp_path / "COD-Inorg-x"
+    (polydb / "sub").mkdir(parents=True)
 
     cfg.set_pdf2_db_path(pdf2)
-    cfg.set_cod_db_path(cod)
+    cfg.set_polydb_path(polydb, variant="cod-inorg")
 
     data = _read(cfg)
     assert data["pdf2_db_path"] == str(pdf2.resolve())
-    assert data["cod_db_path"] == str(cod.resolve())
+    assert data["polydb_inorg_path"] == str(polydb.resolve())
     assert cfg.get_pdf2_db_path() == pdf2.resolve()
-    assert cfg.get_cod_db_path() == cod.resolve()
+    assert cfg.get_polydb_path("cod-inorg") == polydb.resolve()
 
 
-def test_set_pdf2_does_not_wipe_cod(cfg, tmp_path):
-    cod = tmp_path / "cod.sqlite"
-    cod.write_bytes(b"y")
+def test_set_pdf2_does_not_wipe_polydb(cfg, tmp_path):
     pdf2 = tmp_path / "pdf2.sqlite"
     pdf2.write_bytes(b"x")
+    polydb = tmp_path / "COD-Inorg-y"
+    (polydb / "sub").mkdir(parents=True)
 
-    cfg.set_cod_db_path(cod)
+    cfg.set_polydb_path(polydb, variant="cod-inorg")
     cfg.set_pdf2_db_path(pdf2)
 
     data = _read(cfg)
-    assert data["cod_db_path"] == str(cod.resolve())
+    assert data["polydb_inorg_path"] == str(polydb.resolve())
     assert data["pdf2_db_path"] == str(pdf2.resolve())
 
 
-def test_clear_cod_keeps_pdf2(cfg, tmp_path):
-    """回归: 清除 COD 自定义路径只删自己的 key, 不写空 {}。"""
+def test_clear_polydb_keeps_pdf2(cfg, tmp_path):
+    """回归: 清除某个库的自定义路径只删自己的 key, 不写空 {}。"""
     pdf2 = tmp_path / "pdf2.sqlite"
     pdf2.write_bytes(b"x")
-    cod = tmp_path / "cod.sqlite"
-    cod.write_bytes(b"y")
+    polydb = tmp_path / "COD-Inorg-z"
+    (polydb / "sub").mkdir(parents=True)
 
     cfg.set_pdf2_db_path(pdf2)
-    cfg.set_cod_db_path(cod)
-    cfg.set_cod_db_path("")
+    cfg.set_polydb_path(polydb, variant="cod-inorg")
+    cfg.set_polydb_path(None, variant="cod-inorg")
 
     data = _read(cfg)
-    assert "cod_db_path" not in data
+    assert "polydb_inorg_path" not in data
     assert data["pdf2_db_path"] == str(pdf2.resolve())
     assert cfg.get_pdf2_db_path() == pdf2.resolve()
 
@@ -147,7 +150,6 @@ class _FakeCfg(AppConfig):
 
     def __init__(self, default_dir: Path, user_dir: Path):
         super().__init__()
-        self.cod_db_path = default_dir / "COD_inorganics.sqlite"
         self.pdf2_db_path = default_dir / "PDF2_2004.sqlite"
         self._user_dir = user_dir
 
@@ -170,12 +172,10 @@ def test_user_dir_fallback_used_when_default_absent(fake_cfg, tmp_path):
     """安装目录里没有库时, 用户目录 (~/.polyxrd/cif_db) 里的库应被自动发现。"""
     default_dir, user_dir = tmp_path / "install", tmp_path / "userdir"
     user_dir.mkdir(parents=True)
-    (user_dir / "COD_inorganics.sqlite").write_bytes(b"x")
+    (user_dir / "PDF2_2004.sqlite").write_bytes(b"x")
     c = fake_cfg(default_dir, user_dir)
 
-    assert c.get_cod_db_path() == user_dir / "COD_inorganics.sqlite"
-    # 另一个库没放进用户目录 → 仍回退默认 (即使不存在)
-    assert c.get_pdf2_db_path() == default_dir / "PDF2_2004.sqlite"
+    assert c.get_pdf2_db_path() == user_dir / "PDF2_2004.sqlite"
 
 
 def test_default_wins_over_user_dir(fake_cfg, tmp_path):
@@ -183,11 +183,11 @@ def test_default_wins_over_user_dir(fake_cfg, tmp_path):
     default_dir, user_dir = tmp_path / "install", tmp_path / "userdir"
     default_dir.mkdir(parents=True)
     user_dir.mkdir(parents=True)
-    (default_dir / "COD_inorganics.sqlite").write_bytes(b"new")
-    (user_dir / "COD_inorganics.sqlite").write_bytes(b"old")
+    (default_dir / "PDF2_2004.sqlite").write_bytes(b"new")
+    (user_dir / "PDF2_2004.sqlite").write_bytes(b"old")
     c = fake_cfg(default_dir, user_dir)
 
-    assert c.get_cod_db_path() == default_dir / "COD_inorganics.sqlite"
+    assert c.get_pdf2_db_path() == default_dir / "PDF2_2004.sqlite"
 
 
 def test_user_import_beats_both(fake_cfg, tmp_path):
@@ -195,14 +195,14 @@ def test_user_import_beats_both(fake_cfg, tmp_path):
     default_dir, user_dir = tmp_path / "install", tmp_path / "userdir"
     default_dir.mkdir(parents=True)
     user_dir.mkdir(parents=True)
-    (default_dir / "COD_inorganics.sqlite").write_bytes(b"new")
-    (user_dir / "COD_inorganics.sqlite").write_bytes(b"old")
+    (default_dir / "PDF2_2004.sqlite").write_bytes(b"new")
+    (user_dir / "PDF2_2004.sqlite").write_bytes(b"old")
     imported = tmp_path / "imported.sqlite"
     imported.write_bytes(b"imported")
     c = fake_cfg(default_dir, user_dir)
-    c.set_cod_db_path(imported)
+    c.set_pdf2_db_path(imported)
 
-    assert c.get_cod_db_path() == imported.resolve()
+    assert c.get_pdf2_db_path() == imported.resolve()
 
 
 def test_user_db_dir_is_under_home():

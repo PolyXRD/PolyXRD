@@ -75,7 +75,7 @@ else:
 
 datas = _datas_base
 binaries = []
-hiddenimports = ['polyxrd', 'polyxrd.i18n', 'polyxrd.i18n.translations.zh_CN', 'polyxrd.i18n.translations.en_US', 'polyxrd.i18n.translations.ja_JP', 'polyxrd.services.project_service', 'polyxrd.services.structure_simulator', 'polyxrd.services.phase_identifier', 'polyxrd.services.profile_fitting', 'polyxrd.services.db_import', 'polyxrd.services.cod_local', 'polyxrd.views.widgets.database_dialog', 'polyxrd.views.widgets.element_periodic_table', 'polyxrd.views.widgets.element_filter_dialog']
+hiddenimports = ['polyxrd', 'polyxrd.i18n', 'polyxrd.i18n.translations.zh_CN', 'polyxrd.i18n.translations.en_US', 'polyxrd.i18n.translations.ja_JP', 'polyxrd.services.project_service', 'polyxrd.services.structure_simulator', 'polyxrd.services.phase_identifier', 'polyxrd.services.profile_fitting', 'polyxrd.services.db_import', 'polyxrd.services.phase_search', 'polyxrd.services.cif_utils', 'polyxrd.services.cif_minerals', 'polyxrd.views.widgets.database_dialog', 'polyxrd.views.widgets.element_periodic_table', 'polyxrd.views.widgets.element_filter_dialog']
 
 # ── 构建变体 flavor (v2.10.0): 存在 src/polyxrd/_build_flavor.py -> 内部评估版 ──
 # build_flavor._detect() 是在 try/except 里动态 import 该模块的, PyInstaller 的

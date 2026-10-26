@@ -61,11 +61,9 @@ class AppConfig:
     # 项目内路径,便于整体迁移;如需移到其他盘,只改这一处即可
     _PROJECT_ROOT: ClassVar[Path] = Path(__file__).resolve().parents[2]
     cif_db_path: Path = field(default_factory=lambda: AppConfig._PROJECT_ROOT / "cod_data" / "cif_db")
-    cod_svn_path: Path = field(default_factory=lambda: AppConfig._PROJECT_ROOT / "cod_data" / "cod_svn")
-    cod_index_db_path: Path = field(default_factory=lambda: AppConfig._PROJECT_ROOT / "cod_data" / "cod_index.sqlite")
-    # COD 无机物库: 从 COD 筛选的无机物子集 (71199 物相,含 d-I 峰)
-    # 默认指向项目内路径;允许用户通过 UI 导入外部数据库后覆盖
-    cod_db_path: Path = field(default_factory=lambda: AppConfig._PROJECT_ROOT / "cod_data" / "COD_inorganics.sqlite")
+    # v4.2.0: 本地 COD sqlite 运行时（全库索引、无机物库两个 sqlite 以及
+    # COD SVN 源目录）已彻底移除，相关字段与 getter 一并删除。物相检索改由
+    # 外挂 polyDB（v4.0.0+ 格式）承担，见下方 polyDB 挂载路径。
     # PDF2-2004 数据库: ICDD PDF-2 2004 版, 自用验证库
     # (v2.1 P3: 原先硬编码开发机绝对路径的 pdf2_raw_path 字段已删除 —— 零调用点)
     pdf2_db_path: Path = field(default_factory=lambda: AppConfig._PROJECT_ROOT / "cod_data" / "PDF2_2004.sqlite")
@@ -105,41 +103,8 @@ class AppConfig:
                 return cand
         return default
 
-    def get_cod_db_path(self) -> Path:
-        """获取当前 COD 无机物库路径 (支持用户导入的外部库覆盖)。
-
-        v0.14.0 起**瘦身索引式优先** (``COD_inorganics_index.sqlite``):
-        与 COD 全库索引同形态 —— 不内嵌 CIF, 由 ``cod/cif`` 目录按需读取
-        (本地缺失时回退 COD REST 在线下载), 体积约为内嵌版的 1/3。
-        完整内嵌版 (``COD_inorganics.sqlite``) 作为回退, 两者数据逐行一致。
-        """
-        imported = self.user_db_path("cod_db_path")
-        if imported is not None:
-            return imported
-        # 默认位置: 瘦身索引式优先, 回退完整内嵌版
-        for name in ("COD_inorganics_index.sqlite", "COD_inorganics.sqlite"):
-            cand = self.cod_db_path.with_name(name)
-            if cand.exists():
-                return cand
-        # 用户目录兜底: 同样瘦身版优先
-        for name in ("COD_inorganics_index.sqlite", "COD_inorganics.sqlite"):
-            cand = self.user_db_dir() / name
-            if cand.exists():
-                return cand
-        return self.cod_db_path
-
     def get_cif_db_path(self) -> Path:
         return self.cif_db_path
-
-    def get_cod_svn_path(self) -> Path:
-        return self.cod_svn_path
-
-    def set_cod_db_path(self, path: str | Path) -> None:
-        """设置用户导入的 COD 数据库路径,并持久化。
-
-        传入空字符串或 None 可清除自定义路径,回退到项目内默认。
-        """
-        self._update_user_db_path("cod_db_path", path)
 
     def _user_db_paths_file(self) -> Path:
         return Path.home() / ".polyxrd" / "user_db_paths.json"
@@ -188,18 +153,12 @@ class AppConfig:
             return Path(p)
         return None
 
-    def _load_user_cod_db_path(self) -> Optional[str]:
-        """读取用户持久化的 COD 路径,返回 None 表示未设置。"""
-        p = self.user_db_path("cod_db_path")
-        return str(p) if p else None
-
     # ── PDF2-2004 数据库路径 ────────────────────────────────
 
     def get_pdf2_db_path(self) -> Path:
         """获取当前 PDF2-2004 SQLite 索引路径。
 
-        优先级:用户导入的外部库 > 项目内默认路径 > 用户目录兜底
-        (与 :meth:`get_cod_db_path` 对称)。
+        优先级:用户导入的外部库 > 项目内默认路径 > 用户目录兜底。
         """
         return self._resolve_db_path(
             "pdf2_db_path", self.pdf2_db_path, ("PDF2_2004.sqlite",))
@@ -207,23 +166,6 @@ class AppConfig:
     def set_pdf2_db_path(self, path: str | Path) -> None:
         """设置 PDF2-2004 SQLite 路径并持久化 (空值 = 清除, 回退默认)。"""
         self._update_user_db_path("pdf2_db_path", path)
-
-    # ── COD 全库索引路径 (cod_index.sqlite) ─────────────────
-
-    def get_cod_index_sqlite_path(self) -> Optional[Path]:
-        """用户导入的 COD 全库索引 (cod_index.sqlite) 路径。
-
-        与 COD 无机物库/PDF2 不同, 这个库原本由 `cod_local` 从打包资源
-        部署到 `cif_db_path/cod_index.sqlite`, 并在多个候选目录间搜索。
-        0.10.0 起数据库改外挂, 所以这里加一条**用户导入优先**的旁路:
-        只有用户显式导入且文件确实存在时才返回, 否则返回 None 让
-        `cod_local._index_db_path()` 走原有搜索/部署逻辑。
-        """
-        return self.user_db_path("cod_index_db_path")
-
-    def set_cod_index_db_path(self, path: str | Path | None) -> None:
-        """设置用户导入的 COD 全库索引路径并持久化 (空值 = 清除)。"""
-        self._update_user_db_path("cod_index_db_path", path)
 
     # ── polyDB 外挂库路径 (v4.0.0) ──────────────────────────
 
