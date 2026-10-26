@@ -14,6 +14,7 @@ v4.0.0 之前这两个工具只存在于开发机的 `PolyXRD-DataBase/tools/`�
 | `build_polydb.py` | COD CIF → `*.polyDB` 目录容器（两阶段并行 + 断点续跑 + 条数守恒检查） |
 | `fastcif.py` | 快速 CIF 解析（实测 0.87 ms/条） |
 | `fastxrd.py` | 峰计算（与 `build_3cod.py` 定稿口径一致：λ=1.5406、2θ 5~100.76°、等价反射按 2θ 合并、I 归一 1000） |
+| `legacy_sqlite/` | **归档区**：v4.2.0 之前维护旧 COD sqlite 库的 12 个脚本。不参与运行时与构建，在 v4.2.0+ 代码树上无法直接运行（依赖已删除的 `services/cod_local.py` / `cif_database.py`），仅作历史可查，详见该目录 `README.md` |
 
 ## 需要的数据（不进仓库）
 

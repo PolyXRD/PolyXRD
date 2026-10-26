@@ -67,8 +67,8 @@ def expand_sites_by_symmetry(sites: list[dict], space_group: object,
     """把非对称单元位点按空间群对称操作展开成完整晶胞内容 (P1 全胞).
 
     **为什么需要** (v0.15.2 修复): COD CIF 的原子环一般只列非对称单元,
-    依赖空间群对称操作生成全胞。而 ``cod_local.get_phase`` 直建 pymatgen
-    Structure、``phase_to_cif_text`` 反生成 CIF 时都按 P1 处理 —— 高对称
+    依赖空间群对称操作生成全胞。而位点解析 (``cif_utils.parse_atom_sites_from_cif``)
+    只取原始非对称单元、``phase_to_cif_text`` 反生成 CIF 时也按 P1 处理 —— 高对称
     结构 (如 R-3c 方解石, 非对称单元仅 3 位点) 的模拟峰会整体错误
     (104 特征峰缺失、假峰出现在 5.18°), 导致精修权重塌缩 (2-1 实测
     wR 卡 40%, 修复后预期 ≤20%)。

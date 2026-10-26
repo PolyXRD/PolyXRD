@@ -1,3 +1,7 @@
+# ⚠ v4.2.0 起归档：仅用于旧 COD sqlite 的考古式核对/一次性修复，
+#   不参与运行时与构建，且在 v4.2.0+ 代码树上无法直接运行
+#   （依赖已删除的 services/cod_local.py、services/cif_database.py）。
+#   详见同目录 README.md。
 """v0.11.0: 给 COD 无机物库内嵌 CIF (cif_gz) + 原子位点子集。
 
 产出: cod_data/COD_inorganics.sqlite (原地升级, 原文件先备份为

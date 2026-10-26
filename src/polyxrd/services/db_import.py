@@ -207,9 +207,9 @@ def _setter(config_key: str):
 def reload_caches() -> None:
     """挂载/清除后清掉已缓存的连接, 让新路径立即生效。
 
-    `cod_local` 每次查询都新开连接, 无需处理; 需要清的是持有长连接的服务
-    实例 (任何已构造的 PDF2Database)。polyDB 读取器由 ``db_mounts.probe``
-    每次现建, 同样无需在这里处理。
+    v4.2.0 起物相检索（polyDB / PDF2 / 用户库）每次查询都现开连接, 无需处理;
+    需要清的是持有长连接的服务实例 (任何已构造的 PDF2Database)。polyDB 读取器
+    由 ``db_mounts.probe`` 每次现建, 同样无需在这里处理。
     """
     try:
         from polyxrd.services.pdf2_database import PDF2Database

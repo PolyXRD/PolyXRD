@@ -1,4 +1,8 @@
 #!/usr/bin/env python
+# ⚠ v4.2.0 起归档：仅用于旧 COD sqlite 的考古式核对/一次性修复，
+#   不参与运行时与构建，且在 v4.2.0+ 代码树上无法直接运行
+#   （依赖已删除的 services/cod_local.py、services/cif_database.py）。
+#   详见同目录 README.md。
 """修复 COD 无机物库 ``phases.formula`` 被空间群符号覆盖的问题 (幂等)。
 
 背景

@@ -1,3 +1,7 @@
+# ⚠ v4.2.0 起归档：仅用于旧 COD sqlite 的考古式核对/一次性修复，
+#   不参与运行时与构建，且在 v4.2.0+ 代码树上无法直接运行
+#   （依赖已删除的 services/cod_local.py、services/cif_database.py）。
+#   详见同目录 README.md。
 """重打 Databases-COD-inorg 外挂包 (v0.13.2, 载荷 = 修复后的无机库)
 
 现有 v0.13.1 包的内部结构是**单条目、根路径** ``COD_inorganics.sqlite`` (deflate),

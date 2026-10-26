@@ -257,7 +257,7 @@ def compute_pattern_arrays(a, b, c, al, be, ga, frac, symbols, occus,
 def top_peaks_of(d_vals, i_vals, top_n: int = 64):
     """取 I 最高的前 ``top_n`` 个峰，按 I 降序返回 (d, i)。
 
-    与 PolyXRD ``cif_database._top_peaks_of`` 逐元素等价:
+    与 PolyXRD ``phase_search.top_peaks_of`` 逐元素等价:
     ``order = argsort(-i, kind="stable")[:top_n]``。建库期算好存成 float64
     BLOB，检索时零拷贝直读，省掉每相全峰串解析 + argsort。
     """

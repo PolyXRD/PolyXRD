@@ -1,3 +1,7 @@
+# ⚠ v4.2.0 起归档：仅用于旧 COD sqlite 的考古式核对/一次性修复，
+#   不参与运行时与构建，且在 v4.2.0+ 代码树上无法直接运行
+#   （依赖已删除的 services/cod_local.py、services/cif_database.py）。
+#   详见同目录 README.md。
 # -*- coding: utf-8 -*-
 """从 COD_inorganics.sqlite 派生「索引式」瘦身无机库。
 
