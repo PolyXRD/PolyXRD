@@ -1,4 +1,8 @@
 """
+DEPRECATED in v4.2（2026-10-26）：CIF 纯解析能力已迁移至 ``cif_utils``；
+COD sqlite 连接/索引/部署/``CODLocalDatabase`` 整段退役，本模块在 v4.2.0 删除
+（见 docs/v4.2-结构清理方案.md）。P1–P2 期间旧模块保持可运行。
+
 COD 本地 CIF 数据库服务
 ==========================
 

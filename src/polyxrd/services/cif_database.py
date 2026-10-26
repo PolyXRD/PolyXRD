@@ -3,6 +3,10 @@ CIF数据库服务
 ============
 提供内置矿物CIF数据支持，包括常见矿物的晶体结构数据、
 外部CIF文件加载、COD在线搜索等功能。
+
+DEPRECATED in v4.2（2026-10-26）：运行时能力已迁移至 ``cif_utils`` /
+``phase_search`` / ``cif_minerals``，本模块将在 v4.2.0 删除
+（见 docs/v4.2-结构清理方案.md）。P1–P2 期间旧模块保持可运行。
 """
 from __future__ import annotations
 
