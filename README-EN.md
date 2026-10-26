@@ -54,7 +54,7 @@ Core design philosophy:
 | `PolyXRD-v4.2.0-Portable.zip` | 430.7 MB | `7d9e504d7dda8c42…` | Portable package (**internal evaluation build**), bundles COD-Inorg |
 | `SHA256-v4.2.0.txt` | — | — | SHA-256 of the two program artifacts |
 
-👉 **Release**: [v4.2.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v4.2.0) — 3 assets, no databases.
+👉 **Released**: [Release v4.2.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v4.2.0) — 3 assets, no databases (remote digests match the local manifest asset by asset).
 
 > Previous release v4.1.2 (out-of-the-box search / discovery priority / legacy migration hints / minimal builds) — see [CHANGELOG §4.1.2](docs/CHANGELOG.md).
 

@@ -59,7 +59,7 @@
 | `PolyXRD-v4.2.0-Portable.zip` | 430.7 MB | `7d9e504d7dda8c42…` | 便携包（**内部评估版**），内置 COD-Inorg |
 | `SHA256-v4.2.0.txt` | — | — | 以上两个产物的 SHA-256 |
 
-👉 **Release**：[v4.2.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v4.2.0)（3 附件，不含数据库）。
+👉 **已发布**：[Release v4.2.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v4.2.0)（3 附件，不含数据库；远端 digest 与本地清单逐件一致）。
 
 > 上一版 v4.1.2（开箱即检索 / 默认库发现优先级 / 旧库迁移提示 / 纯客户端小包验收）详见 [CHANGELOG §4.1.2](docs/CHANGELOG.md)。
 
