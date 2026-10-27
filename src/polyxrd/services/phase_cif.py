@@ -62,6 +62,32 @@ def _element_from_label(label: str) -> str:
     return m.group(1) if m else ""
 
 
+def space_group_ops(space_group: object) -> Optional[list]:
+    """空间群符号 → 对称操作列表；**解析不出时返回 ``None``**。
+
+    与 :func:`expand_sites_by_symmetry` 共用同一套符号清洗（剥 setting 后缀
+    ``:H`` / ``:R``、去空格：``R -3 c :H`` → ``R-3c``）。
+
+    为什么单独暴露：展开函数对"解析失败"是**原样返回**，调用方看不出
+    "本来就是全胞"与"展不开"的区别 —— v4.4.0 验收里 polyDB 的
+    ``_expanded_sites`` 正是因此把非对称单位当全胞用了（真实库
+    555/77,500 条目命中）。需要区分时先用本函数探路。
+    """
+    sg_raw = str(space_group or "").strip()
+    if not sg_raw:
+        return None
+    sg_clean = re.sub(r"\s*:\s*[A-Za-z0-9]{1,2}$", "", sg_raw)
+    sg_clean = re.sub(r"\s+", "", sg_clean)
+    if not sg_clean:
+        return None
+    try:
+        from pymatgen.symmetry.groups import SpaceGroup
+
+        return list(SpaceGroup(sg_clean).symmetry_ops)
+    except Exception:  # noqa: BLE001 - 符号认不出 → 交给调用方决定
+        return None
+
+
 def expand_sites_by_symmetry(sites: list[dict], space_group: object,
                              max_sites: int = 2000) -> list[dict]:
     """把非对称单元位点按空间群对称操作展开成完整晶胞内容 (P1 全胞).
@@ -83,21 +109,10 @@ def expand_sites_by_symmetry(sites: list[dict], space_group: object,
     out_sites = list(sites) if sites else []
     if not out_sites:
         return out_sites
-    sg_raw = str(space_group or "").strip()
-    if not sg_raw:
+    ops = space_group_ops(space_group)
+    if ops is None:  # 空间群缺失 / 符号认不出 → 不展开（原样返回）
         return out_sites
-    # 剥 setting 后缀 (:H/:R/:1/:2 …) 并去空格 ("R -3 c :H" → "R-3c")
-    sg_clean = re.sub(r"\s*:\s*[A-Za-z0-9]{1,2}$", "", sg_raw)
-    sg_clean = re.sub(r"\s+", "", sg_clean)
-    if sg_clean in ("P1", "C1"):  # P1 无对称操作
-        return out_sites
-    try:
-        from pymatgen.symmetry.groups import SpaceGroup
-
-        ops = SpaceGroup(sg_clean).symmetry_ops
-    except Exception:  # noqa: BLE001 - 空间群解析失败 → 不展开
-        return out_sites
-    if not ops or len(ops) <= 1:
+    if len(ops) <= 1:  # P1 / C1 无对称操作
         return out_sites
 
     expanded: list[dict] = []

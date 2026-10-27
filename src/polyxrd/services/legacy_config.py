@@ -32,6 +32,7 @@ v4.2.0 删掉旧 COD sqlite 运行时后，**配置文件里仍留着指向那�
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -70,45 +71,91 @@ def _store_file(store_file: Optional[str | Path]) -> Path:
     return Path(store_file) if store_file else _home_polyxrd() / "db_mounts.json"
 
 
-def _read_json(f: Path) -> dict:
+def _read_json(f: Path) -> tuple[dict, bool]:
+    """读 JSON → ``(data, ok)``。
+
+    ``ok=False`` 表示文件存在但**读不出来**（损坏 / 非 UTF-8 / 权限），
+    此时 ``data`` 为空字典 —— 调用方**不得**据此整体覆写，否则用户的
+    挂载项会被一份空配置静默抹掉（P1-3 同期加固）。
+
+    非 UTF-8 也曾是一个坑：``read_text(encoding="utf-8")`` 对 GBK 老配置会抛
+    ``UnicodeDecodeError``（不是 ``OSError``），漏捕就让整个清理功能对这类
+    用户永久静默失效。
+    """
     if not f.exists():
-        return {}
+        return {}, True
     try:
-        data = json.loads(f.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    return data if isinstance(data, dict) else {}
+        raw = f.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return {}, False
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        return {}, False
+    if not isinstance(data, dict):
+        return {}, False
+    return data, True
 
 
 def _write_json(f: Path, data: dict) -> None:
+    """原子写回 JSON（``tmp`` + ``os.replace``）。
+
+    与 :func:`polyxrd.services.db_mounts._save_store` 同一套做法：直接
+    ``write_text`` 时，写盘瞬间崩溃/断电会留下半截 JSON，下次读成空配置 →
+    用户所有挂载项静默消失。``os.replace`` 在同一文件系统上是原子的。
+    """
     f.parent.mkdir(parents=True, exist_ok=True)
-    f.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp = f.with_suffix(f.suffix + ".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, f)
 
 
-def _size_mb(p: Path) -> float:
-    """路径体积 (MB)。目录按其下文件累加；读不到返回 0。
+#: 目录体积统计的条目上限。旧库目录可能是几十万文件的 COD CIF 源树，
+#: 启动期做全树 ``rglob`` 会让窗口在弹提示前假死（37,445 条目实测 2.53 s，
+#: 且近似线性）。这里只扫前 N 条，超过即标"体积为下限"。
+_SIZE_MAX_ENTRIES = 3000
 
-    ⚠️ ``Path("")`` 等于 ``Path(".")`` —— 空路径必须先由调用方挡掉，否则
-    一次统计会把**当前工作目录整棵树**扫一遍（实测单条就拖慢 40 s）。
-    这里再做一层保险。
+
+def _size_mb(p: Path) -> tuple[float, bool]:
+    """路径体积 ``(MB, truncated)``。
+
+    * 文件：直接 ``stat``，``truncated=False``；
+    * 目录：**有上限**遍历（最多 :data:`_SIZE_MAX_ENTRIES` 个条目），
+      达到上限即返回 ``truncated=True`` —— 此时数值是下限，界面标"≥"。
+
+    ⚠️ ``Path("")`` 等于 ``Path(".")``：空路径必须先由调用方挡掉，否则一次
+    统计会把当前工作目录整棵树扫一遍（实测单条用例拖慢 40 s）。这里再兜一层。
     """
     try:
         if not str(p).strip() or p in (Path("."), Path("./")):
-            return 0.0
+            return 0.0, False
         if p.is_file():
-            return round(p.stat().st_size / 1e6, 1)
-        if p.is_dir():
-            total = 0
-            for c in p.rglob("*"):
-                try:
-                    if c.is_file():
-                        total += c.stat().st_size
-                except OSError:
-                    continue
-            return round(total / 1e6, 1)
+            return round(p.stat().st_size / 1e6, 1), False
+        if not p.is_dir():
+            return 0.0, False
+        total = 0
+        seen = 0
+        stack = [p]
+        while stack:
+            cur = stack.pop()
+            try:
+                with os.scandir(cur) as it:
+                    for entry in it:
+                        seen += 1
+                        if seen > _SIZE_MAX_ENTRIES:
+                            return round(total / 1e6, 1), True
+                        try:
+                            if entry.is_file(follow_symlinks=False):
+                                total += entry.stat(follow_symlinks=False).st_size
+                            elif entry.is_dir(follow_symlinks=False):
+                                stack.append(Path(entry.path))
+                        except OSError:
+                            continue
+            except OSError:
+                continue
+        return round(total / 1e6, 1), False
     except OSError:
-        pass
-    return 0.0
+        return 0.0, False
 
 
 def _is_polydb_dir(p: Path) -> bool:
@@ -141,6 +188,8 @@ class LegacyItem:
         size_mb: 路径体积（MB）；不存在为 0。
         is_polydb: 路径是否其实是一份可用的 polyDB 目录（→ 可救回）。
         hint: 人类可读说明（i18n 之外的兜底文案，日志/诊断用）。
+        size_truncated: ``size_mb`` 是否为**下限**（目录条目数超
+            :data:`_SIZE_MAX_ENTRIES`，只统计了前 N 条）。界面据此标"≥"。
     """
 
     source: str
@@ -150,6 +199,7 @@ class LegacyItem:
     size_mb: float
     is_polydb: bool
     hint: str
+    size_truncated: bool = False
 
 
 @dataclass(frozen=True)
@@ -169,6 +219,11 @@ class LegacyReport:
     @property
     def total_mb(self) -> float:
         return round(sum(i.size_mb for i in self.items), 1)
+
+    @property
+    def size_truncated(self) -> bool:
+        """任一条目的体积只是下限（目录太大没扫完）。"""
+        return any(i.size_truncated for i in self.items)
 
     @property
     def existing(self) -> tuple[LegacyItem, ...]:
@@ -200,18 +255,20 @@ def scan(
     sf = _store_file(store_file)
     items: list[LegacyItem] = []
 
-    data = _read_json(pf)
+    data, _ok = _read_json(pf)
     for key, hint in LEGACY_USER_DB_KEYS.items():
         p = _opt_path(data.get(key))
         if p is None:
             continue
+        size_mb, trunc = _size_mb(p)
         items.append(LegacyItem(
             source="user_db_paths", key=key, path=str(p),
-            exists=p.exists(), size_mb=_size_mb(p),
+            exists=p.exists(), size_mb=size_mb,
             is_polydb=_is_polydb_dir(p), hint=hint,
+            size_truncated=trunc,
         ))
 
-    store = _read_json(sf)
+    store, _ok = _read_json(sf)
     mounts = store.get("mounts") or []
     legacy_ids: set[str] = set()
     if isinstance(mounts, list):
@@ -225,13 +282,15 @@ def scan(
             if mid:
                 legacy_ids.add(mid)
             p = _opt_path(raw.get("path"))
+            size_mb, trunc = _size_mb(p) if p is not None else (0.0, False)
             items.append(LegacyItem(
                 source="db_mounts", key=mid or kind,
                 path=str(p) if p is not None else "",
                 exists=bool(p is not None and p.exists()),
-                size_mb=_size_mb(p) if p is not None else 0.0,
+                size_mb=size_mb,
                 is_polydb=bool(p is not None and _is_polydb_dir(p)),
                 hint=f"旧挂载项（引擎 {kind} 已于 v4.1.0 删除）",
+                size_truncated=trunc,
             ))
     active = str(store.get("active") or "")
     if active and active in legacy_ids:
@@ -272,36 +331,55 @@ def cleanup(
 
     # 1) user_db_paths.json —— 只动旧键
     pf = Path(rep.paths_file)
-    data = _read_json(pf)
-    touched = False
-    for key in LEGACY_USER_DB_KEYS:
-        if key in data:
-            data.pop(key, None)
-            changed.append(key)
-            touched = True
-    if touched:
-        _write_json(pf, data)
+    data, ok = _read_json(pf)
+    # ok=False（损坏/非 UTF-8）时宁可不改：拿一份空字典覆写会把用户的
+    # polyDB 槽位与 polydb_disabled 一起抹掉（P1-3 加固）。
+    if ok:
+        touched = False
+        for key in LEGACY_USER_DB_KEYS:
+            if key in data:
+                data.pop(key, None)
+                changed.append(key)
+                touched = True
+        if touched:
+            _write_json(pf, data)
 
     # 2) db_mounts.json —— 删旧 kind 条目 + 清 active
     sf = Path(rep.store_file)
-    store = _read_json(sf)
-    mounts = store.get("mounts")
-    if isinstance(mounts, list):
-        kept: list = []
-        dropped_ids: set[str] = set()
-        for raw in mounts:
-            if isinstance(raw, dict) and \
-                    str(raw.get("kind") or "") in LEGACY_MOUNT_KINDS:
-                dropped_ids.add(str(raw.get("id") or ""))
-                changed.append(f"mounts:{raw.get('id') or raw.get('kind')}")
-                continue
-            kept.append(raw)
-        if dropped_ids:
-            store["mounts"] = kept
-            if str(store.get("active") or "") in dropped_ids:
+    store, ok = _read_json(sf)
+    if ok:
+        mounts = store.get("mounts")
+        if isinstance(mounts, list):
+            kept: list = []
+            dropped_ids: set[str] = set()
+            for raw in mounts:
+                if isinstance(raw, dict) and \
+                        str(raw.get("kind") or "") in LEGACY_MOUNT_KINDS:
+                    mid = str(raw.get("id") or "")
+                    if mid:
+                        dropped_ids.add(mid)
+                    changed.append(f"mounts:{raw.get('id') or raw.get('kind')}")
+                    continue
+                kept.append(raw)
+            touched = bool(dropped_ids)
+            if dropped_ids:
+                store["mounts"] = kept
+            active = str(store.get("active") or "")
+            if active and active in dropped_ids:
                 store["active"] = ""
                 changed.append("active")
-            _write_json(sf, store)
+                touched = True
+            elif active:
+                # 悬空 active：指向的条目已不在 mounts 里（手工编辑 / 旧版本写坏）。
+                # 界面按它选检索源会得到空列表，顺手清掉让默认顺序重选。
+                kept_ids = {str(m.get("id") or "") for m in kept
+                            if isinstance(m, dict)}
+                if active not in kept_ids:
+                    store["active"] = ""
+                    changed.append("active:dangling")
+                    touched = True
+            if touched:
+                _write_json(sf, store)
 
     # 3) 顺手把"其实是 polyDB"的旧路径挂回来
     if remount_polydb:
@@ -329,7 +407,7 @@ def is_dismissed(paths_file: Optional[str | Path] = None) -> bool:
     记住位存的是**版本号**：升级到新版本后会重新提示一次 —— 旧版本上的
     "稍后"不该压制新版本的提示（清理项可能随版本变化）。
     """
-    data = _read_json(_paths_file(paths_file))
+    data, _ok = _read_json(_paths_file(paths_file))
     seen = str(data.get(DISMISS_KEY) or "")
     if not seen:
         return False
@@ -348,22 +426,51 @@ def dismiss(paths_file: Optional[str | Path] = None) -> None:
     except Exception:  # noqa: BLE001
         return
     f = _paths_file(paths_file)
-    data = _read_json(f)
+    data, ok = _read_json(f)
+    if not ok:
+        # 配置已损坏：写回等于用一份只剩记住位的文件覆盖用户的原始内容。
+        # 宁可这次没记住（下次再提示一遍），也不销毁可能还能手工挽救的数据。
+        return
     data[DISMISS_KEY] = str(__version__)
     _write_json(f, data)
 
 
-def describe(report: LegacyReport) -> list[str]:
-    """报告 → 逐行人类可读文案（不含 i18n，给日志/诊断/兜底展示用）。"""
+#: :func:`describe` 的中文兜底文案。界面会把 ``tr`` 传进来（见 P2-10：
+#: en/ja 用户以前在详情区看到的是一整段中文），只有日志/诊断走这里的默认值。
+_DESCRIBE_ZH: dict[str, str] = {
+    "legacy_config.line_state_exists": "存在",
+    "legacy_config.line_state_missing": "已不存在",
+    "legacy_config.line_size": "，{mb} MB",
+    "legacy_config.line_recoverable": "（可重新挂载为 polyDB）",
+    "legacy_config.line_active": "· 检索源 → {target}（指向已删除的旧库）",
+}
+
+
+def describe(report: LegacyReport, t=None) -> list[str]:
+    """报告 → 逐行人类可读文案。
+
+    Args:
+        report: 一次盘点的结果。
+        t: 文案函数，签名 ``t(key, **kw) -> str``（界面传 ``i18n.tr``）。
+           省略时用 :data:`_DESCRIBE_ZH` 的中文兜底（日志/诊断/测试用）。
+    """
+    if t is None:
+        def t(key: str, **kw) -> str:  # noqa: ANN001 - 局部兜底
+            return _DESCRIBE_ZH[key].format(**kw)
+
     lines: list[str] = []
     for item in report.items:
         if item.source == "db_mounts_active":
-            lines.append(f"· 检索源 → {item.key}（已删除的旧库）")
+            lines.append(t("legacy_config.line_active", target=item.key))
             continue
-        state = "存在" if item.exists else "已不存在"
-        extra = f"，{item.size_mb} MB" if item.size_mb else ""
-        mark = "（可重新挂载为 polyDB）" if item.is_polydb else ""
-        lines.append(f"· {item.path or item.key} —— {state}{extra}{mark}")
+        state = t("legacy_config.line_state_exists" if item.exists
+                  else "legacy_config.line_state_missing")
+        size = ""
+        if item.size_mb or item.size_truncated:
+            mb = f"≥{item.size_mb}" if item.size_truncated else f"{item.size_mb}"
+            size = t("legacy_config.line_size", mb=mb)
+        mark = t("legacy_config.line_recoverable") if item.is_polydb else ""
+        lines.append(f"· {item.path or item.key} —— {state}{size}{mark}")
     return lines
 
 

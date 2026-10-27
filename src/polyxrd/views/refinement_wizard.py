@@ -68,6 +68,21 @@ from polyxrd.services.rietveld_refiner import RietveldRefiner
 from polyxrd.views.widgets.busy_indicator import BusyIndicator, busy
 
 
+def _density_text(value: object) -> str:
+    """密度 → tooltip 片段；缺失/0 给"--"而不是"0.000 g/cm³"。
+
+    库里有相当一部分条目没有密度（旧导入/计算失败），显示"密度 0.000"
+    会让人以为这是个 0 密度相，而不是"没这个数据"。
+    """
+    try:
+        d = float(value or 0.0)
+    except (TypeError, ValueError):
+        return "--"
+    if d <= 0:
+        return "--"
+    return f"{d:.3f} g/cm³"
+
+
 class RefinementWizard(QWidget):
     """精修向导
 
@@ -106,6 +121,9 @@ class RefinementWizard(QWidget):
         self._cif_resolver = PhaseStructureResolver()
         # 「从检索库找结构」用的 polyDB 句柄 (懒打开; 见 _library_db)
         self._lib_db = None
+        # 句柄是否由本对话框打开 —— 只有自己开的才由自己 close()，
+        # 外部注入（换库 / 测试）的句柄所有权归调用方。
+        self._lib_db_owned = False
 
         self._refinement_config: dict = {
             "engine": "builtin",
@@ -299,6 +317,10 @@ class RefinementWizard(QWidget):
 
         self._btn_lib_add = QPushButton(tr("wizard.phase_page.btn_lib_add"))
         self._btn_lib_add.clicked.connect(self._on_add_lib_phases)
+        # 没选中任何条目时按下去只会静默返回 —— 直接置灰更诚实
+        self._btn_lib_add.setEnabled(False)
+        self._lib_results_list.itemSelectionChanged.connect(
+            self._update_lib_add_enabled)
         lib_layout.addWidget(self._btn_lib_add)
 
         self._lib_tab_index = self._phase_tabs.addTab(
@@ -707,14 +729,34 @@ class RefinementWizard(QWidget):
             self._lib_db = polydb_structure.open_database()
         except Exception:  # noqa: BLE001 - 配置/挂载表异常按"无库"处理
             self._lib_db = None
+        self._lib_db_owned = self._lib_db is not None
         return self._lib_db
+
+    def _release_library_db(self) -> None:
+        """关掉自己开的 polyDB 句柄（mmap + 文件句柄，别留给 GC）。"""
+        db, owned = self._lib_db, self._lib_db_owned
+        self._lib_db, self._lib_db_owned = None, False
+        if owned and db is not None:
+            try:
+                db.close()
+            except Exception:  # noqa: BLE001 - 已在别处关闭/半销毁
+                pass
+
+    def closeEvent(self, event) -> None:  # noqa: N802 - Qt 命名
+        self._release_library_db()
+        super().closeEvent(event)
 
     def set_library_database(self, db) -> None:
         """绑定「检索库」用的 polyDB 句柄（换库后重新绑定 / 测试注入）。
 
-        传 ``None`` 表示下次检索时重新按配置解析。
+        传 ``None`` 表示下次检索时重新按配置解析。注入的句柄**所有权归调用
+        方**：本对话框只换引用，不替调用方关闭（换下来的旧句柄若是自己开的，
+        则顺手关掉）。
         """
+        if db is not self._lib_db:
+            self._release_library_db()
         self._lib_db = db
+        self._lib_db_owned = False
 
     def _lib_wavelength(self) -> float:
         """参考峰 d→2θ 用的波长 = 待精修数据的波长。"""
@@ -738,10 +780,11 @@ class RefinementWizard(QWidget):
         if db is None:
             self._lib_status.setText(tr("wizard.phase_page.lib_no_db"))
             return
+        # 这里还没检索过 —— 不能拿 lib_status（含"命中 N 条"）硬填 0，
+        # 那读起来像"搜过了、零命中"。
         self._lib_status.setText(tr(
-            "wizard.phase_page.lib_status",
+            "wizard.phase_page.lib_ready",
             lib=polydb_structure.library_label(db),
-            count=0,
         ))
 
     def _on_lib_search(self) -> None:
@@ -787,7 +830,8 @@ class RefinementWizard(QWidget):
             rows, tr("wizard.phase_page.lib_status_peaks",
                      peaks=len(md),
                      lib=polydb_structure.library_label(db),
-                     count=len(rows)))
+                     count=len(rows)),
+            empty_key="wizard.phase_page.lib_no_results_peaks")
 
     def _measure_top_peaks(
         self, lo: float, hi: float,
@@ -829,8 +873,18 @@ class RefinementWizard(QWidget):
         picked.sort()
         return [p[0] for p in picked], [p[1] for p in picked]
 
-    def _fill_library_list(self, rows: list[dict], status: str = "") -> None:
-        """把检索结果渲染进列表（条目本身塞进 UserRole 供加相时取用）。"""
+    def _fill_library_list(
+        self, rows: list[dict], status: str = "",
+        empty_key: str = "wizard.phase_page.lib_no_results",
+    ) -> None:
+        """把检索结果渲染进列表（条目本身塞进 UserRole 供加相时取用）。
+
+        Args:
+            rows: 命中的条目 dict 列表。
+            status: 状态行文案；``""`` 时按命中数拼一条。
+            empty_key: 零命中时追加的提示键。两种入口的"下一步"不一样
+                （文本查相 → 换写法；按峰找 → 库内无匹配），不能共用一句。
+        """
         self._lib_results_list.clear()
         for row in rows:
             item = QListWidgetItem(polydb_structure.entry_label(row))
@@ -838,9 +892,10 @@ class RefinementWizard(QWidget):
             item.setToolTip(tr(
                 "wizard.phase_page.lib_item_tip",
                 n=row.get("n_peaks", 0),
-                d=row.get("density", 0.0),
+                d=_density_text(row.get("density")),
             ))
             self._lib_results_list.addItem(item)
+        self._update_lib_add_enabled()
         if not status:
             status = tr(
                 "wizard.phase_page.lib_status",
@@ -848,10 +903,16 @@ class RefinementWizard(QWidget):
                 count=len(rows),
             )
         if not rows:
-            self._lib_status.setText(status + " · " + tr(
-                "wizard.phase_page.lib_no_results"))
+            self._lib_status.setText(status + " · " + tr(empty_key))
             return
         self._lib_status.setText(status)
+
+    def _update_lib_add_enabled(self) -> None:
+        """列表里没选中条目时「加入所选物相」置灰。"""
+        btn = getattr(self, "_btn_lib_add", None)
+        lst = getattr(self, "_lib_results_list", None)
+        if btn is not None and lst is not None:
+            btn.setEnabled(bool(lst.selectedItems()))
 
     def _on_add_lib_phases(self) -> None:
         """把选中的库内条目装载成带结构的 Phase（晶胞 + 全胞位点）。"""
@@ -866,6 +927,7 @@ class RefinementWizard(QWidget):
         with busy(self, tr("busy.cif_match")) as acquired:
             if not acquired:
                 return
+            no_sites: list[str] = []
             for item in items:
                 entry = item.data(Qt.ItemDataRole.UserRole)
                 if not isinstance(entry, dict):
@@ -877,6 +939,15 @@ class RefinementWizard(QWidget):
                 )
                 if phase is not None:
                     self._add_phase(phase)
+                    if not phase.atomic_sites:
+                        no_sites.append(phase.name)
+        if no_sites:
+            # 空间群缺失/写法认不出的条目只能给晶胞（位点不敢猜，见
+            # polydb_structure._expanded_sites）—— 必须说出来，否则用户以为
+            # 拿到的是完整结构，精修跑出来对不上还找不到原因。
+            self._lib_status.setText(tr(
+                "wizard.phase_page.lib_no_sites",
+                names=", ".join(no_sites)))
 
     # ── 已选物相 → 候选 CIF 预填 ─────────────────────────────
 

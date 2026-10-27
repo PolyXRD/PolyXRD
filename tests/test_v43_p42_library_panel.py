@@ -375,3 +375,136 @@ class TestWizardLibraryPanel:
             assert abs(twos[0] - 26.6) < 1.0
         finally:
             w.deleteLater()
+
+
+# ── v4.4.0 独立验收的修复项 ────────────────────────────────
+
+class _KwDB:
+    """只记录 ``search_by_d_peaks`` 收到的关键字参数。"""
+
+    def __init__(self) -> None:
+        self.kwargs: dict = {}
+
+    def search_by_d_peaks(self, md, mi=None, **kw):
+        self.kwargs = dict(kw)
+        return []
+
+    def is_ready(self) -> bool:
+        return True
+
+    def close(self) -> None:
+        pass
+
+
+class TestAuditFixesService:
+    """验收报告 P1-2 / P2-1～P2-4 的回归钉。"""
+
+    # P2-1 —— 与主链路同一排序口径（main_peak_topk=3）
+    def test_by_peaks_uses_same_main_peak_topk_as_main_chain(self):
+        db = _KwDB()
+        PS.search_structures_by_peaks([3.34, 4.26, 1.82], db=db)
+        assert db.kwargs.get("main_peak_topk") == 3, \
+            "主链路硬写 3，服务层不传（默认 1）会让双相排序翻转"
+
+    # P1-2 —— 空间群缺失 / 认不出时返回空位点，而不是把非对称单位当全胞
+    def test_missing_space_group_yields_no_sites(self):
+        db = _FakeDB(_detail(space_group=""),
+                     [{"element": "Si", "x": 0.47, "y": 0.0, "z": 0.0,
+                       "occupancy": 1.0}])
+        phase = PS.phase_from_entry(1000001, db)
+        assert phase is not None
+        assert phase.lattice is not None, "晶胞仍要保留"
+        assert phase.atomic_sites == [], "宁可不给位点，也不能给错的"
+
+    def test_unparsable_space_group_yields_no_sites(self):
+        db = _FakeDB(_detail(space_group="C m c a"),
+                     [{"element": "Si", "x": 0.47, "y": 0.0, "z": 0.0,
+                       "occupancy": 1.0}])
+        phase = PS.phase_from_entry(1000001, db)
+        assert phase is not None and phase.atomic_sites == []
+
+    # P2-3 —— 长周期超胞（COD 实测 c=475.98 Å）不再被判成"晶胞缺失"
+    def test_long_c_axis_is_kept(self):
+        summary = PS._cell_summary({"cell_a": 5.0, "cell_b": 5.0,
+                                    "cell_c": 475.98})
+        assert "c=475.980" in summary
+        db = _FakeDB(_detail(cell_c=475.98), [])
+        phase = PS.phase_from_entry(1000001, db)
+        assert phase is not None and phase.lattice is not None
+        assert phase.lattice.c == pytest.approx(475.98)
+
+    # P2-4 —— NaN / ±inf 不进 d-I 列表
+    def test_peaks_to_d_i_drops_non_finite(self):
+        d, i = PS.peaks_to_d_i(
+            [26.64, float("nan"), 43.0, float("inf")],
+            [1000.0, 900.0, float("nan"), 800.0],
+        )
+        assert len(d) == len(i) == 1
+        assert d[0] == pytest.approx(3.3425, abs=5e-3)
+
+    # P2-2 —— is_ready() 抛异常按"无库"处理，不冒到界面
+    def test_open_database_survives_is_ready_error(self, monkeypatch):
+        def _boom(self):
+            raise OSError("half-built database")
+
+        monkeypatch.setattr(PolyDatabase, "is_ready", _boom)
+        assert PS.open_database(variant="cod-inorg") is None
+        assert PS.open_database("D:/nowhere.polyDB") is None
+
+
+class TestAuditFixesWizard:
+    """验收报告 P2-5 / P2-11～P2-14 的回归钉。"""
+
+    # P2-13 —— 没选中条目时「加入所选物相」置灰
+    def test_add_button_disabled_until_selection(self, wizard, db):
+        rows = PS.search_structures("Quartz", db=db)
+        wizard._fill_library_list(rows)
+        assert not wizard._btn_lib_add.isEnabled()
+        wizard._lib_results_list.setCurrentRow(0)
+        assert wizard._btn_lib_add.isEnabled()
+        wizard._lib_results_list.clearSelection()
+        assert not wizard._btn_lib_add.isEnabled()
+
+    # P2-11 —— 首次进入只报库名，不能假报"命中 0 条"
+    def test_tab_switch_status_does_not_fake_zero_hits(self, wizard):
+        wizard._lib_status.setText("")
+        wizard._on_phase_tab_changed(wizard._lib_tab_index)
+        text = wizard._lib_status.text()
+        assert text
+        assert "命中 0" not in text and "0 hits" not in text
+
+    # P2-12 —— 两种入口的空结果提示不共用一句话
+    def test_empty_result_hint_differs_by_entry(self, wizard, db):
+        from polyxrd.i18n import tr
+
+        wizard._fill_library_list([], tr("wizard.phase_page.lib_status",
+                                         lib="x", count=0))
+        by_text = wizard._lib_status.text()
+        wizard._fill_library_list(
+            [], tr("wizard.phase_page.lib_status_peaks",
+                   peaks=8, lib="x", count=0),
+            empty_key="wizard.phase_page.lib_no_results_peaks")
+        peaks_text = wizard._lib_status.text()
+        assert by_text != peaks_text
+
+    # P2-14 —— 没有密度时显示"--"，不是"密度 0.000"
+    def test_density_placeholder(self, wizard, db):
+        from polyxrd.views.refinement_wizard import _density_text
+
+        assert _density_text(None) == "--"
+        assert _density_text(0.0) == "--"
+        assert "2.650" in _density_text(2.65)
+
+    # P2-5 —— 自己打开的句柄要被释放
+    def test_owned_handle_is_released(self, wizard, db, monkeypatch):
+        monkeypatch.setattr(PS, "open_database", lambda *a, **k: db)
+        wizard.set_library_database(None)
+        assert wizard._library_db() is db
+        assert wizard._lib_db_owned is True
+        wizard._release_library_db()
+        assert wizard._lib_db is None and wizard._lib_db_owned is False
+
+    # 注入的句柄归调用方，不该被这里关掉
+    def test_injected_handle_is_not_owned(self, wizard):
+        assert wizard._lib_db is not None
+        assert wizard._lib_db_owned is False

@@ -50,6 +50,18 @@ REF_PEAK_CAP: int = 120
 DEFAULT_PEAK_COUNT: int = 8
 DEFAULT_MIN_MATCH: int = 3
 
+#: 「主峰命中」判定的参考峰名次上限。
+#: 与 :mod:`polyxrd.services.phase_identifier` 的主链路保持一致（那里硬写 3），
+#: 否则同一个候选池在两处会排成不同名次。
+MAIN_PEAK_TOPK: int = 3
+
+#: 晶胞边长的合法区间 (Å)。下限挡脏数据（0 或负值）；上限取 1000 Å ——
+#: 早期写 200 Å 时，COD 里长周期超胞条目（实测最大 ``c = 475.98 Å``，
+#: 真实库命中 8 条）会被判成"晶胞缺失"，条目在列表里显示不出晶胞、
+#: 加相后也没有晶格。上限放宽后仍拒绝明显无意义的量级。
+CELL_MIN: float = 0.5
+CELL_MAX: float = 1000.0
+
 
 # ── 打开库 ────────────────────────────────────────────────
 
@@ -71,25 +83,50 @@ def open_database(
     无机库找，会出现"同一个化学式在主界面能查到、在向导里查不到"。
     """
     if db_path is not None:
-        db = PolyDatabase(db_path)
-        return db if db.is_ready() else None
+        return _open_ready(db_path)
     if variant:
-        db = PolyDatabase(variant=variant)
-        return db if db.is_ready() else None
+        return _open_ready(variant=variant)
     try:
         from polyxrd.services import db_mounts
 
         m = db_mounts.active_mount()
         if m is not None and m.kind == "polydb" and m.exists:
-            db = PolyDatabase(m.path)
-            if db.is_ready():
+            db = _open_ready(m.path)
+            if db is not None:
                 return db
     except Exception:  # noqa: BLE001 - 挂载表异常不该让向导打不开库
         pass
     for v in ("cod-inorg", "cod-full"):
-        db = PolyDatabase(variant=v)
+        db = _open_ready(variant=v)
+        if db is not None:
+            return db
+    return None
+
+
+def _open_ready(
+    db_path: str | Path | None = None,
+    variant: str | None = None,
+) -> Optional[PolyDatabase]:
+    """``PolyDatabase(...)`` + ``is_ready()``，异常一律按"不可用"处理。
+
+    ``is_ready()`` 要读 ``meta.json`` / ``index.sqlite``：半成品目录、权限被拒、
+    网络盘掉线都会抛异常。以前直接裸调，异常一路冒到向导的"打开库"，
+    整个面板连带精修向导都进不去 —— 打开失败最多是"没有库"，不该是崩溃。
+    失败时顺手 ``close()``，避免 mmap 句柄留在半成品目录上。
+    """
+    try:
+        db = PolyDatabase(db_path, variant=variant) if variant else PolyDatabase(db_path)
+    except Exception:  # noqa: BLE001
+        return None
+    try:
         if db.is_ready():
             return db
+    except Exception:  # noqa: BLE001 - 库半成品/权限异常 → 不可用
+        pass
+    try:
+        db.close()
+    except Exception:  # noqa: BLE001
+        pass
     return None
 
 
@@ -150,21 +187,36 @@ def search_structures_by_peaks(
     limit: int = 30,
     elements_allowed: Optional[set] = None,
 ) -> list[dict]:
-    """按实测 d-I 峰做 Hanawalt 预筛（与主界面检索同一套排序口径）。"""
+    """按实测 d-I 峰做 Hanawalt 预筛（与主界面检索同一套排序口径）。
+
+    ``main_peak_topk=3`` 必须显式给：主链路
+    :meth:`phase_identifier._make_polydb_phase` 用的就是这个值，而
+    ``PolyDatabase.search_by_d_peaks`` 的默认是 1。不传的话"最强测量峰落在
+    参考峰前 1 / 前 3 内"两种判定会给出不同名次 —— 界面承诺的"与主界面
+    同口径"就成了一句空话（双相混合样尤其明显）。
+    """
     if db is None:
         return []
-    md = [float(x) for x in measured_d if x and float(x) > 0]
+    md: list[float] = []
+    for x in measured_d:
+        try:
+            v = float(x)
+        except (TypeError, ValueError):
+            continue
+        if v > 0 and np.isfinite(v):
+            md.append(v)
     if len(md) < min_match:
         return []
     mi = None
     if measured_i is not None:
         mi_raw = [float(x) for x in measured_i]
-        if len(mi_raw) == len(md):
+        if len(mi_raw) == len(md) and all(np.isfinite(v) for v in mi_raw):
             mi = mi_raw
     try:
         return db.search_by_d_peaks(
             md, mi, tolerance=tolerance, min_match=min_match,
-            limit=limit, elements_allowed=elements_allowed)
+            limit=limit, main_peak_topk=MAIN_PEAK_TOPK,
+            elements_allowed=elements_allowed)
     except Exception:  # noqa: BLE001 - 侧车/mmap 异常按"无结果"处理
         return []
 
@@ -216,7 +268,8 @@ def _cell_summary(entry: dict) -> str:
         c = float(entry.get("cell_c") or 0.0)
     except (TypeError, ValueError):
         return ""
-    if not (0.5 <= a <= 200 and 0.5 <= b <= 200 and 0.5 <= c <= 200):
+    if not (CELL_MIN <= a <= CELL_MAX and CELL_MIN <= b <= CELL_MAX
+            and CELL_MIN <= c <= CELL_MAX):
         return ""
     if abs(a - b) < 1e-6 and abs(b - c) < 1e-6:
         return f"a={a:.3f} Å"
@@ -293,7 +346,8 @@ def _lattice_of(detail: dict) -> Optional[LatticeParams]:
         c = float(detail.get("cell_c") or 0.0)
     except (TypeError, ValueError):
         return None
-    if not (0.5 <= a <= 200 and 0.5 <= b <= 200 and 0.5 <= c <= 200):
+    if not (CELL_MIN <= a <= CELL_MAX and CELL_MIN <= b <= CELL_MAX
+            and CELL_MIN <= c <= CELL_MAX):
         return None
 
     def _angle(key: str) -> float:
@@ -314,8 +368,16 @@ def _lattice_of(detail: dict) -> Optional[LatticeParams]:
 def _expanded_sites(db: PolyDatabase, eid: int, space_group: str) -> list[dict]:
     """``sites.bin`` 的非对称单位位点 → 完整晶胞位点。
 
-    ``expand_sites_by_symmetry`` 是幂等的：位点若已是全胞，原样通过。展开
-    需要空间群符号；库里有空间群号无符号时按"只信原样"处理（不猜）。
+    ``expand_sites_by_symmetry`` 是幂等的：位点若已是全胞，原样通过。
+
+    ⚠️ 空间群缺失或展开失败时返回**空列表**，不是"原样返回"。
+    ``sites.bin`` 存的是 CIF 原样的非对称单位，直接当全胞用正是 v4.1.1 那个
+    bug（Corundum R-3c：2 个位点直构 → 6.8° 假峰强度 100%，真主峰
+    35.14/43.34 塌到 15.9%）。真实 Inorg 库里有 555/77,500（0.72%）条目
+    命中这个分支：空空间群 117 条，其余是 pymatgen 认不出的老写法
+    （``C m c a`` / ``B m a b`` / ``A b m a`` …）。宁可不给位点——加相后
+    只有晶胞，由精修前 ``PhaseStructureResolver`` 兜底，界面也能明确提示
+    "该条目无可用位点"，而不是悄悄给出错误结构。
     """
     try:
         sites = db.get_atomic_sites(eid)
@@ -324,13 +386,21 @@ def _expanded_sites(db: PolyDatabase, eid: int, space_group: str) -> list[dict]:
     if not sites:
         return []
     if not (space_group or "").strip():
-        return sites
+        return []
     try:
-        from polyxrd.services.phase_cif import expand_sites_by_symmetry
+        from polyxrd.services.phase_cif import (
+            expand_sites_by_symmetry,
+            space_group_ops,
+        )
 
-        return expand_sites_by_symmetry(sites, space_group)
-    except Exception:  # noqa: BLE001 - 展开失败保持原样, 由精修前 resolver 兜底
-        return sites
+        # 先探一下符号能不能认出来：expand_sites_by_symmetry 对解析失败是
+        # "原样返回"，光看返回值分不清"本来就是全胞"与"展不开"。
+        if space_group_ops(space_group) is None:
+            return []
+        expanded = expand_sites_by_symmetry(sites, space_group)
+    except Exception:  # noqa: BLE001 - 展开失败 → 只给晶胞
+        return []
+    return list(expanded or [])
 
 
 def _reference_peaks(
@@ -398,6 +468,11 @@ def peaks_to_d_i(
             t = float(tt)
             i = float(inten)
         except (TypeError, ValueError):
+            continue
+        # 2θ 来自实测导入/手工输入，NaN、±inf 都可能出现（缺测点、除以 0）。
+        # 不过滤的话 NaN 会照样进排序：排序结果不确定，还会把一条 NaN 的
+        # "最强峰"塞给 Hanawalt 判定，让整个检索返回空。
+        if not (np.isfinite(t) and np.isfinite(i)):
             continue
         if not (0.0 < t < 180.0):
             continue

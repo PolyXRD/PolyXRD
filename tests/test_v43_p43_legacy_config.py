@@ -351,3 +351,129 @@ class TestMainWindowWiring:
         # 早退分支不碰 self（不建窗口、不读状态栏），传 None 即可
         MainWindow._maybe_legacy_config_hint(None)
         assert called["scan"] == 0
+
+
+# ── v4.4.0 独立验收的修复项 ────────────────────────────────
+
+class TestAuditFixes:
+    """验收报告 P1-1 / P1-3 / P2-6 / P2-8 / P2-9 / P2-10 的回归钉。"""
+
+    # P1-1 —— 启动期不再对几十万文件的旧库目录做无上限遍历
+    def test_size_mb_dir_traversal_is_capped(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(L, "_SIZE_MAX_ENTRIES", 5)
+        d = tmp_path / "big"
+        d.mkdir()
+        for i in range(12):
+            (d / f"f{i}.cif").write_bytes(b"\0" * 1000)
+        mb, truncated = L._size_mb(d)
+        assert truncated is True, "超上限必须标 truncated（数值只是下限）"
+        assert mb >= 0.0
+
+    def test_size_mb_small_dir_is_exact(self, tmp_path):
+        d = tmp_path / "small"
+        d.mkdir()
+        for i in range(3):
+            (d / f"f{i}.cif").write_bytes(b"\0" * 1_000_000)
+        mb, truncated = L._size_mb(d)
+        assert truncated is False
+        assert mb == pytest.approx(3.0, abs=0.1)
+
+    def test_report_marks_truncated_size(self, cfg_files, tmp_path, monkeypatch):
+        monkeypatch.setattr(L, "_SIZE_MAX_ENTRIES", 5)
+        d = tmp_path / "big"
+        d.mkdir()
+        for i in range(12):
+            (d / f"f{i}.cif").write_bytes(b"\0" * 1000)
+        paths, store = cfg_files
+        _write(paths, store, {"cod_svn_path": str(d)},
+               {"version": 1, "active": "", "mounts": []})
+        rep = L.scan(paths, store)
+        assert rep.items[0].size_truncated is True
+        assert rep.size_truncated is True
+        assert "≥" in L.describe(rep)[0]
+
+    # P2-6 —— 非 UTF-8 老配置不能被当成"空配置"
+    def test_read_json_flags_non_utf8(self, tmp_path):
+        f = tmp_path / "user_db_paths.json"
+        f.write_bytes('{"cod_db_path": "D:/旧库"}'.encode("gbk"))
+        data, ok = L._read_json(f)
+        assert data == {} and ok is False
+
+    # P1-3 —— 读不出的文件绝不能被空字典盖掉
+    def test_cleanup_keeps_corrupt_paths_file_intact(self, cfg_files):
+        paths, store = cfg_files
+        paths.write_text("{broken", encoding="utf-8")
+        store.write_text(json.dumps({
+            "version": 1, "active": "",
+            "mounts": [{"id": "cod_index:z", "kind": "cod_index",
+                        "path": "D:/old"}],
+        }), encoding="utf-8")
+        changed = L.cleanup(paths_file=paths, store_file=store,
+                            remount_polydb=False)
+        assert "mounts:cod_index:z" in changed
+        assert paths.read_text(encoding="utf-8") == "{broken"
+
+    def test_dismiss_keeps_corrupt_paths_file_intact(self, cfg_files):
+        paths, _store = cfg_files
+        paths.write_text("{broken", encoding="utf-8")
+        L.dismiss(paths)
+        assert paths.read_text(encoding="utf-8") == "{broken"
+        assert L.is_dismissed(paths) is False
+
+    def test_atomic_write_leaves_no_tmp_file(self, cfg_files):
+        paths, _store = cfg_files
+        L.dismiss(paths)
+        assert json.loads(paths.read_text(encoding="utf-8"))
+        assert not list(paths.parent.glob("*.tmp")), "tmp + os.replace 后不该留残骸"
+
+    # P2-8 —— active 本来就空时不该在 changed 里凭空多一条
+    def test_active_not_reported_when_it_was_already_empty(self, cfg_files):
+        paths, store = cfg_files
+        _write(paths, store, {},
+               {"version": 1, "active": "",
+                "mounts": [{"kind": "cod_index", "path": "D:/old"}]})
+        changed = L.cleanup(paths_file=paths, store_file=store,
+                            remount_polydb=False)
+        assert "mounts:cod_index" in changed
+        assert "active" not in changed
+
+    # P2-9 —— 悬空 active 一并清掉
+    def test_dangling_active_is_cleared(self, cfg_files):
+        paths, store = cfg_files
+        _write(paths, store,
+               {"cod_db_path": "D:/gone/cod.sqlite"},
+               {"version": 1, "active": "polydb:vanished",
+                "mounts": [{"id": "polydb:keep", "kind": "polydb",
+                            "path": "D:/keep"}]})
+        changed = L.cleanup(paths_file=paths, store_file=store,
+                            remount_polydb=False)
+        data = json.loads(store.read_text(encoding="utf-8"))
+        assert data["active"] == ""
+        assert "active:dangling" in changed
+
+    # P2-10 —— 明细行走 i18n
+    def test_describe_accepts_translator(self, cfg_files, legacy_sqlite):
+        paths, store = cfg_files
+        _write(paths, store, {"cod_db_path": str(legacy_sqlite)},
+               {"version": 1, "active": "", "mounts": []})
+        lines = L.describe(
+            L.scan(paths, store),
+            lambda key, **kw: f"<{key.rsplit('.', 1)[-1]}>")
+        assert lines and "line_state_exists" in lines[0]
+
+    def test_dialog_note_has_no_markdown_bold(self, cfg_files, legacy_sqlite):
+        from PySide6.QtWidgets import QApplication, QLabel
+
+        from polyxrd.views.legacy_config_dialog import LegacyConfigDialog
+
+        _ = QApplication.instance() or QApplication([])
+        paths, store = cfg_files
+        _write(paths, store, {"cod_db_path": str(legacy_sqlite)},
+               {"version": 1, "active": "", "mounts": []})
+        dlg = LegacyConfigDialog(L.scan(paths, store))
+        try:
+            texts = [w.text() for w in dlg.findChildren(QLabel)]
+            assert texts and not any("**" in t for t in texts), \
+                "QLabel 不渲染 Markdown，`**` 会原样显示"
+        finally:
+            dlg.deleteLater()

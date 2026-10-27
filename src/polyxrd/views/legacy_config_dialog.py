@@ -59,7 +59,9 @@ class LegacyConfigDialog(QDialog):
 
         self._details = QPlainTextEdit()
         self._details.setReadOnly(True)
-        self._details.setPlainText("\n".join(describe(report)))
+        # 明细行走 i18n（以前这里直接吃 describe() 的硬编码中文，
+        # en/ja 界面下半截还是中文）；describe() 的默认值留给日志用。
+        self._details.setPlainText("\n".join(describe(report, tr)))
         self._details.setMinimumHeight(120)
         # 长路径用等宽字体更好读；不改全局样式，只挂在本控件上
         self._details.setStyleSheet("font-family: Consolas, monospace;")
@@ -67,8 +69,10 @@ class LegacyConfigDialog(QDialog):
 
         existed = report.existing
         if existed:
-            note = tr("legacy_config.files_note", count=len(existed),
-                      mb=report.total_mb)
+            # 目录条目数超上限时体积只是下限 → 标 "≥"
+            mb = (f"≥{report.total_mb}" if report.size_truncated
+                  else f"{report.total_mb}")
+            note = tr("legacy_config.files_note", count=len(existed), mb=mb)
         else:
             note = tr("legacy_config.files_note_none")
         lbl_note = QLabel(note)
