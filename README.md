@@ -15,7 +15,7 @@
     &nbsp;
     <img src="https://img.shields.io/badge/UI-PySide6%20(Qt6)-41cd52?style=flat-square" />
     &nbsp;
-    <img src="https://img.shields.io/badge/Tests-1724%20passed-brightgreen?style=flat-square" />
+    <img src="https://img.shields.io/badge/Tests-1748%20passed-brightgreen?style=flat-square" />
   </p>
   <p><i>🌐 English documentation: [README-EN.md](README-EN.md)</i></p>
 </div>
@@ -51,9 +51,9 @@
 
 - **向导新增首个页签「检索库（polyDB）」**：可输化学式 / 矿物名 / 空间群 / 编号查，也可**按当前图谱最强峰**做 Hanawalt d-I 匹配；加入的物相自带晶胞与原子位点，位点按空间群展开成全胞，可直接进精修。
 - **旧库配置一次性清理**：启动时检测 `user_db_paths.json` 里的旧 `cod_*` 键与 `db_mounts.json` 里已删除引擎的条目，一键清理——**只删配置、不删任何库文件**；旧路径若其实是 polyDB 目录会顺手挂回。
-- **i18n**：三语各新增 25 个界面文案键（键集 1040/1040/1040 对齐）。
+- **i18n**：三语各新增 32 个界面文案键（键集 1058/1058/1058 对齐）。
 - **无算法改动**：检索打分口径、精修引擎、报告生成与 v4.3.0 一致；MCP 工具面仍 21 个。
-- **测试**：全量 **1724 passed / 6 skipped / 0 failed**；新增向导检索库面板与旧配置清理两组回归共 58 例。
+- **测试**：全量 **1748 passed / 6 skipped / 0 failed**；新增向导检索库面板与旧配置清理两组回归共 81 例。
 
 | 产物 | 体积 | SHA-256（前 16 位） | 说明 |
 |---|---|---|---|

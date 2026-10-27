@@ -72,6 +72,27 @@ def test_version_is_consistent_across_five_release_points():
     )
 
 
+def test_release_script_matches_current_version():
+    """本版发版脚本必须存在、版本与唯一真源一致，且仍带"禁库"守卫。
+
+    v4.4.0 验收补：脚本名/``$tag``/``$version`` 三处与 ``__init__.__version__``
+    脱钩过一次（版号收口时漏改脚本），发布时才会在 ``gh release create`` 那一步
+    才炸。这里做静态对齐，早发现。
+    """
+    ver = _version_tuple(_read("src/polyxrd/__init__.py"))
+    script = ROOT / "scripts" / f"create_github_release_v{ver}.ps1"
+    assert script.is_file(), f"缺少本版发布脚本: scripts/{script.name}"
+    text = script.read_text(encoding="utf-8", errors="replace")
+    assert re.search(rf"\$tag\s*=\s*['\"]v{re.escape(ver)}['\"]", text), \
+        f"脚本 $tag 与版本 {ver} 不符"
+    assert re.search(rf"\$version\s*=\s*['\"]{re.escape(ver)}['\"]", text), \
+        f"脚本 $version 与版本 {ver} 不符"
+    assert "$BANNED" in text and "PDF2" in text, \
+        "脚本缺少 PDF2 / Databases- 禁传守卫"
+    assert (ROOT / "docs" / f"RELEASE-NOTES-v{ver}.md").is_file()
+    assert (ROOT / "docs" / f"发布检查清单-v{ver}.md").is_file()
+
+
 def test_config_app_version_is_derived_not_duplicated():
     """config.app_version 必须从 ``__init__.__version__`` 派生（v2.3.0 收口约定）。"""
     cfg = _read("src/polyxrd/config.py")
