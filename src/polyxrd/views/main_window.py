@@ -645,6 +645,48 @@ class MainWindow(QMainWindow):
             # ([确定] 继续使用 / [输入注册码] 直接注册)
             self._reg.startup_check(self)
         self._maybe_first_run_db_hint()
+        self._maybe_legacy_config_hint()
+
+    def _maybe_legacy_config_hint(self) -> None:
+        """v4.2 之前遗留的旧库配置：一次性提示 + 一键清理（v4.3.0 P4.3）。
+
+        只清**配置**，绝不删库文件；"稍后再说"按版本记住，不重复打扰。
+        任何异常都直接放弃——启动路径上的提示不值得让程序打不开。
+        """
+        from polyxrd.services import legacy_config
+
+        try:
+            if legacy_config.is_dismissed():
+                return
+            report = legacy_config.scan()
+        except Exception:  # noqa: BLE001 - 配置损坏/权限不足 → 静默跳过
+            return
+        if not report:
+            return
+        try:
+            from polyxrd.views.legacy_config_dialog import LegacyConfigDialog
+
+            action, remount = LegacyConfigDialog.ask(report, self)
+        except Exception:  # noqa: BLE001 - 弹窗失败不该影响启动
+            return
+        if action != LegacyConfigDialog.ACTION_CLEANUP:
+            try:
+                legacy_config.dismiss()
+            except Exception:  # noqa: BLE001
+                pass
+            return
+        try:
+            changed = legacy_config.cleanup(report, remount_polydb=remount)
+        except Exception:  # noqa: BLE001 - 写配置失败按"没清"处理
+            changed = []
+        if changed:
+            self.statusBar().showMessage(
+                tr("legacy_config.done", n=len(changed)), 8000)
+            # 挂载表可能变了（旧条目被摘、polyDB 被救回）→ 刷新检索源下拉
+            try:
+                self._phase_view.refresh_db_sources()
+            except Exception:  # noqa: BLE001 - 刷新失败下次打开界面自会重算
+                pass
 
     def _maybe_first_run_db_hint(self) -> None:
         """一个库都没挂载时给出明确指引 (仅首次弹窗, 之后只留状态栏常驻提示)。
