@@ -216,10 +216,20 @@ echo [步骤 4/6] 创建便携压缩包 (ZIP)...
 echo.
 
 if exist "installer_output\PolyXRD-v%APPVER%-Portable.zip" del "installer_output\PolyXRD-v%APPVER%-Portable.zip" >nul
-powershell -Command "Compress-Archive -Path 'dist\PolyXRD\*' -DestinationPath 'installer_output\PolyXRD-v%APPVER%-Portable.zip' -Force"
+REM v4.4.0: $ProgressPreference 必须关掉。本项目的构建是**无控制台**跑的
+REM (stdout 重定向到日志文件), Compress-Archive 的进度条会去读控制台输出缓冲区,
+REM 拿不到就抛 "Win32 internal error Access is denied 0x5"; 这是非终止错误,
+REM PowerShell 仍以 0 退出 -> 下面的 errorlevel 兜底也不触发 -> 便携包根本没生成,
+REM 直到 verify_release 才报 "便携包不存在" (2026-10-27 实测踩到)。
+powershell -NoProfile -Command "$ProgressPreference='SilentlyContinue'; Compress-Archive -Path 'dist\PolyXRD\*' -DestinationPath 'installer_output\PolyXRD-v%APPVER%-Portable.zip' -Force"
 if %errorlevel% neq 0 (
     echo [警告] ZIP 压缩失败, 尝试备用方法...
-    powershell -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::CreateFromDirectory('dist\PolyXRD', 'installer_output\PolyXRD-v%APPVER%-Portable.zip')"
+    powershell -NoProfile -Command "$ProgressPreference='SilentlyContinue'; Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::CreateFromDirectory('dist\PolyXRD', 'installer_output\PolyXRD-v%APPVER%-Portable.zip')"
+)
+if not exist "installer_output\PolyXRD-v%APPVER%-Portable.zip" (
+    echo [错误] 便携压缩包未生成, 构建中止!
+    pause
+    exit /b 1
 )
 
 :skip_portable
