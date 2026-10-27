@@ -15,7 +15,7 @@
     &nbsp;
     <img src="https://img.shields.io/badge/UI-PySide6%20(Qt6)-41cd52?style=flat-square" />
     &nbsp;
-    <img src="https://img.shields.io/badge/Tests-1565%20passed-brightgreen?style=flat-square" />
+    <img src="https://img.shields.io/badge/Tests-1724%20passed-brightgreen?style=flat-square" />
   </p>
   <p><i>🌐 English documentation: [README-EN.md](README-EN.md)</i></p>
 </div>
@@ -34,6 +34,8 @@
 - **UI 与算法分层** — MVVM 架构，`services/` 层是纯算法、不依赖 Qt，可独立单元测试。
 
 > 📋 **版本变更记录**：见 [docs/CHANGELOG.md](docs/CHANGELOG.md)。
+> ⏳ **v4.4.0 发布检查清单（构建/产物/验收记录，待发布）**：见 [docs/发布检查清单-v4.4.0.md](docs/发布检查清单-v4.4.0.md)。
+> ✅ **v4.3.0 发布检查清单**：见 [docs/发布检查清单-v4.3.0.md](docs/发布检查清单-v4.3.0.md)。
 > ✅ **v4.2.0 发布检查清单（构建/产物/验收记录）**：见 [docs/发布检查清单-v4.2.0.md](docs/发布检查清单-v4.2.0.md)。
 > ✅ v4.1.1 发布检查清单：见 [docs/发布检查清单-v4.1.1.md](docs/发布检查清单-v4.1.1.md)。
 > ✅ v4.1.0 发布检查清单：见 [docs/发布检查清单-v4.1.0.md](docs/发布检查清单-v4.1.0.md)。
@@ -43,7 +45,27 @@
 
 ---
 
-## 🆕 最新版本 v4.3.0（2026-10-27 · 已发布）
+## 🆕 最新版本 v4.4.0（2026-10-27 · 待发布）
+
+**精修向导重建「从检索库找结构」+ 旧库配置一次性清理** —— 兑现 v4.2 遗留的 P4.2/P4.3（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.4.0 与 [docs/RELEASE-NOTES-v4.4.0.md](docs/RELEASE-NOTES-v4.4.0.md)）：
+
+- **向导新增首个页签「检索库（polyDB）」**：可输化学式 / 矿物名 / 空间群 / 编号查，也可**按当前图谱最强峰**做 Hanawalt d-I 匹配；加入的物相自带晶胞与原子位点，位点按空间群展开成全胞，可直接进精修。
+- **旧库配置一次性清理**：启动时检测 `user_db_paths.json` 里的旧 `cod_*` 键与 `db_mounts.json` 里已删除引擎的条目，一键清理——**只删配置、不删任何库文件**；旧路径若其实是 polyDB 目录会顺手挂回。
+- **i18n**：三语各新增 25 个界面文案键（键集 1040/1040/1040 对齐）。
+- **无算法改动**：检索打分口径、精修引擎、报告生成与 v4.3.0 一致；MCP 工具面仍 21 个。
+- **测试**：全量 **1724 passed / 6 skipped / 0 failed**；新增向导检索库面板与旧配置清理两组回归共 58 例。
+
+| 产物 | 体积 | SHA-256（前 16 位） | 说明 |
+|---|---|---|---|
+| `PolyXRD-Setup-v4.4.0.exe` | 待构建 | 待构建 | 正式版安装包（带注册），内置 COD-Inorg 默认库 |
+| `PolyXRD-v4.4.0-Portable.zip` | 待构建 | 待构建 | 便携包（**内部评估版**），内置 COD-Inorg |
+| `SHA256-v4.4.0.txt` | — | — | 以上两个产物的 SHA-256 |
+
+> ⏳ **产物尚未构建、Release 尚未创建**；发布后回填体积/SHA-256 与 Release 链接。
+
+---
+
+## 上一版 v4.3.0（2026-10-27 · 已发布）
 
 **polyDB d 峰检索回到 MCP** —— 兑现 v4.2.1 遗留项（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.3.0 与 [docs/RELEASE-NOTES-v4.3.0.md](docs/RELEASE-NOTES-v4.3.0.md)）：
 

@@ -168,3 +168,9 @@ pytest-of-*/
 
 # 测试临时目录 (DSH 沙箱把 TEMP 回退到 cwd 时会在此建 tmp*; 2026-10-23)
 /tmp*/
+
+# ── 外部进程/沙箱验收在仓库根留下的临时产物 (2026-10-27 v4.4.0 实测) ──
+# 一次 `git add -A` 曾把 acc44_legacy_*/bigdir 的 3000+ 个 1 字节 CIF 扫进暂存区;
+# 上面的 /tmp*/ 只匹配**目录**, 而 NamedTemporaryFile 残留是**文件** (如 tmp0gpqbmbx)。
+/acc44_*/
+/tmp*

@@ -15,7 +15,7 @@
     &nbsp;
     <img src="https://img.shields.io/badge/UI-PySide6%20(Qt6)-41cd52?style=flat-square" />
     &nbsp;
-    <img src="https://img.shields.io/badge/Tests-1500%2B%20collected-brightgreen?style=flat-square" />
+    <img src="https://img.shields.io/badge/Tests-1724%20passed-brightgreen?style=flat-square" />
   </p>
   <p><i>🌐 简体中文文档：[README.md](README.md)</i></p>
 </div>
@@ -38,7 +38,27 @@ Core design philosophy:
 
 ---
 
-## 🆕 Latest Release v4.3.0 (2026-10-27 · released)
+## 🆕 Latest Version v4.4.0 (2026-10-27 · pending release)
+
+**Rebuilt "find a structure in the reference library" panel + one-shot legacy config cleanup** — closes the v4.2 leftovers P4.2/P4.3 (details in Chinese: [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.4.0 and [docs/RELEASE-NOTES-v4.4.0.md](docs/RELEASE-NOTES-v4.4.0.md)):
+
+- **New first tab "Reference Library (polyDB)" in the refinement wizard**: search by formula / mineral name / space group / ID, or **match the strongest peaks** of the current pattern with Hanawalt d-I scoring. Added phases come with cell and atomic sites (sites expanded to the full cell by space group), ready to refine.
+- **One-shot legacy config cleanup**: on startup it detects the old `cod_*` keys in `user_db_paths.json` and entries of removed engines in `db_mounts.json`, then offers to clean them — **settings only, never library files**; a folder that turns out to be a polyDB is re-mounted instead of being dropped.
+- **i18n**: 25 new UI string keys per language (zh/en/ja key sets aligned at 1040 each).
+- **No algorithm change**: scoring, refiner and reporting are identical to v4.3.0; MCP surface still 21 tools.
+- **Tests**: full suite **1724 passed / 6 skipped / 0 failed**; +58 new cases for the library panel and the config cleanup.
+
+| Asset | Size | SHA-256 (first 16) | Notes |
+|---|---|---|---|
+| `PolyXRD-Setup-v4.4.0.exe` | TBD | TBD | Release installer (registration enabled), bundles COD-Inorg |
+| `PolyXRD-v4.4.0-Portable.zip` | TBD | TBD | Portable package (**internal evaluation build**), bundles COD-Inorg |
+| `SHA256-v4.4.0.txt` | — | — | SHA-256 of the two program artifacts |
+
+> ⏳ **Artifacts are not built yet and no Release exists**; sizes/SHA-256 and the Release link will be filled in after publishing.
+
+---
+
+## Previous Release v4.3.0 (2026-10-27 · released)
 
 **polyDB d-spacing search returns to MCP** — closes the v4.2.1 leftover (details in Chinese: [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.3.0 and [docs/RELEASE-NOTES-v4.3.0.md](docs/RELEASE-NOTES-v4.3.0.md)):
 

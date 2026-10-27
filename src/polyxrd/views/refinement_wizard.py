@@ -255,7 +255,7 @@ class RefinementWizard(QWidget):
         self._phase_tabs = QTabWidget()
 
         # ── 检索库（polyDB）: 从本地参考库挑一条现成结构 ──────────
-        # v4.3.0: v4.2.0 下线旧结构库后这里曾是"死 UI"(输什么都弹不可用)。
+        # v4.4.0: v4.2.0 下线旧结构库后这里曾是"死 UI"(输什么都弹不可用)。
         # 现在重建为 polyDB 检索 —— 两种入口: 文本查相 / 按实测最强峰找。
         lib_page = QWidget()
         lib_layout = QVBoxLayout(lib_page)

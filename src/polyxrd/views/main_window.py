@@ -648,7 +648,7 @@ class MainWindow(QMainWindow):
         self._maybe_legacy_config_hint()
 
     def _maybe_legacy_config_hint(self) -> None:
-        """v4.2 之前遗留的旧库配置：一次性提示 + 一键清理（v4.3.0 P4.3）。
+        """v4.2 之前遗留的旧库配置：一次性提示 + 一键清理（v4.4.0 P4.3）。
 
         只清**配置**，绝不删库文件；"稍后再说"按版本记住，不重复打扰。
         任何异常都直接放弃——启动路径上的提示不值得让程序打不开。
