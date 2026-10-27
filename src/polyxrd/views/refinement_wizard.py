@@ -58,6 +58,7 @@ from polyxrd.models.xrd_data import XRDData
 from polyxrd.services.cif_minerals import CifMineralLibrary
 from polyxrd.services.cod_searcher import CODSearcher, CODEntry
 from polyxrd.services.phase_cif import cif_to_phase
+from polyxrd.services import polydb_structure
 from polyxrd.services.refinement_templates import RefinementTemplateManager
 from polyxrd.services.phase_structure_resolver import (
     PhaseStructureResolver,
@@ -103,6 +104,8 @@ class RefinementWizard(QWidget):
         self._cif_db = CifMineralLibrary()
         # 精修前置 CIF 补齐: 有位点无文件时由位点反生成 CIF 落盘
         self._cif_resolver = PhaseStructureResolver()
+        # 「从检索库找结构」用的 polyDB 句柄 (懒打开; 见 _library_db)
+        self._lib_db = None
 
         self._refinement_config: dict = {
             "engine": "builtin",
@@ -251,6 +254,56 @@ class RefinementWizard(QWidget):
 
         self._phase_tabs = QTabWidget()
 
+        # ── 检索库（polyDB）: 从本地参考库挑一条现成结构 ──────────
+        # v4.3.0: v4.2.0 下线旧结构库后这里曾是"死 UI"(输什么都弹不可用)。
+        # 现在重建为 polyDB 检索 —— 两种入口: 文本查相 / 按实测最强峰找。
+        lib_page = QWidget()
+        lib_layout = QVBoxLayout(lib_page)
+
+        self._lib_hint = QLabel(tr("wizard.phase_page.lib_hint"))
+        self._lib_hint.setWordWrap(True)
+        self._lib_hint.setStyleSheet("color: #666;")
+        lib_layout.addWidget(self._lib_hint)
+
+        lib_search_layout = QHBoxLayout()
+        self._lib_search_input = QLineEdit()
+        self._lib_search_input.setPlaceholderText(
+            tr("wizard.phase_page.lib_search_placeholder")
+        )
+        self._lib_search_input.returnPressed.connect(self._on_lib_search)
+        lib_search_layout.addWidget(self._lib_search_input, stretch=1)
+
+        self._btn_lib_search = QPushButton(tr("wizard.phase_page.btn_lib_search"))
+        self._btn_lib_search.clicked.connect(self._on_lib_search)
+        lib_search_layout.addWidget(self._btn_lib_search)
+
+        self._btn_lib_by_peaks = QPushButton(
+            tr("wizard.phase_page.btn_lib_by_peaks"))
+        self._btn_lib_by_peaks.setToolTip(tr("wizard.phase_page.lib_by_peaks_tip"))
+        self._btn_lib_by_peaks.clicked.connect(self._on_lib_search_by_peaks)
+        # 没有数据就没有"最强峰"可找 —— 先置灰，set_data() 后打开
+        self._btn_lib_by_peaks.setEnabled(self._data is not None)
+        lib_search_layout.addWidget(self._btn_lib_by_peaks)
+
+        lib_layout.addLayout(lib_search_layout)
+
+        self._lib_status = QLabel("")
+        self._lib_status.setStyleSheet("color: #666;")
+        lib_layout.addWidget(self._lib_status)
+
+        self._lib_results_list = QListWidget()
+        self._lib_results_list.setSelectionMode(
+            QAbstractItemView.SelectionMode.ExtendedSelection
+        )
+        lib_layout.addWidget(self._lib_results_list)
+
+        self._btn_lib_add = QPushButton(tr("wizard.phase_page.btn_lib_add"))
+        self._btn_lib_add.clicked.connect(self._on_add_lib_phases)
+        lib_layout.addWidget(self._btn_lib_add)
+
+        self._lib_tab_index = self._phase_tabs.addTab(
+            lib_page, tr("wizard.phase_page.tab_library"))
+
         cif_page = QWidget()
         cif_layout = QVBoxLayout(cif_page)
 
@@ -301,6 +354,9 @@ class RefinementWizard(QWidget):
         cod_layout.addWidget(self._btn_cod_add)
 
         self._phase_tabs.addTab(cod_page, tr("wizard.phase_page.tab_cod"))
+
+        # 切到「检索库」时才去解析库名（避免每次开向导都 probe 一遍库目录）
+        self._phase_tabs.currentChanged.connect(self._on_phase_tab_changed)
 
         layout.addWidget(self._phase_tabs, stretch=1)
 
@@ -567,6 +623,9 @@ class RefinementWizard(QWidget):
         self._label_wavelength.setText(info["wavelength"])
         self._spin_two_theta_min.setValue(data.two_theta.min())
         self._spin_two_theta_max.setValue(data.two_theta.max())
+        btn = getattr(self, "_btn_lib_by_peaks", None)
+        if btn is not None:
+            btn.setEnabled(True)
 
     def _on_range_changed(self) -> None:
         pass
@@ -625,6 +684,199 @@ class RefinementWizard(QWidget):
         label = getattr(self, "_cif_count_label", None)
         if label is not None:
             label.setText(text)
+
+    # ------------------------------------------------------------------
+    # 页面 2 逻辑: 检索库（polyDB）
+    # ------------------------------------------------------------------
+
+    def _library_db(self):
+        """懒打开一份可用 polyDB（打不开返回 None，界面给提示而不抛异常）。
+
+        解析优先级在 :func:`polydb_structure.open_database` 里（当前挂载 >
+        默认无机库 > 全库）。句柄缓存在实例上：一次向导会话里库不会中途换，
+        重复 probe 只是白花 IO。
+        """
+        db = self._lib_db
+        if db is not None:
+            try:
+                if db.is_ready():
+                    return db
+            except Exception:  # noqa: BLE001 - 库被挪走/损坏 → 重新解析
+                pass
+        try:
+            self._lib_db = polydb_structure.open_database()
+        except Exception:  # noqa: BLE001 - 配置/挂载表异常按"无库"处理
+            self._lib_db = None
+        return self._lib_db
+
+    def set_library_database(self, db) -> None:
+        """绑定「检索库」用的 polyDB 句柄（换库后重新绑定 / 测试注入）。
+
+        传 ``None`` 表示下次检索时重新按配置解析。
+        """
+        self._lib_db = db
+
+    def _lib_wavelength(self) -> float:
+        """参考峰 d→2θ 用的波长 = 待精修数据的波长。"""
+        try:
+            return float(self._data.wavelength) if self._data is not None else 1.5406
+        except (TypeError, ValueError):
+            return 1.5406
+
+    def _lib_window(self) -> tuple[float, float]:
+        """当前精修 2θ 窗口（参考峰按它裁剪，与执行页保持一致）。"""
+        return (float(self._spin_two_theta_min.value()),
+                float(self._spin_two_theta_max.value()))
+
+    def _on_phase_tab_changed(self, index: int) -> None:
+        """切到「检索库」页时补一行库名/相数（首次进入才解析）。"""
+        if index != getattr(self, "_lib_tab_index", -1):
+            return
+        if self._lib_status.text():
+            return
+        db = self._library_db()
+        if db is None:
+            self._lib_status.setText(tr("wizard.phase_page.lib_no_db"))
+            return
+        self._lib_status.setText(tr(
+            "wizard.phase_page.lib_status",
+            lib=polydb_structure.library_label(db),
+            count=0,
+        ))
+
+    def _on_lib_search(self) -> None:
+        """按 化学式 / 矿名 / 空间群 / 编号 在 polyDB 里找相。"""
+        query = self._lib_search_input.text().strip()
+        if not query:
+            self._lib_status.setText(tr("wizard.phase_page.lib_query_hint"))
+            return
+        db = self._library_db()
+        if db is None:
+            self._lib_status.setText(tr("wizard.phase_page.lib_no_db"))
+            return
+        with busy(self, tr("busy.cif_match")) as acquired:
+            if not acquired:
+                return
+            rows = polydb_structure.search_structures(query, db=db, limit=30)
+        self._fill_library_list(rows)
+
+    def _on_lib_search_by_peaks(self) -> None:
+        """按当前图谱的最强峰做 Hanawalt d-I 预筛。
+
+        向导里还没有"峰列表"（峰检测在主界面 VM 那一侧），所以这里对
+        ``self._data`` 现做一次峰检测。检测失败时退化为"原始谱图强点"
+        —— 精修起点差一点可以接受，静默无响应不可以。
+        """
+        if self._data is None:
+            self._lib_status.setText(tr("wizard.phase_page.lib_need_data"))
+            return
+        db = self._library_db()
+        if db is None:
+            self._lib_status.setText(tr("wizard.phase_page.lib_no_db"))
+            return
+        lo, hi = self._lib_window()
+        with busy(self, tr("busy.cif_match")) as acquired:
+            if not acquired:
+                return
+            twos, ints = self._measure_top_peaks(lo, hi)
+            md, mi = polydb_structure.peaks_to_d_i(
+                twos, ints, wavelength=self._lib_wavelength())
+            rows = polydb_structure.search_structures_by_peaks(
+                md, mi, db=db, limit=30)
+        self._fill_library_list(
+            rows, tr("wizard.phase_page.lib_status_peaks",
+                     peaks=len(md),
+                     lib=polydb_structure.library_label(db),
+                     count=len(rows)))
+
+    def _measure_top_peaks(
+        self, lo: float, hi: float,
+    ) -> tuple[list[float], list[float]]:
+        """当前数据的强峰 (2θ, I)；优先用峰检测，失败退化为局部强点。"""
+        try:
+            from polyxrd.services.peak_detection import detect_peaks_from_data
+
+            pl = detect_peaks_from_data(self._data)  # type: ignore[arg-type]
+            twos = [float(p.two_theta) for p in pl.peaks]
+            ints = [float(p.intensity) for p in pl.peaks]
+        except Exception:  # noqa: BLE001 - 峰检测失败走退化路径
+            twos, ints = [], []
+        if not twos:
+            twos, ints = self._raw_strong_points()
+        keep = [(t, i) for t, i in zip(twos, ints) if lo <= t <= hi]
+        return [p[0] for p in keep], [p[1] for p in keep]
+
+    def _raw_strong_points(self) -> tuple[list[float], list[float]]:
+        """退化路径: 原始谱图按强度取点，并保证最小间距 (避免同峰取多点)。"""
+        try:
+            import numpy as np
+
+            tt = np.asarray(self._data.two_theta, dtype=float)  # type: ignore[union-attr]
+            ii = np.asarray(self._data.intensity, dtype=float)  # type: ignore[union-attr]
+        except Exception:  # noqa: BLE001 - 数据不规整时返回空
+            return [], []
+        if tt.size < 3 or ii.size != tt.size:
+            return [], []
+        order = np.argsort(-ii)
+        picked: list[tuple[float, float]] = []
+        for idx in order[:400]:
+            t = float(tt[idx])
+            if any(abs(t - p[0]) < 0.3 for p in picked):
+                continue
+            picked.append((t, float(ii[idx])))
+            if len(picked) >= polydb_structure.DEFAULT_PEAK_COUNT:
+                break
+        picked.sort()
+        return [p[0] for p in picked], [p[1] for p in picked]
+
+    def _fill_library_list(self, rows: list[dict], status: str = "") -> None:
+        """把检索结果渲染进列表（条目本身塞进 UserRole 供加相时取用）。"""
+        self._lib_results_list.clear()
+        for row in rows:
+            item = QListWidgetItem(polydb_structure.entry_label(row))
+            item.setData(Qt.ItemDataRole.UserRole, row)
+            item.setToolTip(tr(
+                "wizard.phase_page.lib_item_tip",
+                n=row.get("n_peaks", 0),
+                d=row.get("density", 0.0),
+            ))
+            self._lib_results_list.addItem(item)
+        if not status:
+            status = tr(
+                "wizard.phase_page.lib_status",
+                lib=polydb_structure.library_label(self._library_db()),
+                count=len(rows),
+            )
+        if not rows:
+            self._lib_status.setText(status + " · " + tr(
+                "wizard.phase_page.lib_no_results"))
+            return
+        self._lib_status.setText(status)
+
+    def _on_add_lib_phases(self) -> None:
+        """把选中的库内条目装载成带结构的 Phase（晶胞 + 全胞位点）。"""
+        items = self._lib_results_list.selectedItems()
+        if not items:
+            return
+        db = self._library_db()
+        if db is None:
+            QMessageBox.warning(
+                self, tr("dialog.warning"), tr("wizard.phase_page.lib_no_db"))
+            return
+        with busy(self, tr("busy.cif_match")) as acquired:
+            if not acquired:
+                return
+            for item in items:
+                entry = item.data(Qt.ItemDataRole.UserRole)
+                if not isinstance(entry, dict):
+                    continue
+                phase = polydb_structure.phase_from_entry(
+                    entry, db,
+                    wavelength=self._lib_wavelength(),
+                    two_theta_range=self._lib_window(),
+                )
+                if phase is not None:
+                    self._add_phase(phase)
 
     # ── 已选物相 → 候选 CIF 预填 ─────────────────────────────
 
