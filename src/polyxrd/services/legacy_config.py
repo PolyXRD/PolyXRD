@@ -130,7 +130,7 @@ def _size_mb(p: Path) -> tuple[float, bool]:
         if not str(p).strip() or p in (Path("."), Path("./")):
             return 0.0, False
         if p.is_file():
-            return round(p.stat().st_size / 1e6, 1), False
+            return round(p.stat().st_size / 1e6, 2), False
         if not p.is_dir():
             return 0.0, False
         total = 0
@@ -143,7 +143,7 @@ def _size_mb(p: Path) -> tuple[float, bool]:
                     for entry in it:
                         seen += 1
                         if seen > _SIZE_MAX_ENTRIES:
-                            return round(total / 1e6, 1), True
+                            return round(total / 1e6, 2), True
                         try:
                             if entry.is_file(follow_symlinks=False):
                                 total += entry.stat(follow_symlinks=False).st_size
@@ -153,7 +153,7 @@ def _size_mb(p: Path) -> tuple[float, bool]:
                             continue
             except OSError:
                 continue
-        return round(total / 1e6, 1), False
+        return round(total / 1e6, 2), False
     except OSError:
         return 0.0, False
 
@@ -299,6 +299,19 @@ def scan(
             exists=False, size_mb=0.0, is_polydb=False,
             hint="当前检索源指向已删除的旧挂载项",
         ))
+    elif active:
+        # 悬空 active：指向的 id 根本不在 mounts 里（手工编辑 / 旧版本写坏）。
+        # 以前只在"该 id 恰好是旧引擎"时才报，纯悬空的情况既不报也不清 ——
+        # 界面按它选检索源会得到空列表，用户却看不到任何提示。
+        mount_ids = ({str(m.get("id") or "") for m in mounts
+                      if isinstance(m, dict)}
+                     if isinstance(mounts, list) else set())
+        if active not in mount_ids:
+            items.append(LegacyItem(
+                source="db_mounts_active", key=active, path="",
+                exists=False, size_mb=0.0, is_polydb=False,
+                hint="当前检索源指向一个不存在的挂载项",
+            ))
 
     return LegacyReport(items=tuple(items), paths_file=str(pf), store_file=str(sf))
 
@@ -352,17 +365,22 @@ def cleanup(
         if isinstance(mounts, list):
             kept: list = []
             dropped_ids: set[str] = set()
+            dropped_any = False
             for raw in mounts:
                 if isinstance(raw, dict) and \
                         str(raw.get("kind") or "") in LEGACY_MOUNT_KINDS:
                     mid = str(raw.get("id") or "")
                     if mid:
                         dropped_ids.add(mid)
+                    dropped_any = True
                     changed.append(f"mounts:{raw.get('id') or raw.get('kind')}")
                     continue
                 kept.append(raw)
-            touched = bool(dropped_ids)
-            if dropped_ids:
+            # 用 dropped_any 而不是 "dropped_ids 非空"：老版本写下的条目可能
+            # 没有 id，只看 id 集合会漏写回文件 —— 于是 changed 报了"清掉了"，
+            # 文件却原封不动，下次启动又提示一遍（2026-10-27 复核实测）。
+            touched = dropped_any
+            if dropped_any:
                 store["mounts"] = kept
             active = str(store.get("active") or "")
             if active and active in dropped_ids:
@@ -467,7 +485,13 @@ def describe(report: LegacyReport, t=None) -> list[str]:
                   else "legacy_config.line_state_missing")
         size = ""
         if item.size_mb or item.size_truncated:
-            mb = f"≥{item.size_mb}" if item.size_truncated else f"{item.size_mb}"
+            # 目录条目数超上限时只统计了前 N 条 → 数值是下限，标"≥"；
+            # 但下限恰好是 0（前 3000 条全是空文件/子目录）时不标，
+            # 否则显示成"≥0.0 MB"看不出信息。
+            if item.size_truncated and item.size_mb > 0:
+                mb = f"≥{item.size_mb}"
+            else:
+                mb = f"{item.size_mb}"
             size = t("legacy_config.line_size", mb=mb)
         mark = t("legacy_config.line_recoverable") if item.is_polydb else ""
         lines.append(f"· {item.path or item.key} —— {state}{size}{mark}")

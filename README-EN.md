@@ -15,7 +15,7 @@
     &nbsp;
     <img src="https://img.shields.io/badge/UI-PySide6%20(Qt6)-41cd52?style=flat-square" />
     &nbsp;
-    <img src="https://img.shields.io/badge/Tests-1748%20passed-brightgreen?style=flat-square" />
+    <img src="https://img.shields.io/badge/Tests-1764%20passed-brightgreen?style=flat-square" />
   </p>
   <p><i>🌐 简体中文文档：[README.md](README.md)</i></p>
 </div>
@@ -46,7 +46,7 @@ Core design philosophy:
 - **One-shot legacy config cleanup**: on startup it detects the old `cod_*` keys in `user_db_paths.json` and entries of removed engines in `db_mounts.json`, then offers to clean them — **settings only, never library files**; a folder that turns out to be a polyDB is re-mounted instead of being dropped.
 - **i18n**: 32 new UI string keys per language (zh/en/ja key sets aligned at 1058 each).
 - **No algorithm change**: scoring, refiner and reporting are identical to v4.3.0; MCP surface still 21 tools.
-- **Tests**: full suite **1748 passed / 6 skipped / 0 failed**; +81 new cases for the library panel and the config cleanup.
+- **Tests**: full suite **1764 passed / 6 skipped / 0 failed**; 53 cases for the library panel and 37 for the config cleanup (16 of them added by a second independent review after the release).
 
 | Asset | Size | SHA-256 (first 16) | Notes |
 |---|---|---|---|

@@ -725,6 +725,11 @@ class RefinementWizard(QWidget):
                     return db
             except Exception:  # noqa: BLE001 - 库被挪走/损坏 → 重新解析
                 pass
+        # 走到这里说明缓存的句柄已经不可用：重新解析前先关掉**自己开的**
+        # 那个（mmap + 文件句柄）。旧实现在这里直接覆盖引用，库被挪走时
+        # 旧 mmap 要等 GC 才释放，Windows 上会一直占着文件（2026-10-27
+        # 再验收）。注入的句柄所有权归调用方，_release_library_db 不关它。
+        self._release_library_db()
         try:
             self._lib_db = polydb_structure.open_database()
         except Exception:  # noqa: BLE001 - 配置/挂载表异常按"无库"处理
@@ -897,9 +902,13 @@ class RefinementWizard(QWidget):
             self._lib_results_list.addItem(item)
         self._update_lib_add_enabled()
         if not status:
+            # 用**已缓存的句柄**拼状态行，不再走 _library_db() 解析一遍：
+            # 后者在库刚被挪走时会重新打开另一个库，状态行报的库名就和
+            # 本次搜索结果不是同一个了（library_label 还会重读一次
+            # meta.json，属白花的 IO）。
             status = tr(
                 "wizard.phase_page.lib_status",
-                lib=polydb_structure.library_label(self._library_db()),
+                lib=polydb_structure.library_label(getattr(self, "_lib_db", None)),
                 count=len(rows),
             )
         if not rows:
@@ -1577,6 +1586,29 @@ class RefinementWizardHostDialog(QDialog):
     def wizard(self) -> RefinementWizard:
         """内部向导本体 (测试/二次开发用)。"""
         return self._wizard
+
+    def _release_inner(self) -> None:
+        """关掉内部向导自己打开的 polyDB 句柄。
+
+        ⚠️ 子控件**收不到** ``closeEvent``: Qt 关闭父窗口时只是 hide 子控件,
+        不会给它们发 ``QEvent.Close``。所以向导里的 ``closeEvent`` 在"菜单
+        弹出的宿主对话框"这条真实路径上一次都不会触发（实测 hits == []），
+        mmap/文件句柄要等 GC 才放。宿主必须自己转发 —— 关窗走
+        ``closeEvent``，``accept``/``reject``/Esc 走 ``done``，两条都盖住。
+        向导侧的释放是幂等的，重复调用无副作用。
+        """
+        try:
+            self._wizard._release_library_db()
+        except Exception:  # noqa: BLE001 - 向导已半销毁
+            pass
+
+    def closeEvent(self, event) -> None:  # noqa: N802 - Qt 命名
+        self._release_inner()
+        super().closeEvent(event)
+
+    def done(self, r: int) -> None:  # noqa: A002 - Qt 签名就这一个参数名
+        self._release_inner()
+        super().done(r)
 
     def _on_wizard_completed(self, result) -> None:
         """精修成功 → 先广播结果, 再关闭对话框。

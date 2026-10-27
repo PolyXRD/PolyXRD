@@ -15,6 +15,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
@@ -124,6 +125,62 @@ def test_expand_sites_idempotent_nacl():
     again = expand_sites_by_symmetry(full, "F m -3 m")
     assert len(again) == 8, "幂等展开不应重复叠加"
     assert {s["element"] for s in full} == {"Na", "Cl"}
+
+
+class TestStrictExpand:
+    """``strict=True``：降级路径返回 ``None`` 而不是"原样返回"。
+
+    v4.1.1 那个假峰事故的根因是"调用方分不清『本来就是全胞』与『展不开』"。
+    ``polydb_structure._expanded_sites`` 因此传 ``strict=True`` —— 这些用例
+    钉住那条约定：**只有** P1/C1 这种"本来就无操作可展"才返回原样列表。
+    """
+
+    ASYM: ClassVar[list[dict]] = [
+        {"label": "Ca1", "element": "Ca", "x": 0.0, "y": 0.0, "z": 0.0,
+         "occupancy": 1.0},
+        {"label": "C1", "element": "C", "x": 0.0, "y": 0.0, "z": 0.25,
+         "occupancy": 1.0},
+        {"label": "O1", "element": "O", "x": 0.2568, "y": 0.0, "z": 0.25,
+         "occupancy": 1.0},
+    ]
+
+    def test_normal_expand_returns_full_cell(self):
+        assert len(expand_sites_by_symmetry(
+            self.ASYM, "R -3 c", strict=True)) == 30
+
+    def test_p1_returns_input_unchanged(self):
+        """P1 无操作可展 —— 位点本身就是全胞，strict 下也该返回原样。"""
+        out = expand_sites_by_symmetry(self.ASYM, "P 1", strict=True)
+        assert out is not None and len(out) == 3
+
+    def test_missing_or_unparsable_space_group_returns_none(self):
+        assert expand_sites_by_symmetry(self.ASYM, "", strict=True) is None
+        assert expand_sites_by_symmetry(self.ASYM, "C m c a", strict=True) is None
+
+    def test_dirty_site_returns_none(self):
+        dirty = [{"label": "Ca1", "element": "Ca", "x": "a", "y": 0,
+                  "z": 0, "occupancy": 1.0}]
+        assert expand_sites_by_symmetry(dirty, "R -3 c", strict=True) is None
+        # 非 strict 保持老行为：原样返回，不劣化
+        assert expand_sites_by_symmetry(dirty, "R -3 c") == dirty
+
+    def test_non_finite_coordinate_returns_none(self):
+        """``float("NaN")`` 能过 ``float()``，但会污染出 36 个 NaN 假位点。"""
+        dirty = [{"label": "Ca1", "element": "Ca", "x": "NaN", "y": 0,
+                  "z": 0, "occupancy": 1.0}]
+        assert expand_sites_by_symmetry(dirty, "R -3 c", strict=True) is None
+
+    def test_pathological_fuse_returns_none(self):
+        """``len(sites)*len(ops) > 500_000`` 保险丝触发时不谎报"已展开"。"""
+        many = [{"label": f"Ca{i}", "element": "Ca", "x": i / 5000.0,
+                 "y": 0.0, "z": 0.0, "occupancy": 1.0} for i in range(2000)]
+        assert expand_sites_by_symmetry(many, "R -3 c", strict=True) is None
+
+    def test_max_sites_overflow_returns_none(self):
+        assert expand_sites_by_symmetry(
+            self.ASYM, "R -3 c", max_sites=2, strict=True) is None
+        assert len(expand_sites_by_symmetry(
+            self.ASYM, "R -3 c", max_sites=2)) == 3
 
 
 def test_refiner_expands_unexpanded_sites():

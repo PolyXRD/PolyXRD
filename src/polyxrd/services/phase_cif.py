@@ -89,7 +89,8 @@ def space_group_ops(space_group: object) -> Optional[list]:
 
 
 def expand_sites_by_symmetry(sites: list[dict], space_group: object,
-                             max_sites: int = 2000) -> list[dict]:
+                             max_sites: int = 2000,
+                             strict: bool = False) -> Optional[list[dict]]:
     """把非对称单元位点按空间群对称操作展开成完整晶胞内容 (P1 全胞).
 
     **为什么需要** (v0.15.2 修复): COD CIF 的原子环一般只列非对称单元,
@@ -102,7 +103,14 @@ def expand_sites_by_symmetry(sites: list[dict], space_group: object,
     **幂等安全**: 若传入的位点已是完整晶胞, 完整轨道在对称群作用下映射回
     自身 (去重后不变), 因此对"是否已展开"未知的位点无条件调用是安全的。
 
-    空间群缺失 / 解析失败 / P1 / 位点脏数据时**原样返回** (行为不劣化)。
+    :param strict: ``False`` (默认) 时, 空间群缺失 / 解析失败 / P1 / 位点脏数据
+        / 保险丝触发都**原样返回** (行为不劣化, 老调用方无需改动)。
+        ``True`` 时, **只有**"该空间群本来就无操作可展" (P1 / C1 / 空位点) 才返回
+        原样列表, 其余降级路径一律返回 ``None`` —— 让调用方能区分
+        "本来就是全胞" 与 "展不开", 避免把非对称单位当全胞用 (v4.1.1 假峰事故)。
+
+        注意 ``strict=True`` 下 ``space_group`` 为空 / 认不出也算"展不开" →
+        ``None``: 调用方拿不到空间群就不该假设位点是全胞。
     """
     import numpy as np
 
@@ -111,8 +119,8 @@ def expand_sites_by_symmetry(sites: list[dict], space_group: object,
         return out_sites
     ops = space_group_ops(space_group)
     if ops is None:  # 空间群缺失 / 符号认不出 → 不展开（原样返回）
-        return out_sites
-    if len(ops) <= 1:  # P1 / C1 无对称操作
+        return None if strict else out_sites
+    if len(ops) <= 1:  # P1 / C1 无对称操作 → 位点本身就是全胞
         return out_sites
 
     expanded: list[dict] = []
@@ -121,7 +129,7 @@ def expand_sites_by_symmetry(sites: list[dict], space_group: object,
     # ~10 万生成点, 每点与最多 2000 个已展开点逐一比较) 是 O(10^8) 级
     # 纯 Python 热点, 实测 4-1 样品 Fluorite 大胞候选卡死 >12min。
     if len(out_sites) * len(ops) > 500_000:  # 病态输入保险丝
-        return out_sites
+        return None if strict else out_sites
     tol = 1e-3
     mat_by_elem: dict[str, "np.ndarray"] = {}
     for s in out_sites:
@@ -131,9 +139,14 @@ def expand_sites_by_symmetry(sites: list[dict], space_group: object,
                 str(s.get("label") or "")))
             occ = float(s.get("occupancy", 1.0) or 1.0)
         except (TypeError, ValueError, KeyError):
-            return out_sites  # 脏位点 → 放弃展开, 保持旧行为
+            return None if strict else out_sites  # 脏位点 → 放弃展开, 保持旧行为
         if not elem:
-            return out_sites
+            return None if strict else out_sites
+        # float('NaN') / float('inf') 能毫发无损地过 float()，但会把整个展开
+        # 结果污染成 NaN 坐标（去重的 |Δ|<tol 比较对 NaN 恒为 False，36 个
+        # 假位点全被保留）。2026-10-27 再验收实测。
+        if not (bool(np.isfinite(base).all()) and bool(np.isfinite(occ))):
+            return None if strict else out_sites
         mat = mat_by_elem.get(elem)
         for op in ops:
             p = np.asarray(op.operate(base), dtype=float)
@@ -149,7 +162,8 @@ def expand_sites_by_symmetry(sites: list[dict], space_group: object,
             mat_by_elem[elem] = mat
 
     if not expanded or len(expanded) > max_sites:
-        return out_sites  # 异常膨胀 → 放弃展开
+        # 异常膨胀 → 放弃展开（strict 下报"展不开"，不把非对称单位当全胞）
+        return None if strict else out_sites
     counters: dict[str, int] = {}
     result: list[dict] = []
     for o in expanded:

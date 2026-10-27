@@ -15,7 +15,7 @@
     &nbsp;
     <img src="https://img.shields.io/badge/UI-PySide6%20(Qt6)-41cd52?style=flat-square" />
     &nbsp;
-    <img src="https://img.shields.io/badge/Tests-1748%20passed-brightgreen?style=flat-square" />
+    <img src="https://img.shields.io/badge/Tests-1764%20passed-brightgreen?style=flat-square" />
   </p>
   <p><i>🌐 English documentation: [README-EN.md](README-EN.md)</i></p>
 </div>
@@ -53,7 +53,7 @@
 - **旧库配置一次性清理**：启动时检测 `user_db_paths.json` 里的旧 `cod_*` 键与 `db_mounts.json` 里已删除引擎的条目，一键清理——**只删配置、不删任何库文件**；旧路径若其实是 polyDB 目录会顺手挂回。
 - **i18n**：三语各新增 32 个界面文案键（键集 1058/1058/1058 对齐）。
 - **无算法改动**：检索打分口径、精修引擎、报告生成与 v4.3.0 一致；MCP 工具面仍 21 个。
-- **测试**：全量 **1748 passed / 6 skipped / 0 failed**；新增向导检索库面板与旧配置清理两组回归共 81 例。
+- **测试**：全量 **1764 passed / 6 skipped / 0 failed**；向导检索库面板 53 例、旧配置清理 37 例（其中 16 例是发布后第二轮独立复核补的钉子）。
 
 | 产物 | 体积 | SHA-256（前 16 位） | 说明 |
 |---|---|---|---|

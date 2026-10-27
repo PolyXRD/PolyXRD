@@ -451,6 +451,55 @@ class TestAuditFixesService:
         assert PS.open_database(variant="cod-inorg") is None
         assert PS.open_database("D:/nowhere.polyDB") is None
 
+    # ── 2026-10-27 第二轮复核（再验收）实测的缺陷 ─────────────────
+
+    def test_by_peaks_survives_non_numeric_intensity(self):
+        """实测原本抛 ``ValueError: could not convert string to float: 'a'``。
+
+        实测峰来自"原始谱图强点"退化路径，强度列混进坏值不该让整个检索炸掉。
+        """
+        seen: dict = {}
+
+        class _Sink:
+            def search_by_d_peaks(self, md, mi=None, **kw):
+                seen["md"], seen["mi"] = list(md), None if mi is None else list(mi)
+                return []
+
+        PS.search_structures_by_peaks([3.34, 4.26, 1.82, 2.46],
+                                      [1000.0, "a", 420.0, 300.0], db=_Sink())
+        assert seen["md"] == [pytest.approx(3.34), pytest.approx(1.82),
+                              pytest.approx(2.46)]
+        assert seen["mi"] == [pytest.approx(1000.0), pytest.approx(420.0),
+                              pytest.approx(300.0)]
+
+    def test_by_peaks_drops_nan_intensity_without_misaligning(self):
+        """强度坏就**连 d 一起丢**：只丢强度会让 md/mi 错位。
+
+        旧实现整列丢弃 mi（或让 mi 比 md 短），会退化成"锚到最弱峰"
+        （``main_meas = md[-1]``）—— 静默算错，比报错更糟。
+        """
+        seen: dict = {}
+
+        class _Sink:
+            def search_by_d_peaks(self, md, mi=None, **kw):
+                seen["md"], seen["mi"] = list(md), None if mi is None else list(mi)
+                return []
+
+        PS.search_structures_by_peaks(
+            [3.34, 4.26, 1.82, 2.46],
+            [1000.0, float("nan"), 420.0, 300.0], db=_Sink())
+        assert len(seen["md"]) == len(seen["mi"]) == 3
+        assert 4.26 not in seen["md"], "NaN 强度那一条要整对丢掉"
+        assert seen["md"][0] == pytest.approx(3.34)
+
+    def test_reference_peaks_skips_non_finite(self):
+        rows = PS._reference_peaks(
+            {"peaks_d_list": [3.343, 4.257, 1.817],
+             "peaks_i_list": [1000.0, float("nan"), 420.0]},
+            1.5406, None)
+        assert len(rows) == 2, "NaN 强度不该进参考峰（排序未定义 + Hanawalt 恒 False）"
+        assert all(isinstance(r[2], float) and r[2] == r[2] for r in rows)
+
 
 class TestAuditFixesWizard:
     """验收报告 P2-5 / P2-11～P2-14 的回归钉。"""
@@ -508,3 +557,67 @@ class TestAuditFixesWizard:
     def test_injected_handle_is_not_owned(self, wizard):
         assert wizard._lib_db is not None
         assert wizard._lib_db_owned is False
+
+    # ── 2026-10-27 第二轮复核（再验收）实测的缺陷 ─────────────────
+
+    @pytest.mark.parametrize("how", ["accept", "reject", "close"])
+    def test_host_dialog_releases_inner_handle(self, qapp, how):
+        """子控件**收不到** closeEvent，宿主必须自己把释放转过去。
+
+        实测真实路径（主窗口 ``dialog.exec()``）下向导的 closeEvent 触发
+        次数为 0，mmap 句柄只能等 GC。accept/reject/Esc 走 ``done``，
+        点 × 走 ``closeEvent``，两条都要盖住。
+        """
+        from polyxrd.views.refinement_wizard import RefinementWizardHostDialog
+
+        class _Fake:
+            available = True
+            path = "X:/fake"
+            variant = "cod-inorg"
+
+            def __init__(self) -> None:
+                self.meta: dict = {}
+                self.closed = False
+
+            def is_ready(self) -> bool:
+                return True
+
+            def close(self) -> None:
+                self.closed = True
+
+        dlg = RefinementWizardHostDialog(None, None, None)
+        fake = _Fake()
+        dlg.wizard._lib_db, dlg.wizard._lib_db_owned = fake, True
+        getattr(dlg, how)()
+        assert fake.closed is True, f"{how} 未释放内部向导的 polyDB 句柄"
+        assert dlg.wizard._lib_db is None
+        assert dlg.wizard._lib_db_owned is False
+        dlg.deleteLater()
+
+    def test_reresolve_closes_previous_owned_handle(self, qapp, monkeypatch):
+        """库被挪走/损坏时重新解析，旧的自有句柄必须先关掉。"""
+        from polyxrd.views.refinement_wizard import RefinementWizardHostDialog
+
+        class _Fake:
+            available = True
+            path = "X:/fake"
+            variant = "cod-inorg"
+
+            def __init__(self, ready: bool = True) -> None:
+                self.meta: dict = {}
+                self.ready, self.closed = ready, False
+
+            def is_ready(self) -> bool:
+                return self.ready
+
+            def close(self) -> None:
+                self.closed = True
+
+        dlg = RefinementWizardHostDialog(None, None, None)
+        old = _Fake(ready=False)
+        dlg.wizard._lib_db, dlg.wizard._lib_db_owned = old, True
+        fresh = _Fake()
+        monkeypatch.setattr(PS, "open_database", lambda *a, **k: fresh)
+        assert dlg.wizard._library_db() is fresh
+        assert old.closed is True, "旧句柄没关 → Windows 上文件一直被占"
+        dlg.deleteLater()

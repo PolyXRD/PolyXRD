@@ -197,21 +197,36 @@ def search_structures_by_peaks(
     """
     if db is None:
         return []
-    md: list[float] = []
-    for x in measured_d:
+    md_raw = list(measured_d)
+    mi_raw = list(measured_i) if measured_i is not None else None
+    if mi_raw is not None and len(mi_raw) != len(md_raw):
+        # 长度不齐说明调用方给错了 —— 当作"没给强度"（与旧行为一致），
+        # 不能截断配对，否则 d 与 I 会错位。
+        mi_raw = None
+    rows: list[tuple[float, float | None]] = []
+    for idx, x in enumerate(md_raw):
         try:
-            v = float(x)
+            d = float(x)
         except (TypeError, ValueError):
             continue
-        if v > 0 and np.isfinite(v):
-            md.append(v)
-    if len(md) < min_match:
+        if not (d > 0 and np.isfinite(d)):
+            continue
+        if mi_raw is None:
+            rows.append((d, None))
+            continue
+        try:
+            inten = float(mi_raw[idx])
+        except (TypeError, ValueError):
+            # 强度坏就**连 d 一起丢**：只留 d 会让 md/mi 错位，
+            # 主峰判定会锚到别的峰上（不如少一条峰）。
+            continue
+        if not np.isfinite(inten):
+            continue
+        rows.append((d, inten))
+    if len(rows) < min_match:
         return []
-    mi = None
-    if measured_i is not None:
-        mi_raw = [float(x) for x in measured_i]
-        if len(mi_raw) == len(md) and all(np.isfinite(v) for v in mi_raw):
-            mi = mi_raw
+    md = [p[0] for p in rows]
+    mi = None if mi_raw is None else [p[1] for p in rows]
     try:
         return db.search_by_d_peaks(
             md, mi, tolerance=tolerance, min_match=min_match,
@@ -388,19 +403,18 @@ def _expanded_sites(db: PolyDatabase, eid: int, space_group: str) -> list[dict]:
     if not (space_group or "").strip():
         return []
     try:
-        from polyxrd.services.phase_cif import (
-            expand_sites_by_symmetry,
-            space_group_ops,
-        )
+        from polyxrd.services.phase_cif import expand_sites_by_symmetry
 
-        # 先探一下符号能不能认出来：expand_sites_by_symmetry 对解析失败是
-        # "原样返回"，光看返回值分不清"本来就是全胞"与"展不开"。
-        if space_group_ops(space_group) is None:
-            return []
-        expanded = expand_sites_by_symmetry(sites, space_group)
+        # strict=True：符号认不出 / 脏位点 / 病态输入保险丝 / 超 max_sites
+        # 这些**降级**路径一律返回 None 而不是"原样返回"，本函数于是不会
+        # 再把非对称单位当全胞用（那正是 v4.1.1 假峰事故的成因）。
+        # 只有 P1/C1 这类"本来就没有操作可展"的情况才返回原样列表。
+        expanded = expand_sites_by_symmetry(sites, space_group, strict=True)
     except Exception:  # noqa: BLE001 - 展开失败 → 只给晶胞
         return []
-    return list(expanded or [])
+    if expanded is None:
+        return []
+    return list(expanded)
 
 
 def _reference_peaks(
@@ -425,6 +439,11 @@ def _reference_peaks(
             d = float(d_val)
             inten = float(i_val)
         except (TypeError, ValueError):
+            continue
+        if not (np.isfinite(d) and np.isfinite(inten)):
+            # NaN 强度会污染后面的"取最强 REF_PEAK_CAP 条"（NaN 参与排序
+            # 结果未定义），也会让 Hanawalt 的强度比较恒为 False。与
+            # peaks_to_d_i 同口径：非有限值一律不算峰。
             continue
         if d <= 0:
             continue

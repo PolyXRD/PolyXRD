@@ -477,3 +477,40 @@ class TestAuditFixes:
                 "QLabel 不渲染 Markdown，`**` 会原样显示"
         finally:
             dlg.deleteLater()
+
+    # ── 2026-10-27 第二轮复核（再验收）实测的两个真 bug ─────────────
+
+    def test_cleanup_persists_when_legacy_mount_lacks_id(self, cfg_files):
+        """老版本写下的挂载项可能没有 ``id``：只看 id 集合会漏写回文件。
+
+        实测：``changed == ['mounts:cod_index']``，但 ``db_mounts.json`` 的
+        ``mounts`` 原封不动 —— 界面报"已清理"，重启后旧条目还在。
+        """
+        paths, store = cfg_files
+        _write(paths, store, {},
+               {"version": 1, "active": "",
+                "mounts": [{"kind": "cod_index", "path": "D:/old"}]})
+        changed = L.cleanup(paths_file=paths, store_file=store,
+                            remount_polydb=False)
+        assert "mounts:cod_index" in changed
+        data = json.loads(store.read_text(encoding="utf-8"))
+        assert data["mounts"] == [], "报 clean 就必须真的落盘"
+
+    def test_dangling_active_without_any_mount_is_scanned_and_cleared(
+            self, cfg_files):
+        """``mounts`` 为空但 active 指向一个不存在的挂载项。
+
+        实测：``scan`` 打出 0 条、``cleanup`` 返回 ``[]``，``active`` 仍是
+        ``polydb:gone`` —— 这种"纯悬空"状态永远不会被清掉。
+        """
+        paths, store = cfg_files
+        _write(paths, store, {},
+               {"version": 1, "active": "polydb:gone", "mounts": []})
+        rep = L.scan(paths, store)
+        assert [i.source for i in rep.items] == ["db_mounts_active"]
+        assert rep.items[0].key == "polydb:gone"
+        changed = L.cleanup(paths_file=paths, store_file=store,
+                            remount_polydb=False)
+        assert "active:dangling" in changed
+        data = json.loads(store.read_text(encoding="utf-8"))
+        assert data["active"] == ""
