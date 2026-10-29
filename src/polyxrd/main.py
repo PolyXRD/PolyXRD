@@ -18,6 +18,7 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QPixmap, QIcon
 from PySide6.QtWidgets import QApplication, QSplashScreen
 
+from polyxrd import __version__
 from polyxrd.config import get_config
 from polyxrd.services.instance_guard import InstanceGuard, default_lock_dir
 from polyxrd.services import startup_diag
@@ -407,8 +408,12 @@ def main() -> int:
     if "--diagnose" in sys.argv[1:]:
         return _run_diagnose()
 
+    # 版本号直接取包常量: 早先写的是 get_config().app_version, 这会让
+    # ``get_config()`` 在 QApplication 之前就执行 —— 它一旦因路径问题抛异常,
+    # 进程连窗口都出不来 (v4.4.0 装到 Program Files 时实测)。版本号本就
+    # 不依赖配置, 没必要为打一行日志去动配置单例。
     _startup_log(
-        f"--- start v{get_config().app_version} "
+        f"--- start v{__version__} "
         f"frozen={getattr(sys, 'frozen', False)} exe={sys.executable}"
     )
 

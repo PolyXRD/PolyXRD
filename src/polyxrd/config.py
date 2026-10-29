@@ -60,7 +60,7 @@ class AppConfig:
     # 数据库
     # 项目内路径,便于整体迁移;如需移到其他盘,只改这一处即可
     _PROJECT_ROOT: ClassVar[Path] = Path(__file__).resolve().parents[2]
-    cif_db_path: Path = field(default_factory=lambda: AppConfig._PROJECT_ROOT / "cod_data" / "cif_db")
+    cif_db_path: Path = field(default_factory=lambda: AppConfig._default_cif_db_dir())
     # v4.2.0: 本地 COD sqlite 运行时（全库索引、无机物库两个 sqlite 以及
     # COD SVN 源目录）已彻底移除，相关字段与 getter 一并删除。物相检索改由
     # 外挂 polyDB（v4.0.0+ 格式）承担，见下方 polyDB 挂载路径。
@@ -73,6 +73,23 @@ class AppConfig:
     def get_export_dir(self) -> Path:
         return self.export_dir
 
+    #: ``~`` 下的 CIF 库落脚点（相对 home），由项目内路径与用户目录两处共用。
+    _HOME_CIF_DB_REL: ClassVar[Path] = Path(".polyxrd") / "cif_db"
+
+    @staticmethod
+    def _default_cif_db_dir() -> Path:
+        r"""CIF 库默认落点：项目内目录**存在**就用它，否则退回用户可写目录。
+
+        frozen 装到 ``C:\Program Files`` 时 :attr:`_PROJECT_ROOT` 就是安装根，
+        而安装包并不含 ``cod_data`` —— 目录既不存在、普通用户又无写权限。
+        早先 ``get_config()`` 对它无条件 mkdir，于是在启动最早期抛
+        ``PermissionError``，进程连窗口都出不来（v4.4.0 装机实测）。
+        开发机上该目录一直都在，``mkdir(exist_ok=True)`` 直接返回，
+        所以这个隐患从未在源码运行下暴露过。
+        """
+        cand = AppConfig._PROJECT_ROOT / "cod_data" / "cif_db"
+        return cand if cand.is_dir() else Path.home() / AppConfig._HOME_CIF_DB_REL
+
     # ── 外挂数据库路径解析 (0.10.0) ──────────────────────────
 
     def user_db_dir(self) -> Path:
@@ -83,7 +100,7 @@ class AppConfig:
         用户无写权限)。所以"解压后随手把 .sqlite 放哪"需要一个始终可写的默认
         落点 —— 就是这里。放在这里的库即使没走 GUI 导入也会被自动发现。
         """
-        return Path.home() / ".polyxrd" / "cif_db"
+        return Path.home() / self._HOME_CIF_DB_REL
 
     def _resolve_db_path(self, key: str, default: Path,
                          alt_names: tuple[str, ...]) -> Path:
@@ -387,12 +404,27 @@ class AppConfig:
 _config: AppConfig | None = None
 
 
+def _ensure_dir(path: Path) -> bool:
+    """尽力创建目录，成功返回 True；任何 OSError 一律吞掉。
+
+    这里**不允许**把异常抛给调用方：``get_config()`` 位于启动链最前端
+    (main() 取版本号时就要它)，建不出目录绝不能演变成"程序打不开"。
+    """
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        return True
+    except OSError:
+        return False
+
+
 def get_config() -> AppConfig:
     """获取全局配置"""
     global _config
     if _config is None:
         _config = AppConfig()
-        _config.cif_db_path.mkdir(parents=True, exist_ok=True)
-        _config.export_dir.mkdir(parents=True, exist_ok=True)
-        _config.log_dir.mkdir(parents=True, exist_ok=True)
+        # 只读安装目录 (Program Files) 下这三个 mkdir 必然失败 —— 降级为
+        # "静默不建"，让主窗口照常起来，由 UI 在真正要用库时提示路径。
+        _ensure_dir(_config.cif_db_path)
+        _ensure_dir(_config.export_dir)
+        _ensure_dir(_config.log_dir)
     return _config

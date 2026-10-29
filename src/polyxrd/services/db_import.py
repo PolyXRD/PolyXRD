@@ -127,10 +127,13 @@ def inspect_db_file(path: str | Path) -> DBInspect:
         res.error = f"unreadable: {e}"
         return res
 
-    try:
-        conn = sqlite3.connect(f"file:{p}?mode=ro", uri=True)
-    except sqlite3.Error as e:
-        res.error = f"open_failed: {e}"
+    # 只读打开走统一实现: URI 要转义 (路径含空格/# 时裸拼会打不开),
+    # 且 WAL 库放在只读目录/只拷了单文件时需降级 immutable 才能读。
+    from polyxrd.services.sqlite_ro import connect_readonly
+
+    conn, open_err = connect_readonly(p)
+    if conn is None:
+        res.error = f"open_failed: {open_err or 'unknown'}"
         return res
     try:
         tables = {r[0] for r in conn.execute(

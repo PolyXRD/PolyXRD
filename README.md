@@ -7,7 +7,7 @@
     峰检测 &nbsp;·&nbsp; 多物相定性检索 &nbsp;·&nbsp; Rietveld 结构精修 &nbsp;·&nbsp; Le Bail 晶胞精修 &nbsp;·&nbsp; 指标化 &nbsp;·&nbsp; 3D 结构可视化 &nbsp;·&nbsp; 内置 COD 无机物库 (polyDB) + 多库外挂检索
   </p>
   <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v4.3.0-blue?style=flat-square" /></a>
+    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v4.5.0-blue?style=flat-square" /></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
     &nbsp;
@@ -45,7 +45,19 @@
 
 ---
 
-## 🆕 最新版本 v4.4.0（2026-10-27 · 待发布）
+## 🆕 最新版本 v4.5.0（2026-10-29 · 代码已提交，待构建）
+
+**装机可靠性修复 + 元素限定错位（P0）** —— 全部来自 4.4.0 实机使用的现场反馈，无算法口径改动（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.5.0）：
+
+- **装在 `Program Files` 下普通用户起不来（已修）**：`get_config()` 会对安装目录内不存在的 `cod_data/cif_db` 无条件 `mkdir`，普通用户无写权限 → `PermissionError` 抛在 `QApplication` 之前，窗口都出不来。现改为「项目内目录存在才用，否则降到 `~/.polyxrd/cif_db`」+ 目录创建一律容错；版本号也不再为打一行启动日志去提前触发配置单例。
+- **PDF2 外挂库在只读目录/单文件拷贝下读不出（已修）**：只读打开改用转义后的 `file:` URI（路径含空格/`#` 时不再被截断），WAL 模式下自动降级 `immutable=1`；建库收尾改回 `journal_mode=DELETE`，**产物自包含单文件**。附带 `PDF2Database.close()` 与 `last_error`，打开失败不再静默返回 0 条。
+- **元素限定后检不出物相（P0，已修）**：`polydb.ELEMENTS` 漏了 **Rh（Z=45）**，导致 Rh 之后所有元素位图平面整体错位一位 —— 查 W 实际读的是 Ta 的位图。**所有 Z≥45 的元素**（W/Ta/Pb/稀土/U…）的元素限定都受影响。补表后恢复；库文件无需重建（建库端一直正确）。
+- **启动诊断不再误导**：区分「共享冲突」/「无写权限」/「本进程自映射」，不再把程序自己的 exe 报成"被占用，占用进程 = 自己"。
+- **测试**：全量 **1776 passed / 7 skipped / 0 failed**；新增元素表守卫 54 例（跨周期 46 个 Z 锚点）、只读 SQLite 12 例。
+
+---
+
+## 上一版 v4.4.0（2026-10-27）
 
 **精修向导重建「从检索库找结构」+ 旧库配置一次性清理** —— 兑现 v4.2 遗留的 P4.2/P4.3（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.4.0 与 [docs/RELEASE-NOTES-v4.4.0.md](docs/RELEASE-NOTES-v4.4.0.md)）：
 

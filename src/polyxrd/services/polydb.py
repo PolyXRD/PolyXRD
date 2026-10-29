@@ -43,9 +43,16 @@ from polyxrd.services.phase_search import (
 _logger = logging.getLogger(__name__)
 
 #: 元素符号（Z=1..118），与建库器保持一致
+#:
+#: ⚠️ 这张表就是 ``elem.u8`` 位图的行序（下标 = Z-1），**必须与建库端
+#: ``tools/build_polydb.py`` 的 ``ELEMENTS`` 逐字一致**。2026-10-29 查出旧表
+#: 漏了 **Rh（Z=45）**，导致 Rh 之后所有元素在读取端整体前移一位 ——
+#: 查 W 实际拿到的是 Ta、查 Ta 拿到的是 Hf、查 Pb 拿到的是 Tl……
+#: 表现是"元素限定后检不出物相"或给出同族近邻元素的相，而且只在 Z≥45
+#: 的元素上发作（W/Ta/Pb/稀土/U 这些恰恰是 XRD 常见的重原子）。
 ELEMENTS: tuple[str, ...] = tuple((
     "H He Li Be B C N O F Ne Na Mg Al Si P S Cl Ar K Ca Sc Ti V Cr Mn Fe Co Ni "
-    "Cu Zn Ga Ge As Se Br Kr Rb Sr Y Zr Nb Mo Tc Ru Pd Ag Cd In Sn Sb Te I Xe "
+    "Cu Zn Ga Ge As Se Br Kr Rb Sr Y Zr Nb Mo Tc Ru Rh Pd Ag Cd In Sn Sb Te I Xe "
     "Cs Ba La Ce Pr Nd Pm Sm Eu Gd Tb Dy Ho Er Tm Yb Lu Hf Ta W Re Os Ir Pt Au "
     "Hg Tl Pb Bi Po At Rn Fr Ra Ac Th Pa U Np Pu Am Cm Bk Cf Es Fm Md No Lr "
     "Rf Db Sg Bh Hs Mt Ds Rg Cn Nh Fl Mc Lv Ts Og"

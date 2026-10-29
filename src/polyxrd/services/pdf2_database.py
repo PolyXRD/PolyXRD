@@ -642,6 +642,15 @@ class PDF2DatabaseBuilder:
             "INSERT OR REPLACE INTO meta VALUES (?, ?)", list(meta_rows.items())
         )
         conn.commit()
+        # 收尾把日志模式从 WAL 退回 DELETE：``PRAGMA journal_mode=WAL`` 是
+        # **写进库头**的持久设置（不是连接期临时状态），留着它意味着这个库
+        # 此后必须与 -wal/-shm 同目录才能被只读打开。而用户分发/拷贝库时
+        # 永远只拷那一个 ``.sqlite``。DELETE 模式下产物是自包含单文件，
+        # 放在只读目录（如 Program Files）、只读介质上都能直接读。
+        try:
+            conn.execute("PRAGMA journal_mode=DELETE").fetchone()
+        except sqlite3.Error:  # 某些只读/异常环境下降级为"保持原样"
+            pass
         conn.close()
 
         elapsed = time.time() - t0
@@ -679,29 +688,40 @@ class PDF2Database:
         self._config = get_config()
         self._db_path = Path(db_path) if db_path else self._config.get_pdf2_db_path()
         self._conn: Optional[sqlite3.Connection] = None
+        #: 最近一次打开失败的原因（None = 正常）。留给 UI / 诊断显示用 ——
+        #: 否则"库打不开"会一路表现为静默返回 0 条，用户只能猜。
+        self._last_error: Optional[str] = None
 
     # ── 连接管理 ────────────────────────────────────────────
 
     def _get_conn(self) -> Optional[sqlite3.Connection]:
-        """懒加载 SQLite 连接。"""
+        """懒加载只读连接（URI 转义 + WAL 只读降级，见 :mod:`sqlite_ro`）。"""
         if self._conn is not None:
             return self._conn
-        if not self._db_path.exists():
-            return None
-        self._conn = sqlite3.connect(
-            f"file:{self._db_path}?mode=ro", uri=True, check_same_thread=False,
-        )
-        self._conn.row_factory = sqlite3.Row
-        return self._conn
+        from polyxrd.services.sqlite_ro import connect_readonly
 
-    def reload(self) -> None:
-        """关闭当前连接,下次访问时重新连接。"""
+        conn, err = connect_readonly(self._db_path, with_row_factory=True)
+        self._last_error = err
+        self._conn = conn
+        return conn
+
+    def close(self) -> None:
+        """关闭连接（幂等）。长连接不主动关会占着 -shm 不放。"""
         if self._conn is not None:
             try:
                 self._conn.close()
-            except Exception:
+            except Exception:  # noqa: BLE001 - 关连接失败不该影响调用方
                 pass
             self._conn = None
+
+    def reload(self) -> None:
+        """关闭当前连接,下次访问时重新连接。"""
+        self.close()
+
+    @property
+    def last_error(self) -> Optional[str]:
+        """最近一次打开失败的原因；None 表示连接可用。"""
+        return self._last_error
 
     def is_available(self) -> bool:
         """数据库是否可用。"""

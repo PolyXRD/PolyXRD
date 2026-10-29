@@ -31,11 +31,34 @@ CRITICAL_INTERNAL = (
 )
 
 
-def lock_status(path: str) -> Tuple[bool, Optional[str]]:
-    """(是否被占用, 错误描述)。文件不存在 -> (False, None)。
+def dir_writable(directory: os.PathLike[str] | str) -> Optional[bool]:
+    """目录能否新建文件。None = 探测本身失败（不参与结论）。"""
+    try:
+        probe = Path(directory) / ".polyxrd_write_probe"
+        probe.write_bytes(b"")
+        probe.unlink()
+        return True
+    except OSError:
+        return False
+    except Exception:  # noqa: BLE001
+        return None
 
-    只有 PermissionError 才算"被占用" —— Windows 上的共享冲突
-    (映像被别的进程映射) 就报 Errno 13 / winerror 32。
+
+def lock_status(path: str) -> Tuple[bool, Optional[str]]:
+    """(是否被占用, 诊断描述)。文件不存在 -> (False, None)。
+
+    判别分三种，**不能只看异常类型**：
+
+    * ``winerror == 32`` (ERROR_SHARING_VIOLATION) —— 确凿的共享冲突，
+      有别的进程按独占/写方式拿着它。
+    * ``winerror is None`` / ``5`` (拒绝访问) —— CPython 走 io 时经常只带
+      ``errno=13`` 而无 winerror，此时用"所在目录能否写新文件"来分辨：
+      目录不可写 = 权限不足（装到 Program Files 且非管理员）；目录可写
+      却仍打不开 = 确实被映射着（典型就是**本进程自己映射着自己**）。
+    * 其它 OSError —— 路径是目录 / 超长路径，不算占用。
+
+    早先只看"是不是 PermissionError"，于是把"没写权限"和"自己映射自己"
+    全报成了"被占用"，诊断结论一路指向"重启电脑"（v4.4.0 实测踩过）。
     """
     if not os.path.exists(path):
         return False, None
@@ -44,9 +67,29 @@ def lock_status(path: str) -> Tuple[bool, Optional[str]]:
             pass
         return False, None
     except PermissionError as exc:
-        return True, f"PermissionError(winerror={getattr(exc, 'winerror', None)})"
+        winerror = getattr(exc, "winerror", None)
+        if winerror == 32:
+            return True, "PermissionError(winerror=32, 共享冲突)"
+        if dir_writable(Path(path).parent) is False:
+            return False, f"无写权限(winerror={winerror})"
+        return True, f"PermissionError(winerror={winerror}, 已被映射)"
     except OSError as exc:  # 路径是目录 / 超长路径之类, 不算被占用
         return False, f"{type(exc).__name__}(winerror={getattr(exc, 'winerror', None)})"
+
+
+def unwritable_paths(exe_path: str) -> List[str]:
+    """返回当前用户**没有写权限**的关键文件（只读安装目录的特征）。"""
+    out: List[str] = []
+    for p in critical_paths(exe_path):
+        locked, why = lock_status(p)
+        if not locked and why and why.startswith("无写权限"):
+            out.append(p)
+    return out
+
+
+def install_dir_writable(exe_path: str) -> Optional[bool]:
+    """安装目录能否创建文件。None = 探测本身失败。"""
+    return dir_writable(Path(exe_path).resolve().parent)
 
 
 def critical_paths(exe_path: str) -> List[str]:
@@ -178,15 +221,22 @@ def diagnose(exe_path: str, extra_note: Optional[str] = None) -> Dict[str, objec
     """一次性产出一份可写进日志/弹窗的诊断结果。"""
     locked = locked_paths(exe_path)
     holders = lock_holders([p for p, _ in locked]) if locked else []
+    me = os.getpid()
+    # 自己映射着自己的 exe/dll 是**必然**的, Restart Manager 必然把自己报出来;
+    # 那不是"别人占着", 混进结论里只会让人去杀自己的进程。
+    others = [h for h in holders if h[2] != me]
     return {
         "exe": exe_path,
         "frozen": bool(getattr(sys, "frozen", False)),
         "frozen_dir": getattr(sys, "_MEIPASS", None),
         "cwd": os.getcwd(),
-        "pid": os.getpid(),
+        "pid": me,
         "python": sys.version.split()[0],
         "locked": locked,
-        "holders": holders,
+        "holders": others,
+        "holders_self": [h for h in holders if h[2] == me],
+        "unwritable": unwritable_paths(exe_path),
+        "install_dir_writable": install_dir_writable(exe_path),
         "note": extra_note,
     }
 
@@ -195,6 +245,7 @@ def format_report(info: Dict[str, object]) -> str:
     lines = ["=" * 70, "PolyXRD 启动诊断", "=" * 70]
     for k in ("pid", "frozen", "python", "exe", "frozen_dir", "cwd", "note"):
         lines.append(f"{k:<11}: {info.get(k)}")
+    lines.append(f"install dir writable: {info.get('install_dir_writable')}")
     locked = info.get("locked") or []
     lines.append(f"locked files: {len(locked)}")
     for path, why in locked:  # type: ignore[misc]
@@ -205,5 +256,23 @@ def format_report(info: Dict[str, object]) -> str:
         for app, image, pid in holders:  # type: ignore[misc]
             lines.append(f"  - {app or image} pid={pid}")
     elif locked:
-        lines.append("占用进程: 未能识别 (可能需要管理员权限)")
+        self_mapped = all("已被映射" in str(why) for _, why in locked)  # type: ignore[misc]
+        if self_mapped or info.get("holders_self"):
+            lines.append(
+                "占用进程: 只有本进程自身 (自己映射自己的 exe/dll, 属正常) "
+                "-> 不存在外部残留进程"
+            )
+        else:
+            lines.append("占用进程: 未能识别")
+    unwritable = info.get("unwritable") or []
+    if unwritable:
+        # 与"被占用"区分开: 这两种情况的处置完全不同（一个杀进程/重启，
+        # 一个装到可写目录或以管理员运行），混在一起只会误导。
+        lines.append(f"无写权限的文件: {len(unwritable)}")
+        for path in unwritable:  # type: ignore[misc]
+            lines.append(f"  - {path}")
+        lines.append(
+            "  提示: 程序装在只读目录 (如 C:\\Program Files) 且当前不是管理员。"
+            "数据目录改到 ~/.polyxrd 即可，无需提权运行。"
+        )
     return "\n".join(lines)
