@@ -16,9 +16,23 @@ param()
 $ErrorActionPreference = 'Stop'
 Set-Location 'D:/Project/XRD/PolyXRD'
 
-# PortableGit on PATH (pwsh 7 环境默认没有 git; GCM 内部也要定位 git.exe)
-$gitBin = 'C:\Users\Administrator\.workbuddy\binaries\PortableGit\versions\1.2.0\mingw64\bin'
-if (Test-Path $gitBin) { $env:PATH = "$gitBin;$env:PATH" }
+# git.exe 定位 (v4.5.0 修): 原先硬编码 PortableGit 1.2.0 的路径, 升级到 1.3.0 后
+# 该目录不存在 -> `git credential fill` 起不来 -> 报 "An error occurred trying to start
+# process 'git.exe'"。改为按候选列表探测, 并把 `git` 自身能否解析也算命中, 避免下次
+# PortableGit 再升版本又失效。
+$gitCandidates = @(
+  'C:\Users\Administrator\.workbuddy\binaries\PortableGit\current\mingw64\bin',
+  'C:\Users\Administrator\.workbuddy\binaries\PortableGit\versions\1.3.0\mingw64\bin',
+  'C:\Users\Administrator\.workbuddy\binaries\PortableGit\versions\1.2.0\mingw64\bin',
+  'C:\Program Files\Git\cmd'
+)
+$gitBin = $gitCandidates | Where-Object { Test-Path (Join-Path $_ 'git.exe') } | Select-Object -First 1
+if (-not $gitBin) {
+  $g = (Get-Command git.exe -ErrorAction SilentlyContinue).Source
+  if ($g) { $gitBin = Split-Path $g -Parent }
+}
+if ($gitBin) { $env:PATH = "$gitBin;$env:PATH"; Write-Host "git found at $gitBin" }
+else { throw 'git.exe 未找到: 无法读取凭据' }
 
 $owner   = 'PolyXRD'
 $repo    = 'PolyXRD'
