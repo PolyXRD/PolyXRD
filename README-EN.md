@@ -38,6 +38,18 @@ Core design philosophy:
 
 ---
 
+## 🚧 In Development v4.7.0 (2026-10-31 · unreleased)
+
+**Sequential multi-phase identification: confirm a phase → re-search the residual peaks → confirm the next** (see [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.7.0 and [docs/序贯多相鉴定-v4.7.0.md](docs/序贯多相鉴定-v4.7.0.md)):
+
+- **Confirm from the candidate list to advance**: highlight a row and press “Confirm & Search Next”, or simply double-click it → the peaks that phase explains leave the problem → the remaining unexplained peaks are searched again → candidates for the next phase are listed. The loop runs until no peak is left, with every phase confirmed by the user.
+- **Intensity residual bookkeeping** (`services/sequential.py`, following the layering of XinMatch `core/search/sequential.py`, reimplemented on this project's models): per-phase scale factor by least squares in count space, then peak-by-peak subtraction `I_obs − Σ scale·r`. A peak counts as explained only when its residual drops below 5 % of its own intensity; partially explained peaks stay in the residual set with their leftover intensity (overlaps are real physics). Lines weaker than 1 % of the strongest peak are neither searched nor counted in the coverage denominator.
+- **Status strip + undo**: `2 phase(s) confirmed ｜ 12/25 peaks left ｜ 84.3 % intensity explained`; “Undo Last” pops the last phase and re-searches the returned residual peaks (back to full-pattern search at zero phases). Confirmed phases stay in the pattern overlay instead of being wiped by every residual round.
+- **Same database throughout**: the data source is passed through, so an external library used in round one is used in every later round; confirmed phases are removed from the new candidate list (deduplicated by `db_id` first).
+- **Tests**: 22 new cases in `tests/test_sequential_phase.py` (bookkeeping / state machine / VM / view), plus a real-pattern smoke run on sample 3-1 (Zincite 82.6 % → Hornblende +1.6 % → undo returns exactly). Full regression: **1904 passed / 5 skipped / 0 failed**.
+
+---
+
 ## 🚧 In Development v4.6.0 (2026-10-31 · unreleased)
 
 **External databases: unlimited count, multiple types, selected database drives every search** (details in Chinese: [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.6.0 and [docs/外挂数据库-多库挂载与选中检索-v4.6.0.md](docs/外挂数据库-多库挂载与选中检索-v4.6.0.md)):

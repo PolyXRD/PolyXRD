@@ -380,6 +380,55 @@ class MainViewModel(QObject):
         self._phase_vm.select_phase(phase)
         self._refinement_vm.set_phases(self._phase_vm.selected_phases)
 
+    def confirm_phase_sequence(
+        self,
+        result,
+        *,
+        element_filter: Optional[dict] = None,
+        top_n: int = 20,
+        tolerance: float = 0.30,
+        db_source: str = "builtin",
+    ):
+        """序贯多相鉴定: 确认一相并对剩余未解释峰继续检索 (v4.7.0)。
+
+        与 :meth:`select_phase` 的区别: 那个是"选中去精修", 这个是"确认并
+        继续找下一相", 两条路径互不替代。
+        """
+        data = self.current_data
+        if data is None:
+            self.error_occurred.emit("请先加载数据")
+            return None
+        self.status_changed.emit(tr("status.identifying_phases"))
+        return self._phase_vm.confirm_phase_sequence(
+            data,
+            result,
+            element_filter=element_filter,
+            top_n=top_n,
+            tolerance=tolerance,
+            db_source=db_source,
+        )
+
+    def undo_phase_sequence(
+        self,
+        *,
+        element_filter: Optional[dict] = None,
+        top_n: int = 20,
+        tolerance: float = 0.30,
+        db_source: str = "builtin",
+    ):
+        """序贯多相鉴定: 撤销最近一次确认并重新检索 (v4.7.0)。"""
+        data = self.current_data
+        if data is None:
+            self.error_occurred.emit("请先加载数据")
+            return None
+        return self._phase_vm.undo_phase_sequence(
+            data,
+            element_filter=element_filter,
+            top_n=top_n,
+            tolerance=tolerance,
+            db_source=db_source,
+        )
+
     # ------------------------------------------------------------------
     # 公共方法 - Rietveld精修
     # ------------------------------------------------------------------

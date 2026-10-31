@@ -15,6 +15,11 @@ from polyxrd.models.phase import Phase, PhaseMatchResult
 from polyxrd.services.peak_finder import PeakFinder
 from polyxrd.services.phase_identifier import PhaseIdentifier
 from polyxrd.services.profile_fitting import ProfileFittingService
+from polyxrd.services.sequential import (
+    SequentialPhaseIdentifier,
+    phase_key,
+    residual_peak_list,
+)
 
 
 class PhaseViewModel(QObject):
@@ -40,6 +45,9 @@ class PhaseViewModel(QObject):
     # v3.2.0: 外挂库建索引进度 (done, total, stage)。首次挂百万相级的
     # XinMatch 库要建 5~10 min 索引, 界面必须知道它还活着。
     index_progress = Signal(int, int, str)
+    # v4.7.0: 序贯多相鉴定状态 (确认第 N 相 / 剩余峰 / 解释覆盖率)。
+    # payload = dict, 见 `sequence_payload`; 视图据此刷状态条与按钮可用性。
+    sequence_changed = Signal(object)
 
     def __init__(self) -> None:
         super().__init__()
@@ -53,6 +61,8 @@ class PhaseViewModel(QObject):
         self._selected_phases: list[Phase] = []
         # P2-2: 非晶/近非晶诊断 (只用于解释"没匹配上", 不参与也不抑制检索)
         self._amorphous_info: Optional[dict] = None
+        # v4.7.0: 序贯鉴定的账本 (None = 尚未开始)。每次整谱检索都会重置它。
+        self._sequence: Optional[SequentialPhaseIdentifier] = None
 
     @property
     def peaks(self) -> Optional[PeakList]:
@@ -78,6 +88,16 @@ class PhaseViewModel(QObject):
         判定 = 谱图弥散 AND 未获可接受匹配, 二者缺一不可。
         """
         return self._amorphous_info
+
+    @property
+    def sequence(self) -> Optional[SequentialPhaseIdentifier]:
+        """v4.7.0: 序贯鉴定账本 (None = 尚未开始 / 已被整谱检索重置)。"""
+        return self._sequence
+
+    @property
+    def sequence_active(self) -> bool:
+        """是否已确认至少一相 (视图据此决定刷新候选列表时保留勾选)。"""
+        return self._sequence is not None and len(self._sequence) > 0
 
     def reload_databases(self) -> None:
         """外挂数据库被导入/取消挂载后, 丢掉持有旧路径的缓存。
@@ -402,6 +422,11 @@ class PhaseViewModel(QObject):
         if self._peaks is None or len(self._peaks) == 0:
             self.error.emit(tr("error.no_peaks"))
             return
+        # v4.7.0: 任何"整谱/标记峰"检索都是新起点, 序贯账本必须作废 ——
+        # 否则上一轮的已确认相会继续参与残差判定, 与本次候选集不同源。
+        if self._sequence is not None:
+            self._sequence = None
+            self.sequence_changed.emit(self.sequence_payload())
         use_peaks = self._peaks
         if marked_peaks is not None:
             from polyxrd.services.foam import marked_peak_indices
@@ -464,6 +489,7 @@ class PhaseViewModel(QObject):
         self._matched_phases = []
         self._selected_phases = []
         self._amorphous_info = None
+        self._sequence = None
 
     def restore_state(
         self,
@@ -479,6 +505,7 @@ class PhaseViewModel(QObject):
         self._peaks = peaks
         self._matched_phases = list(results or [])
         self._selected_phases = list(selected or [])
+        self._sequence = None
         if self._peaks is not None:
             self.peaks_detected.emit(self._peaks)
         self.phase_identified.emit(list(self._matched_phases))
@@ -555,6 +582,192 @@ class PhaseViewModel(QObject):
             marked_peaks=residual_2t,
         )
 
+    # ── v4.7.0: 序贯 (迭代式) 多相鉴定 ──────────────────────
+    def sequence_payload(self) -> dict:
+        """序贯状态快照 (纯数据; 视图只负责排版)。"""
+        seq = self._sequence
+        total = len(self._peaks.peaks) if self._peaks is not None else 0
+        if seq is None:
+            return {"active": False, "n_phases": 0, "residual": 0,
+                    "total": total, "ignored": 0, "covered": 0.0,
+                    "phases": [], "gains": []}
+        return {
+            "active": len(seq) > 0,
+            "n_phases": len(seq),
+            "residual": seq.n_residual_peaks,
+            "total": seq.n_peaks,
+            "ignored": seq.n_ignored,
+            "covered": seq.covered_fraction,
+            "phases": seq.phases,
+            "gains": [s.gain for s in seq.selections],
+        }
+
+    def _ensure_sequence(self,
+                         tolerance: float) -> Optional[SequentialPhaseIdentifier]:
+        """取当前序贯账本; 峰表或容差变了就按新口径重建并重放已确认相。
+
+        容差影响配对准入门槛, 因此它一变, 之前算出的残差就不再等价 —— 重建
+        比重算增量更简单, 也不可能留下不一致状态。
+        """
+        if self._peaks is None or len(self._peaks) == 0:
+            self.error.emit(tr("error.no_peaks"))
+            return None
+        seq = self._sequence
+        if (seq is None or seq.n_peaks != len(self._peaks)
+                or abs(seq.tolerance - float(tolerance)) > 1e-9):
+            keep = seq.phases if seq is not None else []
+            seq = SequentialPhaseIdentifier(self._peaks, tolerance=tolerance)
+            for phase in keep:
+                seq.select(phase)
+            self._sequence = seq
+        return seq
+
+    def confirm_phase_sequence(
+        self,
+        data,
+        result,
+        *,
+        element_filter: Optional[dict] = None,
+        top_n: int = 20,
+        tolerance: float = 0.30,
+        db_source: str = "builtin",
+    ) -> Optional[list[PhaseMatchResult]]:
+        """确认 *result* 这一相, 并对**剩余未解释峰**继续检索 (核心一步)。
+
+        流程 (v4.7.0):
+
+        1. 把相登记进序贯账本: 重算该相的峰配对、比例因子与逐峰残差;
+        2. 同步勾选集合 —— 已确认相留在谱图叠加里, 用户能一路看到"越叠越
+           像"的过程;
+        3. 用剩余峰调**同一个引擎与同一个数据源**再检索 (数据源绝不能被偷偷
+           换回内置库, 否则两轮候选不可比);
+        4. 从新候选里剔除已确认相 —— 用户要看的是"还剩下什么"。
+
+        重复确认同一相是幂等的 (双击/连按回车不会重复入账)。
+
+        Returns:
+            供候选列表显示的下一轮候选; ``None`` = 出错/无该相 (错误已 emit);
+            ``[]`` = 剩余峰已被完全解释 (候选列表清空)。
+        """
+        phase = getattr(result, "phase", None) if result is not None else None
+        if phase is None:
+            return None
+        seq = self._ensure_sequence(tolerance)
+        if seq is None:
+            return None
+        name = getattr(phase, "name", "") or getattr(phase, "formula", "")
+        if seq.contains(phase):
+            self.info.emit(tr("vw.phase_view.seq_already_confirmed", name=name))
+            return None
+
+        covered_before = seq.covered_fraction
+        selection = seq.select(phase)
+        gain = selection.covered_fraction - covered_before
+        # 勾选 = 谱图叠加显示。MAX_SELECTED 上限由 update_selection 兜住:
+        # 超限时该相仍记在序贯账本里, 只是不再参与叠加绘制。
+        self.update_selection(phase, True)
+        self.sequence_changed.emit(self.sequence_payload())
+
+        # 增量提示: 确认错相时它会"顺手"扣掉别人的峰 (残差是减法, 不会自
+        # 我校验)。几乎不解释新强度的相多半是重复条目或假相, 必须让用户看见。
+        if len(seq) > 1 and gain < 0.01:
+            self.info.emit(tr("vw.phase_view.seq_low_gain", name=name,
+                              gain=f"{gain * 100:.1f}"))
+
+        residual = residual_peak_list(seq)
+        if not residual.peaks:
+            self._matched_phases = []
+            self.phase_identified.emit([])
+            self.sequence_changed.emit(self.sequence_payload())
+            self.info.emit(tr("vw.phase_view.seq_no_residual"))
+            return []
+
+        results = self._identify_with_source(
+            data,
+            peaks=residual,
+            element_filter=element_filter,
+            top_n=top_n,
+            tolerance=tolerance,
+            db_source=db_source,
+        )
+        if results is None:
+            return None
+        confirmed = {phase_key(p) for p in seq.phases}
+        kept = [
+            r for r in results
+            if r is not None and getattr(r, "phase", None) is not None
+            and phase_key(r.phase) not in confirmed
+        ]
+        self._matched_phases = kept
+        self.phase_identified.emit(kept)
+        self.sequence_changed.emit(self.sequence_payload())
+        return kept
+
+    def undo_phase_sequence(
+        self,
+        data,
+        *,
+        element_filter: Optional[dict] = None,
+        top_n: int = 20,
+        tolerance: float = 0.30,
+        db_source: str = "builtin",
+    ) -> Optional[list[PhaseMatchResult]]:
+        """撤销最近一次确认, 并按归还后的剩余峰重新检索。
+
+        撤到 0 相时不是"在几乎全谱上再检索一次", 而是回到整谱检索起点
+        (同时作废序贯账本), 这样候选列表与首次检索逐字一致。
+        """
+        seq = self._sequence
+        if seq is None or len(seq) == 0:
+            self.info.emit(tr("vw.phase_view.seq_empty"))
+            return None
+        removed = seq.undo()
+        if removed is not None:
+            self.update_selection(removed, False)
+            self.info.emit(tr("vw.phase_view.seq_undone",
+                              name=getattr(removed, "name", "") or ""))
+        if len(seq) == 0:
+            self.sequence_changed.emit(self.sequence_payload())
+            self.identify_phases(
+                data,
+                element_filter=element_filter,
+                top_n=top_n,
+                tolerance=tolerance,
+                db_source=db_source,
+            )
+            return list(self._matched_phases)
+        self.sequence_changed.emit(self.sequence_payload())
+        residual = residual_peak_list(seq)
+        if not residual.peaks:
+            self._matched_phases = []
+            self.phase_identified.emit([])
+            return []
+        results = self._identify_with_source(
+            data,
+            peaks=residual,
+            element_filter=element_filter,
+            top_n=top_n,
+            tolerance=tolerance,
+            db_source=db_source,
+        )
+        if results is None:
+            return None
+        confirmed = {phase_key(p) for p in seq.phases}
+        kept = [
+            r for r in results
+            if r is not None and getattr(r, "phase", None) is not None
+            and phase_key(r.phase) not in confirmed
+        ]
+        self._matched_phases = kept
+        self.phase_identified.emit(kept)
+        return kept
+
+    def reset_sequence(self, *, notify: bool = True) -> None:
+        """放弃序贯进度 (候选列表与勾选不动)。"""
+        self._sequence = None
+        if notify:
+            self.sequence_changed.emit(self.sequence_payload())
+
     def add_custom_phase(self, phase: Phase) -> None:
         """添加自定义物相"""
         self._identifier.add_phase(phase)
@@ -580,6 +793,10 @@ class PhaseViewModel(QObject):
         """
         mount = self._resolve_mount(db_source)
         engine = (mount.engine if mount is not None else "") or ""
+        # v4.7.0: Profile Fitting 是另一套候选口径, 序贯账本按新口径作废。
+        if self._sequence is not None:
+            self._sequence = None
+            self.sequence_changed.emit(self.sequence_payload())
         try:
             if not engine:
                 # 内置库 / 无法解析的源: 沿用原路径 (118 相穷举)

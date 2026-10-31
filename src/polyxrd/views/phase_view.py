@@ -230,6 +230,26 @@ class PhaseView(QWidget):
         )
         right_panel.addWidget(self._method_label)
 
+        # v4.7.0: 序贯鉴定状态条 (已确认 N 相 ｜ 剩余 M/总 峰 ｜ 已解释 X% 强度)
+        # + 撤销。未开始序贯时整行隐藏, 不占版面。
+        self._seq_row = QHBoxLayout()
+        self._seq_row.setSpacing(6)
+        self._seq_label = QLabel("")
+        self._seq_label.setStyleSheet(
+            "QLabel { font-size: 11px; color: #00695c; font-weight: bold; "
+            "padding: 2px 4px; background-color: #e0f2f1; border-radius: 3px; }"
+        )
+        self._seq_label.setWordWrap(True)
+        self._seq_label.setVisible(False)
+        self._seq_row.addWidget(self._seq_label, stretch=1)
+        self._btn_undo_seq = QPushButton(tr("vw.phase_view.btn_undo_phase"))
+        self._btn_undo_seq.setFixedHeight(22)
+        self._btn_undo_seq.setToolTip(tr("vw.phase_view.btn_undo_phase_tip"))
+        self._btn_undo_seq.setEnabled(False)
+        self._btn_undo_seq.clicked.connect(self._on_undo_phase)
+        self._seq_row.addWidget(self._btn_undo_seq)
+        right_panel.addLayout(self._seq_row)
+
         self._candidate_list = QListWidget()
         self._candidate_list.setMaximumHeight(150)
         self._candidate_list.itemClicked.connect(self._on_candidate_clicked)
@@ -243,6 +263,21 @@ class PhaseView(QWidget):
         right_panel.addWidget(self._candidate_list, stretch=1)
 
         btn_row = QHBoxLayout()
+        # v4.7.0: 序贯确认 (确认当前行 → 剩余峰自动续检索)。与右侧"选中物相 →"
+        # (去精修) 是两条独立路径, 按钮文案与配色都刻意区分。
+        self._btn_confirm_next = QPushButton(tr("vw.phase_view.btn_confirm_next"))
+        self._btn_confirm_next.setFixedHeight(28)
+        self._btn_confirm_next.setStyleSheet(
+            "QPushButton { background-color: #00897b; color: white; font-weight: bold; padding: 4px 10px; }"
+            "QPushButton:hover { background-color: #00695c; }"
+            "QPushButton:disabled { background-color: #bdbdbd; }"
+        )
+        self._btn_confirm_next.setToolTip(tr("vw.phase_view.btn_confirm_next_tip"))
+        # 没有候选就谈不上"确认" → 初始置灰, 候选填充后由 _on_phases_updated 打开
+        self._btn_confirm_next.setEnabled(False)
+        self._btn_confirm_next.clicked.connect(self._on_confirm_next)
+        btn_row.addWidget(self._btn_confirm_next)
+
         self._btn_select = QPushButton(tr("vw.phase_view.btn_select_phase"))
         self._btn_select.setFixedHeight(28)
         self._btn_select.setStyleSheet(
@@ -302,6 +337,11 @@ class PhaseView(QWidget):
         # M21: 选中相集合变更 → 刷新叠加
         pvm = self._vm._phase_vm
         pvm.selection_changed.connect(self._on_selection_changed)
+        # v4.7.0: 序贯鉴定状态 (确认第 N 相 / 剩余峰 / 覆盖率)
+        pvm.sequence_changed.connect(self._on_sequence_changed)
+        # 双击候选 = 确认该相并继续检索 (与参考实现 Match!/XinMatch 习惯一致:
+        # 候选列表双击即"加入匹配列表")。
+        self._candidate_list.itemDoubleClicked.connect(self._on_confirm_next)
 
     # ------------------------------------------------------------------
     # 元素过滤对话框
@@ -339,6 +379,13 @@ class PhaseView(QWidget):
         self._btn_identify.setText(tr("vw.phase_view.btn_traditional"))
         self._btn_identify.setToolTip(tr("vw.phase_view.tip_traditional"))
         self._btn_quick_identify.setText(tr("vw.phase_view.btn_quick"))
+        self._btn_confirm_next.setText(tr("vw.phase_view.btn_confirm_next"))
+        self._btn_confirm_next.setToolTip(
+            tr("vw.phase_view.btn_confirm_next_tip"))
+        self._btn_undo_seq.setText(tr("vw.phase_view.btn_undo_phase"))
+        self._btn_undo_seq.setToolTip(tr("vw.phase_view.btn_undo_phase_tip"))
+        # 序贯状态条按当前语言重拼 (无进度时 _on_sequence_changed 会隐藏它)
+        self._on_sequence_changed(self._vm._phase_vm.sequence_payload())
         self._btn_select.setText(tr("vw.phase_view.btn_select_phase"))
         self._btn_auto_mix.setText(tr("vw.phase_view.btn_auto_mix"))
         self._btn_auto_mix.setToolTip(tr("vw.phase_view.tip_auto_mix"))
@@ -717,6 +764,79 @@ class PhaseView(QWidget):
                 db_source=self._current_db_source(),
             )
 
+    # ── v4.7.0: 序贯 (迭代式) 多相鉴定 ─────────────────────
+    def _on_confirm_next(self, *args) -> None:
+        """确认候选列表当前行, 并对剩余未解释峰继续检索。
+
+        触发方式: 按钮「确认并继续检索」/ 候选行双击。确认后候选列表被换成
+        "还剩下什么" 的答案, 已确认相留在谱图叠加里; 重复确认同一相是幂等的。
+        """
+        item = self._candidate_list.currentItem()
+        if args and isinstance(args[0], QListWidgetItem):
+            item = args[0]
+            self._candidate_list.setCurrentItem(item)
+        if item is None:
+            QMessageBox.information(
+                self, tr("vw.phase_view.msg_tip"), tr("vw.phase_view.msg_pick_phase"))
+            return
+        result = item.data(Qt.ItemDataRole.UserRole)
+        if result is None:
+            return
+        with busy(self, tr("busy.identify")) as acquired:
+            if not acquired:
+                return
+            self._current_method = "fom"
+            self._vm.confirm_phase_sequence(
+                result,
+                element_filter=self._filter_dict if self._filter_dict else None,
+                top_n=20,
+                tolerance=self._tolerance_spin.value(),
+                db_source=self._current_db_source(),
+            )
+
+    def _on_undo_phase(self) -> None:
+        """撤销最近一次序贯确认, 并按归还后的剩余峰重新检索。"""
+        pvm = self._vm._phase_vm
+        if pvm.sequence is None or len(pvm.sequence) == 0:
+            return
+        with busy(self, tr("busy.identify")) as acquired:
+            if not acquired:
+                return
+            self._current_method = "fom"
+            self._vm.undo_phase_sequence(
+                element_filter=self._filter_dict if self._filter_dict else None,
+                top_n=20,
+                tolerance=self._tolerance_spin.value(),
+                db_source=self._current_db_source(),
+            )
+
+    def _on_sequence_changed(self, payload: dict) -> None:
+        """序贯状态条: 已确认 N 相 ｜ 剩余峰 ｜ 覆盖率; 并同步撤销按钮可用性。"""
+        payload = payload or {}
+        active = bool(payload.get("active"))
+        self._btn_undo_seq.setEnabled(active)
+        self._seq_label.setVisible(active)
+        if not active:
+            self._seq_label.clear()
+            return
+        text = tr(
+            "vw.phase_view.seq_status",
+            n=payload.get("n_phases", 0),
+            residual=payload.get("residual", 0),
+            total=payload.get("total", 0),
+            covered=f"{float(payload.get('covered', 0.0)) * 100:.1f}",
+        )
+        if payload.get("ignored"):
+            text += tr("vw.phase_view.seq_ignored", ignored=payload["ignored"])
+        if payload.get("residual", 0) == 0:
+            text += tr("vw.phase_view.seq_done")
+        self._seq_label.setText(text)
+        names = " → ".join(
+            getattr(p, "name", "") or getattr(p, "formula", "")
+            for p in payload.get("phases", [])
+        )
+        self._seq_label.setToolTip(names)
+
     def _on_quick_identify(self) -> None:
         """快速识别（无元素过滤）"""
         with busy(self, tr("busy.identify")) as acquired:
@@ -742,19 +862,28 @@ class PhaseView(QWidget):
         self._candidate_list.clear()
         self._current_results = phase_results
 
-        # 清空上次勾选, 避免旧叠加残留
-        self._vm._phase_vm.clear_selection()
+        pvm = self._vm._phase_vm
+        # 清空上次勾选, 避免旧叠加残留 —— 但序贯确认后的每轮残差检索不能清:
+        # 已确认相必须留在叠加里, 否则用户每确认一相, 谱图叠加就被打回原形。
+        if not pvm.sequence_active:
+            pvm.clear_selection()
 
         if not phase_results:
-            # P2-2: 没匹配上时, 若谱图本身是弥散包络 (近非晶), 说明这是物理无解
-            # 而非检索失败 —— 直接告诉用户, 免得反复换库空转。
-            info = getattr(self._vm, "amorphous_info", None) or {}
-            if info.get("level") == "amorphous":
-                self._method_label.setText(tr("vw.phase_view.no_match_amorphous"))
+            if pvm.sequence_active:
+                # 序贯到没有剩余峰可取相: 这不是"没匹配上", 是分析收敛了。
+                self._method_label.setText(tr("vw.phase_view.seq_all_explained"))
             else:
-                self._method_label.setText(tr("vw.phase_view.no_match"))
+                # P2-2: 没匹配上时, 若谱图本身是弥散包络 (近非晶), 说明这是
+                # 物理无解而非检索失败 —— 直接告诉用户, 免得反复换库空转。
+                info = getattr(self._vm, "amorphous_info", None) or {}
+                if info.get("level") == "amorphous":
+                    self._method_label.setText(
+                        tr("vw.phase_view.no_match_amorphous"))
+                else:
+                    self._method_label.setText(tr("vw.phase_view.no_match"))
             self._match_table.clear_table()
             self._refresh_overlay()
+            self._btn_confirm_next.setEnabled(False)
             try:
                 self._candidate_list.itemChanged.connect(self._on_candidate_toggled)
             except RuntimeError:
@@ -777,6 +906,15 @@ class PhaseView(QWidget):
         if _info.get("level") == "partially_amorphous":
             self._method_label.setText(
                 self._method_label.text() + tr("vw.phase_view.amorphous_partial")
+            )
+        # v4.7.0: 序贯轮次提示 —— 让用户看清这批候选是"剩余峰"上的结果,
+        # 不是整谱结果 (两者 FoM 不可直接比)。
+        if pvm.sequence_active:
+            self._method_label.setText(
+                self._method_label.text()
+                + tr("vw.phase_view.seq_round_hint",
+                     n=len(pvm.sequence),
+                     residual=pvm.sequence.n_residual_peaks)
             )
 
         for result in phase_results:
@@ -811,6 +949,8 @@ class PhaseView(QWidget):
             self._candidate_list.itemChanged.connect(self._on_candidate_toggled)
         except RuntimeError:
             pass
+        # v4.7.0: 有候选才谈得上"确认"
+        self._btn_confirm_next.setEnabled(True)
         self._refresh_overlay()
 
     # ── 候选列表的对称性信息 (空间群 / 晶胞) ─────────────────
@@ -1061,7 +1201,11 @@ class PhaseView(QWidget):
 
     def _on_clear_selection(self) -> None:
         """清空已选物相 (取消全部勾选, 保留候选列表)"""
-        self._vm._phase_vm.clear_selection()
+        pvm = self._vm._phase_vm
+        # v4.7.0: 序贯进度是"已确认相"的账本, 勾选被清空后账本必须一起作废 ——
+        # 否则状态条还宣称"已确认 2 相"、剩余峰按 2 相算, 而谱图叠加已经空了。
+        pvm.reset_sequence()
+        pvm.clear_selection()
         # 逐个取消勾选 (itemChanged → update_selection 幂等, 均未选则无副作用)
         try:
             self._candidate_list.itemChanged.disconnect(self._on_candidate_toggled)
@@ -1094,6 +1238,14 @@ class PhaseView(QWidget):
             self._method_label.setText("")
         if hasattr(self, "_match_table"):
             self._match_table.clear_table()
+        # v4.7.0: 序贯状态随数据一起复位 (reset_analysis 已清账本)
+        if hasattr(self, "_seq_label"):
+            self._seq_label.clear()
+            self._seq_label.setVisible(False)
+        if hasattr(self, "_btn_undo_seq"):
+            self._btn_undo_seq.setEnabled(False)
+        if hasattr(self, "_btn_confirm_next"):
+            self._btn_confirm_next.setEnabled(False)
         self._refresh_overlay()
 
     def _on_auto_mix(self) -> None:
