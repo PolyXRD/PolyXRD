@@ -7,7 +7,7 @@
     峰检测 &nbsp;·&nbsp; 多物相定性检索 &nbsp;·&nbsp; Rietveld 结构精修 &nbsp;·&nbsp; Le Bail 晶胞精修 &nbsp;·&nbsp; 指标化 &nbsp;·&nbsp; 3D 结构可视化 &nbsp;·&nbsp; 内置 COD 无机物库 (polyDB) + 多库外挂检索
   </p>
   <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v4.5.0-blue?style=flat-square" /></a>
+    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v4.7.0-blue?style=flat-square" /></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
     &nbsp;
@@ -15,7 +15,7 @@
     &nbsp;
     <img src="https://img.shields.io/badge/UI-PySide6%20(Qt6)-41cd52?style=flat-square" />
     &nbsp;
-    <img src="https://img.shields.io/badge/Tests-1764%20passed-brightgreen?style=flat-square" />
+    <img src="https://img.shields.io/badge/Tests-1904%20passed-brightgreen?style=flat-square" />
   </p>
   <p><i>🌐 English documentation: [README-EN.md](README-EN.md)</i></p>
 </div>
@@ -45,7 +45,7 @@
 
 ---
 
-## 🚧 开发中 v4.7.0（2026-10-31 · 未发布）
+## 🆕 最新版本 v4.7.0（2026-10-31 · 代码已提交，待构建）
 
 **序贯多相鉴定：确认一相 → 剩余峰再检索 → 再确认**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.7.0 与 [docs/序贯多相鉴定-v4.7.0.md](docs/序贯多相鉴定-v4.7.0.md)）：
 
@@ -57,7 +57,7 @@
 
 ---
 
-## 🚧 开发中 v4.6.0（2026-10-31 · 未发布）
+## v4.6.0（2026-10-31 · 随 v4.7.0 一并发布，无独立安装包）
 
 **外挂数据库：不限数量、多种类型、选中即用于检索**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.6.0 与 [docs/外挂数据库-多库挂载与选中检索-v4.6.0.md](docs/外挂数据库-多库挂载与选中检索-v4.6.0.md)）：
 
@@ -70,7 +70,7 @@
 
 ---
 
-## 🆕 最新版本 v4.5.0（2026-10-29 · 代码已提交，待构建）
+## 上一版 v4.5.0（2026-10-29 · 已发布）
 
 **装机可靠性修复 + 元素限定错位（P0）** —— 全部来自 4.4.0 实机使用的现场反馈，无算法口径改动（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.5.0）：
 
