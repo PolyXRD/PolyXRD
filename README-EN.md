@@ -38,6 +38,19 @@ Core design philosophy:
 
 ---
 
+## 🚧 In Development v4.6.0 (2026-10-31 · unreleased)
+
+**External databases: unlimited count, multiple types, selected database drives every search** (details in Chinese: [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.6.0 and [docs/外挂数据库-多库挂载与选中检索-v4.6.0.md](docs/外挂数据库-多库挂载与选中检索-v4.6.0.md)):
+
+- **Mount-type registry**: polyDB / PDF2 / user library become seed types; a new format registered via `register_kind()` automatically gets detection, probing, list rendering and search dispatch — no more if/elif edits in the mount module.
+- **No mount-count limit**: the same type can be mounted any number of times (internal disk + portable drive + custom subset + a colleague's export); list, dropdown and persistence have no cap (a 60-mount stress test passes).
+- **polyDB metadata + rename**: the manager shows dataset / variant / schema version / build date; user-added mounts can be renamed; built-in names stay tied to type/variant.
+- **Selected database drives every entry point**: traditional search, quick identify, marked-peak re-match, **residual-peak search**, **Profile Fitting**, **toolbar/menu Identify**, the refinement wizard's reference-library tab, and **MCP** all follow the current data source. Profile Fitting on an external library pre-screens 200 d-I candidates from that library first, then re-ranks them by full-profile fitting (exhaustive fitting over 521k phases is not feasible).
+- **Two real "selected but not used" bugs fixed**: the toolbar Identify action silently used the built-in 118-phase library regardless of the dropdown; residual search was hard-wired to `builtin`. Corrupt selected libraries now report "database cannot be used for search" instead of silently returning no candidates.
+- **Tests**: full regression **1881 passed / 5 skipped / 0 failed**; real 3-library polyDB smoke (mount → select → traditional search / Profile Fitting → MCP database selection) all green, see `tools/smoke_v460_mounts.py`.
+
+---
+
 ## 🆕 Latest Version v4.4.0 (2026-10-27 · pending release)
 
 **Rebuilt "find a structure in the reference library" panel + one-shot legacy config cleanup** — closes the v4.2 leftovers P4.2/P4.3 (details in Chinese: [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.4.0 and [docs/RELEASE-NOTES-v4.4.0.md](docs/RELEASE-NOTES-v4.4.0.md)):

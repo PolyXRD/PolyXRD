@@ -39,10 +39,20 @@ def _fake_db(monkeypatch, *, available=True, ready=True, matches=None):
 
 
 def test_legacy_signature_preserved():
+    """v4.3 的 5 个参数一个不少、顺序不变；v4.4 只在末尾追加可选 database。
+
+    旧客户端按位置/关键字调用前 5 个参数的行为完全兼容；MCP schema 多一个
+    可选字段属于向后兼容变更（客户端不传 → 用当前库，与旧"默认库"行为
+    在不手动切换库时一致）。
+    """
     from polyxrd.mcp_server.server import search_cod_by_d_peaks
 
-    params = list(inspect.signature(search_cod_by_d_peaks).parameters)
-    assert params == ["d_values", "intensities", "tolerance", "min_match", "limit"]
+    params = inspect.signature(search_cod_by_d_peaks).parameters
+    names = list(params)
+    assert names[:5] == ["d_values", "intensities", "tolerance", "min_match",
+                         "limit"]
+    assert names[5:] == ["database"]
+    assert params["database"].default == ""
 
 
 def test_no_mount_returns_json_not_exception(monkeypatch):

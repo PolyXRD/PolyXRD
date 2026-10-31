@@ -34,6 +34,7 @@ from polyxrd.config import AppConfig, get_config   # noqa: E402
 from polyxrd.i18n import tr                        # noqa: E402
 from polyxrd.i18n.translations import en_US, ja_JP, zh_CN  # noqa: E402
 from polyxrd.services import db_import, db_mounts  # noqa: E402
+from polyxrd.views.widgets import database_dialog  # noqa: E402
 from polyxrd.views.widgets.database_dialog import (  # noqa: E402
     DatabaseManagerDialog,
 )
@@ -78,9 +79,35 @@ def isolated(tmp_path, monkeypatch):
         if not meta_file.is_file():
             return {"ok": False, "rows": 0, "error": "polydb_not_ready",
                     "detail": str(p)}
-        meta = json.loads(meta_file.read_text(encoding="utf-8"))
+        raw = json.loads(meta_file.read_text(encoding="utf-8"))
+        build = raw.get("build")
+        built = ""
+        if isinstance(build, dict):
+            built = str(build.get("date") or build.get("started_at") or "")
+        elif build:
+            built = str(build)
+        built = built or str(raw.get("built") or "")
+        try:
+            schema = int(raw.get("schema_version") or 0)
+        except (TypeError, ValueError):
+            schema = 0
+        # v4.6: 真 probe 还会带归一化的 polyDB 元数据 (meta/dataset/built/
+        # schema_version, 见 db_mounts._read_polydb_meta)。这里按同一契约伪造,
+        # 让对话框元数据行的用例不被"读取器能不能开库"牵制。
+        meta = {
+            "format": str(raw.get("format") or ""),
+            "schema_version": schema,
+            "variant": str(raw.get("variant") or ""),
+            "dataset": str(raw.get("name") or raw.get("dataset") or ""),
+            "built": built,
+            "counts": raw.get("counts") or {},
+        }
         return {"ok": True, "rows": int((meta.get("counts") or {}).get("phases", 0)),
-                "size_mb": 1.0, "detail": f"variant={meta.get('variant', '?')}"}
+                "size_mb": 1.0, "detail": f"variant={meta.get('variant', '?')}",
+                "meta": meta,
+                "dataset": meta["dataset"],
+                "built": meta["built"],
+                "schema_version": meta["schema_version"]}
 
     monkeypatch.setattr(db_mounts, "_probe_polydb", _fake_probe_polydb)
     # 消息框静音 (测试里不弹窗)
@@ -88,6 +115,9 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: None)
     monkeypatch.setattr(QMessageBox, "question",
                         lambda *a, **k: QMessageBox.StandardButton.Yes)
+    # critical 也要静音: 它在 offscreen 下是**模态**的, 一旦某条异常路径
+    # 走到这里, 测试会卡死在 exec() 里而不是红掉 —— 这比失败更难查。
+    monkeypatch.setattr(QMessageBox, "critical", lambda *a, **k: None)
     db_mounts.clear_probe_cache()
     return store
 
@@ -127,6 +157,14 @@ def _make_polydb(root: Path, name: str, variant: str = "cod-inorg",
     }), encoding="utf-8")
     (d / "index.sqlite").write_bytes(b"")
     return d
+
+
+def _set_polydb_meta(path: Path, **fields) -> None:
+    """改写 polyDB 的 meta.json (给元数据行用例造数据集名/构建日期)。"""
+    f = path / "meta.json"
+    meta = json.loads(f.read_text(encoding="utf-8"))
+    meta.update(fields)
+    f.write_text(json.dumps(meta), encoding="utf-8")
 
 
 def _row_by_id(dlg: DatabaseManagerDialog, mount_id: str) -> dict | None:
@@ -360,6 +398,112 @@ def test_notice_keys_resolve_in_all_languages(qapp, isolated):
             )
 
 
+# ── 5. 多库规模 / 元数据 / 重命名 ─────────────────────────────
+
+def test_polydb_type_column_shows_variant(qapp, isolated, tmp_path):
+    """类型列带变体: 同类型挂多份时, 光写 "polyDB 库" 分不清是哪一份。"""
+    db = _make_polydb(tmp_path, "Mine.polyDB", variant="cod-full")
+    dlg = DatabaseManagerDialog()
+    dlg.mount_path(str(db))
+    idx = next(i for i, r in enumerate(dlg._rows) if r["path"] == str(db))
+    assert dlg._table.item(idx, 2).text() == tr(
+        "db_manager.type_variant", variant="cod-full")
+
+    pdf = _make_db(tmp_path / "p.sqlite", PDF2_DDL, PDF2_ROW, PDF2_INS)
+    dlg.mount_path(str(pdf))
+    pdf_idx = next(i for i, r in enumerate(dlg._rows) if r["kind"] == "pdf2")
+    assert dlg._table.item(pdf_idx, 2).text() == tr("db_manager.kind.pdf2"), (
+        "非 polyDB 行仍按类型名显示")
+
+
+def test_detail_meta_line_shows_polydb_metadata(qapp, isolated, tmp_path):
+    """详情区要讲清这份 polyDB 的数据集 / 变体 / 格式版本 / 构建日期。"""
+    db = _make_polydb(tmp_path, "Mine.polyDB", variant="cod-inorg")
+    _set_polydb_meta(db, name="COD-Inorg 2026.10",
+                     build={"date": "2026-10-21"}, schema_version=2)
+    dlg = DatabaseManagerDialog()
+    dlg.mount_path(str(db))
+    mid = next(r["id"] for r in dlg._rows if r["path"] == str(db))
+    _select(dlg, mid)
+
+    text = dlg._detail_meta.text()
+    assert "COD-Inorg 2026.10" in text
+    assert tr("db_manager.meta_line", variant="cod-inorg", schema="2",
+              built="2026-10-21") in text
+    assert not dlg._detail_meta.isHidden(), "有元数据时这一行必须显示"
+
+    # 非 polyDB (PDF2) 没有 meta: 这一行整行隐藏, 不能留下空占位。
+    pdf = _make_db(tmp_path / "p.sqlite", PDF2_DDL, PDF2_ROW, PDF2_INS)
+    dlg.mount_path(str(pdf))
+    _select(dlg, next(r["id"] for r in dlg._rows if r["kind"] == "pdf2"))
+    assert dlg._detail_meta.isHidden()
+
+
+def test_rename_custom_mount_persists_and_emits(qapp, isolated, tmp_path,
+                                                monkeypatch):
+    """自加库可以重命名: 立即刷新列表 + 落盘 + 通知下游刷新数据源。"""
+    db = _make_polydb(tmp_path, "Mine.polyDB")
+    dlg = DatabaseManagerDialog()
+    dlg.mount_path(str(db))
+    mid = next(r["id"] for r in dlg._rows if r["path"] == str(db))
+    _select(dlg, mid)
+    assert dlg._btn_rename.isEnabled(), "用户自加项应当可以重命名"
+
+    monkeypatch.setattr(database_dialog.QInputDialog, "getText",
+                        lambda *a, **k: ("My Library", True))
+    seen: list[int] = []
+    dlg.databases_changed.connect(lambda: seen.append(1))
+    dlg._on_rename()
+
+    assert seen, "改名后要通知物相页刷新数据源下拉"
+    assert db_mounts.get_mount(mid).label == "My Library"
+    persisted = json.loads(isolated.read_text(encoding="utf-8"))
+    rec = next(m for m in persisted["mounts"] if m["id"] == mid)
+    assert rec["label"] == "My Library", "改名必须落盘, 重开对话框还在"
+    row = _row_by_id(dlg, mid)
+    assert row is not None and "My Library" in dlg._display_name(row)
+
+
+def test_rename_disabled_for_builtin_mount(qapp, isolated):
+    """内置项的显示名由类型/变体决定, 不允许改名。"""
+    dlg = DatabaseManagerDialog()
+    idx = next(i for i, r in enumerate(dlg._rows) if r["builtin"])
+    dlg._table.selectRow(idx)
+    assert not dlg._btn_rename.isEnabled()
+
+
+def test_rename_rejects_empty_name(qapp, isolated, tmp_path, monkeypatch):
+    """输入框留空 = 手滑, 拒绝并提示; 不能静默恢复默认名或写成空串。"""
+    db = _make_polydb(tmp_path, "Mine.polyDB")
+    dlg = DatabaseManagerDialog()
+    dlg.mount_path(str(db))
+    mid = next(r["id"] for r in dlg._rows if r["path"] == str(db))
+    _select(dlg, mid)
+    monkeypatch.setattr(database_dialog.QInputDialog, "getText",
+                        lambda *a, **k: ("   ", True))
+    warnings: list[str] = []
+    monkeypatch.setattr(QMessageBox, "warning",
+                        lambda *a, **k: warnings.append(a[2]) or None)
+    dlg._on_rename()
+    assert warnings and tr("db_manager.rename_empty") in warnings[0]
+    assert db_mounts.get_mount(mid).label == "Mine.polyDB"
+
+
+def test_thirty_mounts_one_row_each_and_footer_counts(qapp, isolated, tmp_path):
+    """挂 30 份库: 一行一份不合并, footer 讲清"挂了几份 / 用哪份"。"""
+    folder = tmp_path / "many"
+    for i in range(30):
+        _make_polydb(folder, f"db-{i:02d}.polyDB", phases=i + 1)
+    dlg = DatabaseManagerDialog()
+    assert dlg.mount_path(str(folder)) is True
+
+    usable = [r for r in dlg._rows if r.get("kind") == "polydb" and r["ok"]]
+    assert len(usable) == 30
+    assert len({r["id"] for r in usable}) == 30, "每份库必须有自己的数据源 id"
+    assert dlg._table.rowCount() == len(dlg._rows)
+    assert tr("db_manager.mounted_count", n=30, active="—") in dlg._current_lbl.text()
+
+
 def test_new_keys_resolve_in_all_languages(qapp, isolated):
     """列表 / 详情 / 包提示文案三语齐全 (缺键会直接显示成键名)。"""
     keys = [
@@ -371,6 +515,13 @@ def test_new_keys_resolve_in_all_languages(qapp, isolated):
         "db_mounts.kind.polydb_inorg", "db_mounts.kind.polydb_full",
         "db_mounts.type.polydb", "db_mounts.pkg_free",
         "status.internal_tooltip",
+        # v4.6 多库体验 / 重命名 / 元数据 / 物相页接线用的新键
+        "db_manager.btn_rename", "db_manager.rename_title",
+        "db_manager.rename_empty", "db_manager.rename_done",
+        "db_manager.meta_line", "db_manager.type_variant",
+        "db_manager.mounted_count",
+        "vw.phase_view.btn_manage_db", "vw.phase_view.tip_manage_db",
+        "vw.phase_view.db_profile_external", "error.db_unusable",
     ]
     for mod in (zh_CN, en_US, ja_JP):
         for k in keys:

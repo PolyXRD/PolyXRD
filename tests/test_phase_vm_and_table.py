@@ -170,6 +170,10 @@ class TestPolyDbDispatch:
                       builtin=False, variant="cod-full")
         monkeypatch.setattr(db_mounts, "resolve_mount",
                             lambda mid: mount if mid == "polydb:deadbeef" else None)
+        # v4.6.0: 分发前会 probe 选中的库 (本用例的目录只是"存在"的空壳,
+        # 真实探测必然失败) —— 这里只测分发参数, 探测结果按可用处理。
+        monkeypatch.setattr(db_mounts, "probe",
+                            lambda m, use_cache=True: {"ok": True, "rows": 1})
 
         vm = self._vm_with_peaks()
         calls: list[dict] = []

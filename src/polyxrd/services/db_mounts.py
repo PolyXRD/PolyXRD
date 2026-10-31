@@ -30,6 +30,19 @@ PDF2-2004、XinMatch 格式库各占一个固定槽位, 每个槽位只能挂一
 4. **不碰打分**: 本模块只回答"用哪份库", 不参与候选生成/打分/FOM 口径 ——
    物相匹配准确性由既有引擎负责, 本次改造对结果**零影响**(同一路径必然
    落到同一个引擎分支)。
+5. **类型可注册 (v4.6.0)**: 挂载类型不再写死成 if/elif 的三种 kind, 而是登记
+   在 :data:`MOUNT_KINDS` 注册表里 (见 :class:`MountKind`)。内置的 polyDB /
+   PDF2 / user 只是**种子**; 插件或集成方调 :func:`register_kind` 就能让一种
+   新格式享受一等公民待遇 —— 自动判别、探测、列表展示、检索分发全部自动接上,
+   不必改本模块。判别/探测函数一律写成**薄包装**, 调用时才解析模块级函数名,
+   这样测试 monkeypatch `_probe_polydb` 一类函数仍然生效。
+6. **元数据可展示**: :func:`probe` 额外返回 polyDB 的 `meta` / `dataset` /
+   `built` / `schema_version` —— 界面要能说清"这是哪份库、哪版格式、什么时候
+   构的"。这些键是**附加**的: 现有键名与含义一个不变, 老版 meta.json 与老版
+   db_mounts.json 都不需要迁移 (缺字段一律退化为空串 / 0)。
+7. **可重命名**: 用户自加的库可以改名 (:func:`rename_mount`), 只改这一行的
+   `label`; 空名 = 恢复按目录名/文件名显示。内置项的名字由类型/变体决定,
+   不许改 —— 否则同类型的两份库在列表里会变得分不清哪份是哪份。
 """
 from __future__ import annotations
 
@@ -37,10 +50,10 @@ import hashlib
 import json
 import os
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Callable, Iterable, Optional
 
 #: 支持的挂载类型 → 检索引擎。
 #: 引擎名即 ``PhaseIdentifier.identify_with_*`` 的后缀, 便于按 kind 分发。
@@ -88,18 +101,102 @@ _POLYDB_LABEL_KEY = {
 }
 
 
+# ── 类型注册表 ────────────────────────────────────────────────
+#
+# v4.6.0 之前, "这个路径是哪类库"由 detect_kind 里的 if/elif 和 probe() 里的
+# if/elif 各自回答一遍, is_dir / engine 又各写一次。只有三种内置 kind 时还能
+# 接受, 但每多一种库都要同时改四处, 插件想挂自建格式就只能改源码。注册表把
+# 这四处收敛成 MountKind 的六个字段, 内置三类降级为**种子注册**。
+
+@dataclass(frozen=True)
+class MountKind:
+    """一类可挂载数据库的完整描述 (= 注册表里的一条)。
+
+    Attributes:
+        key: 类型名; 用户自加项的 id 前缀与 ``db_source`` 的 kind 段都用它。
+        engine: 检索引擎名 (``PhaseIdentifier.identify_with_*`` 的后缀)。
+        probe: ``Path -> dict`` 的只读探测; 返回的键并入 :func:`probe` 的结果。
+            失败时返回 ``error`` 短标记 (如 ``polydb_not_ready``), 由 UI 译文案。
+            **不许**在这里改配置 —— 探测会被列表刷新高频调用。
+        detect: ``Path -> bool`` 的纯判别; 目录型看目录、文件型看文件 (由
+            ``is_dir`` 决定)。判不出就返回 False, 不抛异常。
+        label_key: 内置项的 i18n 显示名键; 用户自加项用不到 (空串)。
+        is_dir: True = 库是目录容器 (polyDB 这类), False = 单个库文件 (sqlite)。
+    """
+
+    key: str
+    engine: str
+    probe: Callable[[Path], dict]
+    detect: Callable[[Path], bool]
+    label_key: str = ""
+    is_dir: bool = False
+
+
+#: 已注册类型 → MountKind。内置三类在模块末尾由 :func:`_seed_builtin_kinds`
+#: 注册 (那时探测/判别函数都已定义; lambda 仍延迟到调用时才解析函数名)。
+MOUNT_KINDS: dict[str, MountKind] = {}
+
+
+def register_kind(kind: MountKind | None = None, *, replace: bool = False,
+                  **fields) -> MountKind:
+    """注册一类可挂载的数据库, 让它成为与内置类型平级的一等公民。
+
+    注册后立即生效: :func:`detect_kind` 会认它、:func:`add_mount` 会收它,
+    它会出现在 :func:`all_mounts` / :func:`probe_all` / :func:`source_entries`
+    里, ``Mount.is_dir`` / ``Mount.engine`` 也按注册信息回答。
+
+    Args:
+        kind: 完整的 :class:`MountKind`。
+        replace: key 已注册时是否覆盖。默认拒绝 —— 两个来源抢同一个类型名
+            应当报错, 而不是后注册的静默顶掉前一个; 内置类型想换实现时由
+            本模块自己用 ``replace=True`` 重注册。
+        **fields: 省略 ``kind`` 时按 :class:`MountKind` 的字段名逐个给,
+            便于调用方少写一层构造 (例如只登记一个目录型库)。
+
+    Raises:
+        ValueError: key 为空, 或重复注册且未给 ``replace=True``。
+    """
+    if kind is None:
+        kind = MountKind(**fields)
+    elif fields:
+        raise TypeError("register_kind(): 传了 MountKind 就不能再给字段")
+    if not kind.key:
+        raise ValueError("挂载类型必须有 key")
+    if kind.key in MOUNT_KINDS and not replace:
+        raise ValueError(f"挂载类型已注册: {kind.key}")
+    MOUNT_KINDS[kind.key] = kind
+    # 兼容层: 老代码直接读这两个 dict (UI 类型下拉、db_source 解析等),
+    # 注册/覆盖时同步写进去, 不要求外部跟着改成读注册表。
+    KIND_ENGINE[kind.key] = kind.engine
+    KIND_LABEL_KEY[kind.key] = kind.label_key
+    return kind
+
+
+def get_kind(key: str) -> Optional[MountKind]:
+    """按类型名取注册信息; 未注册返回 None (旧 json 里的未知 kind 由此跳过)。"""
+    return MOUNT_KINDS.get(key or "")
+
+
+def iter_kinds() -> tuple[MountKind, ...]:
+    """全部已注册类型 (注册顺序的快照, 迭代中注册/注销不会改变本次结果)。"""
+    return tuple(MOUNT_KINDS.values())
+
+
 @dataclass(frozen=True)
 class Mount:
     """一个已挂载的数据库 (= 列表里的一行)。
 
     Attributes:
         id: 稳定标识; 也是物相检索的 ``db_source`` 取值。
-        kind: 库类型, 见 :data:`KIND_ENGINE`。
-        path: 库位置。polyDB 是**目录**, 其余是**文件**; 未挂载时可为 None。
+        kind: 库类型, 见 :data:`MOUNT_KINDS` 注册表。
+        path: 库位置。目录型 (polyDB) 是**目录**, 文件型是**文件**; 未挂载时可为 None。
         label_key: 内置项的 i18n 显示名键 (用户自加项为空)。
-        label: 用户自定义显示名 / 由目录名生成的显示名。
+        label: 用户自定义显示名 (rename_mount 写这里) / 空 = 按目录文件名显示。
         builtin: True = 由配置槽位派生 (卸载 = 清配置), False = 写在本模块 json 里。
         variant: polyDB 变体 (``cod-inorg`` / ``cod-full``); 非 polyDB 为空串。
+        dataset: polyDB 数据集名 (meta.json 的 name / dataset); 其余类型为空串。
+        built: polyDB 构建时间 (meta.json 的 build.date / started_at)。
+        schema_version: polyDB 格式版本; 其余类型为 0。
     """
 
     id: str
@@ -109,11 +206,18 @@ class Mount:
     label: str = ""
     builtin: bool = True
     variant: str = ""
+    #: 下面三个是 polyDB 元数据在"已落盘挂载项"上的缓存 (v4.6.0 新增, 可缺省)。
+    #: 库文件被挪走时 probe 读不到 meta.json, 列表仍能显示"它是哪份库"。
+    dataset: str = ""
+    built: str = ""
+    schema_version: int = 0
 
     # ── 便捷属性 ──────────────────────────────────────────
     @property
     def is_dir(self) -> bool:
-        return self.kind == "polydb"
+        # 目录/文件由注册表决定: 新注册的目录型库不必再改这里。
+        spec = get_kind(self.kind)
+        return bool(spec.is_dir) if spec is not None else False
 
     @property
     def exists(self) -> bool:
@@ -124,7 +228,8 @@ class Mount:
 
     @property
     def engine(self) -> str:
-        return KIND_ENGINE.get(self.kind, "")
+        spec = get_kind(self.kind)
+        return spec.engine if spec is not None else ""
 
     def display_name(self) -> str:
         """不带翻译的显示名 (内置项的本地化名由 UI 按 ``label_key`` 取)。"""
@@ -176,6 +281,14 @@ def _now() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
+def _as_int(value, default: int = 0) -> int:
+    """把 json 里的版本号/计数安全转 int; 坏值退化为默认值而不是抛异常。"""
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return default
+
+
 # ── 内置挂载项 (由配置现算) ────────────────────────────────────
 
 def default_mounts() -> list[Mount]:
@@ -214,13 +327,19 @@ def default_mounts() -> list[Mount]:
 
 
 def _custom_mounts() -> list[Mount]:
+    """读取用户自加项。
+
+    只认**当前已注册**的 kind: 旧版 json 里残留的未知类型 (例如已删除的检索
+    引擎) 直接跳过 —— 列表里出现一行永远"不可用"的幽灵库, 比少一行更糟。
+    老文件缺 dataset/built/schema_version 时一律当空值, 不需要迁移。
+    """
     out: list[Mount] = []
     for raw in _load_store().get("mounts", []):
         if not isinstance(raw, dict):
             continue
         kind = str(raw.get("kind") or "")
         path = raw.get("path") or ""
-        if kind not in KIND_ENGINE or not path:
+        if get_kind(kind) is None or not path:
             continue
         out.append(Mount(
             id=str(raw.get("id") or _mount_id(kind, Path(path))),
@@ -229,6 +348,9 @@ def _custom_mounts() -> list[Mount]:
             label=str(raw.get("label") or ""),
             builtin=False,
             variant=str(raw.get("variant") or ""),
+            dataset=str(raw.get("dataset") or ""),
+            built=str(raw.get("built") or ""),
+            schema_version=_as_int(raw.get("schema_version")),
         ))
     return out
 
@@ -267,12 +389,12 @@ def add_mount(path: str | Path, kind: str | None = None,
     """把一个合格的库加进列表 (幂等: 同一路径重复添加返回同一条)。
 
     Args:
-        path: 库文件 (sqlite) 或库目录 (polyDB)。
-        kind: 显式指定类型; 省略则自动判别。
-        label: 自定义显示名; 省略时由目录名/文件名词干生成。
+        path: 库文件 (sqlite / 自定义单文件库) 或库目录 (polyDB / 自定义目录型库)。
+        kind: 显式指定类型; 省略则按注册表 (见 :data:`MOUNT_KINDS`) 自动判别。
+        label: 自定义显示名; 省略时由目录名/完整文件名生成。
 
     Raises:
-        ValueError: 路径不合格 (不存在 / 不是库), 消息带人工可读原因。
+        ValueError: 路径不合格 (不存在 / 不是已注册类型的库), 消息带人工可读原因。
     """
     p = Path(path)
     if not p.exists():
@@ -289,23 +411,43 @@ def add_mount(path: str | Path, kind: str | None = None,
         # 用完整文件名/目录名 (含后缀): 同类型挂多份时, 用户就是靠这个区分
         # ".db" 与 ".polyDB" 的 —— 去掉后缀只会让两行看起来一样。
         label = p.name
+    # polyDB 的元数据在挂载时**顺手落盘**: 库之后被挪走/移动硬盘没插上时,
+    # 列表仍能说清"这是哪份库、哪版格式、什么时候构的", 不必等 probe 读到目录。
+    meta: dict = _read_polydb_meta(p) if real_kind == "polydb" else {}
     data = _load_store()
     mounts = [m for m in data.get("mounts", []) if isinstance(m, dict)]
     for raw in mounts:
         if raw.get("id") == mid:
-            return Mount(id=mid, kind=real_kind, path=p, label=str(raw.get("label") or label),
-                         builtin=False)
-    mounts.append({
+            return Mount(id=mid, kind=real_kind, path=p,
+                         label=str(raw.get("label") or label), builtin=False,
+                         variant=str(raw.get("variant") or ""),
+                         dataset=str(raw.get("dataset") or ""),
+                         built=str(raw.get("built") or ""),
+                         schema_version=_as_int(raw.get("schema_version")))
+    record = {
         "id": mid,
         "kind": real_kind,
         "path": str(p.resolve()),
         "label": label,
-        "variant": _read_polydb_variant(p) if real_kind == "polydb" else "",
+        "variant": str(meta.get("variant") or ""),
         "added_at": _now(),
-    })
+    }
+    if real_kind == "polydb":
+        # 仍是同一份 version=1 的 json: 新键只是附加 —— 老版本读到多余键会
+        # 忽略, 老文件缺这些键时 _custom_mounts 也按空值处理 (双向兼容)。
+        record.update({
+            "dataset": str(meta.get("dataset") or ""),
+            "built": str(meta.get("built") or ""),
+            "schema_version": _as_int(meta.get("schema_version")),
+        })
+    mounts.append(record)
     data["mounts"] = mounts
     _save_store(data)
-    return Mount(id=mid, kind=real_kind, path=p, label=label, builtin=False)
+    return Mount(id=mid, kind=real_kind, path=p, label=label, builtin=False,
+                 variant=str(meta.get("variant") or ""),
+                 dataset=str(meta.get("dataset") or ""),
+                 built=str(meta.get("built") or ""),
+                 schema_version=_as_int(meta.get("schema_version")))
 
 
 def remove_mount(mount_id: str) -> None:
@@ -338,6 +480,50 @@ def remove_mount(mount_id: str) -> None:
     _save_store(data)
 
 
+def rename_mount(mount_id: str, label: str) -> Mount:
+    """给用户自加的挂载项改名 (**只改这一行的显示名**, 不碰库文件与其他行)。
+
+    Args:
+        mount_id: 挂载项 id。
+        label: 新显示名; 空串/纯空白 = 清掉自定义名, 恢复按目录名/文件名显示
+            (改名后想"反悔"就传空串, 不必重新挂载)。
+
+    Returns:
+        更新后的 :class:`Mount` (其 ``label`` 已生效)。
+
+    Raises:
+        KeyError: ``mount_id`` 不在列表里。
+        ValueError: 内置项不允许改名。
+
+    为什么内置项不许改: 内置项的显示名 = "类型/变体", 是用户辨认"这行是哪份
+    库"的唯一依据; 允许改成"我的库"之后, 同类型的另一份内置库在列表里就分不
+    清了。用户真想自定义, 应该把自己那份库单独挂进来。
+
+    只落盘 ``mounts[].label``; 仍按整份 json 原子替换 (不就地改文件)。
+    probe 的结果与显示名无关, 所以不动探测缓存; 列表刷新时行名取
+    ``Mount.display_name()``, 立刻就能看到新名字。
+    """
+    m = get_mount(mount_id)
+    if m is None:
+        raise KeyError(mount_id)
+    if m.builtin:
+        raise ValueError("内置挂载项的显示名由类型/变体决定, 不能重命名"
+                         "（想用自定义名请改为挂载你自己的那份库）")
+    data = _load_store()
+    mounts = [r for r in data.get("mounts", []) if isinstance(r, dict)]
+    target = next((r for r in mounts if r.get("id") == mount_id), None)
+    if target is None:
+        # all_mounts 里有、json 里没有: 理论上不该发生 (自加项都写在 json 里),
+        # 真发生了说明 store 被外部改坏, 按"找不到"报, 不伪造一个落盘项。
+        raise KeyError(mount_id)
+    clean = (label or "").strip()
+    target["label"] = clean
+    target["renamed_at"] = _now()
+    data["mounts"] = mounts
+    _save_store(data)
+    return replace(m, label=clean)
+
+
 def set_active(mount_id: str) -> None:
     """记住"当前用于物相检索"的那一行 (空串 = 不指定)。"""
     data = _load_store()
@@ -358,12 +544,58 @@ def active_mount() -> Optional[Mount]:
 
 # ── 类型判别 ──────────────────────────────────────────────────
 
-def _read_polydb_variant(path: Path) -> str:
+def _read_polydb_meta(path: str | Path) -> dict:
+    """安全读取 polyDB 的 ``meta.json``, 返回列表/详情要展示的摘要。
+
+    Args:
+        path: polyDB 目录 (误传文件时按"没有 meta"处理, 不抛异常)。
+
+    Returns:
+        ``{format, schema_version, variant, dataset, built, counts}``;
+        文件不存在 / JSON 坏 / 顶层不是 dict 时返回同结构的空摘要 —— 这只是
+        描述性信息, **绝不能**因为库是半成品而把挂载页整体弄崩。
+
+    meta.json 的字段在不同构库脚本版本里略有差异, 这里做归一化:
+      · 数据集名: ``name`` 优先, 其次 ``dataset``; 两者都没有就是空串, 由 UI
+        用目录名兜底。不拿 ``source.scope`` 冒充 —— "inorg" 是构建范围,
+        不是库名, 显示出来只会让人误以为那就是数据集名;
+      · 构建时间: ``build.date`` 优先, 其次 ``build.started_at`` (现有构库
+        产物只有后者; 以后加了 date 也不用改这里);
+      · counts 里只保留能转 int 的项, 坏值直接丢, 防止把展示链带崩。
+    """
+    empty = {"format": "", "schema_version": 0, "variant": "",
+             "dataset": "", "built": "", "counts": {}}
     try:
-        meta = json.loads((Path(path) / "meta.json").read_text(encoding="utf-8"))
-        return str(meta.get("variant") or "")
-    except Exception:  # noqa: BLE001
-        return ""
+        raw = json.loads((Path(path) / "meta.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return empty
+    if not isinstance(raw, dict):
+        return empty
+    build = raw.get("build")
+    if not isinstance(build, dict):
+        build = {}
+    counts: dict[str, int] = {}
+    raw_counts = raw.get("counts")
+    if isinstance(raw_counts, dict):
+        for k, v in raw_counts.items():
+            try:
+                counts[str(k)] = int(v)
+            except (TypeError, ValueError):
+                continue
+    return {
+        "format": str(raw.get("format") or ""),
+        "schema_version": _as_int(raw.get("schema_version")),
+        "variant": str(raw.get("variant") or ""),
+        "dataset": str(raw.get("name") or raw.get("dataset") or ""),
+        "built": str(build.get("date") or build.get("started_at")
+                     or raw.get("built") or ""),
+        "counts": counts,
+    }
+
+
+def _read_polydb_variant(path: Path) -> str:
+    """兼容旧调用: 只取变体名 (解析逻辑统一在 :func:`_read_polydb_meta`)。"""
+    return str(_read_polydb_meta(path).get("variant") or "")
 
 
 def is_polydb_dir(path: str | Path) -> bool:
@@ -376,21 +608,40 @@ def is_polydb_dir(path: str | Path) -> bool:
             and (p / "meta.json").is_file())
 
 
-def detect_kind(path: str | Path, expect: str | None = None) -> tuple[str, str]:
-    """判别一个路径属于哪类库, 返回 ``(kind, 说明)``; 判不出时 kind 为空。
+def _detect_sqlite(p: Path, want: str = "pdf2") -> bool:
+    """sqlite 文件的判别 (内置只有 PDF2 一类, 走 db_import 的表名/列名判据)。
 
-    Args:
-        expect: 调用方已声明的类型; 给了就**只做校验**, 不猜 —— 用户明确
-            说"这是个 PDF2 库"时, 若内容其实是 COD 无机库, 应当报错而不是
-            静默改判 (拿错库只会静默检索不到东西, 这是本项目踩过的坑)。
+    自定义 sqlite 格式应注册自己的 ``detect``, 不要往这里塞 if/elif ——
+    那正是本次改造要消灭的写法。
     """
-    p = Path(path)
+    try:
+        from polyxrd.services.db_import import inspect_db_file
+
+        ins = inspect_db_file(p)
+        return bool(ins.ok and ins.kind == want)
+    except Exception:  # noqa: BLE001 - 判别失败按"不是"处理, 原因由上层给
+        return False
+
+
+def _detect_any(p: Path) -> tuple[str, str]:
+    """按注册表判别路径, 返回 ``(kind, 失败说明)``。
+
+    探测顺序是**后注册的优先**: 插件新增的格式通常比内置类型更具体, 让插件
+    先认, 内置的通用 sqlite 判据 (pdf2) 兜底; 内置三类之间目录/文件互斥,
+    顺序不影响结果。
+    """
     if p.is_dir():
-        if not is_polydb_dir(p):
-            return "", "目录里没有 meta.json + index.sqlite, 不是 polyDB 目录"
-        if expect and expect != "polydb":
-            return "", f"这是 polyDB 目录, 不是 {expect}"
-        return "polydb", ""
+        for spec in reversed(iter_kinds()):
+            if spec.is_dir and spec.detect(p):
+                return spec.key, ""
+        # 保持 v4.1.0 的原话: 内置目录型库只有 polyDB, 提示直接指到它的判据
+        return "", "目录里没有 meta.json + index.sqlite, 不是 polyDB 目录"
+    for spec in reversed(iter_kinds()):
+        if not spec.is_dir and spec.detect(p):
+            return spec.key, ""
+    # 文件没有任何注册类型认领: 借 db_import 再 inspect 一次, 只为拿到
+    # "缺哪一列 / 表名不对" 这类可执行原因。挂载失败是低频路径, 多一次只读
+    # 打开可以接受; 正常路径 (pdf2 命中) 仍然只 inspect 一次。
     from polyxrd.services.db_import import inspect_db_file
 
     ins = inspect_db_file(p)
@@ -402,9 +653,33 @@ def detect_kind(path: str | Path, expect: str | None = None) -> tuple[str, str]:
                 "PDF2-2004 仍可挂载。")
         detail = ins.error + (f" ({ins.hint})" if ins.hint else "")
         return "", f"不是可用的数据库文件: {detail}"
-    if expect and ins.kind != expect:
-        return "", f"该文件是 {ins.kind}, 不是 {expect}"
-    return str(ins.kind or ""), ""
+    # inspect 认得但注册表里没有对应类型 (例如内置 pdf2 被注销): 不静默接受,
+    # 否则会挂上一行"永远检索不到东西"的库。
+    return "", f"不支持的数据库类型: {ins.kind}"
+
+
+def detect_kind(path: str | Path, expect: str | None = None) -> tuple[str, str]:
+    """判别一个路径属于哪类库, 返回 ``(kind, 说明)``; 判不出时 kind 为空。
+
+    判别规则全部来自注册表 (见 :data:`MOUNT_KINDS`), 本函数只负责"自动认"
+    与"按调用方声明的类型校验"两种模式。
+
+    Args:
+        expect: 调用方已声明的类型; 给了就**只做校验**, 不猜 —— 用户明确
+            说"这是个 PDF2 库"时, 若内容其实是 polyDB 目录, 应当报错而不是
+            静默改判 (拿错库只会静默检索不到东西, 这是本项目踩过的坑)。
+    """
+    p = Path(path)
+    found, reason = _detect_any(p)
+    if not found:
+        return "", reason
+    if expect and found != expect:
+        spec = get_kind(found)
+        if spec is not None and spec.is_dir:
+            name = "polyDB 目录" if found == "polydb" else f"{found} 目录"
+            return "", f"这是 {name}, 不是 {expect}"
+        return "", f"该文件是 {found}, 不是 {expect}"
+    return found, ""
 
 
 # ── 探测 (只读) ───────────────────────────────────────────────
@@ -430,11 +705,20 @@ def probe(mount: Mount, use_cache: bool = True) -> dict:
     """探测一个挂载项: 是否可用、多少个相、占多大、失败原因。
 
     Returns:
-        ``{ok, rows, size_mb, engine, error, hint, detail, has_top_peaks}``
+        ``{ok, rows, size_mb, engine, error, hint, detail, has_top_peaks,
+        meta, dataset, built, schema_version}``
+        —— 后四个是 v4.6.0 **附加**的 polyDB 元数据; 其余类型 / 老调用方
+        拿到的仍是原来的键 (meta 为空 dict, 版本号 0)。
+
+    探测分派走注册表: 自定义类型只要在 :class:`MountKind.probe` 里给了实现,
+    这里不需要再加分支。插件探测函数自己抛异常时兜底成 ``probe_error`` ——
+    一行坏的插件库不能把整张挂载表 (以及依赖它的物相页) 拖崩。
     """
     p = mount.path
     base = {"ok": False, "rows": 0, "size_mb": 0.0, "engine": mount.engine,
-            "error": "", "hint": "", "detail": "", "has_top_peaks": False}
+            "error": "", "hint": "", "detail": "", "has_top_peaks": False,
+            "meta": {}, "dataset": mount.dataset, "built": mount.built,
+            "schema_version": mount.schema_version}
     if p is None:
         base["error"] = "unmounted"
         return base
@@ -449,41 +733,59 @@ def probe(mount: Mount, use_cache: bool = True) -> dict:
         return dict(_PROBE_CACHE[key])
 
     res = dict(base)
-    if mount.kind == "polydb":
-        res.update(_probe_polydb(p))
-    elif mount.kind == "user":
-        res.update(_probe_user(p))
-    else:
-        from polyxrd.services.db_import import inspect_db_file
-
-        ins = inspect_db_file(p)
-        res.update({
-            "ok": ins.ok,
-            "rows": ins.rows,
-            "size_mb": ins.size_mb,
-            "error": ins.error,
-            "hint": ins.hint,
-            "has_top_peaks": ins.has_top_peaks,
-            "detail": "",
-        })
+    spec = get_kind(mount.kind)
+    try:
+        if spec is not None:
+            res.update(spec.probe(p))
+        else:
+            # 未注册的 kind 仍按 sqlite 文件探测: 与扩展前"else 分支"的行为
+            # 一致, 避免旧调用方自己在内存里构造的 Mount 突然探测不了。
+            res.update(_probe_sqlite(p))
+    except Exception as e:  # noqa: BLE001 - 探测失败原因原样给 UI
+        res.update({"error": "probe_error", "detail": f"{e}"})
     if use_cache:
         _PROBE_CACHE[key] = dict(res)
     return res
 
 
+def _probe_sqlite(p: Path) -> dict:
+    """单个 sqlite 库文件的探测 (内置 PDF2 / 自定义单文件库的默认实现)。"""
+    from polyxrd.services.db_import import inspect_db_file
+
+    ins = inspect_db_file(p)
+    return {
+        "ok": ins.ok,
+        "rows": ins.rows,
+        "size_mb": ins.size_mb,
+        "error": ins.error,
+        "hint": ins.hint,
+        "has_top_peaks": ins.has_top_peaks,
+        "detail": "",
+    }
+
+
 def _probe_polydb(p: Path) -> dict:
+    """polyDB 目录的探测 (只读 meta.json + 只读打开数组段, 不改任何配置)。
+
+    失败时 ``error`` 仍是 ``polydb_not_ready`` / ``polydb_error`` 两个老值
+    (UI 与历史测试按它出文案), 但**仍附带 meta 摘要**: 半成品/损坏的库也要
+    能显示"它本该是哪份库", 否则用户只看到一行"不可用"无从判断修哪个文件。
+    """
+    meta = _read_polydb_meta(p)
+    extra = {"meta": meta, "dataset": meta["dataset"], "built": meta["built"],
+             "schema_version": meta["schema_version"]}
     try:
         from polyxrd.services.polydb import PolyDatabase
 
         db = PolyDatabase(p)
         if not db.is_ready():
             return {"error": "polydb_not_ready", "detail": str(p),
-                    "size_mb": _dir_size_mb(p)}
+                    "size_mb": _dir_size_mb(p), **extra}
         st = db.stats()
         return {"ok": True, "rows": int(st.phases), "size_mb": _dir_size_mb(p),
-                "detail": f"variant={st.variant or '?'}"}
+                "detail": f"variant={st.variant or '?'}", **extra}
     except Exception as e:  # noqa: BLE001 - 探测失败原因原样给 UI
-        return {"error": "polydb_error", "detail": f"{e}"}
+        return {"error": "polydb_error", "detail": f"{e}", **extra}
 
 
 def _probe_user(p: Path) -> dict:
@@ -499,14 +801,22 @@ def _probe_user(p: Path) -> dict:
 
 
 def probe_all(mounts: Optional[Iterable[Mount]] = None) -> list[dict]:
-    """探测全部挂载项, 返回 ``mount 字段 + probe 字段`` 合并后的行数据。"""
+    """探测全部挂载项, 返回 ``mount 字段 + probe 字段`` 合并后的行数据。
+
+    行里带 ``engine`` (检索引擎名) 与 ``meta`` / ``dataset`` / ``built`` /
+    ``schema_version`` (polyDB 元数据); 名称取 ``Mount.display_name()``,
+    所以 :func:`rename_mount` 改完名刷新列表就能看到。
+    """
     out: list[dict] = []
     for m in (mounts if mounts is not None else all_mounts()):
         row = {"mount": m, "id": m.id, "kind": m.kind,
                "path": str(m.path) if m.path else "",
                "exists": m.exists,
                "builtin": m.builtin, "variant": m.variant,
-               "label_key": m.label_key, "label": m.display_name()}
+               "label_key": m.label_key, "label": m.display_name(),
+               "engine": m.engine,
+               "meta": {}, "dataset": m.dataset, "built": m.built,
+               "schema_version": m.schema_version}
         row.update(probe(m))
         out.append(row)
     return out
@@ -708,10 +1018,49 @@ def mount_any(path: str | Path) -> list[Mount]:
     mounted, _skipped = mount_any_report(path)
     return mounted
 
+
+# ── 内置类型种子 ──────────────────────────────────────────────
+
+def _seed_builtin_kinds() -> None:
+    """把内置三类登记进注册表 (在三处探测/判别函数都定义完之后调用)。
+
+    probe/detect 一律写成**薄包装**而不是直接绑函数对象: 测试与本模块使用者
+    会 monkeypatch ``_probe_polydb`` / ``_probe_user`` 这些模块级函数, 包一层
+    lambda 让名字在**调用时**才解析, monkeypatch 才能生效。
+    ``replace=True`` 是给"模块被 reload / 测试里重复 seed"留的余地; 正常
+    导入时注册表是空的, 不会覆盖任何人的插件类型。
+    """
+    # 默认参考库: 目录容器, 判据 = meta.json + index.sqlite。
+    register_kind(MountKind(
+        key="polydb", engine="polydb",
+        label_key=KIND_LABEL_KEY["polydb"],
+        probe=lambda p: _probe_polydb(p),
+        detect=lambda p: is_polydb_dir(p),
+        is_dir=True), replace=True)
+    # ICDD PDF-2 2004: sqlite dump, 判据在 db_import (表名 + 列名)。
+    register_kind(MountKind(
+        key="pdf2", engine="pdf2",
+        label_key=KIND_LABEL_KEY["pdf2"],
+        probe=lambda p: _probe_sqlite(p),
+        detect=lambda p: _detect_sqlite(p),
+        is_dir=False), replace=True)
+    # 用户自建库: 位置由 user_db 自己管, 不参与自动判别 (detect 恒 False),
+    # 只作为内置的一行出现在列表里。
+    register_kind(MountKind(
+        key="user", engine="user",
+        label_key=KIND_LABEL_KEY["user"],
+        probe=lambda p: _probe_user(p),
+        detect=lambda p: False,
+        is_dir=False), replace=True)
+
+
+_seed_builtin_kinds()
+
 __all__ = [
-    "KIND_ENGINE", "KIND_LABEL_KEY", "Mount",
+    "KIND_ENGINE", "KIND_LABEL_KEY", "MOUNT_KINDS", "Mount", "MountKind",
     "add_mount", "active_id", "active_mount", "all_mounts", "clear_probe_cache",
-    "default_mounts", "describe", "detect_kind", "get_mount", "is_polydb_dir",
-    "mount_any", "mount_any_report", "probe", "probe_all", "remove_mount", "resolve_mount",
-    "resolve_source", "set_active", "source_entries",
+    "default_mounts", "describe", "detect_kind", "get_kind", "get_mount",
+    "is_polydb_dir", "iter_kinds", "mount_any", "mount_any_report", "probe",
+    "probe_all", "register_kind", "remove_mount", "rename_mount",
+    "resolve_mount", "resolve_source", "set_active", "source_entries",
 ]

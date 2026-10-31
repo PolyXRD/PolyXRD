@@ -125,7 +125,7 @@ translations = {
     },
     "db_manager": {
         "title": "外挂数据库管理",
-        "intro": "从 0.10.0 起，安装包不再内置数据库。三个库各自独立打包、各自下载、各自挂载——只装其中一个也能正常使用，不必成套安装。\n把对应的压缩包解压后，在该槽位点「导入…」选中 .sqlite 文件即可；路径会被记住，下次启动自动加载。三个库全部留空时，仅内置的 118 种参考物相可用。",
+        "intro": "一个库一行：可以挂多份 polyDB（同一类型也能挂多份，例如「常驻的全库」+「随身的无机子集」），放在任意文件夹都行。选中某行点「设为当前」（或双击该行），物相检索就用那一份；卸载只是把这一行从列表里去掉，不会删除库文件。",
         "pkg_hint": "下载包：{pkg}　→　解压出 {file}",
         "pkg_hint_local": "本库不随发布包分发：请自行准备 {file} 后在此导入",
         "recheck": "重新检测",
@@ -194,7 +194,14 @@ translations = {
         "set_active_unavailable": "「{name}」当前不可用（未挂载或库文件已损坏），不能设为检索数据源。",
         "current_source": "当前物相检索使用：{name}",
         "current_source_none": "尚未指定检索数据源：物相分析页按其下拉框里选中的那一项检索。",
-        "row_disabled_tip": "该库当前不可用：请检查文件是否被移动/删除，或重新挂载。"
+        "row_disabled_tip": "该库当前不可用：请检查文件是否被移动/删除，或重新挂载。",
+        "btn_rename": "重命名…",
+        "rename_title": "重命名数据库",
+        "rename_empty": "名称不能为空。",
+        "rename_done": "已重命名为「{name}」",
+        "meta_line": "变体：{variant}　格式：v{schema}　构建：{built}",
+        "type_variant": "polyDB · {variant}",
+        "mounted_count": "已挂载 {n} 个数据库　当前使用：{active}"
     },
     "db_mounts": {
         "type": {
@@ -449,6 +456,7 @@ translations = {
         "refine_failed": "精修失败：{error}",
         "identify_failed": "物相识别失败：{error}",
         "db_missing": "数据库「{name}」已不在原位置（文件被移动或删除）。请到「数据库 ▸ 外挂数据库管理」重新挂载。",
+        "db_unusable": "所选数据库「{name}」无法用于检索：{detail}",
         "peak_finder_failed": "峰检测失败：{error}",
         "peak_fit_failed": "峰拟合失败：{error}",
         "background_failed": "背景扣除失败：{error}",
@@ -917,6 +925,9 @@ translations = {
             "db_combo_tip_import": "数据库不随安装包分发, 请单独下载解压后在\n菜单「数据库 ▸ 外挂数据库管理…」中导入。",
             "pdf2_coverage": "  本机库: {total} 相, 空间群 {sg}%, 晶胞 {cell}%。\n",
             "db_unmounted_hint": "该数据库未挂载。请从菜单「数据库 ▸ 外挂数据库管理…」导入已解压的库文件。",
+            "btn_manage_db": "管理数据库…",
+            "tip_manage_db": "挂载/卸载数据库，或把某一行设为物相检索用库",
+            "db_profile_external": "Profile Fitting：已对「{name}」预筛出的 {n} 个候选做全谱拟合重排。",
             "db_user_empty_hint": "用户数据库里还没有条目。请从菜单「数据库 ▸ 用户数据库管理…」导入你自己的 CIF 文件。",
             "no_match": "未找到匹配物相",
             "no_match_amorphous": "未找到匹配物相 —— 谱图呈弥散包络 (近非晶), 结晶相检索不适用",

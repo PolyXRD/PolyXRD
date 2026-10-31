@@ -312,9 +312,11 @@ class MainViewModel(QObject):
         """传统物相识别 (需要先寻峰)
 
         Args:
-            db_source: 数据库源 ("builtin" / "cod_inorganics" /
-                "cod_full" / "merged" / "pdf2" / "user" / "xinmatch" /
-                "polydb")
+            db_source: 数据源 = 「外挂数据库管理」列表里某一行的 id
+                (`builtin` / `pdf2` / `user` / `polydb:cod-inorg` /
+                用户自加项 `<kind>:<摘要>`)。由
+                :mod:`polyxrd.services.db_mounts` 解析成 (kind, path) 后分发,
+                同类型可挂多份、选中哪行就用哪行。
             marked_peaks: 标记峰 2θ 序列 (v2.2 S13, None → 全部实测峰)
         """
         data = self.current_data
@@ -333,8 +335,13 @@ class MainViewModel(QObject):
         element_filter: Optional[dict] = None,
         top_n: int = 5,
         fwhm: float = 0.15,
+        db_source: str = "builtin",
     ) -> None:
-        """Profile Fitting物相识别 (无需寻峰)"""
+        """Profile Fitting 物相识别 (无需寻峰)。
+
+        v4.6.0: 传入 `db_source` 后, 外挂库会先做 d-I 预筛再全谱拟合重排;
+        `builtin` 仍是对内置 118 相参考库穷举 (原行为)。
+        """
         data = self.current_data
         if data is None:
             self.error_occurred.emit("请先加载数据")
@@ -342,7 +349,8 @@ class MainViewModel(QObject):
 
         self.status_changed.emit(tr("status.identifying_profile"))
         self._phase_vm.identify_phases_profile_fitting(
-            data, element_filter=element_filter, top_n=top_n, fwhm=fwhm
+            data, element_filter=element_filter, top_n=top_n, fwhm=fwhm,
+            db_source=db_source,
         )
 
     def search_residual_peaks(
@@ -350,8 +358,13 @@ class MainViewModel(QObject):
         element_filter: Optional[dict] = None,
         top_n: int = 5,
         tolerance: float = 0.30,
+        db_source: str = "builtin",
     ) -> None:
-        """仅对选中相解释不到的残差峰再检索 (迭代式物相分析)。"""
+        """仅对选中相解释不到的残差峰再检索 (迭代式物相分析)。
+
+        v4.6.0: `db_source` 必须透传 —— 用户用外挂库做首轮检索时, 残差相
+        追查若退回内置 118 相库, 两轮候选取自不同库, 结果不可比。
+        """
         data = self.current_data
         if data is None:
             self.error_occurred.emit("请先加载数据")
@@ -359,7 +372,7 @@ class MainViewModel(QObject):
         self.status_changed.emit(tr("status.identifying_phases"))
         self._phase_vm.search_residual_peaks(
             data, element_filter=element_filter, top_n=top_n,
-            tolerance=tolerance,
+            tolerance=tolerance, db_source=db_source,
         )
 
     def select_phase(self, phase: Phase) -> None:

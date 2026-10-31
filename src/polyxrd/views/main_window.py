@@ -754,6 +754,9 @@ class MainWindow(QMainWindow):
 
         # 连接物相确认信号 - 自动切换到结构精修
         self._phase_view.phase_confirmed.connect(self._on_phase_confirmed)
+        # v4.6.0: 物相页数据源行内的「管理数据库…」→ 复用菜单里的同一个对话框,
+        # 关闭后由 _on_databases_changed 统一刷新下拉/库缓存。
+        self._phase_view.request_db_manager.connect(self._on_database_manager)
 
         self.setStatusBar(QStatusBar())
         self._status_lang_label = QLabel()
@@ -1804,11 +1807,20 @@ class MainWindow(QMainWindow):
                 )
 
     def _on_identify(self) -> None:
+        """工具栏/菜单「识别」—— 必须与物相页内的按钮**用同一个数据源**。
+
+        v4.6.0 前这里调 `identify_phases()` 不传参: 用户在物相页选好了外挂库,
+        从工具栏点「识别」却静默跑内置 118 相库, 两次结果对不上且无任何提示。
+        元素过滤同理 —— 两处入口的输入必须一致, 否则"同一张谱两个结果"。
+        """
         self._tab_widget.setCurrentWidget(self._phase_view)
         with busy(self, tr("busy.identify")) as acquired:
             if not acquired:
                 return
-            self._vm.identify_phases()
+            self._vm.identify_phases(
+                element_filter=self._phase_view.current_element_filter() or None,
+                db_source=self._phase_view.current_db_source(),
+            )
         # 检索已按当前数据波长完成 → 清掉"请重新检索"提示
         self._wavelength_dirty = False
         self._update_status_bar()
@@ -1818,7 +1830,10 @@ class MainWindow(QMainWindow):
         with busy(self, tr("busy.identify_profile")) as acquired:
             if not acquired:
                 return
-            self._vm.identify_phases_profile_fitting()
+            self._vm.identify_phases_profile_fitting(
+                element_filter=self._phase_view.current_element_filter() or None,
+                db_source=self._phase_view.current_db_source(),
+            )
 
     def _on_cif_browser(self) -> None:
         dialog = CIFBrowserDialog(self)

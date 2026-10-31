@@ -9,12 +9,13 @@ r"""外挂数据库管理对话框 —— 列表式多库挂载 (v4.0.0 重设�
 界面结构
 --------
     ┌ 说明 ───────────────────────────────────────────────┐
-    │ 挂载数据库文件…  挂载文件夹…  卸载  设为当前  重新检测  用户库管理… │
+    │ 挂载数据库文件… 挂载文件夹… 卸载 重命名… 设为当前 重新检测 用户库管理… │
     ├ 表格 (名称/类型/相数/大小/状态/位置) ────────────────────┤
-    │ ● COD 无机物库 (polyDB)  polyDB  77,500  89.9 MB  已挂载  D:\... │
-    │   COD 全库索引           COD    1,959,421 30.2 GB 已挂载  D:\... │
-    ├ 详情 (路径 / 下载包 / 授权提示) ────────────────────────┤
-    │ 当前物相检索使用：COD 无机物库 (polyDB)              [关闭] │
+    │ ● COD 无机物库 (polyDB)  polyDB · cod-inorg  77,500  89.9 MB  已挂载  D:\... │
+    │   COD 全库 (polyDB)      polyDB · cod-full   521,361 30.2 GB 已挂载  D:\... │
+    ├ 详情 (路径 / 元数据 / 下载包 / 授权提示) ─────────────────┤
+    │ 数据集名　变体：cod-inorg　格式：v1　构建：2026-10-21          │
+    │ 已挂载 2 个数据库　当前使用：COD 无机物库（polyDB）          [关闭] │
     └──────────────────────────────────────────────────┘
 
 设计取舍
@@ -26,6 +27,9 @@ r"""外挂数据库管理对话框 —— 列表式多库挂载 (v4.0.0 重设�
    从挂载表里删掉。两者都不删库文件本身。
 3. **授权提示跟着选中行走**(PDF2-2004 是 ICDD 商业库)。提示必须出现在用户
    挂载它的地方, 藏在许可协议里等于没提示。
+4. **重命名只给"用户自加项"**。内置项的显示名是"类型/变体"的映射, 改名会
+   让同类型的另一份库失去辨认依据; 详情区则补一行 polyDB 元数据 (数据集名/
+   变体/格式版本/构建日期), 让用户确认自己挂的到底是哪一版库。
 """
 from __future__ import annotations
 
@@ -41,6 +45,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QHeaderView,
+    QInputDialog,
     QLabel,
     QMessageBox,
     QPushButton,
@@ -133,6 +138,11 @@ class DatabaseManagerDialog(QDialog):
         self._btn_set_active.clicked.connect(self._on_set_active)
         self._btn_unmount = QPushButton(tr("db_manager.btn_unmount"))
         self._btn_unmount.clicked.connect(self._on_unmount)
+        # 重命名只对"用户自己加的"库有意义: 内置项的显示名由类型/变体决定,
+        # 改了名反而分不清它其实是哪份库 (内置项留空, 由 _on_selection_changed 置灰)。
+        self._btn_rename = QPushButton(tr("db_manager.btn_rename"))
+        self._btn_rename.clicked.connect(self._on_rename)
+        self._btn_rename.setEnabled(False)
         self._btn_user = QPushButton(tr("db_manager.btn_user_manage"))
         self._btn_user.clicked.connect(self._on_open_user_db)
 
@@ -151,6 +161,7 @@ class DatabaseManagerDialog(QDialog):
         row.addSpacing(12)
         row.addWidget(self._btn_set_active)
         row.addWidget(self._btn_unmount)
+        row.addWidget(self._btn_rename)
         row.addSpacing(12)
         row.addWidget(self._btn_user)
         row.addStretch(1)
@@ -196,6 +207,17 @@ class DatabaseManagerDialog(QDialog):
         self._detail_path.setTextInteractionFlags(
             Qt.TextInteractionFlag.TextSelectableByMouse)
         lay.addWidget(self._detail_path)
+
+        # polyDB 元数据 (变体 / 格式版本 / 构建日期 / 数据集名)。这些字段由
+        # db_mounts.probe 提供, 老版本 probe 没有它们 —— 一律 .get 容错,
+        # 取不到就整行隐藏, 不能因为"探测结果少了几个键"让对话框白屏。
+        self._detail_meta = QLabel("")
+        self._detail_meta.setWordWrap(True)
+        self._detail_meta.setStyleSheet("color: palette(mid);")
+        self._detail_meta.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse)
+        self._detail_meta.hide()
+        lay.addWidget(self._detail_meta)
 
         self._detail_pkg = QLabel("")
         self._detail_pkg.setWordWrap(True)
@@ -271,14 +293,27 @@ class DatabaseManagerDialog(QDialog):
         self._on_selection_changed()
 
     def _update_footer(self) -> None:
+        """底部: 先讲规模 (挂了几份), 再讲当前用的是哪一份。
+
+        列表式挂载之后 "挂了几份库" 本身就是关键信息 —— 只显示当前库时,
+        用户看不出自己到底挂了多少份、会不会有一份被遗忘在列表末尾。
+        当前库仍用绿色高亮, 保留原来"一眼看到用哪个库"的体验。
+        """
+        usable = [r for r in self._rows if r.get("ok")]
         m = db_mounts.active_mount()
+        active_name = "—"
         if m is not None and m.exists:
-            self._current_lbl.setText(
+            active_name = self._display_name_of(m.id)
+        count_line = tr("db_manager.mounted_count",
+                        n=len(usable), active=active_name)
+        if m is not None and m.exists:
+            current = (
                 f"<span style='color:{_GREEN}'>"
-                f"{tr('db_manager.current_source', name=self._display_name_of(m.id))}"
+                f"{tr('db_manager.current_source', name=active_name)}"
                 f"</span>")
         else:
-            self._current_lbl.setText(tr("db_manager.current_source_none"))
+            current = tr("db_manager.current_source_none")
+        self._current_lbl.setText(f"{count_line}<br>{current}")
 
     # ── 行 → 文案 ─────────────────────────────────────────
     def _display_name(self, row: dict) -> str:
@@ -308,9 +343,17 @@ class DatabaseManagerDialog(QDialog):
 
     @staticmethod
     def _type_label(row: dict) -> str:
-        """类型列: 讲清"这是哪种库", 而不重复行名称里的变体信息。"""
+        """类型列: 讲清"这是哪种库"。
+
+        polyDB 有 ``cod-inorg`` / ``cod-full`` 等变体, 同一类型挂多份时
+        只看 "polyDB 库" 分不清是哪一份 —— 变体是这类库最重要的身份信息,
+        所以能取到就带上。其余类型仍按类型名显示。
+        """
         kind = row["kind"]
         if kind == "polydb":
+            variant = _variant_of(row)
+            if variant:
+                return tr("db_manager.type_variant", variant=variant)
             return tr("db_mounts.type.polydb")
         key = db_mounts.KIND_LABEL_KEY.get(kind, "")
         return tr(key) if key else kind
@@ -345,13 +388,19 @@ class DatabaseManagerDialog(QDialog):
         if row is None:
             self._detail_name.setText("—")
             self._detail_path.setText("—")
+            self._detail_meta.setText("")
+            self._detail_meta.hide()
             self._detail_pkg.setText("")
             self._detail_notice.hide()
             self._btn_set_active.setEnabled(False)
             self._btn_unmount.setEnabled(False)
+            self._btn_rename.setEnabled(False)
             return
         self._detail_name.setText(self._display_name(row))
         self._detail_path.setText(row["path"] or tr("db_manager.no_path"))
+        meta_text = self._meta_text(row)
+        self._detail_meta.setText(meta_text)
+        self._detail_meta.setVisible(bool(meta_text))
         self._detail_pkg.setText(self._pkg_hint(row))
         notice = self._notice_of(row)
         self._detail_notice.setText(notice)
@@ -361,6 +410,40 @@ class DatabaseManagerDialog(QDialog):
         # 用户自建库的位置由 user_db 自己管, 这里不给"卸载"
         self._btn_unmount.setEnabled(
             row["kind"] != "user" and (bool(row["path"]) or not row["builtin"]))
+        # 重命名只给用户自加项 (builtin=False): 内置项的显示名是类型/变体
+        # 的映射, 改了名反而认不出它其实是哪份库。
+        self._btn_rename.setEnabled(bool(row.get("builtin") is False))
+
+    @staticmethod
+    def _meta_text(row: dict) -> str:
+        """polyDB 元数据行 (数据集 / 变体 / 格式版本 / 构建日期)。
+
+        字段来自 ``db_mounts.probe`` 的 ``meta`` / ``dataset`` / ``built`` /
+        ``schema_version``。这些键是 v4.6 才补的, 老版本 probe 没有, 其它
+        类型的库也不会有 —— 一律按空值处理, 只有真取到内容才显示, 免得
+        详情区挂出一行 "格式：vNone" 这种给用户添乱的占位。
+        """
+        meta = row.get("meta")
+        meta = meta if isinstance(meta, dict) else {}
+        dataset = _first_text(row.get("dataset"), meta.get("name"),
+                              meta.get("dataset"))
+        variant = _first_text(row.get("variant"), meta.get("variant"))
+        schema = _first_text(row.get("schema_version"),
+                             meta.get("schema_version"))
+        # probe 在缺 schema 时可能给 0 (int 默认值); 那不是合法的格式版本
+        # (schema 从 1 起), 按"没有"处理, 免得显示成 "格式：v0"。
+        if schema == "0":
+            schema = ""
+        built = _first_text(row.get("built"), _build_date(meta.get("build")))
+        if not (dataset or variant or schema or built):
+            return ""
+        # 缺字段用 "—" 占位而不是整行消失: 用户手里可能就是半成品的库,
+        # 让他看到"缺的是构建日期"比什么都看不到更有用。
+        line = tr("db_manager.meta_line",
+                  variant=variant or "—", schema=schema or "—",
+                  built=built or "—")
+        # 数据集名本身是数据、不翻译; 有就放最前, 让用户认出这是哪个子集。
+        return f"{dataset}　{line}" if dataset else line
 
     def _pkg_hint(self, row: dict) -> str:
         spec = DB_KINDS_BY_KEY.get(row["kind"])
@@ -473,6 +556,36 @@ class DatabaseManagerDialog(QDialog):
         self.reload()
         self.databases_changed.emit()
 
+    def _on_rename(self) -> None:
+        """给用户自加的库改显示名 (内置项按钮已置灰, 这里再兜一层)。
+
+        空名不交给 db_mounts: 后者的空 label 语义是"恢复按目录/文件名显示",
+        而用户在输入框里留空通常是手滑 —— 直接拒绝比静默恢复默认名更符合
+        预期, 也不会把用户特意起过的名字意外清掉。
+        """
+        row = self._current_row()
+        if row is None or row.get("builtin") is not False:
+            return
+        name, ok = QInputDialog.getText(
+            self, tr("db_manager.rename_title"), tr("db_manager.col_name"),
+            text=self._display_name(row))
+        if not ok:
+            return
+        name = (name or "").strip()
+        if not name:
+            QMessageBox.warning(self, tr("db_manager.rename_title"),
+                                tr("db_manager.rename_empty"))
+            return
+        try:
+            db_mounts.rename_mount(row["id"], name)
+        except Exception as e:  # noqa: BLE001 - 失败原因原样给用户
+            QMessageBox.critical(self, tr("db_manager.rename_title"), str(e))
+            return
+        self.reload()
+        self.databases_changed.emit()
+        QMessageBox.information(self, tr("db_manager.rename_title"),
+                                tr("db_manager.rename_done", name=name))
+
     def _on_open_user_db(self) -> None:
         from polyxrd.views.widgets.user_db_dialog import UserDatabaseDialog
 
@@ -495,6 +608,37 @@ def _app_version() -> str:
 def _probe_rows(m: db_mounts.Mount) -> int:
     res = db_mounts.probe(m)
     return int(res.get("rows") or 0) if res.get("ok") else 0
+
+
+def _first_text(*values) -> str:
+    """取第一个非空值的文本形式 (None / 空串 / 纯空白都算空)。
+
+    ``db_mounts.probe`` 的新元数据键可能缺席、可能是 None、也可能类型
+    不统一 (schema_version 是 int, build.date 是 str) —— 界面只关心"能
+    不能显示成人看得懂的一小段文本", 统一在这里收口。
+    """
+    for v in values:
+        if v is None or isinstance(v, bool):
+            continue
+        text = str(v).strip()
+        if text:
+            return text
+    return ""
+
+
+def _build_date(build) -> str:
+    """从 meta["build"] 里取构建日期 (兼容 dict / 纯字符串两种写法)。"""
+    if isinstance(build, dict):
+        return _first_text(build.get("date"), build.get("built"),
+                           build.get("time"))
+    return _first_text(build)
+
+
+def _variant_of(row: dict) -> str:
+    """行数据的 polyDB 变体: 优先用挂载项自己的 variant, 再回退 meta。"""
+    meta = row.get("meta")
+    meta = meta if isinstance(meta, dict) else {}
+    return _first_text(row.get("variant"), meta.get("variant"))
 
 
 def user_db_summary() -> dict:

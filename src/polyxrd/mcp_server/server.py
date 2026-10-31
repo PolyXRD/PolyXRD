@@ -20,11 +20,14 @@ import json
 import math
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from mcp.server import MCPServer
 
 from polyxrd.mcp_server.session import get_session
+
+if TYPE_CHECKING:  # 仅供类型注解 (运行期在工具函数内按需 import)
+    from polyxrd.services.polydb import PolyDatabase
 
 # ── Create MCP server instance ────────────────────────────────
 mcp = MCPServer(
@@ -369,31 +372,326 @@ def search_phases(
 #   · search_cod_by_d_peaks → v4.3.0 起转调 polyDB 原生 d 峰检索（旧签名不变）
 #   · search_phases_by_d_peaks → v4.3.0 新增原生 d 峰检索（含元素过滤/相对容差）
 #   · search_cod_online → 走 COD REST（本来就不依赖本地库）
+#
+# v4.6.0：MCP 以前一律 PolyDatabase()（只读配置里的默认 cod-inorg），
+# 完全忽略用户在「数据库管理」里"设为当前"的那一行 —— 界面选中的库与
+# MCP/AI 客户端检索的库可能不是同一份。现在四个 polyDB 工具都吃一个可选
+# 的 database 参数：空 = 当前库（active_mount），显式值 = 挂载 id / 路径 /
+# 标签，都解析不到才回退旧默认行为。新增 list_phase_databases 让客户端
+# 先看见"有哪些库、哪个是当前库"再决定传什么。
+
+
+def _match_mount(mounts, reference: str):
+    """按 id → 路径 → 标签的优先级，在挂载列表里精确匹配一项。
+
+    为什么按这个顺序：id 是程序生成的稳定标识（客户端从
+    list_phase_databases 拿到的就是它）；路径/标签是人在说话时最容易
+    给出的信息（"用 D:\\DB\\COD.polyDB" 或 "那个自建库"）。
+    全部精确匹配、不做模糊匹配 —— 检索错库比检索失败更难发现。
+    """
+    ref = (reference or "").strip()
+    if not ref:
+        return None
+    for m in mounts:
+        if m.id == ref:
+            return m
+    try:
+        resolved = Path(ref).resolve()
+    except (OSError, ValueError):
+        resolved = None
+    if resolved is not None:
+        for m in mounts:
+            if m.path is None:
+                continue
+            try:
+                if m.path.resolve() == resolved:
+                    return m
+            except OSError:
+                continue
+    for m in mounts:
+        if (getattr(m, "label", "") or "") == ref:
+            return m
+    return None
+
+
+def _mount_label(mount) -> str:
+    """挂载项的显示名；display_name 缺失/抛错时退回 label 或 id。
+
+    db_mounts 正由另一路并行扩展（多类型注册表），这里不假设 display_name
+    一定存在 —— MCP 边界不能因为宿主模块的版本差异而抛异常。
+    """
+    try:
+        return mount.display_name()
+    except Exception:  # noqa: BLE001
+        return str(getattr(mount, "label", "") or getattr(mount, "id", ""))
+
+
+def _read_polydb_meta_soft(path) -> dict:
+    """读 polyDB 的 meta.json；失败一律返回 {}（列表工具不能因一个库崩掉）。"""
+    if path is None:
+        return {}
+    try:
+        with open(Path(path) / "meta.json", "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError, TypeError):
+        return {}
+
+
+def _open_phase_database(
+    reference: str = "",
+) -> tuple[Optional[PolyDatabase], str, dict]:
+    """Resolve an MCP database reference to an opened polyDB reader.
+
+    Resolution order:
+      * a non-empty reference: mount id first, then resolved path, then label
+        (exact matches against the host app's mount registry);
+      * an empty reference: the mount the user marked as active, but only
+        when it is a usable polyDB mount;
+      * otherwise: the legacy default PolyDatabase() (configured cod-inorg
+        slot), which keeps old clients working.
+
+    Returns:
+        (db, name, info). db is None only when the reference cannot be
+        resolved; info then carries an "error" (and usually a "hint") that
+        callers embed in their JSON reply. This helper never raises: every
+        unexpected failure is converted into info.
+    """
+    ref = (reference or "").strip()
+    try:
+        from polyxrd.services import db_mounts
+        from polyxrd.services.polydb import PolyDatabase
+    except Exception as exc:  # noqa: BLE001 - MCP 边界必须返回 JSON
+        return None, ref, {
+            "database": ref,
+            "error": "phase database support unavailable: "
+                     f"{type(exc).__name__}: {exc}",
+        }
+
+    if ref:
+        try:
+            mounts = db_mounts.all_mounts()
+        except Exception as exc:  # noqa: BLE001
+            return None, ref, {
+                "database": ref,
+                "error": "failed to list mounted databases: "
+                         f"{type(exc).__name__}: {exc}",
+            }
+        mount = _match_mount(mounts, ref)
+        if mount is None:
+            return None, ref, {
+                "database": ref,
+                "error": f"database not found: {ref}",
+                "hint": "Call list_phase_databases to see mounted database "
+                        "ids/labels/paths.",
+            }
+        if mount.kind != "polydb":
+            return None, ref, {
+                "database": ref,
+                "error": f"database {ref} is kind '{mount.kind}'; MCP phase "
+                         "search currently supports polyDB mounts only.",
+            }
+        if mount.path is None or not Path(mount.path).is_dir():
+            return None, ref, {
+                "database": ref,
+                "error": f"database directory is missing: {mount.path or ''}",
+                "hint": "Re-mount the database in the PolyXRD app.",
+            }
+        try:
+            db = PolyDatabase(mount.path)
+        except Exception as exc:  # noqa: BLE001
+            return None, ref, {
+                "database": ref,
+                "error": f"failed to open database {ref}: "
+                         f"{type(exc).__name__}: {exc}",
+            }
+        info = {
+            "database": mount.id,
+            "label": _mount_label(mount),
+            "kind": mount.kind,
+            "path": str(mount.path),
+            "variant": getattr(mount, "variant", "") or "",
+        }
+        return db, mount.id, info
+
+    # 空参 → 用户"设为当前"的那一行；只认可用 polyDB（PDF2/user 库不是
+    # MCP 物相检索能用的东西，静默回退默认槽比报错更符合旧行为）。
+    active = None
+    try:
+        active = db_mounts.active_mount()
+    except Exception:  # noqa: BLE001 - 读挂载表失败时按"没有当前库"处理
+        active = None
+    if (active is not None
+            and getattr(active, "kind", "") == "polydb"
+            and getattr(active, "exists", False)
+            and getattr(active, "path", None) is not None):
+        try:
+            db = PolyDatabase(active.path)
+        except Exception as exc:  # noqa: BLE001
+            return None, str(getattr(active, "id", "")), {
+                "database": str(getattr(active, "id", "")),
+                "error": "failed to open active database: "
+                         f"{type(exc).__name__}: {exc}",
+            }
+        return db, str(active.id), {
+            "database": str(active.id),
+            "label": _mount_label(active),
+            "kind": "polydb",
+            "path": str(active.path),
+            "variant": getattr(active, "variant", "") or "",
+            "active": True,
+        }
+
+    # 没有当前库 → 旧行为：默认配置槽（cod-inorg）
+    try:
+        db = PolyDatabase()
+    except Exception as exc:  # noqa: BLE001
+        return None, "default", {
+            "database": "default",
+            "error": "failed to open default polyDB: "
+                     f"{type(exc).__name__}: {exc}",
+        }
+    return db, "default", {
+        "database": "default",
+        "kind": "polydb",
+        "path": str(db.path) if getattr(db, "path", None) else "",
+    }
+
+
+@mcp.tool()
+def list_phase_databases() -> str:
+    """List every database mounted in the PolyXRD app and the active one.
+
+    Use this before calling the polyDB search tools to learn which mount ids /
+    labels / paths can be passed as their database argument.
+
+    Returns:
+        JSON with active (mount id used for phase search, "" when unset),
+        active_label, n_databases and databases: one row per mount with id,
+        kind, label, path, available, phases, size_mb, variant, built,
+        engine, is_active and a reason for unavailable rows.
+    """
+    empty = {"active": "", "active_label": "", "n_databases": 0,
+             "databases": []}
+    try:
+        from polyxrd.services import db_mounts
+    except Exception as exc:  # noqa: BLE001
+        return json.dumps({
+            **empty,
+            "error": f"db_mounts unavailable: {type(exc).__name__}: {exc}",
+        }, ensure_ascii=False)
+
+    try:
+        mounts = db_mounts.all_mounts()
+        active_id = db_mounts.active_id() or ""
+        probe_all = getattr(db_mounts, "probe_all", None)
+        rows = probe_all(mounts) if callable(probe_all) else []
+        by_id = {}
+        for row in rows or []:
+            if not isinstance(row, dict):
+                continue
+            mid = row.get("id") or getattr(row.get("mount"), "id", "")
+            if mid:
+                by_id[str(mid)] = row
+    except Exception as exc:  # noqa: BLE001 - 挂载表损坏也不能抛给客户端
+        return json.dumps({
+            **empty,
+            "error": "failed to enumerate mounted databases: "
+                     f"{type(exc).__name__}: {exc}",
+        }, ensure_ascii=False)
+
+    out = []
+    active_label = ""
+    for m in mounts:
+        row = by_id.get(m.id) or {}
+        if m.id == active_id:
+            active_label = _mount_label(m)
+        meta = dict(row.get("meta") or {})
+        # db_mounts 新版本会在 probe 行里带 meta/built；老版本没有时直接
+        # 读 meta.json 兜底 —— MCP 与 db_mounts 的发布节奏不必绑死。
+        if not meta and m.kind == "polydb":
+            meta = _read_polydb_meta_soft(m.path)
+        build = meta.get("build") or {}
+        available = bool(row.get("ok"))
+        reason = ""
+        if not available:
+            reason = str(row.get("detail") or row.get("hint")
+                         or row.get("error") or "")
+            if not reason:
+                reason = "unmounted" if m.path is None else "unavailable"
+        variant = (row.get("variant") or getattr(m, "variant", "")
+                   or str(meta.get("variant") or ""))
+        built = str(row.get("built") or build.get("date") or "")
+        try:
+            phases = int(row.get("rows") or 0) if available else None
+        except (TypeError, ValueError):
+            phases = None
+        try:
+            size_mb = round(float(row.get("size_mb") or 0.0), 1)
+        except (TypeError, ValueError):
+            size_mb = 0.0
+        out.append({
+            "id": m.id,
+            "kind": m.kind,
+            "label": _mount_label(m),
+            "path": str(m.path) if m.path else "",
+            "available": available,
+            "phases": phases,
+            "size_mb": size_mb,
+            "variant": variant,
+            "built": built,
+            "engine": row.get("engine") or getattr(m, "engine", ""),
+            "is_active": m.id == active_id,
+            "reason": reason,
+        })
+
+    return json.dumps({
+        "active": active_id,
+        "active_label": active_label,
+        "n_databases": len(out),
+        "databases": out,
+    }, ensure_ascii=False, default=str)
 
 
 @mcp.tool()
 def search_phases_polydb(
     query: str,
     limit: int = 20,
+    database: str = "",
 ) -> str:
     """Search the mounted polyDB phase database by formula, mineral name, space group, or ID.
 
     Args:
         query: Search keyword. Examples: "SiO2", "O2 Si", "quartz", "F d -3 m" (spaces optional), "1011097", "97-1011097".
         limit: Maximum number of results to return (default 20).
+        database: Mount id, label, or path of the database to search. Empty
+            (default) uses the database marked active in the PolyXRD app,
+            falling back to the default polyDB slot.
 
     Returns:
         JSON list of matching phases with cod_id, formula, mineral name,
-        space group and cell parameters. ``mounted=false`` when no polyDB is
-        mounted (the DB ships as a separate optional download).
+        space group and cell parameters. A mounted=false payload is returned
+        when no polyDB is mounted (the DB ships as a separate optional
+        download).
     """
-    from polyxrd.services.polydb import PolyDatabase
-
-    db = PolyDatabase()
+    db, db_name, db_info = _open_phase_database(database)
+    if db is None:
+        return json.dumps({
+            "query": query,
+            "database": db_name,
+            "mounted": False,
+            "n_results": 0,
+            "phases": [],
+            "error": db_info.get("error",
+                                 "database reference cannot be resolved"),
+            "hint": db_info.get(
+                "hint", "Call list_phase_databases to see what is mounted."),
+        }, ensure_ascii=False)
     if not db.available:
         return json.dumps(
             {
                 "query": query,
+                "database": db_name,
                 "mounted": False,
                 "n_results": 0,
                 "phases": [],
@@ -409,6 +707,7 @@ def search_phases_polydb(
         return json.dumps(
             {
                 "query": query,
+                "database": db_name,
                 "mounted": True,
                 "n_results": 0,
                 "phases": [],
@@ -417,13 +716,22 @@ def search_phases_polydb(
             },
             ensure_ascii=False,
         )
-    results = db.search_entries(query, limit=limit)
-    return json.dumps(
-        {"query": query, "mounted": True, "n_results": len(results),
-         "phases": results},
-        ensure_ascii=False,
-        default=str,
-    )
+    try:
+        results = db.search_entries(query, limit=limit)
+    except Exception as exc:  # noqa: BLE001 - MCP 边界必须返回 JSON
+        return json.dumps({
+            "query": query,
+            "database": db_name,
+            "mounted": True,
+            "n_results": 0,
+            "phases": [],
+            "error": f"polyDB search failed: {type(exc).__name__}: {exc}",
+        }, ensure_ascii=False)
+    payload = {"query": query, "database": db_name, "mounted": True,
+               "n_results": len(results), "phases": results}
+    if db_info.get("label") and db_info["label"] != db_name:
+        payload["database_label"] = db_info["label"]
+    return json.dumps(payload, ensure_ascii=False, default=str)
 
 
 @mcp.tool()
@@ -435,39 +743,62 @@ def search_cod_phases(
 
     Kept so existing MCP clients keep working after the local COD sqlite
     runtime was removed in v4.2.0.
+
+    v4.6.0: 签名**保持不变** (旧客户端按位置/关键字调用不受影响);
+    想显式指定库请用新工具 ``search_phases_polydb(..., database=...)``。
     """
     return search_phases_polydb(query=query, limit=limit)
 
 
 @mcp.tool()
-def get_phase_details(eid: int) -> str:
+def get_phase_details(eid: int, database: str = "") -> str:
     """Get full details of a polyDB phase including its d-I peaks and structure.
 
     Args:
         eid: polyDB entry ID (e.g. 1011097).
+        database: Mount id, label, or path of the database to read. Empty
+            (default) uses the database marked active in the PolyXRD app,
+            falling back to the default polyDB slot.
 
     Returns:
         JSON with phase info: formula, mineral name, space group, cell params,
         d-I peak list and non-symmetric-unit atomic sites.
     """
-    from polyxrd.services.polydb import PolyDatabase
-
-    db = PolyDatabase()
+    db, db_name, db_info = _open_phase_database(database)
+    if db is None:
+        return json.dumps({
+            "database": db_name,
+            "error": db_info.get("error",
+                                 "database reference cannot be resolved"),
+            "hint": db_info.get(
+                "hint", "Call list_phase_databases to see what is mounted."),
+        }, ensure_ascii=False)
     if not db.available:
         return json.dumps({
+            "database": db_name,
             "error": "No polyDB mounted.",
             "hint": "Mount a PolyXRD-DataBase release in the app first.",
         }, ensure_ascii=False)
     if not db.is_ready():
         return json.dumps({
+            "database": db_name,
             "error": "polyDB layout is incomplete/corrupted.",
             "hint": "Re-mount a valid PolyXRD-DataBase release.",
         }, ensure_ascii=False)
-    phase = db.get_phase(int(eid))
-    if phase is None:
-        return json.dumps({"error": f"Entry {eid} not found in polyDB."},
-                          ensure_ascii=False)
-    phase["atomic_sites"] = db.get_atomic_sites(int(eid))
+    try:
+        phase = db.get_phase(int(eid))
+        if phase is None:
+            return json.dumps({"database": db_name,
+                               "error": f"Entry {eid} not found in polyDB."},
+                              ensure_ascii=False)
+        phase["atomic_sites"] = db.get_atomic_sites(int(eid))
+    except Exception as exc:  # noqa: BLE001 - MCP 边界必须返回 JSON
+        return json.dumps({
+            "database": db_name,
+            "error": f"failed to read entry {eid}: "
+                     f"{type(exc).__name__}: {exc}",
+        }, ensure_ascii=False)
+    phase["database"] = db_name
     return json.dumps(phase, ensure_ascii=False, default=str)
 
 
@@ -477,6 +808,8 @@ def get_cod_phase_details(cod_id: int) -> str:
 
     v4.2.1：保留旧参数名 ``cod_id``（MCP 入参 schema 由函数签名生成），
     旧客户端按 ``{"cod_id": …}`` 调用不会失效。
+
+    v4.6.0: 签名保持不变; 想显式指定库请用 ``get_phase_details(eid=..., database=...)``。
     """
     return get_phase_details(eid=cod_id)
 
@@ -492,6 +825,7 @@ def _polydb_d_peak_search(
     elements=None,
     max_ref_peaks: int = 40,
     main_peak_topk: int = 1,
+    database: str = "",
 ) -> dict:
     """MCP d 峰检索公共实现：校验 → polyDB 检索 → 统一 JSON 字段。
 
@@ -548,7 +882,7 @@ def _polydb_d_peak_search(
         if not elems:
             elems = None
 
-    from polyxrd.services.polydb import PolyDatabase, Z_OF
+    from polyxrd.services.polydb import Z_OF
 
     if elems:
         unknown = sorted(e for e in elems if e not in Z_OF)
@@ -556,9 +890,21 @@ def _polydb_d_peak_search(
             return {"error": f"unknown element(s): {', '.join(unknown)}",
                     "n_results": 0, "matches": []}
 
-    db = PolyDatabase()
+    db, db_name, db_info = _open_phase_database(database)
+    if db is None:
+        return {
+            "database": db_name,
+            "mounted": False,
+            "error": db_info.get("error",
+                                 "database reference cannot be resolved"),
+            "hint": db_info.get(
+                "hint", "Call list_phase_databases to see what is mounted."),
+            "n_results": 0,
+            "matches": [],
+        }
     if not db.available:
         return {
+            "database": db_name,
             "mounted": False,
             "n_results": 0,
             "matches": [],
@@ -569,6 +915,7 @@ def _polydb_d_peak_search(
         }
     if not db.is_ready():
         return {
+            "database": db_name,
             "mounted": True,
             "error": "polyDB layout is incomplete/corrupted "
                      "(meta.json/index.sqlite or segments missing).",
@@ -583,6 +930,7 @@ def _polydb_d_peak_search(
         )
     except Exception as exc:  # noqa: BLE001 - MCP 边界必须返回 JSON
         return {
+            "database": db_name,
             "mounted": True,
             "error": f"polyDB d-peak search failed: {type(exc).__name__}: {exc}",
             "n_results": 0,
@@ -597,6 +945,7 @@ def _polydb_d_peak_search(
         m["ref_id"] = f"96-{cid // 10000:03d}-{cid % 10000:04d}"
 
     return {
+        "database": db_name,
         "mounted": True,
         "n_results": len(matches),
         "matches": matches,
@@ -622,6 +971,7 @@ def search_phases_by_d_peaks(
     elements: Optional[list[str]] = None,
     max_ref_peaks: int = 40,
     main_peak_topk: int = 1,
+    database: str = "",
 ) -> str:
     """Search the mounted polyDB by measured d-spacings (Hanawalt-style).
 
@@ -637,6 +987,9 @@ def search_phases_by_d_peaks(
             containing elements outside the whitelist are filtered out.
         max_ref_peaks: Only the strongest N reference peaks per phase are used.
         main_peak_topk: Measured strongest peaks checked by main-peak match.
+        database: Mount id, label, or path of the database to search. Empty
+            (default) uses the database marked active in the PolyXRD app,
+            falling back to the default polyDB slot.
 
     Returns:
         JSON with mounted/n_results/matches. Each match has cod_id, formula,
@@ -647,7 +1000,7 @@ def search_phases_by_d_peaks(
         d_values, intensities, tolerance=tolerance,
         tolerance_rel=tolerance_rel, min_match=min_match, limit=limit,
         elements=elements, max_ref_peaks=max_ref_peaks,
-        main_peak_topk=main_peak_topk,
+        main_peak_topk=main_peak_topk, database=database,
     )
     return json.dumps(payload, ensure_ascii=False, default=str)
 
@@ -659,6 +1012,7 @@ def search_cod_by_d_peaks(
     tolerance: float = 0.02,
     min_match: int = 3,
     limit: int = 20,
+    database: str = "",
 ) -> str:
     """Deprecated-name alias of ``search_phases_by_d_peaks`` (polyDB-backed).
 
@@ -668,7 +1022,7 @@ def search_cod_by_d_peaks(
     """
     payload = _polydb_d_peak_search(
         d_values, intensities, tolerance=tolerance, min_match=min_match,
-        limit=limit,
+        limit=limit, database=database,
     )
     return json.dumps(payload, ensure_ascii=False, default=str)
 

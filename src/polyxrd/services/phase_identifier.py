@@ -1762,6 +1762,107 @@ class PhaseIdentifier:
             tolerance=tolerance, wavelength=wavelength,
         )
 
+    def prescreen_with_polydb(
+        self,
+        data: XRDData,
+        peaks: Optional[PeakList] = None,
+        element_filter: Optional[dict] = None,
+        *,
+        limit: int = 200,
+        prefilter_tolerance: float = 0.02,
+        prefilter_tolerance_rel: float = 0.0,
+        prefilter_min_match: int = 3,
+        db_path: str | None = None,
+        variant: str = "cod-inorg",
+    ) -> list[Phase]:
+        """polyDB 只做位图预筛 + 取相, **不做 FoM 打分** (Profile Fitting 用)。
+
+        为什么需要这条路径: 常规检索的价目是"预筛 → 对百个候选算 FoM → 排序",
+        而 Profile Fitting 拿到候选后要自己生成理论谱、按全谱相关系数重排 ——
+        FoM 排序对它没有意义, 却占了整条链路最贵的一段 (百个候选 × 谱峰数,
+        复杂谱上可达数十秒)。这里直接取预筛行、构造 Phase, 把成本压回
+        "位图预筛 + 200 次取相"。
+
+        Args:
+            limit: 候选池上限 (按预筛排序键取前 N 个; 不做自适应扩池)。
+            prefilter_*: 与 :meth:`identify_with_polydb` 同口径。
+            db_path / variant: 与 :meth:`identify_with_polydb` 同义。
+
+        Returns:
+            Phase 列表 (带晶胞 + 已展开全胞位点); 库不可用/无命中返回 []。
+        """
+        try:
+            from polyxrd.services.polydb import PolyDatabase
+        except Exception:  # noqa: BLE001 - 裁剪安装缺模块时按无候选处理
+            return []
+        try:
+            db = PolyDatabase(db_path) if db_path else PolyDatabase(variant=variant)
+        except Exception:  # noqa: BLE001 - 损坏库/权限异常 → 无候选
+            return []
+        if not db.is_ready():
+            return []
+        if peaks is None:
+            peaks = default_peak_list(data)
+        wavelength = self._effective_wavelength(data)
+        d_list: list[float] = []
+        i_list: list[float] = []
+        for p in peaks.peaks:
+            sin_theta = np.sin(np.radians(p.two_theta / 2.0))
+            if sin_theta <= 1e-6:
+                continue
+            d_list.append(wavelength / (2.0 * sin_theta))
+            i_list.append(float(p.intensity))
+        if not d_list:
+            return []
+        ef = normalize_element_filter(element_filter) if element_filter else None
+        allowed_pool = (set(ef["must_have"]) | set(ef["has"]) | set(ef["maybe"])
+                        if ef else set())
+        elements_allowed = allowed_pool if allowed_pool else None
+        try:
+            rows, _bounds = db.ordered_candidates(
+                d_list, i_list,
+                tolerance=prefilter_tolerance,
+                tolerance_rel=prefilter_tolerance_rel,
+                min_match=prefilter_min_match,
+                elements_allowed=elements_allowed,
+                limit=max(1, int(limit)),
+                main_peak_topk=3,
+            )
+        except Exception:  # noqa: BLE001 - 预筛异常按无候选处理
+            return []
+        if rows is None or len(rows) == 0:
+            return []
+        eids = db.eid_of_rows(rows)
+        tt_min, tt_max = float(data.two_theta[0]), float(data.two_theta[-1])
+        out: list[Phase] = []
+        for eid in eids:
+            detail = db.get_phase(int(eid))
+            if not detail:
+                continue
+            ref_peaks = []
+            for d_val, i_val in zip(detail.get("peaks_d_list", []),
+                                    detail.get("peaks_i_list", [])):
+                if d_val <= 0:
+                    continue
+                sin_theta = wavelength / (2.0 * d_val)
+                if sin_theta > 1.0:
+                    continue
+                tt = 2.0 * float(np.degrees(np.arcsin(sin_theta)))
+                if tt_min <= tt <= tt_max:
+                    ref_peaks.append(((0, 0, 0), tt, float(i_val)))
+            if not ref_peaks:
+                continue
+            phase = self._make_polydb_phase(detail, {"cod_id": int(eid)},
+                                            ref_peaks, db=db)
+            if ef and not elements_match_filter(
+                phase.elements,
+                has=ef["has"], maybe=ef["maybe"], exclude=ef["exclude"],
+                must_have=ef["must_have"],
+            ):
+                continue
+            out.append(phase)
+        return out
+
     @staticmethod
     def _make_polydb_phase(detail: dict, cand: dict, ref_peaks: list,
                            db=None) -> Phase:

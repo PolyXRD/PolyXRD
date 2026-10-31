@@ -58,6 +58,10 @@ class PhaseView(QWidget):
     """
 
     phase_confirmed = Signal(object)
+    #: 请求主窗口打开「外挂数据库管理」(v4.6.0: 数据源行内直达入口)。
+    #: 对话框归 MainWindow 管 (它负责在关闭后刷新下拉 + 重载库缓存),
+    #: 子视图只发意图, 不自己 new 对话框。
+    request_db_manager = Signal()
 
     def __init__(self, vm: MainViewModel) -> None:
         super().__init__()
@@ -143,6 +147,13 @@ class PhaseView(QWidget):
         self._db_combo.currentIndexChanged.connect(self._on_db_source_changed)
         self._mark_unavailable_db_sources()
         db_row.addWidget(self._db_combo)
+        # v4.6.0: 挂多份库后, 用户不必再去菜单里找管理入口 —— 下拉右侧直达。
+        self._btn_manage_db = QPushButton(tr("vw.phase_view.btn_manage_db"))
+        self._btn_manage_db.setFixedHeight(28)
+        self._btn_manage_db.setToolTip(tr("vw.phase_view.tip_manage_db"))
+        self._btn_manage_db.clicked.connect(
+            lambda: self.request_db_manager.emit())
+        db_row.addWidget(self._btn_manage_db)
         db_row.addStretch()
         left_panel.addLayout(db_row)
 
@@ -311,6 +322,8 @@ class PhaseView(QWidget):
         self._update_filter_summary()
 
         self._label_db_source.setText(tr("vw.phase_view.label_db_source"))
+        self._btn_manage_db.setText(tr("vw.phase_view.btn_manage_db"))
+        self._btn_manage_db.setToolTip(tr("vw.phase_view.tip_manage_db"))
         # 数据库下拉项本身是本地化的 (「内置 118 相 / COD 无机物 …」) → 整表重建
         # v4.1.2: 首次进入默认选内置 COD-Inorg（开箱即检索），而不是 118 相 builtin。
         # 之后的 refresh_db_sources() 仍尊重用户显式选过的项（keep 分支）。
@@ -392,6 +405,9 @@ class PhaseView(QWidget):
                 element_filter=self._filter_dict if self._filter_dict else None,
                 top_n=20,
                 fwhm=self._fwhm_spin.value(),
+                # v4.6.0: 与「传统检索」共用同一个数据源下拉 —— 选中的是哪份
+                # 库, Profile Fitting 就在哪份库上做 (外挂库走预筛+全谱重排)。
+                db_source=self._current_db_source(),
             )
 
     # ------------------------------------------------------------------
@@ -408,6 +424,15 @@ class PhaseView(QWidget):
     def _db_source_display(self) -> str:
         """当前数据库源的显示名"""
         return self._db_combo.currentText()
+
+    # ── 对外只读访问 (主窗口工具栏/菜单与检索链路共用同一个源) ──
+    def current_db_source(self) -> str:
+        """当前选中的数据库源 key (= 挂载项 id 或 `builtin`)。"""
+        return self._current_db_source()
+
+    def current_element_filter(self) -> dict:
+        """当前元素过滤条件 (无过滤返回空 dict)。"""
+        return dict(self._filter_dict or {})
 
     def _on_db_source_changed(self, _index: int = -1) -> None:
         """下拉换源时把"当前库"同步回挂载表 (两处必须始终一致)。
@@ -517,10 +542,12 @@ class PhaseView(QWidget):
         return base + tr("vw.phase_view.db_unmounted")
 
     def _db_combo_tooltip(self) -> str:
+        """数据源下拉提示: 当前条目说明 + PDF2 覆盖率 + 挂载入口。"""
         return (
             tr("vw.phase_view.db_combo_tip_main")
             + self._pdf2_coverage_line()
             + tr("vw.phase_view.db_combo_tip_import")
+            + "\n" + tr("vw.phase_view.tip_manage_db")
         )
 
     def _pdf2_coverage_line(self) -> str:
@@ -687,6 +714,7 @@ class PhaseView(QWidget):
             self._vm.search_residual_peaks(
                 element_filter=self._filter_dict if self._filter_dict else None,
                 top_n=20,
+                db_source=self._current_db_source(),
             )
 
     def _on_quick_identify(self) -> None:

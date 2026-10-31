@@ -124,16 +124,11 @@ class ProfileFittingService:
         Returns:
             匹配结果列表，按相关系数降序排列 (越高越好)
         """
-        # 1. 估计实验背景
-        bg = self._estimate_background(data, background_points)
-        experimental_corrected = data.intensity - bg
-
-        # 归一化
-        exp_norm = self._normalize(experimental_corrected)
-
+        # 筛选出参与打分的候选。内置库只有 118 相，直接全量打分；外挂库
+        # (可能几十万相) 由调用方先做粗筛，再把候选传给 score_phases 重排。
         ef = normalize_element_filter(element_filter) if element_filter else None
 
-        results = []
+        candidates = []
         for phase in self._phase_database:
             if ef and not elements_match_filter(
                 phase.elements,
@@ -141,7 +136,60 @@ class ProfileFittingService:
                 must_have=ef["must_have"],
             ):
                 continue
+            candidates.append(phase)
 
+        # 复用 score_phases: 背景扣除/归一化与打分口径只有一处实现，
+        # 内置库路径与"外挂库预筛后重排"路径得到的分数因此严格同源。
+        return self.score_phases(
+            data,
+            candidates,
+            fwhm=fwhm,
+            background_points=background_points,
+        )[:top_n]
+
+    def score_phases(
+        self,
+        data: XRDData,
+        phases: list[Phase],
+        *,
+        fwhm: float = 0.15,
+        background_points: int = 50,
+    ) -> list[PhaseMatchResult]:
+        """对给定物相列表做全谱拟合打分并重排
+
+        这是 Profile Fitting 的**唯一打分入口**：``identify()`` 与
+        "外挂库先预筛候选、再全谱重排"的调用方都走这里，保证同一条曲线
+        无论库多大、候选从哪来，分数与排序口径完全一致。
+
+        为什么把候选列表作为参数而不是自己遍历数据库：
+        外挂库可能有几十万相，逐相生成理论谱再算相关会慢到不可用。调用方
+        先用 d 峰位图预筛出几百个候选，这里只负责对整条曲线算相关系数/
+        R 因子 —— 粗筛负责召回，全谱拟合负责排序。
+
+        Args:
+            data: 实验XRD数据（原始曲线，内部自行扣背景/归一化）
+            phases: 待打分的物相列表；空列表直接返回 []
+            fwhm: 峰的半高宽 (度，2θ单位)
+            background_points: 背景估计点数
+
+        Returns:
+            PhaseMatchResult 列表，按 score 降序（分数越高越好），
+            不过滤、不截断 —— 截断由调用方决定。
+        """
+        # 空候选是合法输入（例如外挂库预筛无命中），返回空列表而不是
+        # 带着空列表去算一个没有意义的背景。
+        if not phases:
+            return []
+
+        # 1. 估计实验背景
+        bg = self._estimate_background(data, background_points)
+        experimental_corrected = data.intensity - bg
+
+        # 归一化
+        exp_norm = self._normalize(experimental_corrected)
+
+        results = []
+        for phase in phases:
             # 2. 生成理论XRD图谱
             theoretical = self._generate_theoretical_profile(
                 phase, data.two_theta, fwhm
@@ -154,19 +202,18 @@ class ProfileFittingService:
             r_factor = self._r_factor(exp_norm, theoretical)
 
             # 综合评分: 相关系数越高 + R因子越低 = 匹配越好
-            score = correlation * 100.0  # 0-100 scale
+            score = correlation * 100.0  # -100..100 scale (r 可为负)
 
-            match_result = PhaseMatchResult(
+            results.append(PhaseMatchResult(
                 phase=phase,
                 score=score,
                 r_factor=r_factor,
                 method="profile_fitting",
-            )
-            results.append(match_result)
+            ))
 
         # 按分数降序排列 (Profile Fitting: 分数越高越好)
         results.sort(key=lambda r: r.score, reverse=True)
-        return results[:top_n]
+        return results
 
     def _estimate_background(
         self, data: XRDData, n_points: int

@@ -194,3 +194,61 @@ class TestProfileFittingService:
         # 两种 FWHM 都应该返回结果
         assert len(narrow) > 0
         assert len(wide) > 0
+
+    # ── score_phases：外挂库"先预筛候选、再全谱重排"的公共入口 ─────
+
+    def test_score_phases_sorted_and_method(self):
+        """给定候选列表时按分数降序返回，method 一律 profile_fitting"""
+        data = self._create_quartz_data()
+        service = ProfileFittingService()
+        candidates = service._phase_database[:12]
+
+        results = service.score_phases(data, candidates, fwhm=0.15)
+
+        assert len(results) == len(candidates)
+        assert {r.phase.name for r in results} == {p.name for p in candidates}
+        scores = [r.score for r in results]
+        assert scores == sorted(scores, reverse=True)
+        assert all(r.method == "profile_fitting" for r in results)
+        # score = Pearson r * 100；相关可以为负（候选与实验谱反相/无关），
+        # 所以区间是 [-100, 100] —— 与既有 identify() 口径一致，不在此夹紧。
+        assert all(-100 <= r.score <= 100 for r in results)
+        assert all(r.r_factor >= 0 for r in results)
+
+    def test_score_phases_empty_candidates(self):
+        """空候选返回 []（外挂库预筛无命中是合法输入，不应报错）"""
+        data = self._create_quartz_data()
+        service = ProfileFittingService()
+
+        assert service.score_phases(data, []) == []
+
+    def test_score_phases_matches_identify(self):
+        """identify() 复用 score_phases：同一份数据输出逐项一致"""
+        data = self._create_quartz_data()
+        service = ProfileFittingService()
+
+        all_scored = service.score_phases(
+            data, service._phase_database, fwhm=0.15
+        )
+        identified = service.identify(
+            data, top_n=len(service._phase_database), fwhm=0.15
+        )
+
+        assert ([r.phase.name for r in identified]
+                == [r.phase.name for r in all_scored])
+        for a, b in zip(identified, all_scored):
+            assert a.score == pytest.approx(b.score)
+            assert a.r_factor == pytest.approx(b.r_factor)
+            assert a.method == b.method == "profile_fitting"
+
+    def test_identify_element_filter_applies_before_scoring(self):
+        """元素过滤仍在打分前生效（identify 只把候选交给 score_phases）"""
+        data = self._create_quartz_data()
+        service = ProfileFittingService()
+
+        results = service.identify(
+            data, element_filter={"must": ["Si"]}, top_n=5
+        )
+
+        assert results, "内置库应至少有一相含 Si"
+        assert all("Si" in r.phase.elements for r in results)

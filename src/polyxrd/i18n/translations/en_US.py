@@ -125,7 +125,7 @@ translations = {
     },
     "db_manager": {
         "title": "External Database Manager",
-        "intro": "Since 0.10.0 the installer no longer bundles any database. The three databases ship as separate archives and mount independently — installing just one of them is perfectly fine.\nExtract the matching archive, then click “Import…” on that row and pick the .sqlite file. The path is remembered and reloaded on the next launch. With none mounted, only the 118 built-in reference phases are available.",
+        "intro": "One row per database: mount as many polyDB libraries as you like, of any type (even several of the same type, e.g. an always-on full database plus a portable inorganics subset), from any folder. Select a row and click “Use This” (or double-click it) and phase identification runs against that one; unmounting only removes the row from this list and never deletes the database files.",
         "pkg_hint": "Download: {pkg}  →  extracts {file}",
         "pkg_hint_local": "Not shipped in any release package: supply your own {file} and import it here",
         "recheck": "Re-check",
@@ -194,7 +194,14 @@ translations = {
         "set_active_unavailable": "“{name}” is currently unavailable (not mounted or the file is damaged) and cannot be used for identification.",
         "current_source": "Current identification source: {name}",
         "current_source_none": "No identification source selected: the Phase Analysis page uses whatever is chosen in its own dropdown.",
-        "row_disabled_tip": "This database is currently unavailable: check whether the file was moved/deleted, or mount it again."
+        "row_disabled_tip": "This database is currently unavailable: check whether the file was moved/deleted, or mount it again.",
+        "btn_rename": "Rename…",
+        "rename_title": "Rename database",
+        "rename_empty": "Name cannot be empty.",
+        "rename_done": "Renamed to “{name}”",
+        "meta_line": "Variant: {variant} · Schema: v{schema} · Built: {built}",
+        "type_variant": "polyDB · {variant}",
+        "mounted_count": "{n} database(s) mounted · In use: {active}"
     },
     "db_mounts": {
         "type": {
@@ -450,6 +457,7 @@ translations = {
         "refine_failed": "Refinement failed: {error}",
         "identify_failed": "Phase identification failed: {error}",
         "db_missing": "The database \"{name}\" is no longer at its original location (moved or deleted). Re-mount it in Database ▸ External Database Manager.",
+        "db_unusable": "Selected database “{name}” cannot be used for search: {detail}",
         "peak_finder_failed": "Peak detection failed: {error}",
         "peak_fit_failed": "Peak fitting failed: {error}",
         "background_failed": "Background subtraction failed: {error}",
@@ -919,6 +927,9 @@ translations = {
             "db_combo_tip_import": "Databases are not bundled with the installer; download and unzip separately, then import via\nMenu “Database ▸ External Database Manager…”.",
             "pdf2_coverage": "  Local library: {total} phases, space group {sg}%, cell {cell}%.\n",
             "db_unmounted_hint": "This database is not mounted. Import the unzipped library file via Menu “Database ▸ External Database Manager…”.",
+            "btn_manage_db": "Manage databases…",
+            "tip_manage_db": "Mount or unmount databases, or choose the one used for phase search",
+            "db_profile_external": "Profile Fitting: re-ranked {n} candidates pre-screened from “{name}” by full-profile fitting.",
             "db_user_empty_hint": "The user database has no entries yet. Import your own CIF files via “Database ▸ Manage User Database…”.",
             "db_user": "User Database",
             "no_match": "No matching phases found",

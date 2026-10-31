@@ -170,6 +170,205 @@ class PhaseViewModel(QObject):
         except Exception as e:
             self.error.emit(tr("error.peak_fit_failed", error=e))
 
+    #: 外挂库做 Profile Fitting 时的候选池上限。
+    #: 全谱拟合是 O(候选数 × 网格点数), 7.7 万相穷举不可行；d-I 预筛拿前
+    #: 200 个候选再全谱重排。一次点击通常数秒 (视库规模/磁盘/CPU 而定),
+    #: 换机器可能更慢; 改大只会线性变慢, 召回收益递减。
+    PROFILE_EXTERNAL_POOL = 200
+
+    def _resolve_mount(self, db_source: str):
+        """`db_source` → 挂载项 (解析不出 / 注册表异常都返回 None)。"""
+        try:
+            from polyxrd.services import db_mounts
+
+            return db_mounts.resolve_mount(db_source)
+        except Exception:  # noqa: BLE001 - 注册表异常不该阻断识别主链路
+            return None
+
+    def _ensure_mount_usable(self, mount) -> bool:
+        """检查选中的库当前是否真的能检索; 不能则发出**明确原因**并返回 False。
+
+        为什么必须在分发前探测: 路径存在但内容损坏 (半成品 polyDB / 被截断的
+        sqlite / 只读网盘掉线) 时, 各引擎的既有行为是"返回空候选"。界面于是
+        显示"没匹配到物相", 用户会以为样品里没有这个相 —— 实际是库打不开。
+        v4.0.0 的代码评估里把这条列为遗留缺陷, 这里补上。
+
+        内置库未挂载时 (`path is None`) 也会走到这里: 下拉里该项本来就被
+        置灰, 能选中说明状态刚变化, 报错比静默返回空结果更符合直觉。
+        """
+        if mount is None:
+            return True
+        if not mount.exists:
+            self.error.emit(tr("error.db_missing", name=mount.display_name()))
+            return False
+        try:
+            from polyxrd.services import db_mounts
+
+            res = db_mounts.probe(mount)
+        except Exception as e:  # noqa: BLE001 - 探测异常按不可用处理
+            res = {"ok": False, "error": f"{e}"}
+        if res.get("ok"):
+            return True
+        detail = str(res.get("error") or "")
+        extra = str(res.get("detail") or "")
+        if extra:
+            detail = f"{detail} ({extra})" if detail else extra
+        self.error.emit(tr("error.db_unusable",
+                           name=mount.display_name(), detail=detail or "unknown"))
+        return False
+
+    def _identify_with_source(
+        self,
+        data,
+        *,
+        peaks,
+        element_filter,
+        elements=None,
+        top_n: int,
+        tolerance: float,
+        db_source: str,
+        prefilter_limit: Optional[int] = None,
+    ) -> Optional[list[PhaseMatchResult]]:
+        """按 `db_source` 分发到对应检索引擎 (识别主链路与 Profile Fitting 共用)。
+
+        v4.0.0: 数据源 = 「挂载列表」里某一行的 id。先解析成 (kind, 挂载项),
+        再按 kind 分发 —— 同一类型挂多份库时只有"用户自加的那一份"才传显式
+        路径; 内置项继续按配置解析, 与历史行为逐字一致。
+
+        Args:
+            peaks: 参与检索的峰表 (None → 各引擎自行寻峰, Profile Fitting 用)。
+            prefilter_limit: 预筛候选池大小; None 用各引擎默认值 (100)。
+                外挂库做 Profile Fitting 时要先把池子放大, 否则 `top_n=200`
+                实际只会在前 100 个候选里挑。
+
+        Returns:
+            结果列表; 选中的库不可用 / 引擎抛异常时返回 None (错误已 emit)。
+        """
+        mount = self._resolve_mount(db_source)
+        if not self._ensure_mount_usable(mount):
+            return None
+        # 按**引擎**分发而不是按 kind: 自定义类型可以复用现成引擎
+        # (MountKind.engine = "polydb" / "pdf2" / "user"), 只要容器结构与
+        # 引擎预期一致; 没有引擎的类型必须明确报错, 不能静默退回内置库。
+        engine = (mount.engine if mount is not None else "") or ""
+        # 兼容历史语义: 内置项不传显式路径 (按配置解析); 用户自加项传路径。
+        explicit = None
+        if mount is not None and not mount.builtin:
+            explicit = mount.path
+        # polyDB 是目录容器, 两个变体是两份独立的库: 必须把路径/变体带下去,
+        # 否则「COD 全库 (polyDB)」会被当成无机库那一份来查。
+        poly_path = None
+        if engine == "polydb" and mount is not None and mount.exists:
+            poly_path = mount.path
+            explicit = None
+        pool = ({"prefilter_limit": int(prefilter_limit)}
+                if prefilter_limit else {})
+        if engine and engine not in ("pdf2", "user", "polydb"):
+            self.error.emit(tr(
+                "error.db_unusable",
+                name=(mount.display_name() if mount is not None else db_source),
+                detail=f"unsupported engine: {engine}"))
+            return None
+        try:
+            if engine == "pdf2":
+                results = self._identifier.identify_with_pdf2(
+                    data,
+                    peaks=peaks,
+                    element_filter=element_filter,
+                    top_n=top_n,
+                    tolerance=tolerance,
+                    db_path=explicit,
+                    **pool,
+                )
+            elif engine == "user":
+                # v2.6.0: 用户自建库 (同构 sqlite)。与 COD 无机库同一套
+                # 预筛/评分, 但返回的 Phase 自带晶胞+原子坐标, 可直接精修。
+                results = self._identifier.identify_with_user_db(
+                    data,
+                    peaks=peaks,
+                    element_filter=element_filter,
+                    top_n=top_n,
+                    tolerance=tolerance,
+                    **pool,
+                )
+            elif engine == "polydb":
+                # v4.0.0: polyDB 外挂库（目录容器 + 位图倒排预筛），v4.1.0 起
+                # 它是**默认参考库**。与 COD 无机库同一套打分，只是候选池靠
+                # 位图+上界分层生成；条目带非对称单位原子位点，命中相可直接精修。
+                results = self._identifier.identify_with_polydb(
+                    data,
+                    peaks=peaks,
+                    element_filter=element_filter,
+                    top_n=top_n,
+                    tolerance=tolerance,
+                    db_path=str(poly_path) if poly_path else None,
+                    # 路径缺省时靠 variant 选槽位: 「COD 全库 (polyDB)」这一行
+                    # 若被卸下, 绝不能悄悄退到无机库那一份去查。
+                    variant=(mount.variant if mount and mount.variant
+                             else "cod-inorg"),
+                    **pool,
+                )
+            elif element_filter:
+                results = self._identifier.identify_with_element_filter(
+                    data,
+                    peaks=peaks,
+                    element_filter=element_filter,
+                    top_n=top_n,
+                    tolerance=tolerance,
+                )
+            else:
+                results = self._identifier.identify(
+                    data,
+                    peaks=peaks,
+                    elements=elements,
+                    top_n=top_n,
+                    tolerance=tolerance,
+                )
+        except Exception as e:  # noqa: BLE001 - 检索失败发信号, 不崩 UI
+            self.error.emit(tr("error.identify_failed", error=e))
+            return None
+        return results
+
+    def _profile_candidates(self, data, db_source: str, engine: str,
+                            element_filter, pool: int):
+        """Profile Fitting 的候选池 (Phase 列表); None = 已报错需中止。
+
+        为什么 polyDB 单独走 `prescreen_with_polydb`: 常规检索的 FoM 打分是
+        整条链最贵的一段, 而 Profile Fitting 本来就要按全谱相关系数重排,
+        FoM 排序对它是废动作。直接取预筛行能把"200 候选"从数十秒压到
+        数秒 (复杂谱/慢机器差异更大)。
+
+        其它引擎 (PDF2/用户库/自定义) 继续复用常规检索拿候选 —— 它们的
+        预筛规模小或没有独立的"只预筛"接口, 收益不足以再复制一套取相逻辑。
+        """
+        if engine == "polydb" and hasattr(self._identifier,
+                                          "prescreen_with_polydb"):
+            mount = self._resolve_mount(db_source)
+            poly_path = (mount.path
+                         if mount is not None and mount.exists else None)
+            return self._identifier.prescreen_with_polydb(
+                data,
+                peaks=None,
+                element_filter=element_filter,
+                limit=pool,
+                db_path=str(poly_path) if poly_path else None,
+                variant=(mount.variant if mount is not None and mount.variant
+                         else "cod-inorg"),
+            )
+        pre = self._identify_with_source(
+            data,
+            peaks=None,
+            element_filter=element_filter,
+            top_n=pool,
+            tolerance=0.15,
+            db_source=db_source,
+            prefilter_limit=pool,
+        )
+        if pre is None:
+            return None
+        return [r.phase for r in pre
+                if r is not None and getattr(r, "phase", None) is not None]
+
     def identify_phases(
         self,
         data,
@@ -180,22 +379,22 @@ class PhaseViewModel(QObject):
         db_source: str = "builtin",
         marked_peaks: Optional[list[float]] = None,
     ) -> None:
-        """物相识别 (支持多数据库源)
+        """物相识别 (支持多数据库源)。
 
         Args:
-            db_source: 数据库源
-                - "builtin": 内置 118 物相库 (默认)
-                - "cod_inorganics": COD 无机物库 (71,199 物相, d-I Hanawalt)
-                - "cod_full": COD 全库 (113,223 条 CIF, 本地索引)
-                - "merged": 内置库 + COD 全库合并检索
-                - "pdf2": ICDD PDF-2 2004 库 (163,834 物相, 带空间群/晶胞)
-                - "user": 用户自建库 (v2.6.0, 导入的 CIF 带晶胞/原子坐标)
-                - "xinmatch": 用户挂载的 XinMatch 格式库 (v3.1.0, 只有晶胞
-                  没有原子坐标, 可用于检索/核对但不宜直接精修)
-                - "polydb" / "polydb:cod-full": polyDB 外挂库 (v4.0.0)
-                - **任意挂载项 id** (v4.0.0 列表式挂载): ``"<kind>:<摘要>"``,
-                  例如 ``"polydb:1a2b3c4d"`` —— 由 :mod:`polyxrd.services.db_mounts`
-                  登记, 同一类型可以挂多份库, 各自独立检索。
+            db_source: 数据源 = 「外挂数据库管理」列表里某一行的 id, 由
+                :mod:`polyxrd.services.db_mounts` 解析成 (kind, path) 后分发:
+
+                - ``builtin``: 内置 118 物相库 (无外挂库时的兜底);
+                - ``pdf2`` / ``user``: ICDD PDF-2 / 用户自建库;
+                - ``polydb:cod-inorg`` / ``polydb:cod-full``: 内置的两个
+                  polyDB 变体;
+                - **任意挂载项 id** (``<kind>:<摘要>``, 例如
+                  ``polydb:1a2b3c4d``): 用户自加的库, 同一类型可挂多份,
+                  各自独立检索 (选中哪一行就用哪一行)。
+
+                老字面量 (``cod_inorganics`` / ``cod_index`` / ``cod_full`` /
+                ``xinmatch`` / ``polydb``) 经别名表映射到语义等价的新库。
             marked_peaks: 标记峰 2θ 序列 (v2.2 S13)。None → 全部实测峰;
                 传入时仅保留与标记位最近 (≤0.30°) 的实测峰参与检索,
                 用于残差相/微量相追查 (候选列表右键"仅对标记峰再匹配")。
@@ -215,86 +414,20 @@ class PhaseViewModel(QObject):
                 return
             use_peaks = PeakList(peaks=[all_peaks[k] for k in keep],
                                  source=self._peaks.source)
-        # v4.0.0: 数据源 = 「挂载列表」里某一行的 id。先解析成 (kind, 挂载项),
-        # 再按 kind 分发 —— 同一类型挂多份库时只有"用户自加的那一份"才传
-        # 显式路径; 内置项继续按配置解析, 与历史行为逐字一致。
-        try:
-            from polyxrd.services import db_mounts
-
-            _mount = db_mounts.resolve_mount(db_source)
-        except Exception:  # noqa: BLE001 - 注册表异常不该阻断识别主链路
-            _mount = None
-        _kind = _mount.kind if _mount is not None else ""
-        _explicit = None
-        if _mount is not None and not _mount.builtin:
-            if not _mount.exists:
-                self.error.emit(
-                    tr("error.db_missing", name=_mount.display_name()))
-                return
-            _explicit = _mount.path
-        # polyDB 是目录容器, 两个变体是两份独立的库: 必须把路径/变体带下去,
-        # 否则「COD 全库 (polyDB)」会被当成无机库那一份来查。
-        _poly_path = None
-        if _kind == "polydb" and _mount is not None and _mount.exists:
-            _poly_path = _mount.path
-            _explicit = None
-        try:
-            if _kind == "pdf2":
-                results = self._identifier.identify_with_pdf2(
-                    data,
-                    peaks=use_peaks,
-                    element_filter=element_filter,
-                    top_n=top_n,
-                    tolerance=tolerance,
-                    db_path=_explicit,
-                )
-            elif _kind == "user":
-                # v2.6.0: 用户自建库 (同构 sqlite)。与 COD 无机库同一套
-                # 预筛/评分, 但返回的 Phase 自带晶胞+原子坐标, 可直接精修。
-                results = self._identifier.identify_with_user_db(
-                    data,
-                    peaks=use_peaks,
-                    element_filter=element_filter,
-                    top_n=top_n,
-                    tolerance=tolerance,
-                )
-            elif _kind == "polydb":
-                # v4.0.0: polyDB 外挂库（目录容器 + 位图倒排预筛），v4.1.0 起
-                # 它是**默认参考库**。与 COD 无机库同一套打分，只是候选池靠
-                # 位图+上界分层生成；条目带非对称单位原子位点，命中相可直接精修。
-                results = self._identifier.identify_with_polydb(
-                    data,
-                    peaks=use_peaks,
-                    element_filter=element_filter,
-                    top_n=top_n,
-                    tolerance=tolerance,
-                    db_path=str(_poly_path) if _poly_path else None,
-                    # 路径缺省时靠 variant 选槽位: 「COD 全库 (polyDB)」这一行
-                    # 若被卸下, 绝不能悄悄退到无机库那一份去查。
-                    variant=(_mount.variant if _mount and _mount.variant
-                             else "cod-inorg"),
-                )
-            elif element_filter:
-                results = self._identifier.identify_with_element_filter(
-                    data,
-                    peaks=use_peaks,
-                    element_filter=element_filter,
-                    top_n=top_n,
-                    tolerance=tolerance,
-                )
-            else:
-                results = self._identifier.identify(
-                    data,
-                    peaks=use_peaks,
-                    elements=elements,
-                    top_n=top_n,
-                    tolerance=tolerance,
-                )
-            self._matched_phases = results
-            self._amorphous_info = self._assess_amorphous(data, use_peaks, results)
-            self.phase_identified.emit(results)
-        except Exception as e:
-            self.error.emit(tr("error.identify_failed", error=e))
+        results = self._identify_with_source(
+            data,
+            peaks=use_peaks,
+            element_filter=element_filter,
+            elements=elements,
+            top_n=top_n,
+            tolerance=tolerance,
+            db_source=db_source,
+        )
+        if results is None:
+            return
+        self._matched_phases = results
+        self._amorphous_info = self._assess_amorphous(data, use_peaks, results)
+        self.phase_identified.emit(results)
 
     @staticmethod
     def _assess_amorphous(data, peaks, results) -> Optional[dict]:
@@ -389,11 +522,17 @@ class PhaseViewModel(QObject):
 
     def search_residual_peaks(self, data, tolerance: float = 0.30,
                               element_filter: Optional[dict] = None,
-                              top_n: int = 5) -> None:
+                              top_n: int = 5,
+                              db_source: str = "builtin") -> None:
         """仅对当前选中相解释不到的实测峰 (残差峰) 再做一次物相检索。
 
         用于迭代式物相分析: 先确认主相, 再对未解释的峰追查残余微量相。
         无选中相或无残差峰时直接返回 (不触发检索)。
+
+        Args:
+            db_source: 复用用户当前选中的数据库源。v4.6.0 之前这里写死
+                `identify_phases` 的默认值 `builtin` —— 用户选了外挂库
+                做首轮检索, 追残差相时却悄悄退回内置 118 相库, 结论不可比。
         """
         if not self._peaks:
             self.error.emit(tr("error.no_peaks"))
@@ -412,6 +551,7 @@ class PhaseViewModel(QObject):
             element_filter=element_filter,
             top_n=top_n,
             tolerance=tolerance,
+            db_source=db_source,
             marked_peaks=residual_2t,
         )
 
@@ -425,15 +565,51 @@ class PhaseViewModel(QObject):
         element_filter: Optional[dict] = None,
         top_n: int = 5,
         fwhm: float = 0.15,
+        db_source: str = "builtin",
     ) -> None:
-        """基于峰形拟合的物相识别 (无需寻峰)"""
+        """基于峰形拟合的物相识别 (无需寻峰)。
+
+        v4.6.0: 数据源不再固定为内置 118 相库 ——
+
+        * `builtin` (或无挂载项能解析): 对内置参考库做全谱拟合 (原行为);
+        * 外挂库 (polyDB / PDF2 / 用户库): 先用该库的 d-I 预筛取
+          :data:`PROFILE_EXTERNAL_POOL` 个候选, 再对这批候选做全谱拟合重排。
+          7.7 万相逐相生成理论谱不可行, 所以"预筛 + 重排"是外挂库上唯一的
+          可行做法; 预筛用的是与常规检索同一套 Hanawalt 口径, 排序由全谱
+          相关系数决定, 与手工把库裁小再按原方法拟合等价。
+        """
+        mount = self._resolve_mount(db_source)
+        engine = (mount.engine if mount is not None else "") or ""
         try:
-            results = self._profile_fitting.identify(
-                data,
-                element_filter=element_filter,
-                top_n=top_n,
-                fwhm=fwhm,
-            )
+            if not engine:
+                # 内置库 / 无法解析的源: 沿用原路径 (118 相穷举)
+                results = self._profile_fitting.identify(
+                    data,
+                    element_filter=element_filter,
+                    top_n=top_n,
+                    fwhm=fwhm,
+                )
+            else:
+                if not self._ensure_mount_usable(mount):
+                    return
+                pool = max(int(self.PROFILE_EXTERNAL_POOL),
+                           max(1, int(top_n)) * 4)
+                phases = self._profile_candidates(
+                    data, db_source, engine, element_filter, pool)
+                if phases is None:
+                    return
+                name = (mount.display_name() if mount is not None
+                        else (db_source or "builtin"))
+                if not phases:
+                    self.info.emit(tr("vw.phase_view.db_profile_external",
+                                      name=name, n=0))
+                    self._matched_phases = []
+                    self.phase_identified.emit([])
+                    return
+                results = self._profile_fitting.score_phases(
+                    data, phases, fwhm=fwhm)[:max(1, int(top_n))]
+                self.info.emit(tr("vw.phase_view.db_profile_external",
+                                  name=name, n=len(phases)))
             # 标记方法
             for r in results:
                 r.method = "profile_fitting"
