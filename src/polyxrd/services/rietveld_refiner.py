@@ -193,6 +193,10 @@ class RietveldRefiner:
                     self.apply_preferred_orientation(p, d, float(po["r"]))
                     for p in phases
                 ]
+                # v5 引擎（refinement）不用参考峰算强度，择优取向只能走
+                # 结构化参数；不把方向/系数摘出来，那边就收不到用户的设定。
+                kwargs["_po_direction"] = d
+                kwargs["_po_r"] = float(po["r"])
             zs = float(getattr(opts, "zero_shift_init", 0.0) or 0.0)
             if abs(zs) > 1e-12:
                 kwargs.setdefault("zero_shift", zs)
@@ -213,8 +217,13 @@ class RietveldRefiner:
             "gsas2": self._refine_gsas2,
             "powerxrd": self._refine_powerxrd,
             "builtin": self._refine_builtin,
+            # v5.0.0：结构因子 + 变量投影 + 分阶段协议（src/polyxrd/refinement）
+            "refinement": self._refine_v5,
             "maud": self._refine_maud,
         }
+        # 别名：v5 / builtin_v5 都指向新引擎，免得用户/脚本各写各的
+        if str(engine).lower() in ("v5", "builtin_v5", "builtin-v5"):
+            engine = "refinement"
 
         refine_func = engines.get(engine)
         if refine_func is None:
@@ -848,6 +857,12 @@ class RietveldRefiner:
         选 auto 前就知道会跑什么。
         """
         status: dict = {"builtin": {"available": True, "note": "内置引擎 (始终可用)"}}
+        # v5.0.0 新引擎：纯 Python、无外部依赖，恒可用
+        status["refinement"] = {
+            "available": True,
+            "note": "v5 全谱拟合引擎：结构因子强度 + 变量投影 + 分阶段协议"
+                    "（需所有相带原子位点，否则回退内置）",
+        }
         # powerxrd
         try:
             import powerxrd
@@ -1053,6 +1068,294 @@ class RietveldRefiner:
                 f"{type(e).__name__}: {e}"
             )
             return result
+
+    # ------------------------------------------------------------------
+    # v5.0.0 精修引擎（src/polyxrd/refinement）—— GUI 适配层
+    # ------------------------------------------------------------------
+
+    #: 档位 → (背景节点间距, 协议阶段表)。阶段号是**累积语义**：跑到 n 就把
+    #: ``stage <= n`` 的参数全放开（2 峰位 → 3 峰形 → 4 择优 → 5 样品展宽）。
+    V5_TIERS = {
+        "fast": {"bg_deg": 12.0, "protocol": ((2, 40), (3, 40))},
+        "precise": {"bg_deg": 8.0,
+                    "protocol": ((2, 150), (3, 120), (5, 80))},
+    }
+
+    def _refine_v5(
+        self,
+        data: XRDData,
+        phases: list[Phase],
+        strategy: str,
+        max_cycles: int,
+        **kwargs,
+    ) -> RefinementResult:
+        """v5.0.0 精修引擎（结构因子 + 变量投影 + 分阶段协议）。
+
+        与 ``_refine_builtin`` 的区别（不是"新版更准"这种含糊说法）：
+
+        * **强度来自结构因子**：``I ∝ m|F|²·LP/V²``，不是 CIF 参考峰的相对高度。
+          因此多相之间强度可比，Hill–Howard 定量才有物理意义。
+        * **标度与背景每轮闭式解**（变量投影），不进非线性向量 —— 少一半自由度。
+        * **分阶段 + 逐段回滚**：某段让 Rwp 变差就撤回（加参数必然让残差平方和
+          下降，所以"变差"只可能是优化跑飞）。
+        * **诊断结构化**：秩亏 / 条件数 / 参数相关 / 残差峰无对应反射，
+          走 ``diagnostics``（code + params），文案由 UI 渲染。
+
+        失败或结构不全时回退 ``_refine_builtin``，并在 ``fit_params`` 里写明原因，
+        由 ``refine()`` 统一追加 ``diag.engine_fallback`` —— 不静默换引擎。
+        """
+        log = self.make_logger(kwargs)
+        _tier = str(kwargs.get("perf_profile") or "").lower()
+        tier = self.V5_TIERS["fast" if _tier == "fast" else "precise"]
+
+        try:
+            from polyxrd.refinement import (
+                BackgroundParams, Kalpha2, PatternProblem, PhaseBlock,
+                ProfileParams, StageSpec, StructureModel, build_report,
+                evaluate_goals, run_protocol, seed_problem,
+            )
+        except Exception as e:  # noqa: BLE001 - 包缺失不该让精修整条断掉
+            log(f"[v5] engine import failed: {type(e).__name__}: {e} -> builtin")
+            return self._fallback_v5(data, phases, strategy, max_cycles, kwargs,
+                                     f"import failed: {e}")
+
+        two_theta = np.asarray(data.two_theta, dtype=float)
+        intensity = np.asarray(data.intensity, dtype=float)
+        if two_theta.size < 50:
+            return self._fallback_v5(data, phases, strategy, max_cycles, kwargs,
+                                     f"too few points ({two_theta.size})")
+
+        # ── 结构：缺结构的相不能参与结构因子计算，整条回退 ──────────
+        structures: list = []
+        missing: list[str] = []
+        for ph in phases:
+            st = StructureModel.from_phase(ph)
+            structures.append(st)
+            if st is None:
+                missing.append(str(getattr(ph, "name", "?")))
+        if missing:
+            log("[v5] phases without structure: " + ", ".join(missing))
+            return self._fallback_v5(
+                data, phases, strategy, max_cycles, kwargs,
+                "no structure: " + ", ".join(missing))
+
+        # ── 择优取向：方向/系数由 refine() 从 options 里摘下 ────────
+        po_dir = kwargs.get("_po_direction")
+        po_r = float(kwargs.get("_po_r", 1.0) or 1.0)
+        po_hkl = tuple(po_dir) if (po_dir and abs(po_r - 1.0) > 1e-9) else None
+
+        blocks = [
+            PhaseBlock(label=str(getattr(ph, "name", f"phase{i}") or f"phase{i}"),
+                       structure=st, index=i,
+                       po_hkl=po_hkl,
+                       size_nm=float(kwargs.get("crystallite_nm", 0.0) or 0.0))
+            for i, (ph, st) in enumerate(zip(phases, structures))
+        ]
+
+        lam = float(getattr(data, "wavelength", 0.0) or 1.54056)
+        model_ka2 = bool(kwargs.get("model_ka2", True))
+        n_bg = max(6, int(round(float(two_theta[-1] - two_theta[0]) / tier["bg_deg"])))
+        mask = dict(kwargs.get("_param_mask") or {})
+        bg = BackgroundParams("tent" if mask.get("background", True) else "none", n_bg)
+
+        fwhm0 = float(kwargs.get("fwhm", 0.15) or 0.15)
+        prob = PatternProblem(
+            two_theta, intensity, blocks,
+            profile=ProfileParams(w=max(1e-4, fwhm0 ** 2)),
+            bg=bg,
+            wavelength=lam,
+            kalph2=Kalpha2(wavelength=lam, ratio=0.497, separation=model_ka2),
+            weights=1.0 / np.maximum(intensity, 1.0),
+            cutoff_fwhm=25.0,
+        )
+
+        # ── 参数掩码：用户在向导里取消勾选的自由度要真的钉住 ────────
+        frozen: list[str] = []
+        if not mask.get("cell", True):
+            frozen += [n for n in prob.params.names() if ".cell." in n]
+        if not mask.get("profile", True):
+            frozen += [f"inst.{t}" for t in ("u", "v", "w", "x", "y", "z")]
+        if not mask.get("zero_shift", True):
+            frozen += ["inst.zero"]
+        for name in frozen:
+            if name in prob.params:
+                prob.params.fix(name, True)
+
+        zs_init = kwargs.get("zero_shift")
+        if zs_init is not None and abs(float(zs_init)) > 1e-12:
+            prob.params.set("inst.zero", float(zs_init))
+
+        # ── 起点：零位与峰宽曲线用观测谱播种（D2）────────────────────
+        try:
+            seeds = seed_problem(prob, apply=True)
+            for note in seeds.notes:
+                log(f"[v5] seed: {note}")
+        except Exception as e:  # noqa: BLE001 - 播种失败不该阻断精修
+            log(f"[v5] seed skipped: {type(e).__name__}: {e}")
+
+        protocol = [StageSpec(st, min(int(it), max(10, max_cycles * 20)))
+                    for st, it in tier["protocol"]]
+        if po_hkl is None:
+            # 无惯习面时 stage 4 零自由参数，排进去只会白耗 patience
+            protocol = [s for s in protocol if s.stage != 4]
+
+        progress_cb = kwargs.get("progress_cb")
+        total = len(protocol)
+
+        def _stage_done(entry: dict) -> None:
+            if progress_cb is None:
+                return
+            try:
+                done = sum(1 for s in _seen) + 1
+                _seen.append(entry.get("stage"))
+                progress_cb(min(done, total), total)
+            except Exception:  # noqa: BLE001 - 进度回调失败不该影响精修
+                pass
+
+        _seen: list = []
+        log("[v5] protocol: " + " → ".join(
+            f"stage {s.stage}(≤{s.max_iter})" for s in protocol))
+        try:
+            summary = run_protocol(prob, protocol=protocol, converge_tol=1e-4,
+                                   patience=3, callback=_stage_done)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("v5 refinement failed: %s", e)
+            return self._fallback_v5(data, phases, strategy, max_cycles, kwargs,
+                                     f"{type(e).__name__}: {e}")
+
+        last_stage = max((int(s.get("stage", 0)) for s in summary.stages), default=5)
+        metrics = prob.metrics(stage=last_stage)
+        wR = float(metrics["Rwp"])
+        Rexp = float(metrics.get("Rexp", 0.0))
+        GOF = float(metrics.get("GOF", 0.0))
+        simulated = np.asarray(summary.y_calc, dtype=float)
+        residuals = intensity - simulated
+
+        # ── 定量（Hill–Howard 密度口径）与误差棒 ───────────────────
+        fracs = [0.0] * len(phases)
+        try:
+            goals = evaluate_goals(prob, summary)
+            fr = [g for g in goals if g.name == "fraction"]
+            for i, g in enumerate(fr[: len(phases)]):
+                fracs[i] = float(g.value)
+            if not fr:
+                fracs = [100.0 * f for f in summary.quant.fractions]
+        except Exception as e:  # noqa: BLE001 - 定量失败不该丢精修结果
+            log(f"[v5] quantification skipped: {type(e).__name__}: {e}")
+            try:
+                fracs = [100.0 * f for f in summary.quant.fractions]
+            except Exception:  # noqa: BLE001
+                fracs = [0.0] * len(phases)
+
+        # ── 诊断（结构化，最多 4 条，避免刷屏）──────────────────────
+        diagnostics: list[dict] = []
+        v5_findings: list[dict] = []
+        try:
+            rep = build_report(prob, summary)
+            for f in rep.findings:
+                v5_findings.append(f.as_dict())
+                if f.severity in ("error", "warn") and len(diagnostics) < 4:
+                    diagnostics.append({
+                        "code": f"refinement.{f.code}",
+                        "params": {k: float(v) for k, v in f.evidence.items()},
+                    })
+        except Exception as e:  # noqa: BLE001
+            log(f"[v5] report skipped: {type(e).__name__}: {e}")
+
+        # ── 回填物相：晶胞 + 质量分数（不改入参，deecopy 后写）───────
+        import copy as _copy
+
+        refined_phases: list[Phase] = []
+        cells: list[dict] = []
+        for i, ph in enumerate(phases):
+            pref = f"phase{i}"
+            vals = {
+                tag: float(prob.params.get(f"{pref}.cell.{tag}", 0.0) or 0.0)
+                for tag in ("a", "b", "c", "alpha", "beta", "gamma")
+            }
+            cells.append(vals)
+            out = _copy.deepcopy(ph)
+            if vals["a"] > 0 and vals["b"] > 0 and vals["c"] > 0:
+                out.lattice = LatticeParams(**vals)
+            out.weight_fraction = float(fracs[i]) if i < len(fracs) else 0.0
+            refined_phases.append(out)
+
+        converged = bool(summary.stages) and not all(
+            s.get("rolled_back") for s in summary.stages)
+        nfev = int(sum(int(s.get("nfev", 0) or 0) for s in summary.stages))
+        quality = quality_grade_for(wR)
+
+        result = RefinementResult(
+            phases=refined_phases,
+            observed_data=(two_theta, intensity),
+            simulated_data=(two_theta, simulated),
+            residual_data=(two_theta, residuals),
+            wR=wR,
+            Rexp=Rexp,
+            Rb=0.0,          # 真实 Bragg R 未实现 —— 不用轮廓 R 冒充
+            Rp=float(metrics.get("Rp", 0.0)),
+            chi2=float(metrics.get("chi2", 0.0)),
+            chi2_red=float(metrics.get("chi2_red", 0.0)),
+            metrics_valid=True,   # 统计权拟合，Rexp/GOF 可解读
+            metric_note="",
+            diagnostics=diagnostics,
+            GOF=GOF,
+            quality=quality,
+            num_cycles=nfev,
+            converged=converged,
+            fit_params={
+                "engine": "refinement",
+                "strategy": strategy,
+                "stat_weights": "poisson",
+                "weight_basis": "mass",
+                "perf_profile": "fast" if _tier == "fast" else "precise",
+                "nfev": nfev,
+                "model_ka2": model_ka2,
+                "ka2_intensity_ratio": 0.497 if model_ka2 else None,
+                "refine_cell": bool(mask.get("cell", True)),
+                "refine_profile": bool(mask.get("profile", True)),
+                "refine_zero_shift": bool(mask.get("zero_shift", True)),
+                "param_mask": mask,
+                "v5_frozen_params": frozen,
+                "v5_tier": "fast" if _tier == "fast" else "precise",
+                "v5_stages": [
+                    {"stage": int(s.get("stage", 0)), "label": s.get("label", ""),
+                     "Rwp": float(s.get("Rwp", 0.0) or 0.0),
+                     "nfev": int(s.get("nfev", 0) or 0),
+                     "rolled_back": bool(s.get("rolled_back", False))}
+                    for s in summary.stages
+                ],
+                "v5_cells": cells,
+                "v5_weight_pct": [float(f) for f in fracs],
+                # 定量口径说明：与 builtin 的"相对定量"不同，这里是密度口径
+                "v5_weight_basis_note": "Hill–Howard: W ∝ S·M_cell/V",
+                "v5_findings": v5_findings,
+                "v5_seed_notes": list(getattr(seeds, "notes", ()) or ()),
+                "v5_po_hkl": list(po_hkl) if po_hkl else None,
+                "v5_po_r": float(po_r) if po_hkl else 1.0,
+            },
+        )
+        log("[v5] tier={} wR={:.3f}% GOF={:.3f} nfev={} stages={}".format(
+            result.fit_params["v5_tier"], wR, GOF, nfev,
+            len(summary.stages)))
+        log("[v5] wt%: " + ", ".join(
+            f"{getattr(p, 'name', '?')}={f:.2f}%" for p, f in zip(refined_phases, fracs)))
+        return result
+
+    def _fallback_v5(
+        self,
+        data: XRDData,
+        phases: list[Phase],
+        strategy: str,
+        max_cycles: int,
+        kwargs: dict,
+        reason: str,
+    ) -> RefinementResult:
+        """v5 引擎不可用时的显式回退（记原因，不静默）。"""
+        result = self._refine_builtin(data, phases, strategy, max_cycles, **kwargs)
+        result.fit_params["engine_requested"] = "refinement"
+        result.fit_params["engine_fallback_reason"] = reason
+        return result
 
     # ------------------------------------------------------------------
     # 内置精修引擎 (最小实现)

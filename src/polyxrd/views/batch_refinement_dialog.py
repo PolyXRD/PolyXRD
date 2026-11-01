@@ -136,7 +136,7 @@ class BatchRefinementDialog(QDialog):
         param_row = QHBoxLayout()
         param_row.addWidget(QLabel(tr("batch_refine.engine")))
         self._engine_combo = QComboBox()
-        self._engine_combo.addItems(["auto", "gsas2", "maud", "builtin", "powerxrd"])
+        self._engine_combo.addItems(["auto", "gsas2", "maud", "builtin", "powerxrd", "refinement"])
         param_row.addWidget(self._engine_combo)
         param_row.addWidget(QLabel(tr("batch_refine.cycles")))
         self._cycles_spin = QSpinBox()

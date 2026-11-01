@@ -131,7 +131,7 @@ class TestAllEngineCombosAreConsistent:
     既避开重量级初始化, 又比字符串匹配更抗改格式。
     """
 
-    EXPECTED = {"auto", "gsas2", "powerxrd", "maud", "builtin"}
+    EXPECTED = {"auto", "gsas2", "powerxrd", "maud", "builtin", "refinement"}
 
     @staticmethod
     def _combo_items_from_source(module_path: str) -> set[str]:

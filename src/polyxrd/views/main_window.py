@@ -114,7 +114,7 @@ class RefinementWizardDialog(QDialog):
         # 候选列表: auto 在首位 (推荐默认), 其后按"始终可用→可能可用"排序;
         # 用户切换时触发状态刷新。列表必须与 RietveldRefiner.get_engine_status()
         # 的键集合一致, 否则界面会出现"选了却没有对应状态"的假不可用。
-        self._engine_combo.addItems(["auto", "gsas2", "powerxrd", "maud", "builtin"])
+        self._engine_combo.addItems(["auto", "gsas2", "powerxrd", "maud", "builtin", "refinement"])
         self._engine_combo.currentTextChanged.connect(self._on_engine_changed)
         engine_row.addWidget(self._engine_combo, 1)
         self._engine_status_label = QLabel("")

@@ -138,7 +138,7 @@ class RefinementView(QWidget):
         ctrl_layout.addRow(self._chk_wizard)
 
         self._engine_combo = QComboBox()
-        self._engine_combo.addItems(["auto", "gsas2", "maud", "builtin", "powerxrd"])
+        self._engine_combo.addItems(["auto", "gsas2", "maud", "builtin", "powerxrd", "refinement"])
         ctrl_layout.addRow(tr("view.refinement.label_engine"), self._engine_combo)
 
         self._strategy_combo = QComboBox()

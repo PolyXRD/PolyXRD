@@ -1,0 +1,230 @@
+"""v5.0.0 精修引擎接入 GUI 的桥接测试（服务层，不起 Qt）。
+
+这里验的不是精修算法本身（那在 ``tests/test_refinement_*.py``），而是
+"界面点『引擎 = refinement』之后到底发生了什么"：
+
+1. 引擎键注册了吗？状态表里有吗？别名 ``v5`` 会不会走进同一个函数？
+2. 真跑一遍合成两相谱，晶胞与定量能不能回到真值？
+3. **结构不全时必须显式回退**（``engine_requested`` / ``engine_fallback_reason``），
+   不能静默换成 builtin 还让用户以为跑的是新引擎。
+4. 向导里取消勾选的自由度（零位 / 晶胞 / 峰形）要真的钉住。
+5. 择优取向在 ``refine()`` 里是从 options 摘出来的，v5 拿不到就得走参考峰 —— 必须传下去。
+
+历史教训：v4.4.0 曾出现"向导里选什么引擎都跑 builtin"（engine 没下传），
+静默失效最难查。所以第 3、5 条比第 2 条更重要。
+"""
+from __future__ import annotations
+
+import types
+
+import numpy as np
+import pytest
+
+from polyxrd.models.phase import LatticeParams, Phase
+from polyxrd.models.refinement import RefinementResult
+from polyxrd.models.xrd_data import XRDData
+from polyxrd.refinement import (
+    BackgroundParams,
+    Cell,
+    Kalpha2,
+    PhaseSpec,
+    ProfileParams,
+    StructureModel,
+    background_basis,
+    build_reflections,
+    design_matrix,
+    hill_howard,
+    site_from_dict,
+)
+from polyxrd.services.rietveld_refiner import RietveldRefiner
+
+LAM = 1.54056
+CUT = 25.0
+TT = np.arange(15.0, 80.0, 0.02)
+
+
+# ── 合成两相体系（立方，各 2 个非对称位点）─────────────────────
+_CAF2 = ("CaF2", "Fm-3m", (5.4626, 5.4626, 5.4626, 90.0, 90.0, 90.0),
+         (("Ca1", "Ca", 0.0, 0.0, 0.0), ("F1", "F", 0.25, 0.25, 0.25)))
+_NACL = ("NaCl", "Fm-3m", (5.6402, 5.6402, 5.6402, 90.0, 90.0, 90.0),
+         (("Na1", "Na", 0.0, 0.0, 0.0), ("Cl1", "Cl", 0.5, 0.5, 0.5)))
+
+
+def _raw_sites(spec) -> list[dict]:
+    return [{"label": lab, "element": el, "x": x, "y": y, "z": z,
+             "occupancy": 1.0, "b_iso": 0.5}
+            for lab, el, x, y, z in spec[3]]
+
+
+def _structure(spec) -> StructureModel:
+    from polyxrd.services.phase_cif import expand_sites_by_symmetry
+
+    name, sg, cell, _sites = spec
+    expanded = expand_sites_by_symmetry(_raw_sites(spec), sg)
+    assert expanded, f"{name}: 空间群 {sg} 展开失败"
+    return StructureModel(sites=tuple(site_from_dict(s) for s in expanded),
+                          cell=Cell(*cell), space_group=sg, name=name)
+
+
+def _phase(spec) -> Phase:
+    name, sg, cell, _sites = spec
+    return Phase(name=name, formula=name, space_group=sg,
+                 lattice=LatticeParams(*cell),
+                 atomic_sites=_raw_sites(spec), elements=set())
+
+
+def _profile() -> ProfileParams:
+    # u/v/w：Caglioti（度²）；x/y/z：Lorentz（度）
+    return ProfileParams(u=0.004, v=-0.002, w=0.012, x=0.008, y=0.0, z=0.0)
+
+
+def _synthetic(fractions=(50.0, 50.0)):
+    """按给定质量分数合成两相谱；返回 (XRDData, 真值 dict, 起点 Rwp)。"""
+    st_a, st_b = _structure(_CAF2), _structure(_NACL)
+    kal = Kalpha2(wavelength=LAM, ratio=0.497, separation=True)
+    tabs = [build_reflections(st, two_theta_range=(12.0, 83.0)) for st in (st_a, st_b)]
+    basis = design_matrix(TT, [PhaseSpec(t) for t in tabs], _profile(),
+                          kalph2=kal, cutoff_fwhm=CUT)
+    # 让定量落在目标分数上：W ∝ S·M_cell/V，先按单位标度算比例再反解
+    unit = hill_howard(["a", "b"], [1.0, 1.0], [st_a, st_b])
+    w_unit = np.array(unit.fractions)
+    want = np.asarray(fractions, dtype=float) / 100.0
+    scales = want / w_unit
+    bg = background_basis(TT, BackgroundParams("tent", 9))
+    y_true = basis @ scales + bg @ np.linspace(40.0, 25.0, 9)
+    rng = np.random.default_rng(11)
+    y_obs = y_true + rng.normal(0.0, np.sqrt(np.maximum(y_true, 1.0)))
+    data = XRDData(two_theta=TT.copy(), intensity=y_obs, wavelength=LAM)
+    return data, {"CaF2": fractions[0], "NaCl": fractions[1]}, st_a, st_b, scales
+
+
+class TestEngineRegistration:
+    def test_status_has_refinement_and_it_is_available(self):
+        status = RietveldRefiner().get_engine_status()
+        assert "refinement" in status
+        assert status["refinement"]["available"] is True
+        assert status["refinement"]["note"]
+
+    def test_aliases_dispatch_to_v5(self, monkeypatch):
+        refiner = RietveldRefiner()
+        calls = []
+        monkeypatch.setattr(
+            refiner, "_refine_v5",
+            lambda *a, **kw: calls.append("v5") or _stub_result())
+
+        data = XRDData(two_theta=TT.copy(), intensity=np.full(TT.size, 100.0),
+                       wavelength=LAM)
+        for alias in ("refinement", "v5", "builtin_v5"):
+            refiner.refine(data, [_phase(_CAF2)], engine=alias, max_cycles=5,
+                           detect_ka2=False)
+        assert calls == ["v5", "v5", "v5"], f"别名没走到新引擎: {calls}"
+
+
+def _stub_result() -> RefinementResult:
+    return RefinementResult(phases=[], wR=10.0, fit_params={"engine": "refinement"})
+
+
+@pytest.fixture(scope="module")
+def fitted():
+    """跑一次 v5 引擎的合成两相精修（模块内共用，省掉重复拟合）。"""
+    data, truth, _st_a, _st_b, _scales = _synthetic()
+    # 基线：不含任何峰模型的"常数谱"Rwp（不拿另一个引擎当对照 ——
+    # 那会把一条断言变成两次精修，慢且与本测试目的无关）
+    w = 1.0 / np.maximum(data.intensity, 1.0)
+    mean = float(np.average(data.intensity, weights=w))
+    rwp0 = float(100.0 * np.sqrt(np.sum(w * (data.intensity - mean) ** 2)
+                                 / np.sum(w * data.intensity ** 2)))
+    result = RietveldRefiner().refine(
+        data, [_phase(_CAF2), _phase(_NACL)], engine="refinement",
+        max_cycles=60, perf_profile="fast")
+    return result, truth, rwp0
+
+
+class TestRefinesSyntheticTwoPhase:
+    """冒烟级端到端：晶胞与定量都要回到合成时的真值。"""
+
+    def test_engine_is_v5_not_fallback(self, fitted):
+        result, _t, _r = fitted
+        assert result.fit_params["engine"] == "refinement"
+        assert "engine_fallback_reason" not in result.fit_params
+
+    def test_metrics_valid_and_rwp_drops(self, fitted):
+        result, _t, rwp0 = fitted
+        assert result.metrics_valid is True      # 统计权拟合，Rexp/GOF 可解读
+        assert result.wR < rwp0 + 1e-9
+        assert result.GOF > 0 and np.isfinite(result.GOF)
+
+    def test_cell_recovered(self, fitted):
+        result, _t, _r = fitted
+        a = result.phases[0].lattice.a
+        assert abs(a - 5.4626) < 0.03, f"CaF2 a={a:.5f} 偏离真值"
+
+    def test_fractions_close_to_truth(self, fitted):
+        result, truth, _r = fitted
+        got = {p.name: p.weight_fraction for p in result.phases}
+        for name, want in truth.items():
+            assert abs(got[name] - want) < 8.0, f"{name}: 精修 {got[name]:.1f}% vs 真值 {want:.1f}%"
+        assert sum(got.values()) == pytest.approx(100.0, abs=1.0)
+
+    def test_frozen_zero_and_cell_when_mask_off(self):
+        data, _truth, _a, _b, _s = _synthetic()
+        result = RietveldRefiner().refine(
+            data, [_phase(_CAF2), _phase(_NACL)], engine="refinement",
+            max_cycles=20, perf_profile="fast",
+            options=types.SimpleNamespace(
+                refine_zero_shift=False, refine_cell=False, refine_profile=False,
+                refine_scale=True, refine_background=True,
+                zero_shift_init=0.0, preferred_orientation=None))
+        frozen = result.fit_params["v5_frozen_params"]
+        assert "inst.zero" in frozen
+        assert any(".cell.a" in n for n in frozen)
+        # 峰形全钉住 → 六个 Lorentz/Caglioti 参数都在冻结表里
+        assert {"inst.u", "inst.v", "inst.w", "inst.x", "inst.y", "inst.z"} <= set(frozen)
+
+
+class TestFallbackIsExplicit:
+    def test_phase_without_structure_falls_back_with_reason(self, monkeypatch):
+        refiner = RietveldRefiner()
+        calls = []
+
+        def _fake_builtin(data, phases, strategy, max_cycles, **kw):
+            calls.append("builtin")
+            # 真 builtin 会把 engine 写成 "builtin" —— 回退诊断正是靠这个差异
+            return RefinementResult(phases=[], wR=10.0,
+                                    fit_params={"engine": "builtin"})
+
+        monkeypatch.setattr(refiner, "_refine_builtin", _fake_builtin)
+        bare = Phase(name="no-atoms", formula="X", space_group="Fm-3m",
+                     lattice=LatticeParams(5.0, 5.0, 5.0, 90.0, 90.0, 90.0),
+                     atomic_sites=[])
+        data = XRDData(two_theta=TT.copy(), intensity=np.full(TT.size, 100.0),
+                       wavelength=LAM)
+        result = refiner.refine(data, [bare], engine="refinement", max_cycles=5)
+
+        assert calls == ["builtin"], "缺结构时必须回退内置引擎"
+        assert result.fit_params["engine_requested"] == "refinement"
+        assert "no structure" in result.fit_params["engine_fallback_reason"]
+        codes = [d.get("code") for d in result.diagnostics]
+        assert "diag.engine_fallback" in codes, "回退必须留下结构化诊断"
+
+
+class TestPreferredOrientationPlumbing:
+    def test_po_direction_reaches_v5(self, monkeypatch):
+        refiner = RietveldRefiner()
+        seen = {}
+
+        def _fake_v5(data, phases, strategy, max_cycles, **kw):
+            seen.update(kw)
+            return _stub_result()
+
+        monkeypatch.setattr(refiner, "_refine_v5", _fake_v5)
+        data = XRDData(two_theta=TT.copy(), intensity=np.full(TT.size, 100.0),
+                       wavelength=LAM)
+        refiner.refine(
+            data, [_phase(_CAF2)], engine="refinement", max_cycles=5,
+            options=types.SimpleNamespace(
+                preferred_orientation={"direction": (0, 0, 1), "r": 1.6},
+                zero_shift_init=0.0, refine_scale=True, refine_background=True,
+                refine_profile=True, refine_cell=True, refine_zero_shift=True))
+        assert tuple(seen.get("_po_direction", ())) == (0, 0, 1)
+        assert seen.get("_po_r") == pytest.approx(1.6)
