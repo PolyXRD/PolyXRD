@@ -1,7 +1,10 @@
-"""engine="auto" 自动引擎选择测试 (v0.11.0 GSAS-II 通道打磨).
+"""engine="auto" 自动引擎选择测试。
 
-规则: 全相有结构 CIF 且 GSAS-II 可用 → gsas2; 否则 builtin,
-原因写入 fit_params["engine_fallback_reason"]。
+v5.0.1 起口径变更（原实现: 全相有结构 CIF 且 GSAS-II 可用 → gsas2）：
+`auto` 一律走 v5 精修引擎（refinement），失败由它自己回退 builtin。
+依据是 13 试样三引擎对拍: refinement 在 11/13 个试样上 Rwp 最低且快 1~2 个
+量级; gsas2 既依赖外部安装、又只在个别试样上更好（详见
+``docs/基准报告-精修-v5.0.0.md`` 与 ``scripts/bench_engines_v500.py``）。
 """
 from __future__ import annotations
 
@@ -33,8 +36,8 @@ def _mk_cif(tmp_path: Path, name: str) -> str:
     return str(p)
 
 
-def _gsas2_result() -> RefinementResult:
-    return RefinementResult(fit_params={"engine": "gsas2"})
+def _v5_result() -> RefinementResult:
+    return RefinementResult(fit_params={"engine": "refinement"})
 
 
 def _builtin_result() -> RefinementResult:
@@ -59,55 +62,62 @@ class TestPhasesHaveStructure:
 
 
 class TestAutoEngine:
-    def test_uses_gsas2_when_structured(
-        self, refiner, data, tmp_path, monkeypatch
-    ):
-        phases = [Phase(name="A", cif_path=_mk_cif(tmp_path, "A"))]
-        monkeypatch.setattr(refiner, "_find_gsas2_python", lambda: Path("fake_py"))
-        monkeypatch.setattr(refiner, "_refine_gsas2",
-                            lambda *a, **k: _gsas2_result())
-        result = refiner.refine(data, phases, engine="auto")
-        assert result.fit_params["engine"] == "gsas2"
-        assert "engine_fallback_reason" not in result.fit_params
-
-    def test_fallback_when_no_structure(self, refiner, data, monkeypatch):
+    def test_auto_uses_v5(self, refiner, data, monkeypatch):
+        """有/无结构 CIF 都走 refinement —— auto 不再以 CIF 为门槛。"""
         phases = [Phase(name="A")]  # 无 CIF
         calls = {}
 
-        def fake_builtin(*a, **k):
+        def fake_v5(*a, **k):
             calls["hit"] = True
-            return _builtin_result()
+            return _v5_result()
 
-        monkeypatch.setattr(refiner, "_refine_builtin", fake_builtin)
+        monkeypatch.setattr(refiner, "_refine_v5", fake_v5)
         result = refiner.refine(data, phases, engine="auto")
-        assert calls["hit"]
-        assert result.fit_params["engine"] == "builtin"
-        # v1.1.1: 服务层不依赖 Qt/i18n (`services/` 的硬约定), 回退原因统一为
-        # 符号化 ASCII 写法, 不再跟随界面语言 → 断言应对英文原文。
-        assert "without structure" in result.fit_params["engine_fallback_reason"]
+        assert calls["hit"], "auto 必须调用 v5 引擎"
+        assert result.fit_params["engine"] == "refinement"
+        assert result.fit_params["engine_auto_selected"] == "refinement"
+        # 正常路径不该被记成"回退"
+        assert "engine_fallback_reason" not in result.fit_params
+        assert not [d for d in result.diagnostics
+                    if d.get("code") == "diag.engine_fallback"]
 
-    def test_fallback_when_gsas2_missing(self, refiner, data, tmp_path, monkeypatch):
-        phases = [Phase(name="A", cif_path=_mk_cif(tmp_path, "A"))]
-        monkeypatch.setattr(refiner, "_find_gsas2_python", lambda: None)
-        monkeypatch.setattr(refiner, "_refine_builtin",
-                            lambda *a, **k: _builtin_result())
-        result = refiner.refine(data, phases, engine="auto")
-        assert result.fit_params["engine"] == "builtin"
-        assert "GSAS-II" in result.fit_params["engine_fallback_reason"]
-
-    def test_fallback_when_gsas2_raises(self, refiner, data, tmp_path, monkeypatch):
+    def test_auto_does_not_touch_gsas2(self, refiner, data, tmp_path, monkeypatch):
+        """即便全相有 CIF 且 GSAS-II 在位, auto 也不再选 gsas2。"""
         phases = [Phase(name="A", cif_path=_mk_cif(tmp_path, "A"))]
         monkeypatch.setattr(refiner, "_find_gsas2_python", lambda: Path("fake_py"))
 
         def boom(*a, **k):
-            raise RuntimeError("bridge crashed")
+            raise AssertionError("auto 不应调用 gsas2")
 
         monkeypatch.setattr(refiner, "_refine_gsas2", boom)
+        monkeypatch.setattr(refiner, "_refine_v5", lambda *a, **k: _v5_result())
+        result = refiner.refine(data, phases, engine="auto")
+        assert result.fit_params["engine"] == "refinement"
+
+    def test_v5_failure_falls_back_to_builtin(self, refiner, data, monkeypatch):
+        """v5 内部回退 builtin 时, requested/used 不一致要留下回退记录。"""
+        def fake_v5(*a, **k):
+            res = _builtin_result()
+            res.fit_params["engine_fallback_reason"] = "no structure for A"
+            return res
+
+        monkeypatch.setattr(refiner, "_refine_v5", fake_v5)
+        result = refiner.refine(data, [Phase(name="A")], engine="auto")
+        assert result.fit_params["engine"] == "builtin"
+        assert "no structure" in result.fit_params["engine_fallback_reason"]
+        assert [d for d in result.diagnostics
+                if d.get("code") == "diag.engine_fallback"]
+
+    def test_auto_engine_exception_falls_back(self, refiner, data, monkeypatch):
+        def boom(*a, **k):
+            raise RuntimeError("v5 crashed")
+
+        monkeypatch.setattr(refiner, "_refine_v5", boom)
         monkeypatch.setattr(refiner, "_refine_builtin",
                             lambda *a, **k: _builtin_result())
-        result = refiner.refine(data, phases, engine="auto")
+        result = refiner.refine(data, [Phase(name="A")], engine="auto")
         assert result.fit_params["engine"] == "builtin"
-        assert "bridge crashed" in result.fit_params["engine_fallback_reason"]
+        assert "v5 crashed" in result.fit_params["engine_fallback_reason"]
 
     def test_generic_fallback_annotates_reason(self, refiner, data, monkeypatch):
         """非 auto 引擎失败回退 builtin 时也应记录 requested/reason"""
@@ -121,17 +131,11 @@ class TestAutoEngine:
         assert result.fit_params["engine_requested"] == "gsas2"
         assert "boom" in result.fit_params["engine_fallback_reason"]
 
-    def test_real_pipeline_auto_with_real_gsas2(
-        self, refiner, data, tmp_path
-    ):
-        """不 mock: 本机装了 GSAS-II 时 auto+结构 CIF 应真的选 gsas2"""
-        py = RietveldRefiner._find_gsas2_python()
-        if py is None:
-            pytest.skip("本机未装 GSAS-II")
+    def test_real_pipeline_auto_end_to_end(self, refiner, data, tmp_path):
+        """不 mock: auto 在极小样本上要么 refinement 要么 builtin, 且自洽。"""
         phases = [Phase(name="A", cif_path=_mk_cif(tmp_path, "A"))]
         result = refiner.refine(data, phases, engine="auto", max_cycles=1)
-        # 假 CIF 结构极简, 桥可能成功也可能报错回退 — 只要求二选一且自洽
         eng = result.fit_params.get("engine")
-        assert eng in ("gsas2", "builtin")
+        assert eng in ("refinement", "builtin")
         if eng == "builtin":
             assert "engine_fallback_reason" in result.fit_params

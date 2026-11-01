@@ -390,31 +390,36 @@ class RietveldRefiner:
         max_cycles: int,
         **kwargs,
     ) -> RefinementResult:
-        """自动引擎选择:
-        全相有结构 CIF 且 GSAS-II 可用 → gsas2 (真 Rietveld + wt% 定量);
-        否则回退 builtin (无结构剖面拟合), 并把原因写入 fit_params.
-        """
-        reasons: list[str] = []
-        log = self.make_logger(kwargs)
-        if self._phases_have_structure(phases):
-            py = self._find_gsas2_python()
-            if py is not None:
-                log(f"[auto] all phases have structure CIF and GSAS-II found ({py}) -> engine=gsas2")
-                try:
-                    return self._refine_gsas2(
-                        data, phases, strategy, max_cycles, **kwargs
-                    )
-                except Exception as e:
-                    reasons.append(f"gsas2 run failed: {type(e).__name__}: {e}")
-            else:
-                reasons.append("GSAS-II install not found (E:\\GSASII)")
-        else:
-            reasons.append("phase without structure CIF present (builtin profile fit suffices)")
+        """自动引擎选择: **v5 精修引擎（refinement）**，失败由它自己回退 builtin。
 
-        log("[auto] -> engine=builtin (reason: " + "; ".join(reasons) + ")")
-        result = self._refine_builtin(data, phases, strategy, max_cycles, **kwargs)
-        result.fit_params["engine_requested"] = "auto"
-        result.fit_params["engine_fallback_reason"] = "; ".join(reasons)
+        v5.0.1 改口径（原实现是"全相有结构 CIF 且 GSAS-II 可用 → gsas2"）。
+        依据是 2026-11-01 的三引擎对拍（``scripts/bench_engines_v500.py``，
+        完整表见 ``docs/基准报告-精修-v5.0.0.md §十``，11 个试样）：
+
+        * refinement 最优 **6/11**、builtin 4/11、gsas2 1/11；Rwp 中位数
+          21.88% vs 24.05% vs 44.13%，均值 23.50 / 24.68 / 43.28；
+        * gsas2 在 **≥5 相的 4 个试样上全部撞 300 s 桥超时**（实际回退 builtin），
+          3 相以内也只在 3-1 更好（13.91%），其余明显更差（2-2 71.21%、1-1 64.91%）；
+        * refinement 不需要结构 CIF，也不依赖外部 GSAS-II 安装 —— 让默认路径
+          依赖它们等于把可用性押在环境上。
+
+        **已知弱项（别再当 bug 查）**：含层状相/强织构的试样 refinement 反而输给
+        builtin —— 4-1（Brucite 001）、5-2 / 5-2b（Muscovite）、5-3（Kaolinite）
+        差 3.6–10.5 pp，因为 v5 目前没有择优取向入口、也没有样品位移/峰尾模型。
+        定量口径则相反：4-1 四相 refinement 的 wt% 偏差 8.38 pp 远好于 builtin
+        的 21.62 pp（Rwp 与 wt% 不同向，别只看 Rwp）。
+        这些缺口见 ``docs/待办清单.md`` P1-8/P1-9。
+        """
+        log = self.make_logger(kwargs)
+        log("[auto] -> engine=refinement (v5, 详见 docs/基准报告-精修-v5.0.0.md)")
+        result = self._refine_v5(data, phases, strategy, max_cycles, **kwargs)
+        _used = str(result.fit_params.get("engine", "refinement"))
+        result.fit_params["engine_auto_selected"] = _used
+        # 正常路径把 engine_requested 归一到实际引擎, 免得 refine() 把
+        # "auto→refinement" 误报成 diag.engine_fallback; 但 v5 自己回退
+        # builtin 时必须保留 requested=refinement, 否则回退被掩盖。
+        if not result.fit_params.get("engine_fallback_reason"):
+            result.fit_params["engine_requested"] = _used
         return result
 
     # ------------------------------------------------------------------

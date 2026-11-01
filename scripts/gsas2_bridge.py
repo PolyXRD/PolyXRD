@@ -50,6 +50,7 @@ import os
 import sys
 import tempfile
 import traceback
+from typing import Optional
 
 import numpy as np
 
@@ -201,20 +202,50 @@ def _cubic_seed_a(peaks: list[float], sg_symbol: str, lam: float,
 # 工程构建
 # ----------------------------------------------------------------------
 
-def _make_inst_prm_lines(lam: float, gw: float) -> list[str]:
-    """CW PseudoVoigt 仪器参数: U=V=0, W=gw (由数据峰形估计)。"""
+#: 常用靶材 Kα1/Kα2 (Å)。GSAS-II 用 ``INS 1 ICONS`` 里第二个波长 +
+#: ``I(L2)/I(L1)`` 生成双线; 只给单波长时拟合会把 Kα1 峰做得过高约 1.5x
+#: (2-1 实测 ycalc 122507 vs yobs 78491 @ZnO 101), Rwp 直接卡在 53%。
+_KA_DOUBLET = ((1.54056, 1.54439), (1.78897, 1.79285), (1.93604, 1.93998),
+               (2.28970, 2.29361), (0.70930, 0.71359), (1.39222, 1.39592))
+
+
+def _ka2_of(lam: float) -> Optional[float]:
+    """Kα1 → 同靶 Kα2 波长; 认不出 (同步辐射/单色器) 返回 ``None``。"""
+    for k1, k2 in _KA_DOUBLET:
+        if abs(float(lam) - k1) < 0.004:
+            return k2
+    return None
+
+
+def _make_inst_prm_lines(lam: float, gw: float,
+                         gx: Optional[float] = None) -> list[str]:
+    """CW PseudoVoigt 仪器参数 (单位: 平方百分度 / 百分度)。
+
+    ``gw`` = W (高斯项, σ² 单位 0.01°²); ``gx`` = X (洛伦兹项 FWHM, 0.01°)。
+
+    v5.0.1: 原先 X=Y=Z=0 即**纯高斯**峰形。实测数据峰形由洛伦兹主导
+    (PolyXRD 内置引擎拟合 eta≈1.00), 纯高斯无法匹配峰尾。
+
+    ``INS 1 ICONS`` 按固定列宽排列 (GSASIIfiles 用 ``s[:10]`` / ``s[10:20]``
+    / ``s[40:50]`` / ``s[55:65]`` 切片读): 前两列各 10 字符 (2 空格 + 8 位
+    数字), 依次 wave1 / wave2 / zero / 占位 / 极化 / 占位 / I(L2)/I(L1)。
+    """
+    if gx is None:
+        gx = math.sqrt(max(gw, 0.0)) if gw > 0 else 0.0
+    ka2 = _ka2_of(lam)
+    icons = (f"  {float(lam):8.6f} {float(ka2 or lam):8.6f}"
+             f"{0.0:10.1f}{0:10d}{0.7:10.2f}{0:5d}{0.5:10.3f}")
     return [
         "            123456789012345678901234567890123456789012345678901234567890",
         "INS   BANK      1",
         "INS   HTYPE   PXCR",
         "INS  1 IRAD     3",
-        f"INS  1 ICONS  {lam:9.6f} {lam:9.6f}       0.0         0"
-        "       0.7    0       0.5",
+        "INS  1 ICONS" + icons,
         "INS  1I HEAD  DUMMY INCIDENT SPECTRUM FOR X-RAY DIFFRACTOMETER",
         "INS  1I ITYP    0    0.0000  180.0000         1",
         "INS  1PRCF1     3    8      0.01",
         f"INS  1PRCF11    0.000000E+00   0.000000E+00   {gw:12.6E}   0.000000E+00",
-        "INS  1PRCF12   0.000000E+00   0.000000E+00   0.000000E+00   0.000000E+00",
+        f"INS  1PRCF12    {gx:12.6E}   0.000000E+00   0.000000E+00   0.000000E+00",
     ]
 
 
@@ -266,6 +297,14 @@ def _build_project(req: dict, xy_path: str, iparm_path: str,
 _CELL_BKG = {"LeBail": True, "Cell": True,
              "Background": {"no. coeffs": 6, "refine": True}}
 
+#: Rietveld 定量阶段的 set 字典 —— **必须显式 LeBail=False**。
+#: ``do_refinements`` 的 ``set`` 会重新打开 Le Bail, 把上面
+#: ``ph.set_refinements({"LeBail": False})`` 关掉的再打开; 此时相分数退化
+#: 成"自由强度比", 2026-11-01 实测 2-1 给出 22/78 (真值 50/50, 真 Rietveld
+#: 应为 48/52)。
+_CELL_BKG_RIET = {"LeBail": False, "Cell": True,
+                  "Background": {"no. coeffs": 6, "refine": True}}
+
 
 def _score_seed(req, xy_path, iparm_path, iparm_lines, scale):
     """种子评分: DoLeBail + 1 轮 Cell+背景 LSQ (max cyc=1)。
@@ -314,7 +353,7 @@ def _final_refine(req, xy_path, iparm_path, iparm_lines, scale):
         ctrl["max cyc"] = 5
         gpx.save()
         gpx.do_refinements([{"set": dict(_CELL_BKG, **{
-            "Instrument Parameters": ["U", "V", "W"]})} for _ in range(2)])
+            "Instrument Parameters": ["U", "V", "W", "X"]})} for _ in range(2)])
         rounds += 2
     except Exception:
         pass
@@ -360,7 +399,7 @@ def _final_refine(req, xy_path, iparm_path, iparm_lines, scale):
         if req_phases and all(p.get("cif_path") for p in req_phases):
             gpx.reload()
             ctrl = gpx.data["Controls"]["data"]
-            ctrl["max cyc"] = 5
+            ctrl["max cyc"] = 8
             # 关 LeBail (强度改由结构因子 |F|² 计算) + 打开相分数精修。
             # 注意: 相名 (如 ' ?') 在 reload 后 gpx.phase(name) 可能查不到,
             # 这里直接迭代工程里的全部相 (与 req 顺序一致) 绕开名字查找.
@@ -368,13 +407,94 @@ def _final_refine(req, xy_path, iparm_path, iparm_lines, scale):
             for ph in proj_phases:
                 ph.set_refinements({"LeBail": False})
                 ph.set_HAP_refinements({"Scale": True}, histograms="all")
+            # 冻结 U/V/W: Le Bail 阶段已把它们精修到近乎共线 (实测 U-V 97.5%、
+            # V-W 98.5%), Rietveld 里再放开会命中 SVD 奇异, chi^2 从 3.9e6 直接
+            # 飙到 4.9e12, 随后 "Invalid metric tensor", 整段定量失败。
+            try:
+                gpx.histogram(0).clear_refinements(
+                    {"Instrument Parameters": ["U", "V", "W"]})
+            except Exception as e:  # noqa: BLE001 - 拿不到峰形键不影响定量
+                print(f"[bridge] freeze U/V/W skipped: {e}", file=sys.stderr)
             gpx.save()
-            gpx.do_refinements([{"set": dict(_CELL_BKG)} for _ in range(2)])
-            rounds += 3
+            # set 字典用 _CELL_BKG_RIET: 带 LeBail=False, 否则上面关掉的又开回来
+            dbg = bool(os.environ.get("POLYXRD_G2_DEBUG"))
+
+            def _dbg(msg):
+                """定量阶段诊断落盘 (子进程 stderr 在上层会被合并丢弃)。"""
+                if not dbg:
+                    return
+                path = os.environ.get("POLYXRD_G2_DEBUG_FILE") or "g2dbg.log"
+                try:
+                    with open(path, "a", encoding="utf-8") as f:
+                        f.write(msg + "\n")
+                except Exception:
+                    pass
+
+            if dbg:
+                for ph in gpx.phases():
+                    _hv = ph.getHAPvalues(gpx.histogram(0).name)
+                    _dbg(f"before {ph.name}: LeBail={_hv.get('LeBail')} scale={_hv.get('Scale')}")
+
+            # ---- 相 Scale 量级初始化 (v5.0.1) ----
+            # Rietveld 的 Y = H·Σ S_p·C_p + bg 对 S 是线性的, 但 S 从 1.0 起步
+            # 常差 3~5 个数量级; LM 第一步给出天文步长 (实测 chi² 3.9e6 → 9e11)
+            # 又被 lambda 压回原处 → 精修报"成功"却一步未动, scale 停在 1.0,
+            # 相分数退化成"胞内质量比"(2-1 得到 21/79, 与结构因子无关)。
+            # 这里先冻结 Scale 只精修背景拿一次 Ycalc, 再用
+            # Σ(yobs-bg)/Σ(ycalc-bg) 把各相 Scale 一次拉到正确量级;
+            # 相对比例仍交给随后几轮 Rietveld LSQ。
+            try:
+                for ph in proj_phases:
+                    ph.set_HAP_refinements({"Scale": False}, histograms="all")
+                gpx.save()
+                gpx.do_refinements([{"set": dict(
+                    _CELL_BKG_RIET, Cell=False,
+                    **{"Instrument Parameters": ["Zero"]})}])
+                rounds += 1
+                _h = gpx.histogram(0)
+                _yobs = np.asarray(_h.getdata("Yobs"), dtype=float)
+                _ycalc = np.asarray(_h.getdata("Ycalc"), dtype=float)
+                _bg = np.asarray(_h.getdata("Background"), dtype=float)
+                _num = float(np.sum(_yobs - _bg))
+                _den = float(np.sum(_ycalc - _bg))
+                if _den > 0 and _num > 0:
+                    _k = _num / _den
+                    for ph in gpx.phases():
+                        _hap = ph.data["Histograms"][_h.name]["Scale"]
+                        _hap[0] = float(_hap[0]) * _k
+                        _hap[1] = True
+                    gpx.save()
+                    _dbg(f"scale-init k={_k:.6g} num={_num:.5g} den={_den:.5g}")
+            except Exception as e:  # noqa: BLE001 - 初始化失败仍走原路径
+                print(f"[bridge] scale init skipped: {e}", file=sys.stderr)
+
+            # Le Bail → Rietveld 切换时若同时放开晶胞, 第一步 LSQ 也会把晶胞
+            # 拉爆 (实测 "Invalid metric tensor ... values (A): -0.1220")。
+            # 所以先固定晶胞只放 Scale+背景, 再放晶胞。
+            for _r, _cell_on in enumerate((False, False, True, True)):
+                gpx.do_refinements([{"set": dict(
+                    _CELL_BKG_RIET, Cell=_cell_on,
+                    # Zero 属于仪器参数 (句典里没有独立的 'Zero' 键), 与
+                    # 已冻结的 U/V/W/X 互不影响; 不修零点时 36° 处错位
+                    # 0.02° → Rwp 直接从 24% 恶化到 47%。
+                    **{"Instrument Parameters": ["Zero"]})}])
+                rounds += 1
+                if dbg:
+                    gpx.reload()
+                    try:
+                        _w = gpx.histogram(0).get_wR()
+                    except Exception:
+                        _w = None
+                    _sc = [ph.getHAPvalues(gpx.histogram(0).name).get("Scale")
+                           for ph in gpx.phases()]
+                    _dbg(f"round {_r} cell={_cell_on}: wR={_w} scales={_sc}")
+            rounds += 1
             gpx.reload()
             hist = gpx.histogram(0)
             proj_phases = list(gpx.phases())  # reload 后重新取对象
             masses = []
+            scales = []
+            cell_masses = []
             for idx, p in enumerate(req_phases):
                 if idx < len(proj_phases):
                     ph = proj_phases[idx]
@@ -384,6 +504,8 @@ def _final_refine(req, xy_path, iparm_path, iparm_lines, scale):
                     raise RuntimeError(f"phase not found: {p.get('name')!r}")
                 frac = ph.getHAPvalues(hist.name)["Scale"][0]
                 mass = ph.data["General"]["Mass"]
+                scales.append(float(frac))
+                cell_masses.append(float(mass))
                 masses.append(float(frac) * float(mass))
             total = sum(masses)
             if total > 0:
@@ -392,6 +514,12 @@ def _final_refine(req, xy_path, iparm_path, iparm_lines, scale):
                 wR_rietveld = float(gpx.histogram(0).get_wR())
             except Exception:
                 wR_rietveld = None
+            if os.environ.get("POLYXRD_G2_DEBUG"):
+                # 定量诊断钩子: 相分数只由 "Scale × 胞内质量" 决定, 两者都不透明
+                # 时只能盲目调参, 故留一条可观测通道。
+                for p, s, cm in zip(req_phases, scales, cell_masses):
+                    _dbg(f"final {p.get('name')}: scale={s:.6g} cell_mass={cm:.4f}")
+                _dbg(f"wR_rietveld={wR_rietveld} fracs={phase_fractions}")
     except Exception as e:
         print(f"[bridge] quantify stage failed: {e}", file=sys.stderr)
         phase_fractions = None

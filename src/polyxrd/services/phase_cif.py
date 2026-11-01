@@ -22,6 +22,8 @@ import re
 from pathlib import Path
 from typing import Optional, Union
 
+import numpy as np
+
 from polyxrd.models.phase import Phase, LatticeParams
 
 
@@ -34,6 +36,26 @@ def _format_value(v) -> str:
             return str(int(v))
         return f"{v:.4f}"
     return f"'{v}'"
+
+
+_BLOCK_NAME_BAD = re.compile(r"[^A-Za-z0-9_.+-]+")
+
+
+def _safe_block_name(name: object) -> str:
+    """``phase.name`` → 合法的 CIF ``data_`` 块名。
+
+    **为什么必须清洗** (v5.0.1 修复): CIF 的 ``data_`` 后只能跟**一个非空白
+    token**, 而 PolyXRD 的相名普遍带空格/括号 (``"Zincite - O Zn (COD 9004180)"``)。
+    写成 ``data_Zincite - O Zn (COD 9004180)`` 后 PyCifRW 在 char13 处直接报
+    ``Star Format error``, GSAS-II 的 ``G2ImportException: No reader could read
+    file`` 即源于此 —— 与空间群/位点语义无关，纯粹是块名不合法。
+    """
+    s = _BLOCK_NAME_BAD.sub("_", str(name or "")).strip("_.")
+    if not s:
+        s = "phase"
+    if s[0].isdigit():
+        s = "p" + s
+    return s
 
 
 def _space_group_to_hall_or_hm(phase: Phase) -> Optional[str]:
@@ -152,6 +174,9 @@ def expand_sites_by_symmetry(sites: list[dict], space_group: object,
             p = np.asarray(op.operate(base), dtype=float)
             p = p - np.floor(p)
             p = np.where(p < 0, p + 1.0, p)
+            # 浮点回绕到 1-1e-16 的坐标会写成 "1.0000"(等价位置但读起来像越界),
+            # 且会让下游按坐标比对的逻辑把 x=1.0 与 x=0.0 判成不同点。
+            p = np.where(p > 1.0 - 1e-6, 0.0, p)
             if mat is not None and mat.shape[0]:
                 d = np.abs(mat - p)
                 d = np.minimum(d, 1.0 - d)
@@ -179,6 +204,149 @@ def expand_sites_by_symmetry(sites: list[dict], space_group: object,
     return result
 
 
+def _site_element(site: dict) -> str:
+    return str(site.get("element") or _element_from_label(str(site.get("label") or "")))
+
+
+def reduce_sites_to_asymmetric(
+    sites: list[dict], space_group: object, tol: float = 1e-3
+) -> Optional[list[tuple[dict, int]]]:
+    """完整晶胞位点 → 非对称单位 ``[(site, 多重度)]``；归并不可信时返回 ``None``。
+
+    **为什么必须归并** (v5.0.1, GSAS-II 定量硬前提): GSAS-II 的 CIF 读取把
+    原子表当作**非对称单位**，再按空间群生成整个轨道，胞内质量按
+    ``Σ 质量·占有率·多重度`` 累计 (``GSASIIstrIO.GetPhaseData``)。若 CIF 里
+    已写全胞 (如 ZnO 的 4 条) 却仍声明 ``P 6_3 m c``，GSAS-II 会把每条再乘
+    多重度 2 → 胞内原子数翻倍 → 结构因子与相质量同时错，wt% 系统性偏移。
+
+    归并规则: 逐元素在剩余位点中查"该位点的完整轨道"；轨道必须**全部存在**
+    且占有率一致才收下 (多重度 = 轨道里不同位点数)，否则返回 ``None``
+    (宁可退回 P1 全胞，也不赌)。
+
+    调用方应用 :func:`_same_site_set` 把返回值再展开一次，与原全胞位点比对。
+    """
+    ops = space_group_ops(space_group)
+    if ops is None or len(ops) <= 1:
+        return None
+    if not sites:
+        return None
+    import numpy as np
+
+    pos = np.zeros((len(sites), 3), dtype=float)
+    occ = np.zeros(len(sites), dtype=float)
+    elems: list[str] = []
+    for i, s in enumerate(sites):
+        try:
+            pos[i] = (float(s["x"]), float(s["y"]), float(s["z"]))
+            occ[i] = float(s.get("occupancy", 1.0) or 1.0)
+        except (TypeError, ValueError, KeyError):
+            return None
+        e = _site_element(s)
+        if not e or not bool(np.isfinite(pos[i]).all()):
+            return None
+        elems.append(e)
+
+    idx_by_elem: dict[str, list[int]] = {}
+    for i, e in enumerate(elems):
+        idx_by_elem.setdefault(e, []).append(i)
+
+    used = np.zeros(len(sites), dtype=bool)
+    out: list[tuple[dict, int]] = []
+    for i in range(len(sites)):
+        if used[i]:
+            continue
+        e = elems[i]
+        pool = [j for j in idx_by_elem[e] if not used[j]]
+        orbit: list[int] = []
+        for op in ops:
+            q = np.asarray(op.operate(pos[i]), dtype=float)
+            q = q - np.floor(q)
+            d = np.abs(pos[pool] - q)
+            d = np.minimum(d, 1.0 - d)
+            hits = [pool[k] for k in np.nonzero(np.all(d < tol, axis=1))[0]]
+            if not hits:
+                return None  # 轨道不闭合 → 位点集与空间群不自洽
+            fresh = [j for j in hits if not used[j] and j not in orbit]
+            if not fresh:
+                continue  # 该操作把位点映回轨道内已有原子 (特殊位置)
+            j = fresh[0]
+            if abs(occ[j] - occ[i]) > 1e-3:
+                return None  # 轨道内占有率不一致 (掺杂/占位无序) → 不敢归并
+            orbit.append(j)
+        for j in orbit:
+            used[j] = True
+        # 多重度 = 轨道里不同位点数 (identity 操作已把 i 本身收进 orbit)
+        out.append((sites[i], max(1, len(orbit))))
+    return out
+
+
+def _same_site_set(a: list[dict], b: list[dict], tol: float = 1e-3) -> bool:
+    """两个位点集合是否逐元素一一对应 (周期性距离, 贪心配对)。"""
+    if a is None or b is None or len(a) != len(b):
+        return False
+    import numpy as np
+
+    def _groups(sites: list[dict]) -> dict[str, "np.ndarray"]:
+        g: dict[str, list[list[float]]] = {}
+        for s in sites:
+            g.setdefault(_site_element(s), []).append(
+                [float(s.get("x", 0.0)), float(s.get("y", 0.0)), float(s.get("z", 0.0))]
+            )
+        return {k: np.asarray(v, dtype=float) for k, v in g.items()}
+
+    ga, gb = _groups(a), _groups(b)
+    if set(ga) != set(gb):
+        return False
+    for elem, pa in ga.items():
+        pb = gb[elem]
+        if pa.shape != pb.shape:
+            return False
+        free = np.ones(pb.shape[0], dtype=bool)
+        for i in range(pa.shape[0]):
+            cand = np.nonzero(free)[0]
+            if cand.size == 0:
+                return False
+            d = np.abs(pb[cand] - pa[i])
+            d = np.minimum(d, 1.0 - d)
+            ok = cand[np.all(d < tol, axis=1)]
+            if ok.size == 0:
+                return False
+            free[ok[0]] = False
+    return True
+
+
+def _formula_units_z(formula: str, full_sites: list[dict]) -> int:
+    """由"全胞原子数 / 化学式原子数"反推 ``_cell_formula_units_Z``。
+
+    GSAS-II 的相质量**不用** Z (它按位点×多重度累计)，但 Z 与原子数不符会
+    让密度、``_chemical_formula_sum`` 自相矛盾，其他阅读器 (VESTA/FullProf)
+    会据此算错。取各元素比值的最小整数；对不上就退回 1。
+    """
+    if not formula or not full_sites:
+        return 1
+    try:
+        from polyxrd.utils.formula_parser import parse_formula_detailed
+
+        per_cell: dict[str, float] = {}
+        for s in full_sites:
+            e = _site_element(s)
+            if not e:
+                continue
+            per_cell[e] = per_cell.get(e, 0.0) + float(s.get("occupancy", 1.0) or 1.0)
+        per_form = parse_formula_detailed(formula)
+        if not per_cell or not per_form:
+            return 1
+        ratios = [per_cell[e] / n for e, n in per_form.items() if n > 0 and e in per_cell]
+        if not ratios:
+            return 1
+        z = min(ratios)
+        if z < 0.5 or any(abs(r - round(r)) > 0.1 for r in ratios):
+            return 1
+        return max(1, int(round(z)))
+    except Exception:  # noqa: BLE001 - 化学式解析失败不该阻断 CIF 生成
+        return 1
+
+
 def phase_to_cif_text(phase: Phase) -> str:
     """生成 CIF 1.1 文本 (返回字符串). 不写盘, 由调用方负责.
 
@@ -192,7 +360,7 @@ def phase_to_cif_text(phase: Phase) -> str:
     sg = _space_group_to_hall_or_hm(phase)
 
     lines: list[str] = []
-    lines.append(f"data_{phase.name or 'phase'}")
+    lines.append(f"data_{_safe_block_name(phase.name)}")
     lines.append(f"_chemical_name_common '{phase.name}'")
     if phase.formula:
         lines.append(f"_chemical_formula_sum '{phase.formula}'")
@@ -207,9 +375,6 @@ def phase_to_cif_text(phase: Phase) -> str:
         lines.append(f"_cell_volume {vol:.3f}")
     except Exception:
         pass
-    if sg:
-        lines.append(f"_space_group_name_H-M_alt '{sg}'")
-    lines.append("_cell_formula_units_Z 1")
 
     sites = list(phase.atomic_sites) if phase.atomic_sites else []
     if not sites and phase.elements:
@@ -223,13 +388,66 @@ def phase_to_cif_text(phase: Phase) -> str:
                 "x": 0.0, "y": 0.0, "z": 0.0,
                 "occupancy": 1.0,
             })
+    raw_sites = sites
 
     # v0.15.2: 非对称单元 → 完整晶胞 (幂等, 已展开的位点原样通过)。
     # 否则 pymatgen/GSAS-II/FullProf 按 P1 读取高对称结构会整体算错强度。
     if sites:
         sites = expand_sites_by_symmetry(sites, phase.space_group)
 
-    if sites:
+    # v5.0.1: 落盘形态改为"非对称单位 + 空间群", 而不是"全胞 + 原空间群"。
+    # 全胞位点配高对称群会让 GSAS-II 再按多重度展开一次 (胞内原子翻倍),
+    # 相质量 (Σ 质量·占有率·多重度) 与结构因子同时翻倍 → wt% 系统性偏移。
+    # 归并结果一律做 "再展开 ↔ 原全胞" 闭环校验, 不自洽就退回 P1 + 全胞。
+    emit: list[tuple[dict, int]] = [(s, 1) for s in sites]
+    emit_sg = sg
+    ops = space_group_ops(phase.space_group)
+    if sites and ops is not None:
+        reduced = reduce_sites_to_asymmetric(sites, phase.space_group)
+        if reduced is not None and _same_site_set(
+            expand_sites_by_symmetry([s for s, _ in reduced], phase.space_group),
+            sites,
+        ):
+            emit = reduced
+        else:
+            emit_sg = "P 1"   # 归并不自洽 → 全胞 + P1 (不做二次展开, 语义无歧义)
+    if emit_sg:
+        lines.append(f"_space_group_name_H-M_alt '{emit_sg}'")
+    lines.append(
+        f"_cell_formula_units_Z {_formula_units_z(phase.formula, sites or [])}"
+    )
+
+    if emit:
+        # 展开会重建位点字典 (丢掉 u_iso)，这里按"元素 + 同轨道"从原始位点找回，
+        # 让 COD 给出的热参数作为 GSAS-II/MAUD 的初值而非一律 0.005。
+        # 归并后的代表点常是原始位点的对称像 (如 (1/3,2/3,0)→(2/3,1/3,1/2))，
+        # 所以必须比轨道、不能只比坐标。
+        u_pool = [
+            (_site_element(s), float(s["x"]), float(s["y"]), float(s["z"]),
+             float(s["u_iso"]))
+            for s in (raw_sites or [])
+            if s.get("u_iso") and "x" in s
+        ]
+
+        def _u_iso_of(site: dict) -> float:
+            elem = _site_element(site)
+            try:
+                p = np.asarray((float(site["x"]), float(site["y"]), float(site["z"])))
+            except (KeyError, TypeError, ValueError):
+                return 0.005
+            for e, ux, uy, uz, u in u_pool:
+                if e != elem:
+                    continue
+                base = np.asarray((ux, uy, uz))
+                for op in (ops or [None]):
+                    q = base if op is None else np.asarray(op.operate(base), dtype=float)
+                    q = q - np.floor(q)
+                    d = np.abs(q - p)
+                    d = np.minimum(d, 1.0 - d)
+                    if bool(np.all(d < 1e-3)):
+                        return u
+            return 0.005
+
         lines.append("loop_")
         lines.append("_atom_site_label")
         lines.append("_atom_site_type_symbol")
@@ -237,16 +455,20 @@ def phase_to_cif_text(phase: Phase) -> str:
         lines.append("_atom_site_fract_y")
         lines.append("_atom_site_fract_z")
         lines.append("_atom_site_occupancy")
-        for site in sites:
+        lines.append("_atom_site_site_symmetry_multiplicity")
+        lines.append("_atom_site_U_iso_or_equiv")
+        for site, mult in emit:
             lbl = site.get("label") or ""
             elem = site.get("element") or _element_from_label(lbl) or "X"
             x = site.get("x", 0.0)
             y = site.get("y", 0.0)
             z = site.get("z", 0.0)
             occ = site.get("occupancy", 1.0)
+            u_iso = site.get("u_iso") or _u_iso_of(site)
             label_str = lbl if lbl else "X1"
             lines.append(
-                f"{label_str} {elem} {float(x):.4f} {float(y):.4f} {float(z):.4f} {float(occ):.4f}"
+                f"{label_str} {elem} {float(x):.6f} {float(y):.6f} {float(z):.6f} "
+                f"{float(occ):.4f} {int(mult)} {u_iso:.4f}"
             )
 
     return "\r\n".join(lines) + "\r\n"

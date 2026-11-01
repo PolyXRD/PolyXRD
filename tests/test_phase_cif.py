@@ -102,7 +102,9 @@ class TestPhaseToCifText:
         # 见 phase_cif._space_group_to_hall_or_hm 的说明
         assert "_space_group_name_H-M_alt 'R -3 c'" in txt
         assert ":H" not in txt
-        assert "_cell_formula_units_Z 1" in txt
+        # v5.0.1: Z 由"胞内原子数 / 化学式原子数"反推, 不再固定写 1。
+        # 刚玉 Al2O3 六方胞 Z=6, 固定 1 会让密度与 _chemical_formula_sum 自相矛盾。
+        assert "_cell_formula_units_Z 6" in txt
 
     def test_volume_included(self, al2o3_phase: Phase):
         txt = phase_to_cif_text(al2o3_phase)
@@ -208,10 +210,14 @@ class TestCifToPhase:
         assert back.lattice.a == pytest.approx(4.758, abs=0.01)
         assert back.lattice.c == pytest.approx(12.991, abs=0.01)
         assert back.lattice.gamma == pytest.approx(120.0)
-        # v0.15.2: 非对称单元按 R-3c 对称展开成完整晶胞 (刚玉 Z=6: 12 Al + 18 O)
-        assert len(back.atomic_sites) == 30
+        # v5.0.1: 写盘形态改为**非对称单位 + 空间群** (CIF 的规范形态, 也是
+        # GSAS-II/MAUD 期望的形态)。往返后拿到 2 条非对称位点, 需要时由
+        # expand_sites_by_symmetry 展开成完整晶胞 (刚玉 Z=6: 12 Al + 18 O)。
+        assert len(back.atomic_sites) == 2
+        full = expand_sites_by_symmetry(back.atomic_sites, back.space_group)
+        assert full is not None and len(full) == 30
         # 原子位点: 12c Al 轨道必含 (0, 0, ±0.352) 类位置
-        al_sites = [s for s in back.atomic_sites if s["element"] == "Al"]
+        al_sites = [s for s in full if s["element"] == "Al"]
         assert len(al_sites) == 12
         assert any(
             s["x"] == pytest.approx(0.0, abs=0.01)
