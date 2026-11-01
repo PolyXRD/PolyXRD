@@ -1209,6 +1209,15 @@ class RietveldRefiner:
             frozen += [f"inst.{t}" for t in ("u", "v", "w", "x", "y", "z")]
         if not mask.get("zero_shift", True):
             frozen += ["inst.zero"]
+        # v5.1：样品位移（Δ2θ = disp·cosθ）**默认冻结**，与 builtin 的 W16 同口径
+        # （opt-in: refine_displacement=True）。真实试样实测它统计惰性且与
+        # zero/cell 三者共线 —— 2-1 放开时 disp 撞 +0.5 上界、Rwp 只动 0.05 pp、
+        # zero 却被带到 −0.58°（失真）。引擎里保留模型（Problem 级可自由精修），
+        # 服务层默认钉住，用户显式要才放开。
+        _disp_on = bool(kwargs.get("refine_displacement", False)) \
+            and mask.get("displacement", True)
+        if not _disp_on:
+            frozen += ["inst.disp"]
         for name in frozen:
             if name in prob.params:
                 prob.params.fix(name, True)
@@ -1347,6 +1356,11 @@ class RietveldRefiner:
                 "refine_cell": bool(mask.get("cell", True)),
                 "refine_profile": bool(mask.get("profile", True)),
                 "refine_zero_shift": bool(mask.get("zero_shift", True)),
+                "refine_displacement": bool(_disp_on),
+                # 拟合出的峰位修正（度）：零位是常数项、位移按 cosθ 衰减。
+                # GUI 状态条 / 报告要分开展示 —— 两者混在一起会互相掩盖。
+                "inst_zero": float(summary.params.get("inst.zero", 0.0) or 0.0),
+                "inst_disp": float(summary.params.get("inst.disp", 0.0) or 0.0),
                 "param_mask": mask,
                 "v5_frozen_params": frozen,
                 "v5_tier": "fast" if _tier == "fast" else "precise",

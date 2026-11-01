@@ -25,9 +25,11 @@ from polyxrd.refinement import (
     ParameterSet,
     PhaseBlock,
     PatternProblem,
+    Kalpha2,
     build_reflections,
     design_matrix,
     PhaseSpec,
+    reflection_centers_and_intensities,
     background_basis,
     levenberg_marquardt,
     scipy_least_squares,
@@ -381,7 +383,7 @@ class TestRoundTrip:
     def test_stage_log(self, roundtrip):
         _p, summary, _r0, _g, _pf = roundtrip
         assert [s["stage"] for s in summary.stages] == [2, 3]
-        assert summary.stages[0]["n_params"] == 6 + 1     # 晶胞 6 + 零位 1
+        assert summary.stages[0]["n_params"] == 6 + 2     # 晶胞 6 + 零位 1 + 位移 1
         assert summary.stages[1]["Rwp"] <= summary.stages[0]["Rwp"] + 1e-9
 
 
@@ -463,3 +465,89 @@ class TestCaching:
         prob.params.set("inst.w", 0.05)
         prob.apply()
         assert prob._make_design_key() != k0
+
+
+class TestDisp:
+    """``inst.disp``：样品位移项 ``Δ2θ = disp·cosθ``（v5.1，P1-8 第 1 件）。
+
+    与零位的分野必须**可辨识**：zero 是常数、disp 随角衰减（cos15°=0.966 →
+    cos75°=0.259）。只测位移场景就能把两者分开 —— 纯 cosθ 偏移的谱，只放
+    零位补不掉（低角补上了高角就偏），零位 + 位移一起放才收得干净。
+    """
+
+    GRID = np.linspace(15.0, 75.0, 1201)
+    DISP_TRUE = 0.12
+
+    def _problem(self):
+        tab = build_reflections(_lfp(), two_theta_range=(14.0, 76.0))
+        prof = ProfileParams(**TRUE_PROFILE)
+        basis = design_matrix(self.GRID, [PhaseSpec(tab)], prof,
+                              cutoff_fwhm=CUT, disp=self.DISP_TRUE)
+        y_obs = basis @ np.array([SCALE_TRUE])       # 无噪：回收精度不受统计限制
+        prob = PatternProblem(
+            self.GRID, y_obs, [PhaseBlock("LFP", _lfp())],
+            profile=prof, bg=BackgroundParams("none"),
+            weights=1.0 / np.maximum(y_obs, 1.0), cutoff_fwhm=CUT,
+        )
+        # 只考察峰位：与位移无关的阶段全部推到 9（不进 stage 2）
+        prob.params = prob.build_parameters(
+            stages={"cell": 9, "po": 9, "sample": 9, "asym": 9, "profile": 9})
+        prob.apply()
+        prob.invalidate()
+        return prob
+
+    def test_shift_is_costheta_shaped(self):
+        """位移量必须严格是 ``disp·cosθ``，而不是另一个常数平移。"""
+        tab = build_reflections(_lfp(), two_theta_range=(14.0, 76.0))
+        c0, _, _ = reflection_centers_and_intensities(tab)
+        c1, _, _ = reflection_centers_and_intensities(tab, disp=self.DISP_TRUE)
+        got = c1 - c0
+        want = self.DISP_TRUE * np.cos(np.radians(c0) / 2.0)
+        assert np.max(np.abs(got - want)) < 1e-9
+
+    def test_ka2_shifts_together(self):
+        """位移作用于 Kα2 拆分之前 → Kα1/Kα2 两条线同步平移。"""
+        tab = build_reflections(_lfp(), two_theta_range=(14.0, 76.0))
+        ka2 = Kalpha2()
+        c0, _, _ = reflection_centers_and_intensities(tab, ka2)
+        c1, _, _ = reflection_centers_and_intensities(tab, ka2,
+                                                      disp=self.DISP_TRUE)
+        assert c0.shape == c1.shape
+        d = c1 - c0
+        # Kα2 线的 2θ 略大、cosθ 略小：位移项按各自 2θ 取 cosθ，与用 Kα1 位置
+        # 估计的 want 差二阶小量（实测 ≤1.4e-4°，远低于峰位精度）
+        want = self.DISP_TRUE * np.cos(np.radians(c0) / 2.0)
+        assert np.max(np.abs(d - want)) < 3e-4
+
+    def test_zero_alone_cannot_fix(self):
+        """纯 cosθ 偏移只放零位：低角补上、高角就偏，Rwp 收不下去。"""
+        prob = self._problem()
+        prob.params["inst.disp"].stage = 9      # 把位移推出 stage 2
+        summary = prob.fit(stages=(2,), max_iter_per_stage=60)
+        # 实测只放零位收到 4.8%（无噪底 ~0%）：低角补上、高角就偏，收不干净。
+        # 别把阈值写太高 —— zero 能吸收 cosθ 曲线的加权平均，剩余不是零。
+        assert summary.metrics["Rwp"] > 2.0, (
+            f"只放零位竟能收到 {summary.metrics['Rwp']:.2f}% —— "
+            "zero 与 disp 已不可分辨，测试场景失效")
+
+    def test_disp_recovered(self):
+        prob = self._problem()
+        summary = prob.fit(stages=(2,), max_iter_per_stage=60)
+        got = float(prob.params.get("inst.disp"))
+        assert abs(got - self.DISP_TRUE) < 0.02, f"disp 回收 {got:.4f}"
+        assert summary.metrics["Rwp"] < 0.5
+
+    def test_design_cache_key_covers_disp(self):
+        """disp 改了设计矩阵必须跟着改（否则就是吃了旧基，v5.0 的老坑）。"""
+        prob = self._problem()
+        prob.residual(None)
+        yc0 = prob.calc_pattern().copy()
+        k0 = prob._make_design_key()
+        prob.params.set("inst.disp", self.DISP_TRUE + 0.08)
+        prob.apply()
+        assert prob._make_design_key() != k0
+        assert prob.disp == pytest.approx(self.DISP_TRUE + 0.08)
+        # 加权 Rwp 对"偏多少"不单调（0.20 离真值 0.12 比全偏 0.12 还近），
+        # 所以这里断言**计算谱本身变了**，而不是 Rwp 变差
+        yc1 = prob.calc_pattern()
+        assert np.max(np.abs(yc1 - yc0)) > 1e-6 * max(yc0.max(), 1.0)

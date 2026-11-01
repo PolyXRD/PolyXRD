@@ -232,6 +232,7 @@ class PatternProblem:
             self.weights = w
 
         self.shift = 0.0
+        self.disp = 0.0
         self._atom_slots: Dict[int, List[Optional[int]]] = {}
         self.params = params if params is not None else self.build_parameters()
         if not self._atom_slots:
@@ -265,6 +266,13 @@ class PatternProblem:
         # 仪器
         ps.add(Parameter("inst.zero", 0.0, -1.0, 1.0, stage=st["zero"],
                          label="零位偏移 (°)"))
+        # 样品位移：Δ2θ = disp·cosθ（Bragg–Brentano 样品高度偏差 h → 2h/R·cosθ）。
+        # 与零位的分野：zero 是常数、disp 随角衰减。两者一起放开才补得掉
+        # "零位已修、低角仍偏"的残差 —— 实测口径是交叉样本 a 系统性偏 −0.11%
+        # 且两个零位不同的试样偏得一样多（这正是 cosθ 项的指纹）。
+        # 界 ±0.5°：h=1 mm / R=240 mm 也才 0.48°，物理上到顶了。
+        ps.add(Parameter("inst.disp", 0.0, -0.5, 0.5, stage=st["zero"],
+                         label="样品位移 cosθ 项 (°)"))
         ps.add(Parameter("inst.asym", float(self.profile.asymmetry), 0.0, 0.4,
                          stage=st["asym"], label="低角不对称"))
         # 精修里**不设** inst.eta：η 由 TCH 的宽度比导出（与 GSAS-II 一致）。
@@ -373,6 +381,7 @@ class PatternProblem:
         self.params.refresh_constraints()
         g = self.params.get
         self.shift = float(g("inst.zero", 0.0) or 0.0)
+        self.disp = float(g("inst.disp", 0.0) or 0.0)
         self.profile = replace(
             self.profile,
             u=float(g("inst.u", self.profile.u) or 0.0),
@@ -464,7 +473,7 @@ class PatternProblem:
         self._basis = design_matrix(
             self.two_theta, specs, self.profile,
             wavelength=self.wavelength, kalph2=self.kalph2,
-            cutoff_fwhm=self.cutoff_fwhm, shift=self.shift)
+            cutoff_fwhm=self.cutoff_fwhm, shift=self.shift, disp=self.disp)
         self._bg_basis = background_basis(self.two_theta, self.bg)
         self._design_key = key
         return self._basis, self._bg_basis
@@ -475,7 +484,7 @@ class PatternProblem:
                 self.profile.y, self.profile.z, self.profile.eta,
                 self.profile.asymmetry)
         sample = tuple((ph.size_nm, ph.strain, ph.po_r) for ph in self.phases)
-        return cells + prof + sample + (self.shift,)
+        return cells + prof + sample + (self.shift, self.disp)
 
     def invalidate(self) -> None:
         self._basis = None

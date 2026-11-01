@@ -93,6 +93,7 @@ def reflection_centers_and_intensities(
     po_r: float = 1.0,
     *,
     shift: float = 0.0,
+    disp: float = 0.0,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """把反射表展开成 ``(centers, intensities, is_ka2)``。
 
@@ -101,10 +102,18 @@ def reflection_centers_and_intensities(
 
     :param shift: 整体 2θ 平移（度），用于仪器零位 ``inst.zero``。先平移再拆
         Kα2 —— 零位误差是**仪器**偏移，对 Kα1/Kα2 两条线同等生效。
+    :param disp: 样品位移项（度）：``Δ2θ = disp·cosθ``。Bragg–Brentano 下样品
+        高度偏差 h 给 ``Δ2θ = (2h/R)·cosθ``——与零位的区别在于它随角度衰减，
+        只补零位补不掉的那部分（实测表现为"零位已修、a 仍系统性偏"）。
+        同样先于 Kα2 拆分生效。
     """
     tt = np.asarray(table.two_theta, dtype=float)
     if shift:
         tt = tt + float(shift)
+    if disp:
+        # 位移项用**未平移**的 2θ 算 cosθ 即可：shift/disp 都是小量（≪1°），
+        # cos(θ+δ) 与 cosθ 的差是 δ·sinθ 的高阶小量，远低于峰位有效精度。
+        tt = tt + float(disp) * np.cos(np.radians(tt) / 2.0)
     inten = np.asarray(table.reweight_po(po_r), dtype=float)
     if kalph2 is None or not kalph2.separation:
         return tt, inten, np.zeros(tt.shape, dtype=bool)
@@ -212,6 +221,7 @@ def phase_pattern(
     kalph2: Optional[Kalpha2] = None,
     cutoff_fwhm: Optional[float] = DEFAULT_CUTOFF_FWHM,
     shift: float = 0.0,
+    disp: float = 0.0,
     return_detail: bool = False,
 ):
     """单相"单位标度"计算谱（``scale = 1``）。
@@ -222,6 +232,7 @@ def phase_pattern(
     :param kalph2: Kα2 描述；None → 只用 Kα1
     :param cutoff_fwhm: 窗口半宽（FWHM 倍数）；None → 全矩阵
     :param shift: 整体 2θ 平移（度），用于仪器零位
+    :param disp: 样品位移项（度），``Δ2θ = disp·cosθ``
     :param return_detail: 为 True 时返回 ``(pattern, PhasePattern)``
     """
     tt = np.asarray(two_theta, dtype=float)
@@ -229,7 +240,7 @@ def phase_pattern(
         return (np.zeros(0), None) if return_detail else np.zeros(0)
 
     centers, areas, is2 = reflection_centers_and_intensities(
-        spec.table, kalph2, spec.po_r, shift=shift)
+        spec.table, kalph2, spec.po_r, shift=shift, disp=disp)
 
     # 样品层（尺寸/应变）叠加到仪器层之上
     p_eff = profile.with_samples(size_nm=spec.size_nm, strain=spec.strain)
@@ -256,6 +267,7 @@ def design_matrix(
     kalph2: Optional[Kalpha2] = None,
     cutoff_fwhm: Optional[float] = DEFAULT_CUTOFF_FWHM,
     shift: float = 0.0,
+    disp: float = 0.0,
 ) -> np.ndarray:
     """``(N, n_phase)`` 设计矩阵；列 = 各相单位标度谱。
 
@@ -267,7 +279,7 @@ def design_matrix(
     for i, sp in enumerate(specs):
         out[:, i] = phase_pattern(
             tt, sp, profile, wavelength=wavelength, kalph2=kalph2,
-            cutoff_fwhm=cutoff_fwhm, shift=shift,
+            cutoff_fwhm=cutoff_fwhm, shift=shift, disp=disp,
         )
     return out
 
@@ -285,11 +297,13 @@ def synthesize(
     cutoff_fwhm: Optional[float] = DEFAULT_CUTOFF_FWHM,
     basis: Optional[np.ndarray] = None,
     shift: float = 0.0,
+    disp: float = 0.0,
 ) -> np.ndarray:
     """完整 ``y_calc`` = Σ scale_p·(该相谱) + 背景。
 
     :param basis: 已算好的设计矩阵（避免重复计算）；列序须与 ``specs`` 一致
     :param shift: 整体 2θ 平移（度），仪器零位
+    :param disp: 样品位移项（度），``Δ2θ = disp·cosθ``
     """
     tt = np.asarray(two_theta, dtype=float)
     n = tt.size
@@ -300,7 +314,7 @@ def synthesize(
     if specs:
         b = basis if basis is not None else design_matrix(
             tt, specs, profile, wavelength=wavelength, kalph2=kalph2,
-            cutoff_fwhm=cutoff_fwhm, shift=shift)
+            cutoff_fwhm=cutoff_fwhm, shift=shift, disp=disp)
         sc = np.asarray(scales, dtype=float).reshape(-1)
         if sc.size != b.shape[1]:
             raise ValueError(f"标度个数 {sc.size} 与相数 {b.shape[1]} 不一致")
