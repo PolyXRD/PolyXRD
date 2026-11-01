@@ -208,6 +208,62 @@ class TestFallbackIsExplicit:
         assert "diag.engine_fallback" in codes, "回退必须留下结构化诊断"
 
 
+class TestSiteFillWiring:
+    """检索直通场景：候选相只有参考峰（无位点）时，先补位点、不直接回退。
+
+    v5.0.1 之前这里必然是 ``engine_fallback_reason='no structure: ...'`` ——
+    内置矿物表 / PDF2 的相天生没有位点，于是"选了新引擎却永远跑内置"。
+    """
+
+    def test_fill_supplies_sites_and_avoids_fallback(self, monkeypatch):
+        from polyxrd.services import structure_augment as SA
+
+        data, _truth, st_a, st_b, _sc = _synthetic()
+        bare = []
+        for spec in (_CAF2, _NACL):
+            ph = _phase(spec)
+            ph.atomic_sites = []          # 模拟检索直通：只有晶胞与参考峰
+            bare.append(ph)
+
+        calls = []
+
+        def _fake_builtin(data_, phases, strategy, max_cycles, **kw):
+            calls.append("builtin")
+            return RefinementResult(phases=[], wR=99.0,
+                                    fit_params={"engine": "builtin"})
+
+        def _fake_fill(phases, *, db=None, log_cb=None):
+            out, fills = [], []
+            for ph, st in zip(phases, (st_a, st_b)):
+                new = Phase(name=ph.name, formula=ph.formula,
+                            space_group=ph.space_group, lattice=ph.lattice,
+                            atomic_sites=[s.to_dict() for s in st.sites])
+                out.append(new)
+                fills.append(SA.SiteFill(name=ph.name, source="polyDB COD 1",
+                                         matched_by="formula+sg+cell",
+                                         n_sites=len(new.atomic_sites),
+                                         cell_dev=0.0))
+            return out, fills
+
+        refiner = RietveldRefiner()
+        monkeypatch.setattr(refiner, "_refine_builtin", _fake_builtin)
+        monkeypatch.setattr(SA, "fill_atomic_sites", _fake_fill)
+
+        result = refiner.refine(data, bare, engine="refinement", max_cycles=3)
+
+        assert calls == [], "补到结构后不该回退内置引擎"
+        fp = result.fit_params
+        assert fp["engine"] == "refinement"
+        assert not fp.get("engine_fallback_reason")
+        assert len(fp["v5_structure_fills"]) == 2
+        assert "COD 1" in fp["v5_structure_fills"][0]
+
+    def test_fill_records_are_empty_when_sites_already_present(self, fitted):
+        """本来就带位点 → 不做补齐、``v5_structure_fills`` 为空（不谎报）。"""
+        result = fitted[0] if isinstance(fitted, tuple) else fitted
+        assert result.fit_params["v5_structure_fills"] == []
+
+
 class TestPreferredOrientationPlumbing:
     def test_po_direction_reaches_v5(self, monkeypatch):
         refiner = RietveldRefiner()

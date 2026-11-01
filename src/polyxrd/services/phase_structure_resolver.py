@@ -7,11 +7,14 @@
 本服务在「开始精修」前把已选物相逐一补齐结构:
 
 1. 已带可用结构 (atomic_sites + 磁盘上的 cif_path) 的相**原样保留**;
-2. 相**已有展开后的原子位点**但无 cif_path 时 (内置 polyDB / 用户库 /
+2. 相**没有原子位点**时 (内置矿物表 / PDF2 / 部分用户库条目的形态),
+   按 **(化学式 + 空间群 + 晶胞)** 到 polyDB 里找同一条目, 把它的**全胞
+   位点**补进来 (v5.0.1, 见 :mod:`polyxrd.services.structure_augment`);
+3. 相**已有展开后的原子位点**但无 cif_path 时 (内置 polyDB / 用户库 /
    PDF2 候选的典型形态), 用 :func:`phase_cif.phase_to_cif_text` 反生成
    CIF 落盘到 ``cif_cache_dir()`` 并回填 cif_path —— 否则干净安装下
    ``_phases_have_structure`` 恒 False, GSAS-II/MAUD 会被静默跳过;
-3. 两者都不满足的相**原样返回**, 以参考峰剖面参与 builtin 精修, 不阻断。
+4. 两者都不满足的相**原样返回**, 以参考峰剖面参与内置引擎精修, 不阻断。
 
 v4.2 变更
 ---------
@@ -125,6 +128,9 @@ class PhaseStructureResolver:
     def __init__(self) -> None:
         # (name, formula) → 解析结果；同一物相第二次精修不再重复落盘
         self._cache: dict[tuple[str, str], Phase] = {}
+        # polyDB 只读句柄（惰性）与本实例的"补齐不可用"标记
+        self._db = None
+        self._augment_off = False
 
     # ── 主入口 ──────────────────────────────────────────────
 
@@ -143,16 +149,22 @@ class PhaseStructureResolver:
         """
         log = log_cb or (lambda _m: None)
         out: list[Phase] = []
-        n_ok = 0
         for phase in phases:
             resolved, note = self._resolve_one(
                 phase, wavelength=wavelength, two_theta_range=two_theta_range
             )
             out.append(resolved)
             log(f"[cif] {note}")
-            if resolved is not phase:
-                n_ok += 1
-        log(f"[cif] structure match: {n_ok}/{len(phases)} phases loaded with CIF base structure")
+        # 计数口径分三层，各有各的用途（以前只有一个"返回了新对象"的数，
+        # 位点补齐成功但 CIF 落盘失败时会自相矛盾）：
+        #   n_ok    —— 本轮**新**解析出来的相（已带结构的跳过，不计）；
+        #   n_site  —— 最终带原子位点的相（v5 引擎能不能用，看这个）；
+        #   n_cif   —— 磁盘上真有 CIF 的相（GSAS-II / MAUD 能不能用，看这个）。
+        n_ok = sum(1 for p, q in zip(phases, out) if p is not q)
+        n_site = sum(1 for p in out if getattr(p, "atomic_sites", None))
+        n_cif = sum(1 for p in out if getattr(p, "cif_path", None))
+        log(f"[cif] structure match: {n_ok}/{len(phases)} phases newly resolved "
+            f"({n_site} with atomic sites, {n_cif} with CIF on disk)")
         return out
 
     # ── 单相解析 ────────────────────────────────────────────
@@ -174,12 +186,27 @@ class PhaseStructureResolver:
 
         key = (name, formula)
 
+        # 0.4) 无位点 → 按 化学式+空间群+晶胞 从 polyDB 取同一条目的全胞位点
+        #      （v5.0.1）。检索直通场景（内置矿物表 / PDF2 / 部分用户库）就
+        #      是这种形态：只有参考峰与晶胞。补不上原样返回，不阻断。
+        augment_note = ""
+        aug, fill = self._augment_sites(phase)
+        if fill is not None:
+            phase = aug
+            augment_note = fill.describe() + "; "
+
         # 0.5) 有位点、无 CIF 文件 → 由位点反生成 CIF 落盘并回填（v4.1.1）
         #      内置 polyDB 候选就是这种形态：晶胞 + 全胞位点，没有 CIF 文件。
         synth = self._synthesize_cif_from_sites(phase)
         if synth is not None:
             self._cache[key] = synth
-            return synth, f"{name}: 由原子位点生成 CIF ({Path(synth.cif_path).name})"
+            return synth, (f"{augment_note}{name}: 由原子位点生成 CIF "
+                           f"({Path(synth.cif_path).name})")
+
+        if augment_note:
+            # 补到了位点但 CIF 落盘失败 —— 位点已在内存里，v5 引擎仍可用
+            self._cache[key] = phase
+            return phase, f"{augment_note}{name}: CIF 落盘失败，位点仅内存可用"
 
         cached = self._cache.get(key)
         if cached is not None:
@@ -192,6 +219,41 @@ class PhaseStructureResolver:
         return phase, f"{name}: 无可用 CIF, 以参考峰剖面参与精修"
 
     # ── 工具 ────────────────────────────────────────────────
+
+    def _polydb(self):
+        """惰性打开 polyDB（同一 resolver 复用一条只读连接）。"""
+        if self._db is None:
+            try:
+                from polyxrd.services.polydb import PolyDatabase
+
+                self._db = PolyDatabase()
+            except Exception:  # noqa: BLE001 - 库缺失按"补齐不可用"处理
+                self._db = False
+        return self._db or None
+
+    def _augment_sites(self, phase: Phase):
+        """从 polyDB 给单相补全胞位点（v5.0.1）。
+
+        返回 ``(可能已补位点的相, SiteFill 或 None)``。三道门（化学式 /
+        空间群 / 晶胞）全在 :mod:`polyxrd.services.structure_augment` 里，
+        这里只负责复用连接与"补齐不可用"短路 —— 库没挂载时不该每相都去
+        探一次盘、刷一条日志。
+        """
+        if getattr(phase, "atomic_sites", None) or self._augment_off:
+            return phase, None
+        db = self._polydb()
+        if db is None or not db.is_ready():
+            self._augment_off = True
+            return phase, None
+        try:
+            from polyxrd.services.structure_augment import fill_atomic_sites
+
+            filled, fills = fill_atomic_sites([phase], db=db)
+        except Exception:  # noqa: BLE001 - 补齐失败不阻断精修
+            return phase, None
+        if fills:
+            return filled[0], fills[0]
+        return phase, None
 
     @staticmethod
     def _synthesize_cif_from_sites(phase: Phase) -> Optional[Phase]:

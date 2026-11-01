@@ -241,9 +241,13 @@ Core design philosophy:
     (constants fixed, `b=a`-style ties placed in the constraint system).
     Validation on real samples: [docs/基准报告-精修-v5.0.0.md](docs/基准报告-精修-v5.0.0.md) — four-phase sample total
     absolute deviation **7.16 pp** (legacy engine 21.40 pp), two-phase 50/50 standard **±2.00 pp**.
-    ⚠️ Intensities come from **structure factors**, so **every phase must carry atomic sites**: if any phase lacks
-    them the engine falls back to the built-in one and reports an "engine fallback" diagnostic (never a silent swap).
-    Search-hit phases usually ship reference peaks only; load structures via the refinement wizard (polyDB / CIF import) first.
+    ⚠️ Intensities come from **structure factors**, so **every phase must carry atomic sites**. When phases come
+    straight from search results (built-in mineral table / PDF2 / some user-library entries carry reference peaks only),
+    sites are **filled automatically**: formula + space group + cell are matched against polyDB and that entry's
+    full-cell sites are copied (`services/structure_augment.py`, log line `[cif] <phase>: 补齐位点 ← polyDB COD xxx`).
+    Only phases that still cannot be resolved fall back to the built-in engine, with an explicit "engine fallback"
+    diagnostic (never a silent swap). Measured on sample 2-1, two phases straight from search:
+    Rwp 21.12%, wt% 47.99/52.01 (true 50/50).
   - Sequential / automatic / manual refinement strategies apply to all engines above.
   - ⚠️ Metric convention: `Rwp/Rexp/GOF` are always based on **statistical weights** (`stat_weights="poisson"`).
     If unit weights (`"none"`) are explicitly selected, `Rexp/GOF` lose physical meaning and the UI shows "not interpretable".

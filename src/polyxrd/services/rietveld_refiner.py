@@ -1075,11 +1075,22 @@ class RietveldRefiner:
 
     #: 档位 → (背景节点间距, 协议阶段表)。阶段号是**累积语义**：跑到 n 就把
     #: ``stage <= n`` 的参数全放开（2 峰位 → 3 峰形 → 4 择优 → 5 样品展宽）。
-    V5_TIERS = {
+    V5_TIERS: ClassVar[dict] = {
         "fast": {"bg_deg": 12.0, "protocol": ((2, 40), (3, 40))},
         "precise": {"bg_deg": 8.0,
                     "protocol": ((2, 150), (3, 120), (5, 80))},
     }
+
+    #: 峰窗半宽（FWHM 倍数）。默认值是 ``pattern.DEFAULT_CUTOFF_FWHM`` 的 25，
+    #: 在真实试样上代价极高：窗口长度 ∝ cutoff，每次峰形参数变动都要重建整个
+    #: 设计矩阵 —— 实测 2-1（两相、4000 点、FWHM≈0.36°）precise 档 286 s，
+    #: 把 cutoff 降到 12 后 **降到 1/4 以下**，而 Rwp 只差 0.02 pp
+    #: （21.08 → 21.10，GOF 7.56 → 7.73，都在噪声量级）。
+    #:
+    #: 物理依据：pV 的洛伦兹尾巴在 ``Δ=12·FWHM`` 处只剩峰高的 ``1/(1+(24)²)``
+    #: ≈ 0.17%，``Δ=25·FWHM`` 处 0.04% —— 两者的差别远小于 wR 的有效精度，
+    #: 后者多花的 20 倍算力买不到可读的精度。
+    V5_CUTOFF_FWHM = 12.0
 
     def _refine_v5(
         self,
@@ -1125,7 +1136,23 @@ class RietveldRefiner:
             return self._fallback_v5(data, phases, strategy, max_cycles, kwargs,
                                      f"too few points ({two_theta.size})")
 
-        # ── 结构：缺结构的相不能参与结构因子计算，整条回退 ──────────
+        # ── 结构：缺结构的相不能参与结构因子计算 ────────────────────
+        # 先把"只有参考峰、没有位点"的相补齐（检索直通场景：内置矿物表 /
+        # PDF2 / 部分用户库条目）。来源 = polyDB 同一条目（化学式+空间群+
+        # 晶胞三道门都过才采纳），补不上才整条回退 —— 不拿参考峰硬算结构
+        # 因子，也不用错结构去凑一个"好看"的 Rwp。
+        structure_fills: list[str] = []
+        if any(not getattr(ph, "atomic_sites", None) for ph in phases):
+            try:
+                from polyxrd.services.structure_augment import fill_atomic_sites
+
+                filled, fills = fill_atomic_sites(phases, log_cb=log)
+                if fills:
+                    phases = filled
+                    structure_fills = [f.describe() for f in fills]
+            except Exception as e:  # noqa: BLE001 - 补齐失败照旧走回退诊断
+                log(f"[v5] site fill skipped: {type(e).__name__}: {e}")
+
         structures: list = []
         missing: list[str] = []
         for ph in phases:
@@ -1166,7 +1193,7 @@ class RietveldRefiner:
             wavelength=lam,
             kalph2=Kalpha2(wavelength=lam, ratio=0.497, separation=model_ka2),
             weights=1.0 / np.maximum(intensity, 1.0),
-            cutoff_fwhm=25.0,
+            cutoff_fwhm=self.V5_CUTOFF_FWHM,
         )
 
         # ── 参数掩码：用户在向导里取消勾选的自由度要真的钉住 ────────
@@ -1333,6 +1360,8 @@ class RietveldRefiner:
                 "v5_seed_notes": list(getattr(seeds, "notes", ()) or ()),
                 "v5_po_hkl": list(po_hkl) if po_hkl else None,
                 "v5_po_r": float(po_r) if po_hkl else 1.0,
+                # 位点补齐记录（无补齐则为空列表）：来源 + 匹配方式 + 位点数
+                "v5_structure_fills": structure_fills,
             },
         )
         log("[v5] tier={} wR={:.3f}% GOF={:.3f} nfev={} stages={}".format(
