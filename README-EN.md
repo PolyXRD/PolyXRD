@@ -228,9 +228,19 @@ Core design philosophy:
 ### ③ Crystal phases & crystallography
 - **Structure refinement (tiered engine capability)**:
   - **True Rietveld** (structural degrees of freedom: coordinates/occupancies/ADPs + `S·ZMV` quantification) → **GSAS-II / FullProf / MAUD**;
-  - **Built-in engine** = **structure-free whole-pattern fitting (Le Bail grade, fast)**: uses CIF `|F|²` reference peaks + per-phase isotropic cell scaling
+  - **Built-in engine (current GUI path)** = **structure-free whole-pattern fitting (Le Bail grade, fast)**: uses CIF `|F|²` reference peaks + per-phase isotropic cell scaling
     + March-Dollase texture + Chebyshev background + statistical weights; yields usable wR/Rp without installing external programs;
     it does **not** refine atomic coordinates/occupancies/ADPs, so its wt% values are **relative quantification**, not strict mass fractions.
+  - **v5.0.0 new engine `polyxrd.refinement` (validated, not yet wired to the GUI)**: a complete forward model —
+    Cromer–Mann scattering factors, `I ∝ m|F|²·LP/V²` intensity convention, Kα2 doublet separation, TCH profile synthesis,
+    crystallite/strain broadening, Poisson weights `w=1/max(y,1)`; solved by **variable projection** (scales + background
+    closed-form least squares each iteration) with a staged protocol (positions → profile → preferred orientation → sample
+    broadening → structure), per-stage rollback and early convergence; quantification uses Hill–Howard with the **density
+    convention** (`W ∝ S·M_cell/V`) plus scale-error propagation; ships GSAS-II-style diagnostics (rank deficiency, condition
+    number, parameter correlation, unexplained residual peaks) and applies space-group cell constraints automatically
+    (constants fixed, `b=a`-style ties placed in the constraint system).
+    Validation on real samples: [docs/基准报告-精修-v5.0.0.md](docs/基准报告-精修-v5.0.0.md) — four-phase sample total
+    absolute deviation **7.16 pp** (legacy engine 21.40 pp), two-phase 50/50 standard **±2.00 pp**.
   - Sequential / automatic / manual refinement strategies apply to all engines above.
   - ⚠️ Metric convention: `Rwp/Rexp/GOF` are always based on **statistical weights** (`stat_weights="poisson"`).
     If unit weights (`"none"`) are explicitly selected, `Rexp/GOF` lose physical meaning and the UI shows "not interpretable".

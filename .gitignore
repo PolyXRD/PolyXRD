@@ -174,3 +174,10 @@ pytest-of-*/
 # 上面的 /tmp*/ 只匹配**目录**, 而 NamedTemporaryFile 残留是**文件** (如 tmp0gpqbmbx)。
 /acc44_*/
 /tmp*
+
+# ── GSAS-II 集成测试在仓库根留下的工作目录 (2026-11-01 v5.0.0 全量回归实测) ──
+# GSAS-II 的测试夹具用 mkdtemp 但 TEMP 被回退到 cwd 时会造出 13 个
+# polyxrd_g2_*/polyxrd_gsas_*/ (内含 data.xy + inst.prm)。不加这两行, 每次
+# 全量回归都会往 `git status` 里塞一批未跟踪目录, 再被 `git add -A` 误提交。
+/polyxrd_g2_*/
+/polyxrd_gsas_*/
