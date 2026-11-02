@@ -1128,7 +1128,8 @@ class RietveldRefiner:
             from polyxrd.refinement import (
                 BackgroundParams, Kalpha2, PatternProblem, PhaseBlock,
                 ProfileParams, StageSpec, StructureModel, build_report,
-                evaluate_goals, run_protocol, seed_problem,
+                detect_ka2_doublet, evaluate_goals, run_protocol,
+                seed_problem,
             )
         except Exception as e:  # noqa: BLE001 - 包缺失不该让精修整条断掉
             log(f"[v5] engine import failed: {type(e).__name__}: {e} -> builtin")
@@ -1185,7 +1186,30 @@ class RietveldRefiner:
         ]
 
         lam = float(getattr(data, "wavelength", 0.0) or 1.54056)
-        model_ka2 = bool(kwargs.get("model_ka2", True))
+        # Kα2 存在性判别（§十二 12.2-3）：默认 "auto" —— 高角双峰检测判数据
+        # 是否含双线；判"无"才关 separation（u/v 保持自由，实测无双线时 u
+        # 会自然回落到物理值），判不了维持建模。显式 True/False 永远优先。
+        _ka2_opt = kwargs.get("model_ka2", "auto")
+        ka2_auto = isinstance(_ka2_opt, str) \
+            and str(_ka2_opt).strip().lower() == "auto"
+        ka2_info: Optional[dict] = None
+        if ka2_auto:
+            model_ka2 = True
+            try:
+                ka2_info = detect_ka2_doublet(two_theta, intensity, lam)
+                if ka2_info.get("flagged") is False:
+                    model_ka2 = False
+                log("[v5] ka2 detect: flagged={} examined={} hits={} "
+                    "fwhm={:.3f} region={}".format(
+                        ka2_info.get("flagged"),
+                        ka2_info.get("examined"),
+                        ka2_info.get("hits"),
+                        float(ka2_info.get("fwhm") or 0.0),
+                        ka2_info.get("region")))
+            except Exception as e:  # noqa: BLE001 - 检测失败维持建模双线
+                log(f"[v5] ka2 detect skipped: {type(e).__name__}: {e}")
+        else:
+            model_ka2 = bool(_ka2_opt)
         n_bg = max(6, int(round(float(two_theta[-1] - two_theta[0]) / tier["bg_deg"])))
         mask = dict(kwargs.get("_param_mask") or {})
         bg = BackgroundParams("tent" if mask.get("background", True) else "none", n_bg)
@@ -1352,6 +1376,8 @@ class RietveldRefiner:
                 "perf_profile": "fast" if _tier == "fast" else "precise",
                 "nfev": nfev,
                 "model_ka2": model_ka2,
+                "ka2_auto": bool(ka2_auto),
+                "ka2_detect": ka2_info,
                 "ka2_intensity_ratio": 0.497 if model_ka2 else None,
                 "refine_cell": bool(mask.get("cell", True)),
                 "refine_profile": bool(mask.get("profile", True)),

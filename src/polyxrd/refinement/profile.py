@@ -385,12 +385,18 @@ class Kalpha2:
         return 1.0 / (1.0 + r), r / (1.0 + r)
 
 
-def ka2_wavelength(wavelength: float, *, ratio_of_ka1: float = 0.99937
+def ka2_wavelength(wavelength: float, *, ratio_of_ka1: float = 1.00249
                    ) -> float:
-    """由 Kα1 估 Kα2 波长（默认 Cu：1.54056 → 1.54439 Å，比值 0.99937）。
+    """由 Kα1 估 Kα2 波长（默认 Cu：1.54056 → 1.54439 Å，比值 1.00249）。
 
-    对多数靶 ``λ(Kα2)/λ(Kα1) ≈ 0.99937`` 够用；需要精确值时调用方直接传
-    ``ka2_two_theta`` 的显式波长。
+    ``λ(Kα2)/λ(Kα1)``：Cu 1.00249、Mo 1.00605 —— 各靶都略大于 1，统一取
+    Cu 值对常规角域够用；需要精确值时调用方直接传 ``ka2_two_theta`` 的
+    显式波长。
+
+    历史 bug（2026-11-01 修）：旧默认 0.99937 会把伴峰放到主峰**左侧**
+    约 0.0006·2tanθ 处（真值在右侧 0.0025·2tanθ），方向和量级全错 ——
+    v5 在双线数据上被迫让 U·tan²θ 当双线"替身"（u=0.182 vs 物理值
+    0.008）的根因之一，见基准报告 §十二。
     """
     return float(wavelength) * float(ratio_of_ka1)
 
@@ -426,3 +432,135 @@ def profile_centers(
     weights = np.concatenate([np.full(tt.shape, w1), np.full(tt.shape, w2)])
     is2 = np.concatenate([np.zeros(tt.shape, bool), np.ones(tt.shape, bool)])
     return centers, weights, is2
+
+
+# ── Kα2 存在性判别（基准报告-精修-v5.0.0.md §十二 12.2-3）──────
+
+def detect_ka2_doublet(
+    two_theta,
+    intensity,
+    wavelength: float = 1.54056,
+    *,
+    fwhm: Optional[float] = None,
+    ratio_band: Tuple[float, float] = (0.22, 0.78),
+) -> dict:
+    """判别观测谱是否含**未剥离**的 Kα1/Kα2 双线。
+
+    与 ``RietveldRefiner.detect_ka2``（W19-a，最强峰残差诊断）是两个问题：
+    这里回答的是"数据里到底有没有双线"，供 v5 引擎决定
+    ``Kalpha2.separation`` 的取值 —— 无双线数据却建模双线时，U·tan²θ 会
+    被迫当双线的"替身"（3-1 实测 u 从 0.008 涨到 0.182），宽度参数失去
+    物理可解读性。
+
+    判据（**镜像位对称性**，对洛伦兹拖尾稳健）：
+      对高角区（Δ2θ > 1.15×FWHM 处）每个强峰 p：
+        r_right = I(p + Δ) / I(p)    Δ 为解析双线间距（严格 Bragg 式）
+        r_left  = I(p − Δ) / I(p)    镜像位（同偏移量的左侧）
+      真伴峰 → r_right ∈ 伴峰强度比带 且 r_right ≫ r_left（≥1.3×）；
+      单峰洛伦兹拖尾 → r_right ≈ r_left → 排除；单峰高斯拖尾 →
+      r_right 本身就在带外 → 排除。多重峰（相邻 hkl）不满足解析 Δ 角度
+      规律 + 镜像位常被邻居抬升 → 大多重不中。
+
+    决策规则（保守）：检出伴峰 ≥2 且命中率 ≥50% → True；
+    全部强峰零命中 → False；其余（高角区不足 / 强峰 <2 / 混合命中）
+    → None（调用方维持现状，即建模双线）。
+
+    Returns:
+        ``dict(flagged, examined, hits, ratios, fwhm, region)``；
+        ``flagged ∈ {True, False, None}``，检测失败绝不抛异常。
+    """
+    out: dict = {"flagged": None, "examined": 0, "hits": 0, "ratios": [],
+                 "fwhm": fwhm, "region": None}
+    tt = np.asarray(two_theta, dtype=float).reshape(-1)
+    y = np.asarray(intensity, dtype=float).reshape(-1)
+    if tt.size < 100 or tt.size != y.size:
+        return out
+    step = float(np.median(np.diff(tt)))
+    if step <= 0:
+        return out
+
+    # 轻度平滑 + 宽窗滑动中值背景（无双线判据对背景形状不敏感，够用）
+    k = max(3, int(round(0.02 / step)))
+    k += (k + 1) % 2
+    ys = np.convolve(y, np.ones(k) / k, mode="same")
+    wb = max(31, int(round(4.0 / step)))
+    wb += (wb + 1) % 2
+    pad = wb // 2
+    yp = np.pad(ys, pad, mode="edge")
+    bg = np.median(
+        np.lib.stride_tricks.sliding_window_view(yp, wb), axis=1)
+    ysub = np.clip(ys - bg, 0.0, None)
+
+    # FWHM 估计：未给则取全局最高峰的半高全宽（双线会把宽度测大一档，
+    # 方向保守 —— 判"双线分开"的门限随之抬高，不会误报）
+    if fwhm is None:
+        i0 = int(np.argmax(ysub))
+        f = 0.12
+        if ysub[i0] > 0:
+            half = 0.5 * float(ysub[i0])
+            l = i0
+            while l > 0 and ysub[l] > half:
+                l -= 1
+            r = i0
+            while r < tt.size - 1 and ysub[r] > half:
+                r += 1
+            f = float(tt[r] - tt[l])
+    else:
+        f = float(fwhm)
+    f = float(np.clip(f, 0.04, 0.6))
+    out["fwhm"] = f
+
+    # 高角区：双线间距 > 1.15×FWHM 且右侧留足伴峰搜索空间
+    lam1 = float(wavelength)
+    lam2 = ka2_wavelength(lam1)
+    d2 = ka2_two_theta(tt, lam1, lam2) - tt
+    hi = (d2 > 1.15 * f) & (tt < tt[-1] - 1.0)
+    idx_hi = np.nonzero(hi)[0]
+    if idx_hi.size < 10 or (tt[idx_hi[-1]] - tt[idx_hi[0]]) < 3.0:
+        return out  # 角域太窄，双线根本分不开 → 无法判定
+    out["region"] = (float(tt[idx_hi[0]]), float(tt[idx_hi[-1]]))
+
+    # 候选主峰：高角区局部极大，≥15% 区域最大高度，按高度取前 8 且互相分开
+    yhi = ysub[idx_hi]
+    loc = (yhi[1:-1] >= yhi[:-2]) & (yhi[1:-1] > yhi[2:])
+    cand = idx_hi[1:-1][loc]
+    cand = cand[ysub[cand] >= 0.15 * float(yhi.max())]
+    cand = list(cand[np.argsort(ysub[cand])[::-1]])
+    prim: list = []
+    for i in cand:
+        if all(abs(tt[i] - tt[j]) >= max(1.5 * f, 4 * step) for j in prim):
+            prim.append(int(i))
+        if len(prim) >= 8:
+            break
+    if len(prim) < 2:
+        return out
+    out["examined"] = len(prim)
+
+    r_lo, r_hi = float(ratio_band[0]), float(ratio_band[1])
+    w = max(2, int(round(0.4 * f / step)))
+    for i in prim:
+        h1 = float(ysub[i])
+        if h1 <= 0:
+            continue
+        c2 = tt[i] + d2[i]
+        j2 = int(np.searchsorted(tt, c2 + 0.4 * f))
+        seg = ysub[max(i + 2, j2 - 2 * w):j2]
+        if seg.size < 2:
+            continue
+        r_right = float(seg.max()) / h1
+        if not (r_lo <= r_right <= r_hi):
+            continue
+        c0 = tt[i] - d2[i]
+        j1 = int(np.searchsorted(tt, c0 - 0.4 * f))
+        seg_l = ysub[j1:j1 + 2 * w]
+        r_left = (float(seg_l.max()) / h1) if seg_l.size else 0.0
+        if r_right < 1.3 * max(r_left, 1e-6):
+            continue
+        out["hits"] += 1
+        out["ratios"].append(round(r_right, 3))
+
+    if out["hits"] >= 2 and out["hits"] >= 0.5 * out["examined"]:
+        out["flagged"] = True
+    elif out["hits"] == 0:
+        out["flagged"] = False
+    return out

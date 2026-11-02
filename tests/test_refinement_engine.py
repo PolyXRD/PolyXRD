@@ -28,6 +28,9 @@ from polyxrd.refinement import (
     Kalpha2,
     build_reflections,
     design_matrix,
+    detect_ka2_doublet,
+    ka2_two_theta,
+    ka2_wavelength,
     PhaseSpec,
     reflection_centers_and_intensities,
     background_basis,
@@ -514,10 +517,12 @@ class TestDisp:
                                                       disp=self.DISP_TRUE)
         assert c0.shape == c1.shape
         d = c1 - c0
-        # Kα2 线的 2θ 略大、cosθ 略小：位移项按各自 2θ 取 cosθ，与用 Kα1 位置
-        # 估计的 want 差二阶小量（实测 ≤1.4e-4°，远低于峰位精度）
+        # 位移先于 Kα2 拆分施加 → 伴峰位移 = 主峰位移 × (λ2/λ1)(cosθ1/cosθ2)
+        # ≈ ×1.004（ka2 映射的导数放大）。76° 处差 ~5.2e-4°，为 FWHM 的
+        # 0.3%、远低于步长，物理上可忽略（λ2 修正后伴峰在主峰右侧、位移
+        # 略大于 Kα1，方向与真物理一致 —— λ2/λ1 > 1 时伴峰 2θ 增长更快）。
         want = self.DISP_TRUE * np.cos(np.radians(c0) / 2.0)
-        assert np.max(np.abs(d - want)) < 3e-4
+        assert np.max(np.abs(d - want)) < 1e-3
 
     def test_zero_alone_cannot_fix(self):
         """纯 cosθ 偏移只放零位：低角补上、高角就偏，Rwp 收不下去。"""
@@ -551,3 +556,73 @@ class TestDisp:
         # 所以这里断言**计算谱本身变了**，而不是 Rwp 变差
         yc1 = prob.calc_pattern()
         assert np.max(np.abs(yc1 - yc0)) > 1e-6 * max(yc0.max(), 1.0)
+
+
+class TestKa2Detect:
+    """Kα2 存在性判别 + λ2 波长比守卫（基准报告 §十二 12.2-3 / 12.4）。
+
+    ``detect_ka2_doublet`` 回答"数据里有没有双线"（区别于 builtin 的
+    W19-a 最强峰残差诊断），供 v5 决定 ``Kalpha2.separation``。判据是
+    镜像位对称性：真伴峰在解析 Δ2θ 处且镜像位没有等高强度。
+    """
+
+    MAINS = [(21.4, 100.0), (30.4, 70.0), (37.4, 50.0), (43.4, 60.0),
+             (48.1, 30.0), (53.3, 40.0), (58.6, 25.0), (62.5, 35.0),
+             (69.4, 30.0), (77.5, 20.0), (88.5, 25.0), (100.5, 15.0),
+             (110.0, 10.0)]
+
+    @staticmethod
+    def _pv(d, amp, eta):
+        fw = 0.13
+        s = fw / (2.0 * np.sqrt(2.0 * np.log(2.0)))
+        g = np.exp(-0.5 * (d / s) ** 2) / (s * np.sqrt(2.0 * np.pi))
+        lz = (fw / 2.0 / np.pi) / (d * d + (fw / 2.0) ** 2)
+        return amp * (eta * g + (1.0 - eta) * lz)
+
+    def _synth(self, doublet, eta=0.5, tmax=120.0):
+        t = np.arange(15.0, tmax, 0.01)
+        y = np.full_like(t, 50.0)
+        lam2 = ka2_wavelength(1.54056)
+        for tt1, i1 in self.MAINS:
+            y += self._pv(t - tt1, i1, eta)
+            if doublet:
+                tt2 = float(ka2_two_theta(np.array([tt1]), 1.54056, lam2)[0])
+                y += self._pv(t - tt2, 0.5 * i1, eta)
+        return t, y
+
+    def test_lambda_ratio_default_is_true_cu_value(self):
+        """旧默认 0.99937 把伴峰放到主峰**左侧**半间距（方向量级全错），
+        是 v5 双线建模半失效、U·tan²θ 当替身的根因之一 —— 守卫不许回退。"""
+        assert ka2_wavelength(1.54056) == pytest.approx(1.54439, abs=1e-4)
+
+    def test_satellite_on_right_side(self):
+        """60° 处伴峰在主峰右侧 ≈0.19°（真 Kα2 间距方向）。"""
+        tt2 = float(ka2_two_theta(np.array([60.0]), 1.54056,
+                                  ka2_wavelength(1.54056))[0])
+        assert 0.15 < tt2 - 60.0 < 0.25
+
+    def test_doublet_data_detected(self):
+        t, y = self._synth(True)
+        r = detect_ka2_doublet(t, y, 1.54056)
+        assert r["flagged"] is True, r
+        assert r["hits"] >= 2
+        # 伴峰/主峰强度比回收应落在 0.5 附近（半高宽膨胀会略偏高）
+        assert all(0.4 < x < 0.75 for x in r["ratios"])
+
+    def test_monochromatic_not_detected(self):
+        t, y = self._synth(False)
+        r = detect_ka2_doublet(t, y, 1.54056)
+        assert r["flagged"] is False, r
+
+    def test_lorentzian_dominant_double_sides(self):
+        """洛伦兹拖尾是最难的单峰干扰（右侧拖尾显著）—— 必须双向都过。"""
+        t, y = self._synth(True, eta=0.9)
+        assert detect_ka2_doublet(t, y, 1.54056)["flagged"] is True
+        t, y = self._synth(False, eta=0.9)
+        assert detect_ka2_doublet(t, y, 1.54056)["flagged"] is False
+
+    def test_narrow_range_cannot_judge(self):
+        """双线间距未超过 FWHM 的角域里判不了 → None（调用方维持现状）。"""
+        t, y = self._synth(True, tmax=50.0)
+        r = detect_ka2_doublet(t, y, 1.54056)
+        assert r["flagged"] is None and r["region"] is None

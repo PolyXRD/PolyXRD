@@ -78,10 +78,13 @@ def _profile() -> ProfileParams:
     return ProfileParams(u=0.004, v=-0.002, w=0.012, x=0.008, y=0.0, z=0.0)
 
 
-def _synthetic(fractions=(50.0, 50.0)):
-    """按给定质量分数合成两相谱；返回 (XRDData, 真值 dict, 起点 Rwp)。"""
+def _synthetic(fractions=(50.0, 50.0), ka2=True):
+    """按给定质量分数合成两相谱；返回 (XRDData, 真值 dict, 起点 Rwp)。
+
+    ``ka2=False`` 生成单色（无双线）数据，供 Kα2 存在性判别测试用。
+    """
     st_a, st_b = _structure(_CAF2), _structure(_NACL)
-    kal = Kalpha2(wavelength=LAM, ratio=0.497, separation=True)
+    kal = Kalpha2(wavelength=LAM, ratio=0.497, separation=ka2)
     tabs = [build_reflections(st, two_theta_range=(12.0, 83.0)) for st in (st_a, st_b)]
     basis = design_matrix(TT, [PhaseSpec(t) for t in tabs], _profile(),
                           kalph2=kal, cutoff_fwhm=CUT)
@@ -284,3 +287,66 @@ class TestPreferredOrientationPlumbing:
                 refine_profile=True, refine_cell=True, refine_zero_shift=True))
         assert tuple(seen.get("_po_direction", ())) == (0, 0, 1)
         assert seen.get("_po_r") == pytest.approx(1.6)
+
+
+class TestKa2AutoDetection:
+    """model_ka2="auto"（v5 默认）：按数据判 Kα2 双线有无（§十二 12.2-3）。
+
+    收益不是 Rwp（含双线数据打平），是**参数可信度**：无双线数据却建模
+    双线时 U·tan²θ 会被迫当伴峰的替身，宽度参数失去物理可解读性。
+
+    数据用**单相宽角域**（CaF2 至 105°）：双相重叠谱的高角净窗太窄
+    （~72–79°），判别器只能给 None（保守维持建模）——那是正确行为，
+    但演示不了"判无"分支，所以这里选判别条件充分的数据。
+    """
+
+    @staticmethod
+    def _caf2_data(ka2: bool) -> XRDData:
+        st = _structure(_CAF2)
+        tab = build_reflections(st, two_theta_range=(12.0, 108.0))
+        tt = np.arange(15.0, 105.0, 0.02)
+        kal = Kalpha2(wavelength=LAM, ratio=0.497, separation=ka2)
+        basis = design_matrix(tt, [PhaseSpec(tab)], _profile(),
+                              kalph2=kal, cutoff_fwhm=CUT)
+        bg = background_basis(tt, BackgroundParams("tent", 7))
+        y = basis @ np.array([50.0]) + bg @ np.linspace(40.0, 25.0, 7)
+        rng = np.random.default_rng(7)
+        y = y + rng.normal(0.0, np.sqrt(np.maximum(y, 1.0)))
+        return XRDData(two_theta=tt, intensity=y, wavelength=LAM)
+
+    def test_auto_disables_model_on_mono_data(self):
+        res = RietveldRefiner().refine(
+            self._caf2_data(ka2=False), [_phase(_CAF2)],
+            engine="refinement", max_cycles=5)
+        fp = res.fit_params
+        assert fp["ka2_auto"] is True
+        assert fp["model_ka2"] is False
+        assert fp["ka2_detect"]["flagged"] is False
+
+    def test_auto_keeps_model_on_doublet_data(self):
+        res = RietveldRefiner().refine(
+            self._caf2_data(ka2=True), [_phase(_CAF2)],
+            engine="refinement", max_cycles=5)
+        fp = res.fit_params
+        assert fp["ka2_auto"] is True
+        assert fp["model_ka2"] is True
+        assert fp["ka2_detect"]["flagged"] is True
+
+    def test_narrow_window_data_conservatively_keeps_model(self):
+        """双相重叠谱（TT 15–80°）高角净窗不足 → 判 None → 维持建模。"""
+        data, _truth, *_ = _synthetic(ka2=False)
+        res = RietveldRefiner().refine(
+            data, [_phase(_CAF2), _phase(_NACL)],
+            engine="refinement", max_cycles=5)
+        fp = res.fit_params
+        assert fp["ka2_auto"] is True
+        assert fp["ka2_detect"]["flagged"] is None
+        assert fp["model_ka2"] is True
+
+    def test_explicit_override_wins(self):
+        res = RietveldRefiner().refine(
+            self._caf2_data(ka2=False), [_phase(_CAF2)],
+            engine="refinement", max_cycles=5, model_ka2=True)
+        fp = res.fit_params
+        assert fp["ka2_auto"] is False
+        assert fp["model_ka2"] is True
