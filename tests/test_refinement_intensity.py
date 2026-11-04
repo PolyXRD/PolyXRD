@@ -462,3 +462,102 @@ class TestMicroabsorptionWiring:
         assert w1[0] > w0[0]
         assert w1[1] < w0[1]
         assert sum(w1) == pytest.approx(1.0)
+
+
+class TestMicroabsorptionDiagnostics:
+    """微吸收的适用性必须变成可读告警 —— τ 不进拟合向量，Rwp 反映不出来。
+
+    `report.audit` 是「该不该报警」的唯一判定点（§22.8 第 3 条），界面只负责
+    渲染；这里钉住三种状态的码与严重级。
+    """
+
+    def _codes(self, prob):
+        from polyxrd.refinement import build_report
+
+        rep = build_report(prob)
+        return {f.code: f for f in rep.findings}
+
+    def test_clamped_radius_raises_warning(self):
+        """R=25 µm + μ 反差 2000 → |(μ−μ̄)·R| > 0.5，必须报 warn。"""
+        prob, _ = _two_phase_problem(mu=[2200.0, 300.0], radius_um=25.0)
+        findings = self._codes(prob)
+        assert "MICROABSORPTION_CLAMPED" in findings
+        f = findings["MICROABSORPTION_CLAMPED"]
+        assert f.severity == "warn"
+        assert f.evidence["n_clamped"] >= 1.0
+
+    def test_applied_inside_table_is_info(self):
+        prob, _ = _two_phase_problem(mu=[2200.0, 300.0], radius_um=2.0)
+        findings = self._codes(prob)
+        assert "MICROABSORPTION_APPLIED" in findings
+        assert findings["MICROABSORPTION_APPLIED"].severity == "info"
+        assert "MICROABSORPTION_CLAMPED" not in findings
+
+    def test_no_finding_when_disabled(self):
+        prob, _ = _two_phase_problem()
+        findings = self._codes(prob)
+        assert "MICROABSORPTION_APPLIED" not in findings
+        assert "MICROABSORPTION_CLAMPED" not in findings
+
+
+class TestRefineOptionsTransfer:
+    """``RefineOptions`` 是 UI 的唯一选项入口，两个开关必须转成引擎 kwargs。"""
+
+    class _Data:
+        two_theta = np.linspace(10.0, 80.0, 201)
+        intensity = np.ones(201)
+        wavelength = 1.54056
+
+    def _capture(self, monkeypatch, **refine_kw):
+        from polyxrd.models.refinement import RefinementResult
+        from polyxrd.services.rietveld_refiner import RietveldRefiner
+
+        refiner = RietveldRefiner()
+        seen: dict = {}
+
+        def fake(data, phases, strategy, max_cycles, **kw):
+            seen.update(kw)
+            return RefinementResult(wR=1.0, GOF=1.0)
+
+        monkeypatch.setattr(refiner, "_refine_v5", fake)
+        refiner.refine(self._Data(), [], engine="refinement", detect_ka2=False,
+                       **refine_kw)
+        return seen
+
+    def test_options_become_kwargs(self, monkeypatch):
+        from polyxrd.models.refinement_options import RefineOptions
+
+        seen = self._capture(monkeypatch, options=RefineOptions(
+            roughness_model="sidey", refine_roughness=True,
+            microabsorption=True, grain_radius_um=12.5))
+        assert seen["roughness_model"] == "sidey"
+        assert seen["refine_roughness"] is True
+        assert seen["microabsorption"] is True
+        assert seen["grain_radius_um"] == pytest.approx(12.5)
+
+    def test_default_options_leave_engine_untouched(self, monkeypatch):
+        from polyxrd.models.refinement_options import RefineOptions
+
+        seen = self._capture(monkeypatch, options=RefineOptions())
+        for key in ("roughness_model", "refine_roughness",
+                    "microabsorption", "grain_radius_um"):
+            assert key not in seen, key
+
+    def test_explicit_kwargs_win_over_options(self, monkeypatch):
+        """脚本显式给 kwargs 时不被 options 覆盖（setdefault 语义）。"""
+        from polyxrd.models.refinement_options import RefineOptions
+
+        seen = self._capture(
+            monkeypatch, grain_radius_um=3.0,
+            options=RefineOptions(microabsorption=True, grain_radius_um=25.0))
+        assert seen["grain_radius_um"] == pytest.approx(3.0)
+
+    def test_options_to_dict_roundtrip_keys(self):
+        from polyxrd.models.refinement_options import RefineOptions
+
+        d = RefineOptions(roughness_model="sparks", refine_roughness=True,
+                          microabsorption=True, grain_radius_um=8.0).to_dict()
+        assert d["roughness_model"] == "sparks"
+        assert d["refine_roughness"] is True
+        assert d["microabsorption"] is True
+        assert d["grain_radius_um"] == pytest.approx(8.0)

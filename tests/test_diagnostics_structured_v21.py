@@ -33,6 +33,15 @@ ALL_CODES = [
     ("diag.low_angle_residual", {"low": 18.2, "high": 5.0}),
     ("diag.residual_large", {"r": 12.6, "dw": 1.31}),
     ("diag.weight_basis_relative", {"phases": "LiNiO2, ZnO"}),
+    # v5.2: 精修引擎的结构化诊断（键在 diag.refinement 下）。这组码原来以裸
+    # ``refinement.xxx`` 形式进 diagnostics，render 时查不到翻译、界面上直接
+    # 显示码名 —— 加进这里就锁住"前缀必须是 diag."这个约定。
+    ("diag.refinement.rank_deficient", {"svd0": 5e-15, "rank": 15.0}),
+    ("diag.refinement.phase_not_detected", {"fraction": 0.0}),
+    ("diag.refinement.microabsorption_clamped",
+     {"mu_bar": 603.0, "n_clamped": 2.0}),
+    ("diag.refinement.microabsorption_applied",
+     {"mu_bar": 272.0, "tau_min": 0.99, "tau_max": 1.25}),
 ]
 
 

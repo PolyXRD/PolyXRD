@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QComboBox,
+    QCheckBox,
     QSpinBox,
     QDoubleSpinBox,
     QGroupBox,
@@ -51,7 +52,11 @@ from PySide6.QtWidgets import (
 )
 
 from polyxrd.i18n import tr
-from polyxrd.i18n.diag_texts import metric_note_text, render_diagnostics
+from polyxrd.i18n.diag_texts import (
+    metric_note_text,
+    microabsorption_note,
+    render_diagnostics,
+)
 from polyxrd.models.phase import Phase
 from polyxrd.models.refinement import RefinementResult
 from polyxrd.models.xrd_data import XRDData
@@ -469,8 +474,96 @@ class RefinementWizard(QWidget):
         params_group.setLayout(params_layout)
         layout.addWidget(params_group)
 
+        # ── 系统性强度误差（v5.2）─────────────────────────────────
+        # 两个都默认关，理由不是"没实现"，而是实测：SR 在 13 试样上没有收益
+        # （s 收敛到 ~0），微吸收则**全由颗粒半径决定** —— 半径猜 10 µm 会把
+        # 本来定量对的 2-1 从 0.96 打到 6.16 pp（基准报告 §22.6）。所以这里
+        # 只提供入口，默认不勾，并在旁边写清"半径必须实测"。
+        intensity_group = QGroupBox(tr("wizard.params_page.intensity_title"))
+        intensity_layout = QFormLayout()
+
+        self._chk_roughness = QCheckBox(tr("wizard.params_page.roughness"))
+        self._chk_roughness.toggled.connect(self._on_intensity_toggled)
+        intensity_layout.addRow(self._chk_roughness)
+
+        self._chk_roughness_refine = QCheckBox(
+            tr("wizard.params_page.roughness_refine"))
+        self._chk_roughness_refine.setEnabled(False)
+        self._chk_roughness_refine.toggled.connect(self._on_param_changed)
+        intensity_layout.addRow("", self._chk_roughness_refine)
+
+        self._chk_microabsorption = QCheckBox(
+            tr("wizard.params_page.microabsorption"))
+        self._chk_microabsorption.toggled.connect(self._on_intensity_toggled)
+        intensity_layout.addRow(self._chk_microabsorption)
+
+        self._spin_grain_radius = QDoubleSpinBox()
+        self._spin_grain_radius.setRange(0.1, 200.0)
+        self._spin_grain_radius.setDecimals(1)
+        self._spin_grain_radius.setSingleStep(0.5)
+        self._spin_grain_radius.setValue(10.0)
+        self._spin_grain_radius.setSuffix(" µm")
+        self._spin_grain_radius.setEnabled(False)
+        self._spin_grain_radius.valueChanged.connect(self._on_param_changed)
+        intensity_layout.addRow(tr("wizard.params_page.grain_radius"),
+                                self._spin_grain_radius)
+
+        hint = QLabel(tr("wizard.params_page.intensity_hint"))
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: gray;")
+        intensity_layout.addRow(hint)
+
+        intensity_group.setLayout(intensity_layout)
+        layout.addWidget(intensity_group)
+
         layout.addStretch()
         return page
+
+    # ── 系统性强度误差控件 ──────────────────────────────────────────
+    def _on_intensity_toggled(self, *_args) -> None:
+        """联动启用从属控件，并把状态写回配置。"""
+        rough_on = self._chk_roughness.isChecked()
+        ma_on = self._chk_microabsorption.isChecked()
+        self._chk_roughness_refine.setEnabled(rough_on)
+        self._spin_grain_radius.setEnabled(ma_on)
+        self._on_param_changed()
+
+    def _intensity_params(self) -> dict:
+        """控件 → 引擎 kwargs（与 ``refine()`` 的键名一致）。"""
+        rough_on = self._chk_roughness.isChecked()
+        ma_on = self._chk_microabsorption.isChecked()
+        return {
+            "roughness_model": "sidey" if rough_on else "none",
+            "refine_roughness": bool(rough_on
+                                     and self._chk_roughness_refine.isChecked()),
+            "microabsorption": bool(ma_on),
+            # 不勾微吸收时半径无意义，传 0 让引擎走"未启用"分支
+            "grain_radius_um": (float(self._spin_grain_radius.value())
+                                if ma_on else 0.0),
+        }
+
+    def _load_intensity_params(self, params: dict) -> None:
+        """模板 / 工程文件 → 控件。blockSignals 防抖成"每次 setChecked 都同步"。"""
+        p = dict(params or {})
+        rm = str(p.get("roughness_model", "none") or "none").strip().lower()
+        widgets = (self._chk_roughness, self._chk_roughness_refine,
+                   self._chk_microabsorption, self._spin_grain_radius)
+        for w in widgets:
+            w.blockSignals(True)
+        try:
+            self._chk_roughness.setChecked(rm not in ("", "none", "off", "0"))
+            self._chk_roughness_refine.setChecked(
+                bool(p.get("refine_roughness", False)))
+            self._chk_microabsorption.setChecked(
+                bool(p.get("microabsorption", False)))
+            radius = float(p.get("grain_radius_um", 0.0) or 0.0)
+            if radius > 0.0:
+                self._spin_grain_radius.setValue(
+                    min(radius, self._spin_grain_radius.maximum()))
+        finally:
+            for w in widgets:
+                w.blockSignals(False)
+        self._on_intensity_toggled()
 
     # ------------------------------------------------------------------
     # 页面 4: 预览确认
@@ -531,6 +624,14 @@ class RefinementWizard(QWidget):
 
         self._label_time = QLabel("--")
         result_layout.addRow(tr("wizard.execute_page.label_time"), self._label_time)
+
+        # v5.2: 强度误差修正的状态/告警。微吸收的 τ 不进拟合向量，Rwp 好坏
+        # 反映不出"半径是否给对"，只能在这里显式告警（撞 Brindley 表端点时
+        # wt% 只能定性参考）。
+        self._label_microabsorption = QLabel("--")
+        self._label_microabsorption.setWordWrap(True)
+        result_layout.addRow(tr("wizard.execute_page.label_microabsorption"),
+                             self._label_microabsorption)
 
         result_group.setLayout(result_layout)
         layout.addWidget(result_group)
@@ -1258,6 +1359,9 @@ class RefinementWizard(QWidget):
         self._peak_shape_combo.setCurrentText(template.peak_shape)
         self._max_cycles_spin.setValue(template.max_cycles)
         self._refinement_config["params"] = dict(template.params)
+        # 模板里的强度误差开关要先回填到控件 —— 否则下面的 sync 会拿**旧控件
+        # 状态**把模板值盖掉（sync 是"控件 → 配置"的单向通道）。
+        self._load_intensity_params(template.params)
         self._sync_config_from_ui()
 
     def _on_param_changed(self) -> None:
@@ -1271,6 +1375,11 @@ class RefinementWizard(QWidget):
         self._refinement_config["max_cycles"] = self._max_cycles_spin.value()
         self._refinement_config["two_theta_min"] = self._spin_two_theta_min.value()
         self._refinement_config["two_theta_max"] = self._spin_two_theta_max.value()
+        # params 里既有模板带来的其它键（quick_scan / refine_lattice…），也有
+        # 本页控件管的四个强度误差键 —— 用 update 合并，别整体替换。
+        params = dict(self._refinement_config.get("params") or {})
+        params.update(self._intensity_params())
+        self._refinement_config["params"] = params
 
     def _on_save_as_template(self) -> None:
         self._sync_config_from_ui()
@@ -1482,6 +1591,19 @@ class RefinementWizard(QWidget):
                 tr("error.refine_failed", error=error_text),
             )
 
+    def _update_microabsorption_note(self, result: RefinementResult) -> None:
+        """微吸收/粗糙度的状态与告警。
+
+        文案与判定统一走 ``diag_texts.microabsorption_note``（主精修页共用同一
+        实现），这里只负责把"撞表端点"渲染成红字 —— 三态：没启用 / 落在表内
+        （报 μ̄ 与 τ 区间）/ 撞 Brindley 表端点（wt% 只能定性参考）。
+        """
+        text, clamped = microabsorption_note(getattr(result, "fit_params", None))
+        self._label_microabsorption.setStyleSheet(
+            "color: #c0392b; font-weight: bold;" if clamped else ""
+        )
+        self._label_microabsorption.setText(text)
+
     def _display_result(self, result: RefinementResult) -> None:
         self._label_wr.setText(f"{result.Rwp:.3f} %")
         # v1.1.2: Rexp/GOF 仅在统计权下可解读
@@ -1505,6 +1627,7 @@ class RefinementWizard(QWidget):
         self._label_quality.setText(result.quality_grade)
         self._label_cycles_done.setText(str(result.num_cycles))
         self._label_time.setText(f"{result.time_seconds:.1f} s")
+        self._update_microabsorption_note(result)
 
         self._log(tr("wizard.execute_page.log_result_wr", wr=f"{result.wR:.3f}"))
         self._log(tr("wizard.execute_page.log_result_gof", gof=f"{result.GOF:.3f}"))

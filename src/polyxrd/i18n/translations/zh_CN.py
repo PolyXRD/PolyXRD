@@ -762,7 +762,13 @@ translations = {
             "strategy": "策略",
             "background": "背景方法",
             "peak_shape": "峰形模型",
-            "max_cycles": "最大循环数"
+            "max_cycles": "最大循环数",
+            "intensity_title": "系统性强度误差",
+            "roughness": "表面粗糙度（Sidey）",
+            "roughness_refine": "精修粗糙度幅度 s",
+            "microabsorption": "微吸收修正（Brindley）",
+            "grain_radius": "颗粒半径",
+            "intensity_hint": "半径须实测（SEM / 激光粒度 / 沉降法）；未知请不要勾选 —— 半径猜错会把本来定量对的样品打偏 5 pp 以上（基准报告 §22.6）",
         },
         "preview": {
             "title": "精修配置预览",
@@ -788,6 +794,7 @@ translations = {
             "label_quality": "质量评级",
             "label_cycles": "循环次数",
             "label_time": "耗时",
+            "label_microabsorption": "强度误差修正",
             "log_placeholder": "精修日志...",
             "btn_start": "开始精修",
             "log_start": "精修已启动",
@@ -1215,6 +1222,22 @@ translations = {
         "enter_code": "输入注册码(&R)…"
     },
     "diag": {
+        "refinement": {
+            "gof_high": "GOF 偏高：拟合优度不足，检查峰形 / 背景 / 是否缺相",
+            "residual_serial": "残差逐点强相关：模型有缺项（缺相或缺物理项），不是随机噪声",
+            "texture_suspect": "低角段明显更差且择优取向未释放：疑似织构未修正",
+            "width_model_suspect": "高角段明显更差且样品展宽未释放：峰宽模型不足",
+            "segment_misfit": "分段残差差异大：某一段整体偏了（峰位 / 背景 / 强度口径）",
+            "negative_calc": "出现负的计算强度：峰形或背景参数越界",
+            "unidentified_peaks": "有实测峰没有对应反射：疑似缺相",
+            "background_trend": "背景残差有系统趋势：背景节点太少或阶数偏低",
+            "rank_deficient": "参数秩亏：存在完全不可辨识的参数组合",
+            "high_correlation": "参数高度相关：相关对里的误差棒不可信",
+            "at_bound": "参数贴在边界上：数据不支持这个自由度，或边界设得太紧",
+            "phase_not_detected": "某相的标度被压到 0：该相无法定量，先确认它是否真的存在",
+            "microabsorption_clamped": "微吸收颗粒半径超出 Brindley 表的适用范围：wt% 只能定性参考。请确认实际粒度（SEM / 激光粒度），或把半径减小到 |(μ−μ̄)·R| ≤ 0.5",
+            "microabsorption_applied": "已施加 Brindley 微吸收修正：wt% 按 W∝S/τ 搬运；Rwp 不受影响（τ 只改份额），所以 Rwp 变差说明半径给错了",
+        },
         "engine_fallback": "请求引擎 {requested} → 实际使用 {used} (原因: {reason})",
         "ka2_detected": "检测到 Kα2 双线未剥离 (最强峰 {center:.2f}°, Δ≈{delta:.3f}°, 高角侧残差 ≈{ratio:.0f}% 峰高): 建议先剥离 Kα2 (数据处理 → Kα2 剥离) 或后续启用 Kα2 建模",
         "metrics_no_weights": "未使用统计权重: Rexp/GOF 不可解读 (需 stat_weights=poisson/poirier)",
@@ -1225,5 +1248,11 @@ translations = {
         "low_angle_residual": "低角区残差偏大 ({low:.1f}% vs 高角 {high:.1f}%): 检查低角不对称 / 背景估计 / 择优取向",
         "residual_large": "整体残差偏大 (R={r:.1f}%) 但无明显逐点相关 (DW={dw:.2f}): 可能接近噪声底或统计量不足",
         "weight_basis_relative": "定量口径为相对强度归一 (relative): 以下物相未匹配到结构数据 ({phases}), 无法计算严格质量分数 W∝S·ZMV; 建议在物相库重新匹配结构后重试"
+    },
+    "intensity_note": {
+        "off": "未启用",
+        "roughness_only": "粗糙度 {model} 已启用：s={s:.3f}（SR 只改峰强比；基准上 s 趋 0 即说明没抓到系统偏差）",
+        "applied": "已启用：μ̄ {mu_bar:.0f} cm⁻¹，τ {tau_min:.2f}~{tau_max:.2f}（只改 wt%，不影响 Rwp）",
+        "clamped": "⚠ 半径超出 Brindley 表范围（|(μ−μ̄)·R| > 0.5）：wt% 只能定性参考"
     }
 }

@@ -765,7 +765,13 @@ translations = {
             "strategy": "戦略",
             "background": "バックグラウンド方法",
             "peak_shape": "ピーク形状",
-            "max_cycles": "最大サイクル数"
+            "max_cycles": "最大サイクル数",
+            "intensity_title": "系統的強度誤差",
+            "roughness": "表面粗さ（Sidey）",
+            "roughness_refine": "粗さ振幅 s を精修",
+            "microabsorption": "マイクロ吸収補正（Brindley）",
+            "grain_radius": "粒子半径",
+            "intensity_hint": "半径は実測値が必要（SEM / レーザー回折 / 沈降法）。不明ならチェックしないでください — 半径を誤ると、正しく定量できていた試料が 5 pp 以上ずれます（基準報告 §22.6）",
         },
         "preview": {
             "title": "精密化設定プレビュー",
@@ -791,6 +797,7 @@ translations = {
             "label_quality": "品質グレード",
             "label_cycles": "サイクル数",
             "label_time": "経過時間",
+            "label_microabsorption": "強度誤差補正",
             "log_placeholder": "精密化ログ...",
             "btn_start": "精密化開始",
             "log_start": "精密化が開始されました",
@@ -1218,6 +1225,22 @@ translations = {
         "enter_code": "登録コード入力(&R)…"
     },
     "diag": {
+        "refinement": {
+            "gof_high": "GOF が高い：当てはまり不足。プロファイル / バックグラウンド / 相の欠落を確認",
+            "residual_serial": "残差に逐点相関：モデル不足（相または物理項の欠落）で、ランダムノイズではない",
+            "texture_suspect": "低角側が著しく悪く、優先配向が未解放：集合組織の未補正の疑い",
+            "width_model_suspect": "高角側が著しく悪く、試料広がりが未解放：ピーク幅モデル不足",
+            "segment_misfit": "区間ごとの残差差が大きい：ある区間が全体にずれている（位置 / 背景 / 強度基準）",
+            "negative_calc": "計算強度が負：ピーク形状または背景パラメータが範囲外",
+            "unidentified_peaks": "反射に対応しない実測ピーク：相の欠落の疑い",
+            "background_trend": "背景残差に系統的傾向：ノード数不足または次数が低い",
+            "rank_deficient": "パラメータが階数不足：完全に識別できない組合せが存在",
+            "high_correlation": "パラメータ間の相関が強い：当該ペアの誤差棒は信頼できない",
+            "at_bound": "パラメータが境界に張り付き：データがその自由度を支えていない、または境界が厳しすぎる",
+            "phase_not_detected": "ある相のスケールが 0 に潰れた：その相は定量できない。まず実在を確認",
+            "microabsorption_clamped": "マイクロ吸収の粒子半径が Brindley 表の適用範囲を超えています：wt% は定性的のみ。実粒度（SEM / レーザー回折）を確認するか、半径を |(mu-mu_bar)*R| <= 0.5 まで下げてください",
+            "microabsorption_applied": "Brindley マイクロ吸収を適用：wt% は W∝S/τ で移動。Rwp は不変（τ は割合だけを動かす）なので、Rwp が悪化するなら半径が誤り",
+        },
         "engine_fallback": "要求エンジン {requested} → 実際に使用 {used} (理由: {reason})",
         "ka2_detected": "Kα2 二重線が未除去と検出 (最強ピーク {center:.2f}°, Δ≈{delta:.3f}°, 高角側の残差 ≈{ratio:.0f}% ピーク高): 先に Kα2 を除去 (データ処理 → Kα2 除去) するか、後続の Kα2 モデリングを有効にしてください",
         "metrics_no_weights": "統計重み未使用: Rexp/GOF は解釈不可 (stat_weights=poisson/poirier が必要)",
@@ -1228,5 +1251,11 @@ translations = {
         "low_angle_residual": "低角域の残差が過大 ({low:.1f}% vs 高角 {high:.1f}%): 低角非対称性 / 背景推定 / 配向選択を確認してください",
         "residual_large": "全体残差が過大 (R={r:.1f}%) だが明確な逐点相関なし (DW={dw:.2f}): ノイズフロア近傍または統計量不足の可能性",
         "weight_basis_relative": "定量は相対強度正規化 (relative) を使用: 以下の相は構造データ未一致のため ({phases})、厳密な質量分数 W∝S·ZMV を計算できません。物相データベースで構造を再マッチングして再試行してください"
+    },
+    "intensity_note": {
+        "off": "未使用",
+        "roughness_only": "粗さモデル {model} 有効：s={s:.3f}（SR はピーク強度比のみ変化。基準で s→0 なら系統偏差を捉えていない）",
+        "applied": "有効：μ̄ {mu_bar:.0f} cm⁻¹、τ {tau_min:.2f}~{tau_max:.2f}（wt% のみ、Rwp は不変）",
+        "clamped": "⚠ 半径が Brindley 表の範囲外（|(μ−μ̄)·R| > 0.5）：wt% は定性的のみ"
     }
 }

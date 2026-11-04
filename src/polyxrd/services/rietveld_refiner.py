@@ -210,6 +210,19 @@ class RietveldRefiner:
                 "cell": bool(getattr(opts, "refine_cell", True)),
                 "zero_shift": bool(getattr(opts, "refine_zero_shift", True)),
             }
+            # 系统性强度误差（v5.2）：RefineOptions 是 UI 侧的**唯一**选项入口，
+            # 但这两个开关在引擎里走的是普通 kwargs（不是参数掩码）—— 在这里
+            # 转一次，界面就不必自己拼 kwargs。显式 kwargs 优先（脚本可覆盖）。
+            _rm = str(getattr(opts, "roughness_model", "none") or "none")
+            if _rm.strip().lower() not in ("", "none", "off", "0"):
+                kwargs.setdefault("roughness_model", _rm)
+                kwargs.setdefault("refine_roughness",
+                                  bool(getattr(opts, "refine_roughness", False)))
+            if bool(getattr(opts, "microabsorption", False)):
+                kwargs.setdefault("microabsorption", True)
+                kwargs.setdefault(
+                    "grain_radius_um",
+                    float(getattr(opts, "grain_radius_um", 0.0) or 0.0))
         kwargs.pop("options", None)
 
         engines = {
@@ -1437,8 +1450,13 @@ class RietveldRefiner:
             for f in rep.findings:
                 v5_findings.append(f.as_dict())
                 if f.severity in ("error", "warn") and len(diagnostics) < 4:
+                    # 码前缀必须是 ``diag.``：render_diagnostics 一律按
+                    # ``tr(code)`` 查翻译，而翻译表是 ``diag`` 段下的嵌套键
+                    # （``diag.refinement.rank_deficient``）。原来写的是裸
+                    # ``refinement.rank_deficient``，整组 v5 诊断在界面上都
+                    # 显示成原始码名。
                     diagnostics.append({
-                        "code": f"refinement.{f.code}",
+                        "code": f"diag.refinement.{f.code.lower()}",
                         "params": {k: float(v) for k, v in f.evidence.items()},
                     })
         except Exception as e:  # noqa: BLE001

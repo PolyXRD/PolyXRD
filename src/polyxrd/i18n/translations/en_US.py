@@ -765,7 +765,13 @@ translations = {
             "strategy": "Strategy",
             "background": "Background Method",
             "peak_shape": "Peak Shape",
-            "max_cycles": "Max Cycles"
+            "max_cycles": "Max Cycles",
+            "intensity_title": "Systematic intensity errors",
+            "roughness": "Surface roughness (Sidey)",
+            "roughness_refine": "Refine roughness amplitude s",
+            "microabsorption": "Microabsorption (Brindley)",
+            "grain_radius": "Grain radius",
+            "intensity_hint": "Radius must be measured (SEM / laser diffraction / sedimentation). Leave it off when unknown - a wrong radius shifts an otherwise correct wt% by more than 5 pp (report §22.6)",
         },
         "preview": {
             "title": "Refinement Configuration Preview",
@@ -791,6 +797,7 @@ translations = {
             "label_quality": "Quality Grade",
             "label_cycles": "Cycles",
             "label_time": "Time Elapsed",
+            "label_microabsorption": "Intensity corrections",
             "log_placeholder": "Refinement log...",
             "btn_start": "Start Refinement",
             "log_start": "Refinement started",
@@ -1218,6 +1225,22 @@ translations = {
         "enter_code": "Enter Registration &Code…"
     },
     "diag": {
+        "refinement": {
+            "gof_high": "GOF is high: fit quality insufficient - check profile / background / missing phases",
+            "residual_serial": "Residuals are serially correlated: the model is missing terms (a phase or a physical effect), not random noise",
+            "texture_suspect": "Low-angle region much worse while preferred orientation is fixed: likely unmodelled texture",
+            "width_model_suspect": "High-angle region much worse while sample broadening is fixed: profile model insufficient",
+            "segment_misfit": "Segments differ strongly: one region is shifted as a whole (position / background / intensity scale)",
+            "negative_calc": "Negative calculated intensity: profile or background parameters out of range",
+            "unidentified_peaks": "Observed peaks without matching reflections: a phase may be missing",
+            "background_trend": "Systematic background residual: too few nodes or order too low",
+            "rank_deficient": "Rank-deficient parameters: a completely unidentifiable combination exists",
+            "high_correlation": "Strongly correlated parameters: error bars on the pair are unreliable",
+            "at_bound": "Parameters at bounds: the data do not support the freedom, or the bounds are too tight",
+            "phase_not_detected": "A phase scale collapsed to zero: that phase cannot be quantified - first confirm it is really present",
+            "microabsorption_clamped": "Microabsorption grain radius exceeds the valid range of the Brindley table: wt% is qualitative only. Verify the real particle size (SEM / laser diffraction) or reduce the radius to |(mu-mu_bar)*R| <= 0.5",
+            "microabsorption_applied": "Brindley microabsorption applied: wt% shifted by W proportional to S/tau; Rwp is unaffected (tau only moves fractions), so a worse Rwp means the radius is wrong",
+        },
         "engine_fallback": "Requested engine {requested} → actually used {used} (reason: {reason})",
         "ka2_detected": "Kα2 doublet detected but not stripped (strongest peak {center:.2f}°, Δ≈{delta:.3f}°, high-angle residual ≈{ratio:.0f}% of peak height): strip Kα2 first (Data processing → Kα2 stripping) or enable Kα2 modeling later",
         "metrics_no_weights": "Statistical weights not used: Rexp/GOF are not interpretable (requires stat_weights=poisson/poirier)",
@@ -1228,5 +1251,11 @@ translations = {
         "low_angle_residual": "Low-angle residuals too large ({low:.1f}% vs high-angle {high:.1f}%): check low-angle asymmetry / background estimate / preferred orientation",
         "residual_large": "Overall residuals too large (R={r:.1f}%) without obvious point-to-point correlation (DW={dw:.2f}): possibly near the noise floor or insufficient statistics",
         "weight_basis_relative": "Quantification uses relative-intensity normalization (relative): no structure data matched for these phases ({phases}), so strict mass fractions W∝S·ZMV cannot be computed; re-match structures in the phase database and retry"
+    },
+    "intensity_note": {
+        "off": "Not enabled",
+        "roughness_only": "Roughness {model} enabled: s={s:.3f} (SR moves peak intensity ratios only; s→0 on the benchmark means it caught no systematic bias)",
+        "applied": "Enabled: mu_bar {mu_bar:.0f} 1/cm, tau {tau_min:.2f}~{tau_max:.2f} (moves wt% only, Rwp unaffected)",
+        "clamped": "WARNING: radius outside the Brindley table range (|(mu-mu_bar)*R| > 0.5) - wt% is qualitative only"
     }
 }

@@ -33,6 +33,16 @@ class RefineOptions:
     preferred_orientation: Optional[dict] = None   # {"direction": [...], "r": float}
     # 零点误差初值 (度), 数据前校正符号见 calibration 模块
     zero_shift_init: float = 0.0
+    # ── 系统性强度误差 (v5.2)，两个都默认关 ──────────────────────
+    # 表面粗糙度: "none" / "sidey"(单参数，默认首选) / "suortti" / "sparks"。
+    # 只在 refinement 引擎生效；refine_roughness=False 时按 grain 的 s 固定修正。
+    roughness_model: str = "none"
+    refine_roughness: bool = False
+    # 微吸收 (Brindley): 需要真实颗粒半径 (µm)。**不设默认半径** —— 半径是
+    # 可测量的物理量，猜一个 10 µm 会把本来定量对的样品打偏 5 pp 以上
+    # （基准报告 §22.6）。microabsorption=False 或 radius<=0 → 不修正。
+    microabsorption: bool = False
+    grain_radius_um: float = 0.0
 
     def to_dict(self) -> dict:
         return {
@@ -43,4 +53,8 @@ class RefineOptions:
             "refine_zero_shift": self.refine_zero_shift,
             "preferred_orientation": self.preferred_orientation,
             "zero_shift_init": self.zero_shift_init,
+            "roughness_model": self.roughness_model,
+            "refine_roughness": self.refine_roughness,
+            "microabsorption": self.microabsorption,
+            "grain_radius_um": self.grain_radius_um,
         }

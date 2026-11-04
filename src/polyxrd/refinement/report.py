@@ -34,6 +34,7 @@ import numpy as np
 from .diagnostics import Diagnostics
 from .goal import (GoalResult, classify_tier, evaluate_goals, refined_stage,
                    tier_note)
+from .intensity import BRINDLEY_TAU
 from .problem import pattern_metrics
 from .quantitative import QuantResult
 
@@ -415,6 +416,37 @@ def audit(
                 "若结构可信（文献 CIF、占位已知），这个 wt% 可用；"
                 "否则误差会整块进到含量里",
                 {}))
+
+    # ── 10. 微吸收修正的适用性（v5.2）──────────────────────────
+    # τ 由 μ 与颗粒半径 R 确定、**不进拟合向量**，所以它的对错不会被 Rwp 反映
+    # 出来 —— 只能在这里判：撞表端点（|(μ−μ̄)·R| > 0.5）就必须告警，因为表外
+    # 的值是截断出来的，继续报 wt% 会把"颗粒太粗、Rietveld 定量已失效"写成正常数。
+    taus = getattr(quant, "tau", ()) if quant is not None else ()
+    if taus:
+        clamped = bool(getattr(quant, "mu_clamped", False))
+        if clamped:
+            n_clamped = sum(1 for t in taus
+                            if t <= BRINDLEY_TAU[0] + 1e-6
+                            or t >= BRINDLEY_TAU[-1] - 1e-6)
+            out.append(Finding(
+                "MICROABSORPTION_CLAMPED", "warn",
+                f"微吸收颗粒半径超出 Brindley 表适用范围"
+                f"（μ̄={float(getattr(quant, 'mu_bar', 0.0)):.0f} cm⁻¹，"
+                f"{n_clamped}/{len(taus)} 相 τ 撞表端点）——wt% 只能定性参考",
+                "把颗粒半径降到 |(μ−μ̄)·R| ≤ 0.5（或确认实际粒度：SEM / 激光"
+                "粒度 / 沉降法）；表外外推比不修正更糟",
+                {"mu_bar": float(getattr(quant, "mu_bar", 0.0)),
+                 "n_clamped": float(n_clamped)}))
+        else:
+            out.append(Finding(
+                "MICROABSORPTION_APPLIED", "info",
+                "已施加 Brindley 微吸收修正："
+                f"μ̄={float(getattr(quant, 'mu_bar', 0.0)):.0f} cm⁻¹，"
+                f"τ={min(taus):.2f}~{max(taus):.2f}",
+                "wt% 已按 W ∝ S/τ 搬运；Rwp 不受影响（τ 只改份额、被标度吸收），"
+                "所以 Rwp 变差说明半径给错了",
+                {"mu_bar": float(getattr(quant, "mu_bar", 0.0)),
+                 "tau_min": float(min(taus)), "tau_max": float(max(taus))}))
 
     out.sort(key=lambda f: (SEVERITY_RANK.get(f.severity, 9), f.code))
     return out

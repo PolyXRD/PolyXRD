@@ -62,3 +62,31 @@ def metric_note_text(result: Any) -> str:
         if d["code"] in METRIC_NOTE_CODES:
             return render_entry(d)
     return ""
+
+
+def microabsorption_note(fit_params: Any) -> tuple[str, bool]:
+    """系统性强度误差的状态文案 (v5.2), 返回 ``(文案, 是否撞 Brindley 表端点)``。
+
+    主精修页与精修向导共用同一份实现 —— 两处界面各写一遍必然漂移, 而这条
+    文案恰恰是"半径给错了"唯一能被用户看到的地方: τ 只进 Hill–Howard 定量,
+    **不进拟合向量**, 所以 Rwp 对错误的半径没有任何反应, 只能靠文字兜住。
+
+    第三种状态 (只开了粗糙度) 特意把收敛到的 s 报出来: SR 在 13 个基准试样
+    上 s 全部趋 0 (基准报告 §22.6), 用户看到 s≈0 就知道"这个模型没抓到东西"。
+
+    ``fit_params`` 可能来自其他引擎 (builtin / gsas2) —— 它们不写这几个键,
+    这时统一显示"未启用", 不假装做过修正。
+    """
+    fp = dict(fit_params or {})
+    tau = [float(t) for t in (fp.get("microabsorption_tau") or [])]
+    mu_bar = float(fp.get("microabsorption_mu_bar") or 0.0)
+    if fp.get("microabsorption_clamped"):
+        return tr("intensity_note.clamped"), True
+    if tau:
+        return tr("intensity_note.applied",
+                  mu_bar=mu_bar, tau_min=min(tau), tau_max=max(tau)), False
+    model = str(fp.get("roughness_model") or "none").strip().lower()
+    if model in ("", "none", "off", "0"):
+        return tr("intensity_note.off"), False
+    return tr("intensity_note.roughness_only",
+              model=model, s=float(fp.get("roughness_s") or 0.0)), False

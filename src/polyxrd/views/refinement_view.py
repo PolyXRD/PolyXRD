@@ -41,7 +41,11 @@ from PySide6.QtWidgets import (
 )
 
 from polyxrd.i18n import tr
-from polyxrd.i18n.diag_texts import metric_note_text, render_diagnostics
+from polyxrd.i18n.diag_texts import (
+    metric_note_text,
+    microabsorption_note,
+    render_diagnostics,
+)
 from polyxrd.services.refinement_templates import RefinementTemplateManager
 from polyxrd.viewmodels.main_vm import MainViewModel
 from polyxrd.views.widgets.busy_indicator import BusyIndicator, busy
@@ -58,6 +62,17 @@ class RefinementView(QWidget):
 
     #: 日志面板最多保留的行数 (避免长跑把内存吃光)
     _LOG_MAX_BLOCKS = 4000
+
+    #: 结果区提示条样式: 普通运行期提示 = 琥珀, 定量被破坏 (clamped) = 红
+    _ALERT_STYLE_WARN = (
+        "QLabel { color: #8a5300; background-color: #fff4d6; "
+        "border: 1px solid #e0b860; border-radius: 3px; padding: 4px 6px; }"
+    )
+    _ALERT_STYLE_DANGER = (
+        "QLabel { color: #8c1a10; background-color: #fdecea; "
+        "border: 1px solid #d94f3d; border-radius: 3px; padding: 4px 6px; "
+        "font-weight: bold; }"
+    )
 
     def __init__(self, vm: MainViewModel) -> None:
         super().__init__()
@@ -177,6 +192,42 @@ class RefinementView(QWidget):
         self._zero_shift_spin.setSuffix("°")
         ctrl_layout.addRow(tr("vw.refinement_view.zero_shift"), self._zero_shift_spin)
 
+        # ── 系统性强度误差 (v5.2) ────────────────────────────────
+        # 与精修向导「系统性强度误差」组完全同源 (翻译键也复用, 避免两套文案
+        # 慢慢说岔)。两个开关都默认关, 理由不是"没实现"而是实测: SR 在 13 个
+        # 基准试样上 s 全部趋 0 (无收益); 微吸收则**全由颗粒半径决定** —— 半径
+        # 猜 10 µm 会把本来定量正确的 2-1 从 0.96 打到 6.16 pp (基准报告 §22.6)。
+        # 因此只提供入口 + 一句"半径必须实测", 默认不让用户踩到。
+        self._chk_roughness = QCheckBox(tr("wizard.params_page.roughness"))
+        self._chk_roughness.setToolTip(tr("wizard.params_page.intensity_hint"))
+        self._chk_roughness.toggled.connect(self._on_intensity_toggled)
+        ctrl_layout.addRow(self._chk_roughness)
+
+        self._chk_roughness_refine = QCheckBox(
+            tr("wizard.params_page.roughness_refine")
+        )
+        self._chk_roughness_refine.setEnabled(False)
+        ctrl_layout.addRow("", self._chk_roughness_refine)
+
+        self._chk_microabsorption = QCheckBox(
+            tr("wizard.params_page.microabsorption")
+        )
+        self._chk_microabsorption.setToolTip(tr("wizard.params_page.intensity_hint"))
+        self._chk_microabsorption.toggled.connect(self._on_intensity_toggled)
+        ctrl_layout.addRow(self._chk_microabsorption)
+
+        self._spin_grain_radius = QDoubleSpinBox()
+        self._spin_grain_radius.setRange(0.1, 200.0)
+        self._spin_grain_radius.setDecimals(1)
+        self._spin_grain_radius.setSingleStep(0.5)
+        self._spin_grain_radius.setValue(10.0)
+        self._spin_grain_radius.setSuffix(" µm")
+        self._spin_grain_radius.setEnabled(False)
+        self._spin_grain_radius.setToolTip(tr("wizard.params_page.intensity_hint"))
+        ctrl_layout.addRow(
+            tr("wizard.params_page.grain_radius"), self._spin_grain_radius
+        )
+
         self._btn_refine = QPushButton(tr("view.refinement.btn_start_refine"))
         self._btn_refine.clicked.connect(self._on_refine)
         ctrl_layout.addRow(self._btn_refine)
@@ -201,10 +252,7 @@ class RefinementView(QWidget):
         # v1.1.2: 结果区顶部提示条 (引擎回退 / Kα2 / 指标不可解读等运行期提示)
         self._label_alert = QLabel("")
         self._label_alert.setWordWrap(True)
-        self._label_alert.setStyleSheet(
-            "QLabel { color: #8a5300; background-color: #fff4d6; "
-            "border: 1px solid #e0b860; border-radius: 3px; padding: 4px 6px; }"
-        )
+        self._label_alert.setStyleSheet(self._ALERT_STYLE_WARN)
         self._label_alert.setVisible(False)
         result_layout.addRow(self._label_alert)
 
@@ -228,6 +276,14 @@ class RefinementView(QWidget):
 
         self._label_time = QLabel("--")
         result_layout.addRow(tr("vw.refinement_view.time_spent"), self._label_time)
+
+        # v5.2: 系统性强度误差状态 (未启用 / μ̄+τ 区间 / 撞表端点标红)
+        self._label_microabsorption = QLabel("--")
+        self._label_microabsorption.setWordWrap(True)
+        result_layout.addRow(
+            tr("wizard.execute_page.label_microabsorption"),
+            self._label_microabsorption,
+        )
 
         self._group_result.setLayout(result_layout)
         right_layout.addWidget(self._group_result)
@@ -363,6 +419,7 @@ class RefinementView(QWidget):
             (self._fwhm_spin, "vw.refinement_view.init_fwhm"),
             (self._bg_combo, "vw.refinement_view.bg_method"),
             (self._zero_shift_spin, "vw.refinement_view.zero_shift"),
+            (self._spin_grain_radius, "wizard.params_page.grain_radius"),
         )
         for field, key in ctrl_rows:
             label = self._form_ctrl.labelForField(field)
@@ -375,6 +432,8 @@ class RefinementView(QWidget):
             (self._label_quality, "view.refinement.label_quality"),
             (self._label_cycles, "view.refinement.label_cycles"),
             (self._label_time, "vw.refinement_view.time_spent"),
+            (self._label_microabsorption,
+             "wizard.execute_page.label_microabsorption"),
         )
         for field, key in result_rows:
             label = self._form_result.labelForField(field)
@@ -384,6 +443,19 @@ class RefinementView(QWidget):
         # 按钮 / 复选框 / 占位文本
         self._chk_wizard.setText(tr("view.refinement.wizard_style"))
         self._chk_wizard.setToolTip(tr("view.refinement.wizard_style_tip"))
+        # 系统性强度误差 (v5.2): 选项文案复用精修向导的翻译键, 一处措辞两处生效
+        self._chk_roughness.setText(tr("wizard.params_page.roughness"))
+        self._chk_roughness.setToolTip(tr("wizard.params_page.intensity_hint"))
+        self._chk_roughness_refine.setText(
+            tr("wizard.params_page.roughness_refine")
+        )
+        self._chk_microabsorption.setText(
+            tr("wizard.params_page.microabsorption")
+        )
+        self._chk_microabsorption.setToolTip(
+            tr("wizard.params_page.intensity_hint")
+        )
+        self._spin_grain_radius.setToolTip(tr("wizard.params_page.intensity_hint"))
         self._btn_refine.setText(tr("view.refinement.btn_start_refine"))
         self._btn_cancel.setText(tr("vw.refinement_view.cancel"))
         self._btn_clear_log.setText(tr("view.refinement.btn_clear_log"))
@@ -492,6 +564,9 @@ class RefinementView(QWidget):
             self._fwhm_spin.setValue(p["fwhm"])
             self._zero_shift_spin.setValue(p["zero_shift"])
 
+        # 注意: 系统性强度误差的四个控件**故意不在这个置灰名单里** ——
+        # 本页默认就勾着"按向导方式", 若把它们也锁住, 默认状态下根本点不到,
+        # 等于这个功能没做。它们是显式 opt-in, 与向导/手动方式正交。
         for w in (
             self._engine_combo,
             self._strategy_combo,
@@ -506,6 +581,34 @@ class RefinementView(QWidget):
     def is_wizard_style(self) -> bool:
         """当前是否按精修向导的方式执行。"""
         return bool(self._chk_wizard.isChecked())
+
+    # ------------------------------------------------------------------
+    # 系统性强度误差 (v5.2)
+    # ------------------------------------------------------------------
+
+    def _on_intensity_toggled(self, *_args) -> None:
+        """父开关联动子控件 (与精修向导同一套联动规则)。"""
+        self._chk_roughness_refine.setEnabled(self._chk_roughness.isChecked())
+        self._spin_grain_radius.setEnabled(self._chk_microabsorption.isChecked())
+
+    def _intensity_params(self) -> dict:
+        """控件 → 引擎 kwargs (键名与 ``refine()`` 一致)。
+
+        未勾微吸收时半径一律传 0: 否则引擎会拿一个"用户没打算用"的半径去算
+        τ, 而 τ 只改 wt% 不改 Rwp —— 界面上看不出任何异常, 定量却已经被搬歪。
+        """
+        rough_on = self._chk_roughness.isChecked()
+        ma_on = self._chk_microabsorption.isChecked()
+        return {
+            "roughness_model": "sidey" if rough_on else "none",
+            "refine_roughness": bool(
+                rough_on and self._chk_roughness_refine.isChecked()
+            ),
+            "microabsorption": bool(ma_on),
+            "grain_radius_um": (
+                float(self._spin_grain_radius.value()) if ma_on else 0.0
+            ),
+        }
 
     # ------------------------------------------------------------------
     # 日志
@@ -627,6 +730,10 @@ class RefinementView(QWidget):
 
             # 向导方式: 把模板自带的额外参数一并带上 (与精修向导执行页一致)
             extra = dict(preset.get("params", {})) if wizard_style else {}
+            # 系统性强度误差是"显式 opt-in", 与向导/手动方式无关 —— 向导档也
+            # 必须生效, 否则本页默认勾着向导条目时这两个开关点了等于没点。
+            # 控件是唯一真相来源, 放在模板值之后覆盖。
+            extra.update(self._intensity_params())
 
             # 把进度回调交给精修引擎: 多起点 + 稀疏抛光都是纯 Python 嵌套循环,
             # 借它周期性泵事件, 窗口才不会在几十秒里被系统标成"未响应"。
@@ -680,6 +787,23 @@ class RefinementView(QWidget):
             _note = metric_note_text(result)
             if _note:
                 _notes.append(_note)
+
+        # v5.2: 系统性强度误差状态。clamped 时必须有醒目告警 —— τ 只进
+        # Hill–Howard 定量、**不进拟合向量**, 所以 Rwp 对"颗粒半径给错了"
+        # 没有任何反应, 这行文字是用户唯一能发现定量已不可信的地方。
+        _ma_text, _ma_clamped = microabsorption_note(
+            getattr(result, "fit_params", None)
+        )
+        self._label_microabsorption.setText(_ma_text)
+        self._label_microabsorption.setStyleSheet(
+            "color: #c0392b; font-weight: bold;" if _ma_clamped else ""
+        )
+        self._label_alert.setStyleSheet(
+            self._ALERT_STYLE_DANGER if _ma_clamped else self._ALERT_STYLE_WARN
+        )
+        if _ma_clamped and not _notes:  # 兜底: 审计没给 finding 也要看得见
+            _notes.append(_ma_text)
+
         if _notes:
             self._label_alert.setText("⚠ " + " ｜ ".join(_notes))
             self._label_alert.setVisible(True)
