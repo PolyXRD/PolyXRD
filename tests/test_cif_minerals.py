@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import ast
 import sys
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -316,3 +317,144 @@ def test_does_not_touch_user_config(tmp_path, monkeypatch):
     monkeypatch.setattr(config_mod, "get_config", lambda: _Boom())
     CifMineralLibrary()
     assert called == []
+
+
+class TestR3cSiteCorrectness:
+    """P2-9：R-3c 两相的坐标必须落在特殊位置上。
+
+    修复前 Calcite 的 C 在 (0,0,0)、O 在 (0.2388,0,0)（CO3^2- 是平面基团，
+    C 与 O 必须同层），Corundum 的 O 在 (0.2604,0.0144,0.2425)（一般位置）
+    —— 两者都展开成 48 位点（应 30：O 多出一倍 36 个，应 18 个）。实测后果
+    （pymatgen 对照，2026-11-05）：方解石多出 31.45° 幽灵峰（~16%）且 012
+    缺失；刚玉 104 (25.6°) 误为最强峰，而 PDF 10-0173 最强峰是 113 (43.4°)
+    —— GUI 走内置库时多相定量全错。三道防线：
+      1. 展开后的全胞位点数与元素计数（结构错误的最低门槛）；
+      2. 展开后全胞喂两套独立实现（项目 build_reflections vs pymatgen
+         XRDCalculator，同 B=0.5 Debye–Waller）逐峰对拍 ≤4% 相对强度差，
+         并用 PDF 文献锚点钉住主峰位置；
+      3. CO3 平面性（C 与 O 同 z）+ 内嵌 CIF 文本与 atomic_sites 同步。
+    """
+
+    EXPECTED = {
+        "CaCO3": {"total": 30, "counts": {"Ca": 6, "C": 6, "O": 18}},
+        "Al2O3": {"total": 30, "counts": {"Al": 12, "O": 18}},
+    }
+
+    @staticmethod
+    def _expanded(key):
+        from polyxrd.services import cif_minerals as m
+        from polyxrd.services.phase_cif import expand_sites_by_symmetry
+        from polyxrd.refinement.symmetry import resolve_space_group_symbol
+
+        data = m._BUILTIN_MINERALS[key]
+        sg = resolve_space_group_symbol(data["space_group_number"])
+        return data, expand_sites_by_symmetry(data["atomic_sites"], sg)
+
+    @pytest.mark.parametrize("key", ["CaCO3", "Al2O3"])
+    def test_expanded_unit_cell_has_30_sites(self, key):
+        exp = self._expanded(key)[1]
+        want = self.EXPECTED[key]
+        assert len(exp) == want["total"], len(exp)
+        got = dict(Counter(s["element"] for s in exp))
+        assert got == want["counts"], got
+
+    @pytest.mark.parametrize("key", ["CaCO3", "Al2O3"])
+    def test_relative_intensities_match_pymatgen(self, key):
+        """展开后 30 位点全胞喂两套独立实现，逐峰相对强度差 ≤4%。
+
+        双实现（自研 |F|²·LP·1/V² 口径 vs pymatgen XRDCalculator）在
+        同一结构、同一 Debye–Waller（B=0.5）下逐峰一致，即可证明
+        坐标/对称展开/强度口径全链路正确。主峰位置另用 PDF 文献锚点。
+        """
+        pytest.importorskip("pymatgen.analysis.diffraction.xrd")
+        import numpy as np
+        from pymatgen.analysis.diffraction.xrd import XRDCalculator
+        from pymatgen.core import Lattice, Structure
+
+        from polyxrd.refinement.cell import Cell
+        from polyxrd.refinement.structure import (
+            AtomSite,
+            StructureModel,
+            build_reflections,
+        )
+
+        data, exp = self._expanded(key)
+        lat = data["lattice"]
+        a, b, c = lat["a"], lat["b"], lat["c"]
+        al, be, ga = lat["alpha"], lat["beta"], lat["gamma"]
+        elements = [s["element"] for s in exp]
+        xyz = [(s["x"], s["y"], s["z"]) for s in exp]
+
+        # 项目引擎（B = B_ISO_DEFAULT = 0.5）
+        st = StructureModel(
+            sites=[AtomSite(e, x, y, z, occ, 0.5, e)
+                   for e, (x, y, z), occ in
+                   zip(elements, xyz, [s["occupancy"] for s in exp])],
+            cell=Cell(a, b, c, al, be, ga), space_group="P 1", name=key)
+        tab = build_reflections(st, two_theta_range=(15, 60))
+        I_p = np.asarray(tab.intensity)
+        I_p = I_p / I_p.max() * 100
+        tt_p = np.asarray(tab.two_theta)
+
+        # pymatgen（同结构、同 B）
+        struct = Structure(Lattice.from_parameters(a, b, c, al, be, ga),
+                           elements, xyz)
+        calc = XRDCalculator(
+            wavelength="CuKa",
+            debye_waller_factors={e: 0.5 for e in sorted(set(elements))})
+        pat = calc.get_pattern(struct, two_theta_range=(15, 60))
+        I_m = np.asarray(pat.y)
+        I_m = I_m / I_m.max() * 100
+        tt_m = np.asarray(pat.x)
+
+        assert tt_m.size >= 5 and tt_p.size >= 5
+        n_cmp = 0
+        for tj, Ij in zip(tt_p, I_p):
+            if Ij < 3.0:
+                continue
+            k = int(np.argmin(np.abs(tt_m - tj)))
+            assert abs(tt_m[k] - tj) < 0.08, (key, "峰位不匹配", tj)
+            assert Ij == pytest.approx(I_m[k], abs=4.0), \
+                (key, "相对强度超差", float(tj), float(Ij), float(I_m[k]))
+            n_cmp += 1
+        assert n_cmp >= 5, n_cmp
+
+        # PDF 文献锚点：方解石主峰 104@29.4°、012@23.0 存在（PDF 05-0586）；
+        # 刚玉主峰 113@43.4°（PDF 10-0173），104 不得是最强峰。
+        main = float(tt_p[int(np.argmax(I_p))])
+        if key == "CaCO3":
+            assert main == pytest.approx(29.4, abs=0.15), main
+            assert np.min(np.abs(tt_p - 23.0)) < 0.15
+        else:
+            assert main == pytest.approx(43.4, abs=0.15), main
+            i104 = int(np.argmin(np.abs(tt_p - 25.6)))
+            assert I_p[i104] < 80.0, float(I_p[i104])
+
+    def test_calcite_carbonate_group_is_planar(self):
+        """CO3^2- 平面基团：C 与 O 必须同 z（R-3c 里都在 1/4）。"""
+        from polyxrd.services import cif_minerals as m
+
+        sites = m._BUILTIN_MINERALS["CaCO3"]["atomic_sites"]
+        z_c = next(s["z"] for s in sites if s["element"] == "C")
+        z_o = next(s["z"] for s in sites if s["element"] == "O")
+        assert z_c == pytest.approx(z_o, abs=1e-9)
+
+    def test_embedded_cif_matches_atomic_sites(self, lib):
+        """atomic_sites 与内嵌 CIF 文本必须同步改 —— 两条读取路径只对一条改
+        就会出现"看入口不一样错法"的鬼问题（P2-9 就是两条都错、错得一样）。"""
+        for key in ("CaCO3", "Al2O3"):
+            cif = lib.get_cif_content(key)
+            assert cif is not None
+            sites = lib.get_mineral_info(key)["atomic_sites"] \
+                if isinstance(lib.get_mineral_info(key), dict) else None
+            if sites is None:
+                continue
+            for s in sites:
+                # 每个位点的三个分数坐标都必须能在 CIF 文本里找到（数值
+                # 近似比较，容差 5e-5：CIF 里写的是 4~5 位小数）
+                import re
+
+                nums = [float(t) for t in re.findall(r"-?\d+\.\d+", cif)]
+                for v in (s["x"], s["y"], s["z"]):
+                    assert any(abs(n - v) < 5e-5 for n in nums), \
+                        (key, s.get("label"), v)

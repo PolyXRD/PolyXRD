@@ -257,8 +257,12 @@ _register("Al2O3", {
     "lattice": {"a": 4.752, "b": 4.752, "c": 12.982,
                 "alpha": 90.0, "beta": 90.0, "gamma": 120.0},
     "atomic_sites": [
-        {"label": "Al1", "element": "Al", "x": 0.0000, "y": 0.0000, "z": 0.3521, "occupancy": 1.0},
-        {"label": "O1", "element": "O", "x": 0.2604, "y": 0.0144, "z": 0.2425, "occupancy": 1.0},
+        # R-3c：Al 在 12c (0,0,z)、O 在 18e (x,0,1/4) —— O 的 y 必须为 0、
+        # z 必须恰为 1/4，否则落到一般位置展开成 36 个 O（全胞 48 位点，
+        # 应 30），相对强度全错（P2-9）。x=0.30624 与 pymatgen
+        # XRDCalculator 逐峰对拍 ≤4%（文献值 Maslen et al. 1993）。
+        {"label": "Al1", "element": "Al", "x": 0.0000, "y": 0.0000, "z": 0.35216, "occupancy": 1.0},
+        {"label": "O1", "element": "O", "x": 0.30624, "y": 0.0000, "z": 0.2500, "occupancy": 1.0},
     ],
     "cif": """data_Corundum
 _cell_length_a 4.752
@@ -315,8 +319,8 @@ _atom_site_fract_x
 _atom_site_fract_y
 _atom_site_fract_z
 _atom_site_occupancy
-Al1 Al 0.0000 0.0000 0.3521 1.00
-O1 O 0.2604 0.0144 0.2425 1.00
+Al1 Al 0.0000 0.0000 0.35216 1.00
+O1 O 0.30624 0.0000 0.2500 1.00
 """
 })
 
@@ -330,9 +334,14 @@ _register("CaCO3", {
     "lattice": {"a": 4.989, "b": 4.989, "c": 17.068,
                 "alpha": 90.0, "beta": 90.0, "gamma": 120.0},
     "atomic_sites": [
-        {"label": "Ca1", "element": "Ca", "x": 0.0000, "y": 0.0000, "z": 0.2500, "occupancy": 1.0},
-        {"label": "C1", "element": "C", "x": 0.0000, "y": 0.0000, "z": 0.0000, "occupancy": 1.0},
-        {"label": "O1", "element": "O", "x": 0.2388, "y": 0.0000, "z": 0.0000, "occupancy": 1.0},
+        # R-3c：Ca 在 6b (0,0,0)、C 在 6a (0,0,1/4)、O 在 18e (x,0,1/4)。
+        # CO3^2- 是**平面基团**：C 与 O 必须同层（z 都是 1/4）—— 旧条目把 C
+        # 放 0、O 放 (0.2388,0,0)，展开成 36 个 O（全胞 48 位点，应 30），
+        # 012 (2θ≈23.0°) 从 ~18% 飙到 86%，多相定量全错（P2-9）。
+        # x=0.2578 与 pymatgen XRDCalculator 逐峰对拍 ≤4%。
+        {"label": "Ca1", "element": "Ca", "x": 0.0000, "y": 0.0000, "z": 0.0000, "occupancy": 1.0},
+        {"label": "C1", "element": "C", "x": 0.0000, "y": 0.0000, "z": 0.2500, "occupancy": 1.0},
+        {"label": "O1", "element": "O", "x": 0.2578, "y": 0.0000, "z": 0.2500, "occupancy": 1.0},
     ],
     "cif": """data_Calcite
 _cell_length_a 4.989
@@ -389,9 +398,9 @@ _atom_site_fract_x
 _atom_site_fract_y
 _atom_site_fract_z
 _atom_site_occupancy
-Ca1 Ca 0.0000 0.0000 0.2500 1.00
-C1 C 0.0000 0.0000 0.0000 1.00
-O1 O 0.2388 0.0000 0.0000 1.00
+Ca1 Ca 0.0000 0.0000 0.0000 1.00
+C1 C 0.0000 0.0000 0.2500 1.00
+O1 O 0.2578 0.0000 0.2500 1.00
 """
 })
 
