@@ -98,6 +98,7 @@ class PhaseBlock:
     size_nm: float = 0.0
     strain: float = 0.0
     po_r: float = 1.0
+    b_overall: float = 0.0
     scale: float = 1.0
     table: Optional[ReflectionTable] = None
     _table_key: tuple = field(default=(), repr=False)
@@ -258,6 +259,11 @@ class PatternProblem:
             "po": 4,
             "sample": 5,
             "atom": 6,
+            # 整体温度因子 B（逐相）：**放 stage 3 而不是 5**。它与宽度参数
+            # 不同域（强度 vs 峰宽），不共线；放 stage 5 会让 fast 档（只有
+            # 2、3 两个阶段）永远碰不到它 —— 而真实试样的 0.7 pp 收益正是
+            # 在默认档上量的（基准报告 §十二 实验 5）。
+            "bovr": 3,
         }
         if stages:
             st.update(stages)
@@ -324,6 +330,12 @@ class PatternProblem:
             ps.add(Parameter(f"{p}.po.r", float(ph.po_r), 0.05, 20.0,
                              stage=st["po"], fixed=ph.po_hkl is None,
                              label=f"{ph.label} 择优 r"))
+            # 整体温度因子 B（每相）：|F|²·exp(−2B s²)，只依赖各反射自身 d，
+            # 因此不需要重算结构因子。与原子级 biso（stage 6）的区别是它把
+            # 所有位点一起压 —— 缺它会系统性高估高角强度（builtin W22-a 同口径，
+            # 默认 0 = 无修正，上界 15 Å² 防跑飞）。
+            ps.add(Parameter(f"{p}.bovr", float(ph.b_overall), 0.0, 15.0,
+                             stage=st["bovr"], label=f"{ph.label} 整体 B (Å²)"))
 
             if with_atoms:
                 # 只对**独立位点**（非对称单元）放坐标自由度：全胞展开后同一
@@ -411,6 +423,7 @@ class PatternProblem:
             ph.size_nm = float(g(f"{p}.size", ph.size_nm) or 0.0)
             ph.strain = float(g(f"{p}.strain", ph.strain) or 0.0)
             ph.po_r = float(g(f"{p}.po.r", ph.po_r) or 1.0)
+            ph.b_overall = float(g(f"{p}.bovr", ph.b_overall) or 0.0)
             ph.scale = float(g(f"{p}.scale", ph.scale) or 0.0)
 
     def _sites_from_params(self, ph: PhaseBlock) -> List[AtomSite]:
@@ -469,7 +482,8 @@ class PatternProblem:
         for ph in self.phases:
             ph.ensure_table((tmin, tmax), (self.wavelength,))
             specs.append(PhaseSpec(table=ph.table, size_nm=ph.size_nm,
-                                   strain=ph.strain, po_r=ph.po_r))
+                                   strain=ph.strain, po_r=ph.po_r,
+                                   b_overall=ph.b_overall))
         self._basis = design_matrix(
             self.two_theta, specs, self.profile,
             wavelength=self.wavelength, kalph2=self.kalph2,
@@ -483,7 +497,8 @@ class PatternProblem:
         prof = (self.profile.u, self.profile.v, self.profile.w, self.profile.x,
                 self.profile.y, self.profile.z, self.profile.eta,
                 self.profile.asymmetry)
-        sample = tuple((ph.size_nm, ph.strain, ph.po_r) for ph in self.phases)
+        sample = tuple((ph.size_nm, ph.strain, ph.po_r, ph.b_overall)
+                       for ph in self.phases)
         return cells + prof + sample + (self.shift, self.disp)
 
     def invalidate(self) -> None:

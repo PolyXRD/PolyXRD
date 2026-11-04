@@ -558,6 +558,72 @@ class TestDisp:
         assert np.max(np.abs(yc1 - yc0)) > 1e-6 * max(yc0.max(), 1.0)
 
 
+class TestOverallB:
+    """每相整体温度因子 B（v5.1，与 builtin W22-a 同口径）。
+
+    ``|F|² → |F|²·exp(−2B s²)``，``s = sinθ/λ = 1/(2d)`` → 峰强乘
+    ``exp(−B/(2d²))``：只依赖各反射自身 d，不需要重算结构因子，是结构
+    自由度里最便宜的一项。缺它系统性高估高角强度。
+    """
+
+    GRID = np.linspace(15.0, 75.0, 2001)
+    B_TRUE = 1.2
+
+    def _problem(self):
+        tab = build_reflections(_lfp(), two_theta_range=(14.0, 76.0))
+        prof = ProfileParams(**TRUE_PROFILE)
+        basis = design_matrix(
+            self.GRID, [PhaseSpec(tab, b_overall=self.B_TRUE)], prof,
+            cutoff_fwhm=CUT)
+        y = basis @ np.array([SCALE_TRUE])
+        prob = PatternProblem(
+            self.GRID, y, [PhaseBlock("LFP", _lfp())],
+            profile=prof, bg=BackgroundParams("none"),
+            weights=1.0 / np.maximum(y, 1.0), cutoff_fwhm=CUT,
+        )
+        # 只考察 B：与它无关的阶段全部推到 9，stage 3 里只剩 bovr
+        prob.params = prob.build_parameters(
+            stages={"cell": 9, "zero": 9, "profile": 9, "asym": 9})
+        prob.apply()
+        prob.invalidate()
+        return prob
+
+    def test_b_zero_is_noop(self):
+        tab = build_reflections(_lfp(), two_theta_range=(14.0, 76.0))
+        c0, i0, _ = reflection_centers_and_intensities(tab)
+        c1, i1, _ = reflection_centers_and_intensities(tab, b_overall=0.0)
+        assert np.array_equal(c0, c1) and np.array_equal(i0, i1)
+
+    def test_b_damps_high_angle_more_than_low(self):
+        """物理方向守卫：B>0 压高角强于低角（B<0 的方向绝不能反过来）。"""
+        tab = build_reflections(_lfp(), two_theta_range=(14.0, 76.0))
+        _c, i0, _ = reflection_centers_and_intensities(tab)
+        _c, i1, _ = reflection_centers_and_intensities(tab, b_overall=1.0)
+        ratio = i1 / np.maximum(i0, 1e-30)
+        low = ratio[tab.two_theta < 30.0].mean()
+        high = ratio[tab.two_theta > 50.0].mean()
+        assert high < low < 1.0
+
+    def test_b_recovered(self):
+        prob = self._problem()
+        summary = prob.fit(stages=(3,), max_iter_per_stage=80)
+        got = float(prob.params.get("phase0.bovr"))
+        assert abs(got - self.B_TRUE) < 0.05, f"B 回收 {got:.4f}"
+        assert summary.metrics["Rwp"] < 0.5
+
+    def test_design_cache_key_covers_b(self):
+        """B 改了设计矩阵必须跟着改（否则又是"吃旧基"的快照坑）。"""
+        prob = self._problem()
+        prob.residual(None)
+        yc0 = prob.calc_pattern().copy()
+        k0 = prob._make_design_key()
+        prob.params.set("phase0.bovr", 2.0)
+        prob.apply()
+        assert prob._make_design_key() != k0
+        yc1 = prob.calc_pattern()
+        assert np.max(np.abs(yc1 - yc0)) > 1e-6 * max(yc0.max(), 1.0)
+
+
 class TestKa2Detect:
     """Kα2 存在性判别 + λ2 波长比守卫（基准报告 §十二 12.2-3 / 12.4）。
 
@@ -566,10 +632,10 @@ class TestKa2Detect:
     镜像位对称性：真伴峰在解析 Δ2θ 处且镜像位没有等高强度。
     """
 
-    MAINS = [(21.4, 100.0), (30.4, 70.0), (37.4, 50.0), (43.4, 60.0),
+    MAINS = ((21.4, 100.0), (30.4, 70.0), (37.4, 50.0), (43.4, 60.0),
              (48.1, 30.0), (53.3, 40.0), (58.6, 25.0), (62.5, 35.0),
              (69.4, 30.0), (77.5, 20.0), (88.5, 25.0), (100.5, 15.0),
-             (110.0, 10.0)]
+             (110.0, 10.0))
 
     @staticmethod
     def _pv(d, amp, eta):

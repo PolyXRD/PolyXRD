@@ -302,7 +302,7 @@ class TestTieTracking:
         def _rank(prob: PatternProblem) -> tuple:
             # 只留胞参 + 峰形/零位之外的东西全部定住，专注于"胞参是否退化"
             for pref in ("phase0.atom", "phase0.size", "phase0.strain",
-                         "phase0.po", "inst."):
+                         "phase0.po", "phase0.bovr", "inst."):
                 prob.params.fix_prefix(pref, True)
             x0 = prob.params.to_vector()
             r0 = prob.residual(x0)

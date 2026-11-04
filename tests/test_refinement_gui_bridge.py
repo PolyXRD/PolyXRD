@@ -350,3 +350,30 @@ class TestKa2AutoDetection:
         fp = res.fit_params
         assert fp["ka2_auto"] is False
         assert fp["model_ka2"] is True
+
+
+class TestOverallBService:
+    """每相整体 B 的服务层口径：**默认冻结**（opt-in），不为 Rwp 牺牲定量。
+
+    依据（基准报告 §十四）：2-1 上 B 开使 Rwp 14.20→13.13 但定量从
+    50.48/49.52 偏到 46.98/53.02（真值 50/50），B 在吸收结构误差。
+    """
+
+    def test_frozen_by_default(self):
+        data, _truth, *_ = _synthetic()
+        res = RietveldRefiner().refine(
+            data, [_phase(_CAF2), _phase(_NACL)],
+            engine="refinement", max_cycles=5)
+        fp = res.fit_params
+        assert fp["refine_b_overall"] is False
+        assert fp["b_overall"] == [0.0, 0.0]
+
+    def test_opt_in_reports_per_phase_b(self):
+        data, _truth, *_ = _synthetic()
+        res = RietveldRefiner().refine(
+            data, [_phase(_CAF2), _phase(_NACL)],
+            engine="refinement", max_cycles=5, refine_b_overall=True)
+        fp = res.fit_params
+        assert fp["refine_b_overall"] is True
+        assert len(fp["b_overall"]) == 2
+        assert max(fp["b_overall"]) > 0.0       # 参数真的进了非线性向量

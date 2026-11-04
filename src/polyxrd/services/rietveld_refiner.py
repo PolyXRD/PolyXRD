@@ -1242,6 +1242,17 @@ class RietveldRefiner:
             and mask.get("displacement", True)
         if not _disp_on:
             frozen += ["inst.disp"]
+        # 每相整体温度因子 B（v5.1，模型与 builtin 的 W22-a 同口径）：**默认冻结**
+        # （opt-in ``refine_b_overall=True``）。它只压强度不改峰宽，物理上该有，
+        # 实测 Rwp 也确实降（3-1 9.93→9.47、2-1 14.20→13.13），但 2-1 的定量
+        # 被它从 50.48/49.52 拉到 46.98/53.02（真值 50/50）—— B 吸收了结构误差
+        # （CaCO3 拿到 1.33 Å²、上界收到 1.0 会撞界并把定量留在 47.86/52.14，
+        # 说明是系统性强度失配而非真温度因子），把质量分数带偏 3 pp。**不为 Rwp
+        # 牺牲定量**：默认钉住，结构/择优取向欠账清完再放开（基准报告 §十四）。
+        _bovr_on = bool(kwargs.get("refine_b_overall", False)) \
+            and mask.get("b_overall", True)
+        if not _bovr_on:
+            frozen += [f"phase{i}.bovr" for i in range(len(prob.phases))]
         for name in frozen:
             if name in prob.params:
                 prob.params.fix(name, True)
@@ -1387,6 +1398,9 @@ class RietveldRefiner:
                 # GUI 状态条 / 报告要分开展示 —— 两者混在一起会互相掩盖。
                 "inst_zero": float(summary.params.get("inst.zero", 0.0) or 0.0),
                 "inst_disp": float(summary.params.get("inst.disp", 0.0) or 0.0),
+                "refine_b_overall": bool(_bovr_on),
+                "b_overall": [float(prob.params.get(f"phase{i}.bovr", 0.0) or 0.0)
+                              for i in range(len(prob.phases))],
                 "param_mask": mask,
                 "v5_frozen_params": frozen,
                 "v5_tier": "fast" if _tier == "fast" else "precise",

@@ -57,12 +57,15 @@ class PhaseSpec:
     :param size_nm: 该相相干域尺寸（nm），0 = 不限
     :param strain: 该相微观应变 ε，0 = 无
     :param po_r: March–Dollase ``r``，1 = 无择优（走零开销分支）
+    :param b_overall: 该相整体温度因子 B（Å²），0 = 无修正。``|F|² ∝
+        exp(−2B·s²)``，``s = sinθ/λ = 1/(2d)`` → 峰强乘 ``exp(−B/(2d²))``
     """
 
     table: ReflectionTable
     size_nm: float = 0.0
     strain: float = 0.0
     po_r: float = 1.0
+    b_overall: float = 0.0
 
     @property
     def n_reflections(self) -> int:
@@ -94,11 +97,13 @@ def reflection_centers_and_intensities(
     *,
     shift: float = 0.0,
     disp: float = 0.0,
+    b_overall: float = 0.0,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """把反射表展开成 ``(centers, intensities, is_ka2)``。
 
-    ``intensities`` 已按 Kα1/Kα2 权重（``w1+w2=1``）与 March–Dollase 重加权，
-    **面积守恒**。``po_r=1`` 时走 ``reweight_po`` 的零开销分支。
+    ``intensities`` 已按 Kα1/Kα2 权重（``w1+w2=1``）、March–Dollase 与整体
+    温度因子重加权，**面积守恒**。``po_r=1`` 与 ``b_overall=0`` 时都走零开销
+    分支。
 
     :param shift: 整体 2θ 平移（度），用于仪器零位 ``inst.zero``。先平移再拆
         Kα2 —— 零位误差是**仪器**偏移，对 Kα1/Kα2 两条线同等生效。
@@ -106,6 +111,10 @@ def reflection_centers_and_intensities(
         高度偏差 h 给 ``Δ2θ = (2h/R)·cosθ``——与零位的区别在于它随角度衰减，
         只补零位补不掉的那部分（实测表现为"零位已修、a 仍系统性偏"）。
         同样先于 Kα2 拆分生效。
+    :param b_overall: 整体温度因子 B（Å²）。``|F|² → |F|²·exp(−2B s²)``，
+        ``s = sinθ/λ = 1/(2d)``，故峰强乘 ``exp(−B/(2d²))``。与原子位点
+        ``b_iso`` 的区别：这是一个**逐相**的全局量（每个反射只依赖自身 d），
+        不需要重算结构因子 —— 结构自由度里最便宜的一项。
     """
     tt = np.asarray(table.two_theta, dtype=float)
     if shift:
@@ -115,6 +124,10 @@ def reflection_centers_and_intensities(
         # cos(θ+δ) 与 cosθ 的差是 δ·sinθ 的高阶小量，远低于峰位有效精度。
         tt = tt + float(disp) * np.cos(np.radians(tt) / 2.0)
     inten = np.asarray(table.reweight_po(po_r), dtype=float)
+    if b_overall:
+        # s = sinθ/λ = 1/(2d) → 2B s² = B/(2d²)
+        d = np.maximum(np.asarray(table.d, dtype=float), 1e-6)
+        inten = inten * np.exp(-float(b_overall) / (2.0 * d * d))
     if kalph2 is None or not kalph2.separation:
         return tt, inten, np.zeros(tt.shape, dtype=bool)
     w1, w2 = kalph2.component_weights()
@@ -240,7 +253,8 @@ def phase_pattern(
         return (np.zeros(0), None) if return_detail else np.zeros(0)
 
     centers, areas, is2 = reflection_centers_and_intensities(
-        spec.table, kalph2, spec.po_r, shift=shift, disp=disp)
+        spec.table, kalph2, spec.po_r, shift=shift, disp=disp,
+        b_overall=spec.b_overall)
 
     # 样品层（尺寸/应变）叠加到仪器层之上
     p_eff = profile.with_samples(size_nm=spec.size_nm, strain=spec.strain)
