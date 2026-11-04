@@ -927,13 +927,19 @@ class PolyDatabase:
                 break
             try:
                 r = conn.execute(
-                    "SELECT formula, space_group, mineral, n_peaks FROM entries WHERE eid=?",
+                    "SELECT formula, space_group, sg_number, mineral, n_peaks "
+                    "FROM entries WHERE eid=?",
                     (rec["cod_id"],)).fetchone()
             except sqlite3.Error:
                 break
             if r:
                 rec["formula"] = r["formula"] or ""
                 rec["space_group"] = r["space_group"] or ""
+                # v5.1: 国际表编号。同物相的替代设置（P n m a / P b n m、
+                # C m c m / B b m m / A m a m）共享同一编号，而空间群**字符串**
+                # 写法各异 —— 折叠去重必须用编号，否则同一物相的不同设置会被
+                # 当成不同相、白占 top-N 名额（`_cod_comp_key` 优先用这个）。
+                rec["sg_number"] = int(r["sg_number"] or 0)
                 rec["mineral_name"] = r["mineral"] or ""
                 rec["n_peaks"] = int(r["n_peaks"] or 0)
         return out[:limit]

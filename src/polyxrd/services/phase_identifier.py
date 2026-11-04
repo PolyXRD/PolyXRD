@@ -266,24 +266,136 @@ def cod_rank_score(item: tuple[dict, PhaseMatchResult]) -> float:
 # 名次, 去重后只会前移或不变, 永不会把已在 top-N 的真物相挤出。
 _COD_COLLAPSE_CANDIDATES = True
 
+# v5.1 (B 方向): 同键折叠时优先"位点元素齐全"的条目。
+# COD 的氢氧化物/含水矿物条目常只列重原子：formula 写 Al H3 O3，原子环里只有
+# Al/O。H 对 X 射线散射极弱（≈1 个电子），峰位与相对强度几乎不变，所以缺氢
+# 条目在检索阶段与含氢条目打分并列；一旦被选中进 Rietveld，该相基面强线被
+# 算低、定量系统性偏低（7-1 实测 Gibbsite 43.16 vs 真值 54.90，换含氢条目后
+# 45.46）。这里在折叠阶段把代表换成含氢的那条 —— 只换内容、不动位置，所以
+# 对 top-N 的相集合零影响（严格保持下面的"非回退"保证）。
+_COD_PREFER_COMPLETE_SITES = True
+# 换代表时的分数护栏：齐全条目的 cod_rank_score 不得低于最优代表的这个比例。
+# 同键 = 同成分 + 同空间群，峰位几乎一样，实测分数差通常 <1%；留 5% 足够宽松，
+# 同时挡住"峰表明显更差"的条目。
+_COMPLETE_SITE_SCORE_FLOOR = 0.95
 
-def _cod_comp_key(formula: str, space_group: str = "") -> tuple:
+_ELEMENT_SYMBOL_RE = re.compile(r"^([A-Z][a-z]?)")
+
+
+def _cod_comp_key(formula: str, space_group: str = "",
+                  sg_number: int = 0) -> tuple:
+    """折叠去重键 = (名义元素集合, 空间群)。
+
+    空间群优先用国际表编号：同一物相的替代设置（``P n m a`` / ``P b n m``、
+    ``C m c m`` / ``B b m m`` / ``A m a m``）共享编号，而字符串写法各异；
+    只按字符串比会把同相拆成多个键（7-1 实测：Goethite 的 Pnma 与 Pbnm 两条
+    同键不了，Boehmite 的三种设置同样），白占 top-N 名额。编号缺失时
+    回退到归一化字符串。
+    """
     els = elements_from_db_formula(formula or "", space_group=space_group or "")
-    return (frozenset(els) if els else frozenset(("__EMPTY__",)),
-            re.sub(r"\s", "", (space_group or "").lower()))
+    els_key = frozenset(els) if els else frozenset(("__EMPTY__",))
+    try:
+        n = int(sg_number or 0)
+    except (TypeError, ValueError):
+        n = 0
+    sg_key = f"#{n}" if n > 0 else re.sub(r"\s", "", (space_group or "").lower())
+    return (els_key, sg_key)
+
+
+def _site_element_symbols(phase: Phase) -> set[str]:
+    """位点里实际出现的元素符号（``"H1"`` / ``"Fe0.86"`` → ``"H"`` / ``"Fe"``）。"""
+    from polyxrd.services.phase_cif import _site_element
+
+    out: set[str] = set()
+    for s in getattr(phase, "atomic_sites", None) or []:
+        if not isinstance(s, dict):
+            continue
+        m = _ELEMENT_SYMBOL_RE.match(str(_site_element(s) or "").strip())
+        if m:
+            out.add(m.group(1))
+    return out
+
+
+def _missing_site_elements(phase: Phase) -> set[str]:
+    """名义元素里有、实际位点里一个都没有的元素。
+
+    COD 的氢氧化物/含水矿物条目常只列重原子（formula 写 ``Al H3 O3``，
+    原子环里只有 Al/O）。H 对 X 射线散射贡献 ≈1 个电子，峰位与相对强度
+    几乎不受影响，所以这种"缺氢条目"在检索阶段与含氢条目打分并列，常被
+    选中；进 Rietveld 后该相基面强线被算低、定量系统性偏低。
+
+    位点未解析（空）时返回空集：不能把"读不到位点"当成"缺元素"，否则
+    只有晶胞、没有位点的条目会被无差别降级。
+    """
+    nominal = {str(e).strip()
+               for e in (getattr(phase, "elements", None) or set())
+               if str(e).strip()}
+    if not nominal:
+        return set()
+    actual = _site_element_symbols(phase)
+    if not actual:
+        return set()
+    return nominal - actual
 
 
 def _collapse_distinct(results: list, max_per_phase: int = 1) -> list:
-    seen: dict[tuple, int] = {}
-    out: list = []
-    for item in results:  # 已按 cod_rank_score 降序
+    """同键候选折叠，每键保留 ``max_per_phase`` 条代表。
+
+    v5.1: 同键组内若有"位点元素齐全"的条目、且分数不低于最优代表的
+    ``_COMPLETE_SITE_SCORE_FLOOR``，优先用它当代表。**输出位置与顺序完全
+    不变**（只换该位置的条目内容），所以对 top-N 的相集合零影响，严格保持
+    "去重对真值召回非回退"的既有保证。
+    """
+    if not _COD_PREFER_COMPLETE_SITES or max_per_phase != 1:
+        seen: dict[tuple, int] = {}
+        out: list = []
+        for item in results:  # 已按 cod_rank_score 降序
+            c, _ = item
+            key = _cod_comp_key(c.get("formula", ""), c.get("space_group", ""),
+                                c.get("sg_number", 0))
+            n = seen.get(key, 0)
+            if n >= max_per_phase:
+                continue
+            seen[key] = n + 1
+            out.append(item)
+        return out
+
+    # 1) 按 key 分组（组内保持原排序 = 分数降序）
+    groups: dict[tuple, list] = {}
+    for item in results:
         c, _ = item
-        key = _cod_comp_key(c.get("formula", ""), c.get("space_group", ""))
+        key = _cod_comp_key(c.get("formula", ""), c.get("space_group", ""),
+                            c.get("sg_number", 0))
+        groups.setdefault(key, []).append(item)
+
+    # 2) 每组挑代表：最优代表已齐全就不动；缺元素则找组内"齐全且分数够"的
+    rep: dict[tuple, object] = {}
+    for key, group in groups.items():
+        best = group[0]
+        rep[key] = best
+        if not _missing_site_elements(best[1].phase):
+            continue
+        floor = cod_rank_score(best) * _COMPLETE_SITE_SCORE_FLOOR
+        for cand in group[1:]:
+            if _missing_site_elements(cand[1].phase):
+                continue
+            # 组内降序：这是分数最高的齐全条目，够门槛就换，不够则后面更不够
+            if cod_rank_score(cand) >= floor:
+                rep[key] = cand
+            break
+
+    # 3) 按原顺序输出（位置不变，只把该键的条目换成代表）
+    seen = {}
+    out = []
+    for item in results:
+        c, _ = item
+        key = _cod_comp_key(c.get("formula", ""), c.get("space_group", ""),
+                            c.get("sg_number", 0))
         n = seen.get(key, 0)
         if n >= max_per_phase:
             continue
         seen[key] = n + 1
-        out.append(item)
+        out.append(rep[key])
     return out
 
 
