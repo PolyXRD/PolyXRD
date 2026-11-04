@@ -495,9 +495,32 @@ class RietveldRefiner:
                 }
             req["phases"].append(entry)
 
-        timeout = float(kwargs.get("gsas2_timeout", 300.0))
+        # v5.2 (P1-9③): 样品位移 / 择优取向入口 —— 桥此前没传这两样，
+        # 4-1 四相 31.64%（缺 Brucite 001 择优）、5-2 强织构云母相都被拖死。
+        # PO 与 RefineOptions.preferred_orientation 同源（M14 前处理已写成
+        # _po_direction/_po_r，v5 引擎吃的就是它）；位移暂无 GUI 字段，
+        # 只留 kwargs（gsas2_sample_displace，µm，Bragg-Brentano DisplaceX）。
+        _po_d = kwargs.get("_po_direction")
+        _po_r = kwargs.get("_po_r")
+        if _po_d and abs(float(_po_r) - 1.0) > 1e-9:
+            req["pref_ori"] = {"hkl": [int(v) for v in tuple(_po_d)],
+                               "r": float(_po_r)}
+        _disp = kwargs.get("gsas2_sample_displace")
+        if isinstance(_disp, (int, float)) and float(_disp) != 0.0:
+            req["sample_displace"] = float(_disp)
+
+        # v5.2 (P1-9①): 300 s 对 ≥5 相 / 大胞（Muscovite 96 位点）必超时 ——
+        # 5-1/5-2 实测 timed out → 整条回退 builtin。未显式给 gsas2_timeout
+        # 时按相数自适应 max(300, 120·n)；显式给 ≤0 = 不限时（timeout=None）。
+        _to_raw = kwargs.get("gsas2_timeout")
+        if _to_raw is None:
+            timeout = max(300.0, 120.0 * len(phases))
+        else:
+            _to = float(_to_raw)
+            timeout = None if _to <= 0 else _to
         log(f"[gsas2] subprocess bridge start: python={py} "
-            f"timeout={timeout:.0f}s phases={len(phases)}")
+            f"timeout={'none' if timeout is None else f'{timeout:.0f}s'} "
+            f"phases={len(phases)}")
         try:
             with tempfile.TemporaryDirectory(prefix="polyxrd_g2_") as td:
                 req_path = str(Path(td) / "request.json")
@@ -657,6 +680,12 @@ class RietveldRefiner:
                 "gsas2_python": str(py),
                 "gpx": out.get("gpx", ""),
                 "wR": wR,
+                # v5.2 (P1-9④): 桥回传的观测点/参数数 —— 诊断侧判断 GOF
+                # 可解读性的原始依据（此前恒缺，GOF 列整列 0）。
+                "gsas2_nobs": int(out.get("Nobs") or 0),
+                "gsas2_nvar": int(out.get("Nvar") or 0),
+                "gsas2_pref_ori": bool(req.get("pref_ori")),
+                "gsas2_sample_displace": req.get("sample_displace"),
                 # v0.11.0: 定量阶段结果 (全相有 CIF 时才有)
                 "wR_rietveld": out.get("wR_rietveld"),
                 "quantified": bool(

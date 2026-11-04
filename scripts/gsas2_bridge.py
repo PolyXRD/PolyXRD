@@ -285,6 +285,19 @@ def _build_project(req: dict, xy_path: str, iparm_path: str,
             histograms=[hist],
         )
         del phase
+
+    # ── v5.2 (P1-9③): 样品位移 / 择优取向入口 ──
+    # 服务层从 RefineOptions/kwargs 透传过来; 桥侧应用失败只降级、不致命
+    # (这些是"锦上添花"的物理量, 不该让整条精修回退 builtin)。
+    try:
+        _apply_sample_displace(hist, req)
+    except Exception as e:  # noqa: BLE001
+        print(f"[bridge] sample displace skipped: {e}", file=sys.stderr)
+    try:
+        _apply_pref_ori(gpx, req)
+    except Exception as e:  # noqa: BLE001
+        print(f"[bridge] pref ori skipped: {e}", file=sys.stderr)
+
     gpx.set_refinement({"set": {"LeBail": True}}, histogram="all", phase="all")
     ctrl = gpx.data["Controls"]["data"]
     ctrl["newLeBail"] = True
@@ -296,6 +309,51 @@ def _build_project(req: dict, xy_path: str, iparm_path: str,
 
 _CELL_BKG = {"LeBail": True, "Cell": True,
              "Background": {"no. coeffs": 6, "refine": True}}
+
+
+def _apply_sample_displace(hist, req: dict) -> None:
+    """v5.2 (P1-9③): req["sample_displace"] → Bragg-Brentano 样品位移。
+
+    GSAS-II 的 ``Sample Parameters['DisplaceX']`` 是 [值(µm), 精修标志]；
+    给了初值即打开精修标志，让 LSQ 自己找准确的位移量。
+    未给 / 键不存在 / 结构不符时静默跳过（不许影响主流程）。
+    """
+    disp = req.get("sample_displace")
+    if not isinstance(disp, (int, float)) or not np.isfinite(disp):
+        return
+    sp = hist.data.get("Sample Parameters") or {}
+    dx = sp.get("DisplaceX")
+    if not (isinstance(dx, list) and len(dx) >= 2):
+        return
+    dx[0] = float(disp)
+    dx[1] = True
+
+
+def _apply_pref_ori(gpx, req: dict) -> None:
+    """v5.2 (P1-9③): req["pref_ori"] = {"hkl": [h,k,l], "r": float} → March-Dollase。
+
+    HAP 的 ``Pref.Ori.`` 结构（GSASIIstrIO 口径，MD 模式）:
+      [0]='MD', [1]=MD 系数 r 本身, [2]=精修标志, [3]=MDAxis (hkl)。
+    与 RefineOptions.preferred_orientation 的"全局一个方向"对齐 ——
+    应用于工程内**所有相**（v5 引擎的 _po_direction 也是全相同语义）。
+    r=1（无择优）时不设置。
+    """
+    po = req.get("pref_ori")
+    if not isinstance(po, dict):
+        return
+    r = float(po.get("r", 1.0))
+    if not np.isfinite(r) or abs(r - 1.0) < 1e-9:
+        return
+    hkl = [int(v) for v in po.get("hkl", (0, 0, 1))]
+    for ph in gpx.phases():
+        for hname, hap in (ph.data.get("Histograms") or {}).items():
+            p = hap.get("Pref.Ori.")
+            if not (isinstance(p, list) and len(p) >= 4):
+                continue
+            p[0] = "MD"
+            p[1] = r
+            p[2] = True   # 打开精修: 起点给对方向, r 让 LSQ 自己找
+            p[3] = hkl
 
 #: Rietveld 定量阶段的 set 字典 —— **必须显式 LeBail=False**。
 #: ``do_refinements`` 的 ``set`` 会重新打开 Le Bail, 把上面
@@ -386,6 +444,10 @@ def _final_refine(req, xy_path, iparm_path, iparm_lines, scale):
         wR = gpx.histogram(0).get_wR()
     except Exception:
         wR = None
+    # v5.2 (P1-9④): Rvals 里的 GOF/Nobs/Nvar 一并回传 —— 此前 main() 硬编码
+    # "GOF": None, 诊断表整列恒 0, 不能当"GOF 更好"的判据。位置兼容两代:
+    # Controls['Rvals'] 与 Controls['data']['Rvals']。
+    rvals = _read_rvals(gpx)
 
     # ── v0.11.0 定量阶段: 全相有 CIF 结构时关 LeBail, 用 |F|² 精修相分数 ──
     # Le Bail 模式下相分数无语义 (强度是自由变量); 只有回到真 Rietveld
@@ -532,7 +594,34 @@ def _final_refine(req, xy_path, iparm_path, iparm_lines, scale):
         ycalc = None
     return {"phases": out_phases, "wR": wR, "rounds": rounds, "gpx": gpx_path,
             "phase_fractions": phase_fractions, "wR_rietveld": wR_rietveld,
-            "ycalc": ycalc}
+            "ycalc": ycalc,
+            "GOF": (float(rvals["GOF"]) if rvals.get("GOF") is not None else None),
+            "Nobs": int(rvals.get("Nobs") or 0),
+            "Nvar": int(rvals.get("Nvar") or 0)}
+
+
+def _read_rvals(gpx) -> dict:
+    """v5.2 (P1-9④): 从工程树里取 Rvals（GOF/Nobs/Nvar）。
+
+    正确位置是 **Covariance 树**（``GSASIIstrMain`` 把 covData = {'Rvals':…}
+    存进 ``Covariance['data']``，2026-11-05 端到端实测 Controls 里没有）；
+    ``Controls['Rvals']`` / ``Controls['data']['Rvals']`` 是老版本候选，
+    一并兼容。任何失败返回 {} —— 指标缺失只降级，不影响晶胞/wR 主结果。
+    """
+    try:
+        c = gpx.data.get("Covariance") or {}
+        for cand in (c.get("data") or {},):
+            rv = cand.get("Rvals") if isinstance(cand, dict) else None
+            if isinstance(rv, dict) and rv.get("GOF") is not None:
+                return rv
+        c = gpx.data.get("Controls") or {}
+        for cand in (c.get("data") or {}, c):
+            rv = cand.get("Rvals") if isinstance(cand, dict) else None
+            if isinstance(rv, dict) and rv.get("GOF") is not None:
+                return rv
+    except Exception:  # noqa: BLE001
+        pass
+    return {}
 
 
 # ----------------------------------------------------------------------
@@ -663,7 +752,10 @@ def main() -> int:
     _write(out_path, {
         "ok": True,
         "wR": float(result["wR"]),
-        "GOF": None,
+        # v5.2 (P1-9④): 真实 GOF/Nobs/Nvar (此前硬编码 None, 诊断表整列恒 0)
+        "GOF": result.get("GOF"),
+        "Nobs": result.get("Nobs", 0),
+        "Nvar": result.get("Nvar", 0),
         "n_cycles": int(result["rounds"]),
         "phases": result["phases"],
         "phase_fractions": result.get("phase_fractions"),
