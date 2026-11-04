@@ -207,6 +207,7 @@ def audit(
     unidentified_snr: float = 6.0,
     unmatched_tol: float = 0.35,
     min_phase_fraction: float = 0.01,
+    scale_corr=None,
 ) -> List[Finding]:
     """跑完整诊断规则，返回按严重度排序的 ``Finding`` 列表。
 
@@ -216,6 +217,9 @@ def audit(
     :param kalph2_modeled: 前向模型里有没有 Kα2 双线
     :param po_freed / sample_freed: 择优取向 / 样品展宽是否已释放（决定能否
         把「低角差」归因到织构、「高角差」归因到峰宽）
+    :param scale_corr: 相标度相关系数矩阵（``linear.scale_correlations``）。
+        给了才判「两相份额不可分辨」—— 这条判据无法从 Rwp / 各自 σ 推出来：
+        两相此消彼长时 Rwp 与两个 σ 都可以很漂亮，份额却整体错位。
     """
     y = np.asarray(y_obs, dtype=float).reshape(-1)
     yc = np.asarray(y_calc, dtype=float).reshape(-1)
@@ -448,9 +452,40 @@ def audit(
                 {"mu_bar": float(getattr(quant, "mu_bar", 0.0)),
                  "tau_min": float(min(taus)), "tau_max": float(max(taus))}))
 
+    # ── 11. 两相份额是否根本不可分辨（v5.2, 5-3 定量重排的答案）──────
+    # Rwp 与各自 σ 都看不出来：两相标度高度负相关时，份额在它们之间互换而
+    # 总谱几乎不变。此时"wt% 精确到小数点后两位"是**表面精度**，物理上无意义。
+    # 只看 |ρ| 与两相含量（<1% 的相本来就是检出限问题，另有规则管）。
+    if scale_corr is not None and quant is not None and len(quant.labels) > 1:
+        corr = np.asarray(scale_corr, dtype=float)
+        n_lab = len(quant.labels)
+        if corr.shape == (n_lab, n_lab) and np.all(np.isfinite(corr)):
+            fracs = np.asarray(quant.fractions, dtype=float)
+            worst = None
+            for i in range(n_lab):
+                for j in range(i + 1, n_lab):
+                    if (fracs[i] < min_phase_fraction
+                            or fracs[j] < min_phase_fraction):
+                        continue
+                    rho = abs(float(corr[i, j]))
+                    if worst is None or rho > worst[0]:
+                        worst = (rho, i, j)
+            if worst is not None and worst[0] >= 0.95:
+                rho, i, j = worst
+                out.append(Finding(
+                    "SCALE_CORRELATED", "warn",
+                    f"{quant.labels[i]} 与 {quant.labels[j]} 的相标度相关系数 "
+                    f"|ρ|={rho:.2f}（>0.95）—— 两相份额可在彼此之间互换而总谱"
+                    f"几乎不变，这两个 wt% 只能当一个区间读，不是两个独立数",
+                    "要真正分开：延长扫描/换靶提高分辨率、加一条只属于其中一相"
+                    "的孤立强线、或先修好该相的择优取向与占位（模型越准，相关"
+                    "越低）；在此之前不要用这两个 wt% 比较版本优劣",
+                    {"rho": rho,
+                     "phase_a": str(quant.labels[i]),
+                     "phase_b": str(quant.labels[j])}))
+
     out.sort(key=lambda f: (SEVERITY_RANK.get(f.severity, 9), f.code))
     return out
-
 
 @dataclass
 class FitReport:
@@ -540,6 +575,28 @@ class FitReport:
         }
 
 
+def _scale_correlations(problem, summary):
+    """相标度相关矩阵；拿不到（无雅可比 / 维度不符）→ ``None``（不判）。
+
+    与 ``goal._scale_sigmas`` 同源（投影协方差），只是取的是非对角块。
+    任何一步失败都安静返回 ``None``：这是"加分项诊断"，不能因为矩阵奇异
+    就把整份报告打挂。
+    """
+    jac = getattr(getattr(summary, "result", None), "jac", None)
+    if jac is None or len(getattr(problem, "phases", ())) < 2:
+        return None
+    try:
+        from .linear import scale_correlations
+
+        basis, bgb = problem.design()
+        red = float(getattr(getattr(summary, "result", None), "reduced_chi2", 1.0)
+                    or 1.0)
+        return scale_correlations(jac, basis, problem.weights,
+                                  bg_basis=bgb, reduced_chi2=red)
+    except Exception:  # noqa: BLE001 - 诊断失败不能影响报告
+        return None
+
+
 def build_report(
     problem,
     summary=None,
@@ -595,7 +652,8 @@ def build_report(
         metrics=metrics, diagnostics=diag, quant=quant,
         calc_centers=calc_centers,
         kalph2_modeled=bool(kalph2_modeled),
-        po_freed=po_freed, sample_freed=sample_freed, atoms_freed=atoms_freed)
+        po_freed=po_freed, sample_freed=sample_freed, atoms_freed=atoms_freed,
+        scale_corr=_scale_correlations(problem, summary))
 
     return FitReport(
         metrics=metrics, findings=findings,

@@ -1457,7 +1457,14 @@ class RietveldRefiner:
                     # 显示成原始码名。
                     diagnostics.append({
                         "code": f"diag.refinement.{f.code.lower()}",
-                        "params": {k: float(v) for k, v in f.evidence.items()},
+                        # evidence 里不全是数：新增的 SCALE_CORRELATED 带相名
+                        # （字符串）。原来一律 float()，一个字符串就让**整组**
+                        # v5 诊断抛异常被吞掉（界面上一条都不显示，看着像没做
+                        # 诊断）。数值仍转 float，其余保留原文。
+                        "params": {
+                            k: (float(v) if isinstance(v, (int, float)) else str(v))
+                            for k, v in f.evidence.items()
+                        },
                     })
         except Exception as e:  # noqa: BLE001
             log(f"[v5] report skipped: {type(e).__name__}: {e}")

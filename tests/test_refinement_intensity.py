@@ -224,14 +224,21 @@ class TestApplyMicroabsorption:
 class TestMassAttenuationTable:
     """μ/ρ 元素表：矿物级文献锚点 + 三条最容易写错的物理。"""
 
-    #: 文献锚点（Cu Kα 的 μ/ρ，cm²/g）。这些值本身是文献/标准表取整，容差
-    #: 按 10% 定 —— 本测试抓的是"数量级错、量纲错、摩尔比当质量分数"这类
+    #: 矿物锚点（Cu Kα 的 μ/ρ，cm²/g），由 NIST 表（8.000 keV 列）按质量分数
+    #: 换算。容差 10%：本测试抓的是"数量级错、量纲错、摩尔比当质量分数"这类
     #: 会直接把微吸收修正带偏的错，不是小数点后第 3 位。
+    #:
+    #: ⚠️ 与早期教材表（Fe 325 / Mg 47.0）相比，含 Fe 的锚点低约 6%、含 Mg 的
+    #: 低约 14%（NIST 8 keV：Fe 306、Mg 40.6）。以 NIST 为准 —— 旧表那两处是
+    #: 抄录偏差，见 ``MASS_ATTENUATION_CU_KA`` 的 docstring。
     ANCHORS = {
-        "Al2O3": 31.8, "Fe2O3": 230.4, "SiO2": 35.0, "CaCO3": 75.6,
-        "Al2Si2O5(OH)4": 30.4, "ZnO": 49.3, "CaF2": 89.8,
-        "Mg3Si4O10(OH)2": 32.1, "NaAlSi3O8": 33.3, "CaAl2Si2O8": 52.3,
-        "KAlSi3O8": 48.9, "CaMgSi2O6": 57.7,
+        "Al2O3": 32.1, "Fe2O3": 217.5, "SiO2": 36.4, "CaCO3": 75.4,
+        "Al2Si2O5(OH)4": 31.1, "ZnO": 49.5, "CaF2": 96.6,
+        "Mg3Si4O10(OH)2": 32.8, "NaAlSi3O8": 34.3, "CaAl2Si2O8": 53.1,
+        "KAlSi3O8": 50.5, "CaMgSi2O6": 58.5,
+        # 重元素体系（v5.2 扩表后首次可算）
+        "ZrO2": 103.7, "BaSO4": 212.1, "La2O3": 302.7, "CeO2": 305.8,
+        "WO3": 137.2, "PbO2": 199.9, "TiO2": 125.7,
     }
 
     @pytest.mark.parametrize("formula,ref", sorted(ANCHORS.items()))
@@ -241,20 +248,24 @@ class TestMassAttenuationTable:
         assert got == pytest.approx(ref, rel=0.10)
 
     @pytest.mark.parametrize("formula,ref", [
-        ("Al2O3", 31.8), ("Fe2O3", 230.4), ("SiO2", 35.0), ("CaCO3", 75.6),
+        ("Al2O3", 32.1), ("ZnO", 49.5), ("CaCO3", 75.4), ("CaMgSi2O6", 58.5),
     ])
     def test_strong_anchors_within_2pct(self, formula, ref):
-        """四个最常用的锚点收紧到 2% —— 它们钉住了 Al/O/Fe/Si/Ca 五个元素。"""
+        """四个最常用的锚点收紧到 2% —— 钉住 Al/O/Zn/Ca/C/Mg/Si 七个元素。
+
+        故意**不含 Fe₂O₃**：新旧两套表在 Fe 上差 6%（325 vs 306），把它放进
+        2% 组会让"换表"和"算错加权"两种失败混在一起，分不清。
+        """
         assert mass_attenuation_from_formula(formula) == pytest.approx(ref, rel=0.02)
 
     def test_weighted_by_mass_fraction_not_mole_ratio(self):
-        """Al2O3 必须按**质量分数**加权（≈32），不是按摩尔比（≈26）。
+        """Al2O3 必须按**质量分数**加权（≈32.1），不是按摩尔比（≈27）。
 
-        按摩尔比算会得到 (2·50 + 3·11.5)/5 = 26.9；按质量分数是
-        0.529·50 + 0.471·11.5 = 31.9。差 15%，足以让 τ 与 μ̄ 都跑偏。
+        按摩尔比算会得到 (2·50.3 + 3·11.6)/5 = 27.1；按质量分数是
+        0.529·50.3 + 0.471·11.6 = 32.1。差 15%，足以让 τ 与 μ̄ 都跑偏。
         """
         got = mass_attenuation_from_formula("Al2O3")
-        assert got == pytest.approx(31.9, abs=0.5)
+        assert got == pytest.approx(32.1, abs=0.5)
         assert got > 28.0
 
     def test_k_edge_makes_ni_cu_zn_far_weaker_than_cr_co(self):
@@ -268,10 +279,41 @@ class TestMassAttenuationTable:
             assert t[el] < 0.4 * t["Co"], el
 
     def test_unknown_element_returns_none(self):
-        """未收录（Z>30）→ None，绝不猜。"""
-        assert mass_attenuation_from_formula("ZrO2") is None
-        assert mass_attenuation_from_formula("BaSO4") is None
+        """超出表的元素（Z>92）→ None，绝不猜。"""
+        assert mass_attenuation_from_formula("NpO2") is None
+        assert mass_attenuation_from_counts({"U": 1, "Np": 1}) is None
         assert mass_attenuation_from_counts({"Fe": 2, "Xx": 3}) is None
+
+    def test_heavy_elements_now_covered(self):
+        """v5.2 扩表：Zr / Ba / 稀土 / W / Pb 必须能算 —— 这是本次改动的目的。"""
+        for formula in ("ZrO2", "BaSO4", "La2O3", "WO3", "PbO2"):
+            assert mass_attenuation_from_formula(formula) is not None, formula
+
+    def test_l_edge_cliff_is_not_smoothed(self):
+        """L 吸收边断崖必须原样保留 —— 这是禁止"按 Z 外推"的实证。
+
+        NIST 8 keV：Gd 407 → Tb 313（丢掉 L2）→ Ho **127**（丢掉 L3）。
+        若有人"顺手"把这条曲线抹平（外推/插值补值），稀土的 μ 会错 2.5 倍，
+        而这个错会静默进到 wt% 里（τ 不参与拟合，Rwp 不会报警）。
+        """
+        t = MASS_ATTENUATION_CU_KA
+        assert t["Ho"] < 0.5 * t["Gd"]
+        assert t["Tb"] < 0.85 * t["Gd"]
+        # 边下（Er…Ta）缓慢爬升，单调不减
+        seq = ["Er", "Tm", "Yb", "Lu", "Hf", "Ta"]
+        vals = [t[s] for s in seq]
+        assert vals == sorted(vals)
+
+    def test_table_covers_h_through_u_without_gaps(self):
+        """覆盖 H…U（92 个元素）且全部为正 —— 少一个就会让整相自动推算失败。"""
+        from polyxrd.refinement.quantitative import ATOMIC_MASS
+
+        expected = list(ATOMIC_MASS)[:92]
+        assert len(expected) == 92
+        for el in expected:
+            assert el in MASS_ATTENUATION_CU_KA, el
+            assert MASS_ATTENUATION_CU_KA[el] > 0, el
+        assert len(MASS_ATTENUATION_CU_KA) == 92
 
     def test_empty_inputs(self):
         assert mass_attenuation_from_counts({}) is None
@@ -281,10 +323,10 @@ class TestMassAttenuationTable:
     def test_linear_mu_from_composition_matches_formula_route(self):
         """两条独立路径（位点计数 vs 化学式×密度）必须一致。
 
-        刚玉：全胞 Al12 O18、V=254.09 Å³；文献 ρ=3.99、μ/ρ=31.8 → μ≈127。
+        刚玉：全胞 Al12 O18、V=254.09 Å³；ρ=3.99、μ/ρ=32.1 → μ≈128。
         """
         mu = linear_mu_from_composition({"Al": 12, "O": 18}, 254.09)
-        assert mu == pytest.approx(127.0, rel=0.02)
+        assert mu == pytest.approx(128.3, rel=0.02)
         assert mu == pytest.approx(linear_mu_from_formula("Al2O3", 3.99), rel=0.02)
 
     def test_linear_mu_needs_positive_volume(self):
@@ -304,7 +346,7 @@ class TestMassAttenuationTable:
                   AtomSite("O", 0.25, 0.25, 0.25, 18.0, 0.5, "O")]
         mu_d = linear_mu_from_sites(as_dict, v)
         mu_o = linear_mu_from_sites(as_obj, v)
-        assert mu_d == pytest.approx(127.0, rel=0.02)
+        assert mu_d == pytest.approx(128.3, rel=0.02)
         assert mu_o == pytest.approx(mu_d, rel=1e-12)
 
     def test_linear_mu_from_sites_skips_zero_occupancy(self):
@@ -464,6 +506,88 @@ class TestMicroabsorptionWiring:
         assert sum(w1) == pytest.approx(1.0)
 
 
+class TestFractionSigmasWithMicroabsorption:
+    """误差棒必须含 τ 的传播 —— τ 依赖 W，W 依赖 S，是一条闭环。
+
+    待办清单里的原话是"``fraction_sigmas`` 未含 τ 传播，MA 开启时 σ 偏小
+    （量级 <10%）"。这里钉住三件事：
+      1. 不开 MA 时走原闭式路径（不许为了统一而改坏已验证的公式）；
+      2. 开 MA 时 σ 有限且与闭式同量级（不能因为数值差分炸掉）；
+      3. τ 的反馈**真的**进了导数（否则就是"接了但没接"）。
+    """
+
+    def test_without_ma_closed_form_unchanged(self):
+        """无 MA：σ 仍是 ∂W/∂S = (δ_pq·f_p − W_p·f_q)/T 的闭式解（T=Σ S·f）。"""
+        from polyxrd.refinement.goal import fraction_sigmas
+
+        prob, _ = _two_phase_problem()
+        q = prob.quantitative()
+        got = fraction_sigmas(q, [0.02, 0.02])
+        f = np.asarray(q.factor)
+        s = np.asarray(q.scales)
+        w = np.asarray(q.fractions)
+        t = float(np.sum(np.maximum(s, 0.0) * f))
+        for p in range(2):
+            coef = (np.eye(2)[p] * f[p] - w[p] * f) / t
+            assert got[p] == pytest.approx(float(np.sqrt(np.sum(coef ** 2 * 4e-4))), rel=1e-12)
+
+    def test_with_ma_sigma_finite_and_same_order(self):
+        """开 MA：σ 必须有限，且与"忽略 τ 反馈"的闭式差在 20% 以内。
+
+        差太多说明数值差分失稳；一模一样说明 τ 根本没进导数（见下一条）。
+        ⚠️ 半径要选在**表内**（R=3 µm ⇒ x≈0.29）；R=20 µm 会撞 0.5 截断，
+        截断区 dτ/dS=0，两条路必然逐位相同，测不出东西。
+        """
+        from polyxrd.refinement.goal import fraction_sigmas
+
+        plain, _ = _two_phase_problem()
+        corr, _ = _two_phase_problem(mu=[2200.0, 300.0], radius_um=3.0)
+        s0 = fraction_sigmas(plain.quantitative(), [0.02, 0.02])
+        s1 = fraction_sigmas(corr.quantitative(), [0.02, 0.02])
+        assert all(np.isfinite(v) and v > 0 for v in s1)
+        for a, b in zip(s0, s1):
+            assert b == pytest.approx(a, rel=0.20)
+
+    def test_tau_feedback_enters_the_jacobian(self):
+        """R=3 µm（x≈0.29，τ 明显偏离 1 但未截断）时，含 τ 的雅可比必须与固定 τ 不同。
+
+        构造方式：把 ``f`` 换成 ``f/τ`` 再走闭式，即"τ 当常数"——这正是修复前
+        的口径。两条路差 >0.5% 才说明 τ 的间接依赖被算进去了。
+        """
+        from polyxrd.refinement.goal import _microabsorption_jacobian
+
+        prob, _ = _two_phase_problem(mu=[2200.0, 300.0], radius_um=3.0)
+        q = prob.quantitative()
+        assert not q.mu_clamped
+        f = np.asarray(q.factor)
+        tau = np.asarray(q.tau)
+        s = np.asarray(q.scales)
+        assert np.any(np.abs(tau - 1.0) > 0.05), tau
+
+        j_full = _microabsorption_jacobian(s, f, q.mu, q.radius_um)
+        # "τ 当常数"：因子先除 τ，再套闭式
+        f_eff = f / tau
+        w = np.asarray(q.fractions)
+        t = float(np.sum(np.maximum(s, 0.0) * f_eff)) or 1.0
+        j_frozen = np.array([(np.eye(2)[p] * f_eff[p] - w[p] * f_eff) / t
+                             for p in range(2)])
+        assert np.max(np.abs(j_full - j_frozen)) / np.max(np.abs(j_frozen)) > 0.005
+
+    def test_jacobian_reduces_to_closed_form_at_zero_radius(self):
+        """R→0（x→0，τ→1）时数值雅可比必须退化回闭式 —— 用来自证实现正确。"""
+        from polyxrd.refinement.goal import _microabsorption_jacobian
+
+        prob, _ = _two_phase_problem()
+        q = prob.quantitative()
+        f = np.asarray(q.factor)
+        w = np.asarray(q.fractions)
+        s = np.asarray(q.scales)
+        j_num = _microabsorption_jacobian(s, f, [2200.0, 300.0], 1e-9)
+        t = float(np.sum(np.maximum(s, 0.0) * f)) or 1.0
+        j_ana = np.array([(np.eye(2)[p] * f[p] - w[p] * f) / t for p in range(2)])
+        assert np.allclose(j_num, j_ana, rtol=1e-6, atol=1e-9)
+
+
 class TestMicroabsorptionDiagnostics:
     """微吸收的适用性必须变成可读告警 —— τ 不进拟合向量，Rwp 反映不出来。
 
@@ -561,3 +685,69 @@ class TestRefineOptionsTransfer:
         assert d["refine_roughness"] is True
         assert d["microabsorption"] is True
         assert d["grain_radius_um"] == pytest.approx(8.0)
+
+
+class TestScaleCorrelationDiagnostics:
+    """相标度相关：回答"两个 wt% 是不是可以互换"(5-3 定量重排的答案)。
+
+    这条判据**无法**从 Rwp 或各自 σ 推出 —— 两相此消彼长时两者都可以很漂亮。
+    """
+
+    def _quant(self, fracs, labels=("A", "B")):
+        from polyxrd.refinement.quantitative import QuantResult
+
+        return QuantResult(labels=tuple(labels), fractions=tuple(fracs),
+                           scales=(1.0,) * len(fracs),
+                           factor=(1.0,) * len(fracs), z=(1,) * len(fracs),
+                           mass_per_cell=(1.0,) * len(fracs),
+                           volume=(1.0,) * len(fracs),
+                           detectable=(True,) * len(fracs))
+
+    def _audit(self, quant, corr):
+        from polyxrd.refinement.report import audit
+
+        tt = np.linspace(10.0, 60.0, 200)
+        y = np.ones_like(tt)
+        return {f.code: f for f in audit(tt, y, y, np.ones_like(tt),
+                                         quant=quant, scale_corr=corr)}
+
+    def test_high_correlation_warns(self):
+        q = self._quant((0.5, 0.5))
+        corr = np.array([[1.0, -0.98], [-0.98, 1.0]])
+        f = self._audit(q, corr)
+        assert "SCALE_CORRELATED" in f
+        assert f["SCALE_CORRELATED"].severity == "warn"
+        assert f["SCALE_CORRELATED"].evidence["rho"] == pytest.approx(0.98, abs=1e-9)
+
+    def test_moderate_correlation_is_silent(self):
+        q = self._quant((0.5, 0.5))
+        corr = np.array([[1.0, 0.7], [0.7, 1.0]])
+        assert "SCALE_CORRELATED" not in self._audit(q, corr)
+
+    def test_trace_phase_is_ignored(self):
+        """0.5% 的相本来就只能报检出限，不该拿它去指责定量不可分辨。"""
+        q = self._quant((0.995, 0.005))
+        corr = np.array([[1.0, -0.99], [-0.99, 1.0]])
+        assert "SCALE_CORRELATED" not in self._audit(q, corr)
+
+    def test_no_matrix_no_finding(self):
+        """没给相关矩阵就不判 —— 不能凭空假设"不可分辨"。"""
+        q = self._quant((0.5, 0.5))
+        assert "SCALE_CORRELATED" not in self._audit(q, None)
+
+    def test_scale_correlations_numeric_properties(self):
+        """共线两列 → |ρ|→1；正交两列 → ρ≈0；对角恒 1。"""
+        from polyxrd.refinement.linear import scale_correlations
+
+        rng = np.random.default_rng(7)
+        a = rng.random(400)
+        collinear = np.column_stack([a, a * 2.0 + 1e-6 * rng.random(400)])
+        c = scale_correlations(None, collinear, np.ones(400))
+        assert abs(c[0, 1]) > 0.999
+        assert c[0, 0] == pytest.approx(1.0)
+
+        orth = rng.random((400, 2))
+        orth[:, 1] -= orth[:, 0].mean()
+        orth[:, 0] -= orth[:, 0].mean()
+        c2 = scale_correlations(None, orth, np.ones(400))
+        assert abs(c2[0, 1]) < 0.2

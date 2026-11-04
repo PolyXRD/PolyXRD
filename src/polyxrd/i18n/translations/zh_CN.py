@@ -1237,6 +1237,7 @@ translations = {
             "phase_not_detected": "某相的标度被压到 0：该相无法定量，先确认它是否真的存在",
             "microabsorption_clamped": "微吸收颗粒半径超出 Brindley 表的适用范围：wt% 只能定性参考。请确认实际粒度（SEM / 激光粒度），或把半径减小到 |(μ−μ̄)·R| ≤ 0.5",
             "microabsorption_applied": "已施加 Brindley 微吸收修正：wt% 按 W∝S/τ 搬运；Rwp 不受影响（τ 只改份额），所以 Rwp 变差说明半径给错了",
+            "scale_correlated": "两相份额不可分辨：{phase_a} 与 {phase_b} 的标度相关系数 |ρ|={rho:.2f}（>0.95）。份额可在两相之间互换而总谱几乎不变——wt% 的小数位不代表精度。要真正分开：延长扫描或换靶提高分辨率、加一条只属于其中一相的孤立强线，或先修好该相的择优取向/占位",
         },
         "engine_fallback": "请求引擎 {requested} → 实际使用 {used} (原因: {reason})",
         "ka2_detected": "检测到 Kα2 双线未剥离 (最强峰 {center:.2f}°, Δ≈{delta:.3f}°, 高角侧残差 ≈{ratio:.0f}% 峰高): 建议先剥离 Kα2 (数据处理 → Kα2 剥离) 或后续启用 Kα2 建模",

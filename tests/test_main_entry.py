@@ -263,3 +263,77 @@ class TestStartupRobustness:
         monkeypatch.setenv("QT_OPENGL", "desktop")
         main_mod._apply_safe_render_overrides(["prog", "--safe-render"])
         assert os.environ["QT_OPENGL"] == "desktop"
+
+
+class TestLaunchProbes:
+    """P0-1 探针 (v5.2): 启动日志要能回答"崩在哪一阶段"与"哪个账号"。
+
+    现场 15 次启动分不清 A/B 组, 根因就是日志里既没有"是否管理员", 也没有
+    "cif_db 是否已存在"——后者一旦存在, 普通用户也能过 `exist_ok=True`,
+    权限这个变量就被悄悄抹平了。这里钉住三件事:
+      1. 上下文一行里必须同时有 admin / cif_db / exists / writable;
+      2. 配置不可用时不能抛 (探针不许成为新的失败点);
+      3. 首帧探针只打一次 (它不是绘制计数器, 是"第一帧到了"的里程碑)。
+    """
+
+    def _log_dir(self, tmp_path, monkeypatch):
+        d = tmp_path / "logs"
+        monkeypatch.setattr(main_mod, "_LOG_DIR_HINT", d)
+        return d
+
+    @staticmethod
+    def _read(d):
+        return "".join(
+            p.read_text(encoding="utf-8") for p in sorted(d.glob("startup-*.log"))
+        )
+
+    def test_context_line_records_permission_and_cif_db(
+            self, qapp, monkeypatch, tmp_path):
+        d = self._log_dir(tmp_path, monkeypatch)
+        main_mod._log_launch_context()
+        text = self._read(d)
+        assert "context: admin=" in text
+        for key in ("remote_session=", "cif_db=", "exists=", "writable=",
+                    "opengl=", "qpa=", "dpi_scale="):
+            assert key in text, key
+
+    def test_context_survives_broken_config(self, qapp, monkeypatch, tmp_path):
+        """get_config() 抛异常时仍要落一行 (现场"配置坏了"正是要诊断的场景)。"""
+        d = self._log_dir(tmp_path, monkeypatch)
+
+        def _boom():
+            raise RuntimeError("config unavailable")
+
+        monkeypatch.setattr(main_mod, "get_config", _boom)
+        main_mod._log_launch_context()          # 不许抛
+        assert "config unavailable" in self._read(d)
+
+    def test_first_paint_logged_exactly_once(self, qapp, monkeypatch, tmp_path):
+        """首帧探针是里程碑, 不是计数器 —— 重绘多次也只能有一行。"""
+        from PySide6.QtWidgets import QWidget
+
+        d = self._log_dir(tmp_path, monkeypatch)
+        w = QWidget()
+        w.resize(40, 40)
+        main_mod._install_first_paint_probe(qapp, w)
+        w.show()
+        for _ in range(5):
+            w.repaint()
+            qapp.processEvents()
+        w.close()
+        assert self._read(d).count("first-paint") == 1
+
+    def test_probe_ignores_other_windows(self, qapp, monkeypatch, tmp_path):
+        """别的窗口重绘不算主窗口首帧 (否则探针会在 splash 上就点亮)。"""
+        from PySide6.QtWidgets import QWidget
+
+        d = self._log_dir(tmp_path, monkeypatch)
+        main_w = QWidget()
+        main_mod._install_first_paint_probe(qapp, main_w)
+        other = QWidget()
+        other.show()
+        other.repaint()
+        qapp.processEvents()
+        other.close()
+        main_w.close()
+        assert "first-paint" not in self._read(d)

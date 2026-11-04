@@ -1240,6 +1240,7 @@ translations = {
             "phase_not_detected": "A phase scale collapsed to zero: that phase cannot be quantified - first confirm it is really present",
             "microabsorption_clamped": "Microabsorption grain radius exceeds the valid range of the Brindley table: wt% is qualitative only. Verify the real particle size (SEM / laser diffraction) or reduce the radius to |(mu-mu_bar)*R| <= 0.5",
             "microabsorption_applied": "Brindley microabsorption applied: wt% shifted by W proportional to S/tau; Rwp is unaffected (tau only moves fractions), so a worse Rwp means the radius is wrong",
+            "scale_correlated": "Phase fractions are not separable: scale correlation between {phase_a} and {phase_b} is |rho|={rho:.2f} (>0.95). The two fractions can be traded against each other with almost no change in the total pattern, so extra digits in wt% do not mean precision. To separate them: extend the scan or change the target for better resolution, add an isolated strong line belonging to only one of them, or fix that phase's preferred orientation / occupancies first",
         },
         "engine_fallback": "Requested engine {requested} → actually used {used} (reason: {reason})",
         "ka2_detected": "Kα2 doublet detected but not stripped (strongest peak {center:.2f}°, Δ≈{delta:.3f}°, high-angle residual ≈{ratio:.0f}% of peak height): strip Kα2 first (Data processing → Kα2 stripping) or enable Kα2 modeling later",

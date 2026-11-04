@@ -271,3 +271,48 @@ def linear_sigmas(
     b = np.sqrt(np.clip(diag[n_ph:n_ph + n_bg], 0.0, None))
     return s, b
 
+
+
+def scale_correlations(
+    jac: Optional[np.ndarray],
+    basis: np.ndarray,
+    weights: Optional[np.ndarray] = None,
+    *,
+    bg_basis: Optional[np.ndarray] = None,
+    reduced_chi2: float = 1.0,
+) -> np.ndarray:
+    """相标度之间的**相关系数**矩阵 ``(n_phase, n_phase)``。
+
+    为什么单独给一个函数：``linear_sigmas`` 只回答"这个相的 wt% 抖多少"，
+    回答不了"这个相的 wt% 和那个相是不是一起动"。多相试样里峰重叠严重时，
+    两相标度可以**此消彼长而总 Rwp 几乎不变** —— 此时 wt% 有两位小数的
+    表面精度，物理上却完全不可辨（5-3 的定量大幅重排就是这么来的）。
+
+    ``ρ_ij = cov_ij / √(cov_ii·cov_jj)``，从 :func:`full_covariance` 的相标度
+    块取。判读经验值：
+
+    ==========  ==========================================================
+    |ρ|         含义
+    ==========  ==========================================================
+    < 0.8       两相有各自独立的强线，份额可分
+    0.8 ~ 0.95  轻度共享峰区，wt% 差 1~2 pp 不宜当结论
+    > 0.95      **不可分辨**：份额可在两相间互换，wt% 只能定性
+    ==========  ==========================================================
+
+    注意这是"给定当前模型"的条件相关系数：模型（择优/占位/峰形）本身错时，
+    相关性只会更高，不会更低 —— 所以它是个下界意义上的"不可分辨"判据。
+    """
+    b = np.asarray(basis, dtype=float)
+    n = int(b.shape[1]) if b.ndim == 2 else 1
+    if n < 2:
+        return np.ones((n, n))
+    cov = full_covariance(jac, b, weights, bg_basis=bg_basis,
+                          reduced_chi2=reduced_chi2)
+    blk = np.asarray(cov[:n, :n], dtype=float)
+    if not np.all(np.isfinite(blk)):
+        return np.full((n, n), np.nan)
+    d = np.sqrt(np.clip(np.diag(blk), 1e-300, None))
+    corr = blk / np.outer(d, d)
+    corr = np.clip(corr, -1.0, 1.0)
+    np.fill_diagonal(corr, 1.0)
+    return corr

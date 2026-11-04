@@ -128,6 +128,9 @@ class QuantResult:
     :param mu_bar: 样品平均线吸收系数（1/cm，未启用时 0）
     :param mu_clamped: 有相的 ``|(μ−μ̄)·R|`` 超出 Brindley 表的适用范围
         （> 0.5）—— 此时 τ 已按边界值截断，定量结果只能定性参考
+    :param mu: 各相线吸收系数（1/cm，未启用时为空）—— 误差棒要把 τ 的
+        依赖一起传播，而 τ 只由 ``mu`` / ``radius_um`` 决定，所以必须存下来
+    :param radius_um: 施加微吸收时用的颗粒半径（µm，未启用时 0）
     """
 
     labels: Tuple[str, ...]
@@ -141,6 +144,8 @@ class QuantResult:
     tau: Tuple[float, ...] = ()           # Brindley τ（空 = 未启用微吸收）
     mu_bar: float = 0.0
     mu_clamped: bool = False
+    mu: Tuple[float, ...] = ()            # 各相线吸收系数（空 = 未启用微吸收）
+    radius_um: float = 0.0
 
     def percent(self) -> Tuple[float, ...]:
         return tuple(100.0 * f for f in self.fractions)
@@ -265,9 +270,12 @@ def hill_howard(
 
     detectable = [bool(f >= min_fraction and s > 0.0)
                   for f, s in zip(fracs, scales)]
+    applied = bool(taus)
     return QuantResult(
         labels=tuple(labels), fractions=tuple(fracs), scales=tuple(scales),
         factor=tuple(factors), z=tuple(zs), mass_per_cell=tuple(masses),
         volume=tuple(vols), detectable=tuple(detectable),
         tau=taus, mu_bar=float(mu_bar), mu_clamped=bool(mu_clamped),
+        mu=(tuple(float(v) for v in mu) if applied else ()),
+        radius_um=(float(radius_um) if applied else 0.0),
     )

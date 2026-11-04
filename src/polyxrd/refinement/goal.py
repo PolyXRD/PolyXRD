@@ -173,16 +173,28 @@ def fraction_sigmas(
 ) -> Tuple[float, ...]:
     """重量分数的标准不确定度（由标度不确定度传播）。
 
-    对 ``W_p = S_p·M_p / Σ_q S_q·M_q``（``M = Z·M·V``，记 ``T = Σ_q S_q·M_q``）：
+    无微吸收时对 ``W_p = S_p·f_p / Σ_q S_q·f_q``（记 ``T = Σ_q S_q·f_q``）：
 
-        ∂W_p/∂S_q = (δ_pq·M_p − W_p·M_q) / T
+        ∂W_p/∂S_q = (δ_pq·f_p − W_p·f_q) / T
 
-    所以 ``σ²(W_p) = Σ_q [(δ_pq·M_p − W_p·M_q)/T]²·σ²(S_q)``。
+    所以 ``σ²(W_p) = Σ_q [(δ_pq·f_p − W_p·f_q)/T]²·σ²(S_q)``。
 
-    **交叉项里是 ``M_q`` 不是 ``W_q``**：``∂W_p/∂S_q (q≠p) = −S_p M_p M_q/T²
-    = −W_p·M_q/T``，而 ``W_q = S_q M_q/T`` 多带了一个 ``S_q``。写成 ``W_q`` 会让
-    交叉项系统性偏小（实测 65/35 两相下 σ 低估约 25%）。用 ``quant.scales`` /
-    ``quant.factor`` / ``quant.fractions`` 就能算，不需要重新解一次线性层。
+    **交叉项里是 ``f_q`` 不是 ``W_q``**：``∂W_p/∂S_q (q≠p) = −W_p·f_q/T``，而
+    ``W_q = S_q f_q/T`` 多带了一个 ``S_q``。写成 ``W_q`` 会让交叉项系统性偏小
+    （实测 65/35 两相下 σ 低估约 25%）。
+
+    开了微吸收（``quant.tau`` 非空）时上式的 ``f`` 不再是常数
+    ----------------------------------------------
+    ``W_p ∝ S_p·f_p/τ_p``，而 ``τ_p = τ((μ_p − μ̄)·R)``、``μ̄ = Σ_j W_j μ_j`` ——
+    τ 依赖 W，W 又依赖 S，**这是一条闭环**（``apply_microabsorption`` 用不动点
+    迭代解它）。闭式导数要展开 ``dτ/dx`` 与 ``dμ̄/dW`` 再解线性方程组，写起来
+    长且容易在截断区（clamped）出错，所以这里直接对 S 做**数值雅可比**：整条
+    不动点迭代是 S 的确定函数，差分即可，代价是 n 次重解（n = 相数，通常 ≤7，
+    每次 3 轮向量运算 —— 相对一次精修可忽略）。
+
+    量级：R=10 µm、Δμ≈150/cm ⇒ x≈0.15，τ≈1.02，σ 变化 <10%（待办清单里记的
+    "σ 偏小 <10%" 就是这条）。**clamped 时导数为 0**（τ 已截断），此时误差棒
+    只反映标度噪声，报告层另有 ``MICROABSORPTION_CLAMPED`` 告警兜底。
     """
     n = len(quant.labels)
     if n == 0:
@@ -193,6 +205,13 @@ def fraction_sigmas(
     s = np.asarray(quant.scales, dtype=float)
     z = np.asarray(quant.factor, dtype=float)
     w = np.asarray(quant.fractions, dtype=float)
+
+    if getattr(quant, "tau", ()) and getattr(quant, "mu", ()) \
+            and float(getattr(quant, "radius_um", 0.0)) > 0.0:
+        jac = _microabsorption_jacobian(s, z, quant.mu, quant.radius_um)
+        var = np.sum((jac ** 2) * (np.maximum(sig, 0.0) ** 2)[None, :], axis=1)
+        return tuple(math.sqrt(max(float(v), 0.0)) for v in var)
+
     total = float(np.sum(np.maximum(s, 0.0) * z)) or 1.0
     eye = np.eye(n)
     out: List[float] = []
@@ -201,6 +220,51 @@ def fraction_sigmas(
         var = float(np.sum((coef ** 2) * np.maximum(sig, 0.0) ** 2))
         out.append(math.sqrt(max(var, 0.0)))
     return tuple(out)
+
+
+def _microabsorption_jacobian(
+    scales: np.ndarray,
+    factors: np.ndarray,
+    mu: Sequence[float],
+    radius_um: float,
+    *,
+    iterations: int = 3,
+) -> np.ndarray:
+    """``∂W_p/∂S_q``（含 τ 的间接依赖），数值差分。
+
+    差分步长取 ``max(|S_q|, 该相最小正标度)·1e-4``：标度本身可以有 1e8 的量级
+    差（弱相 vs 强相），固定步长会让弱相的列全是噪声。负数侧被 ``base`` 的
+    ``max(·, 0)`` 夹住，所以用**中心差分 + 退化时回退单侧**，避免在 0 附近
+    出现假的非线性。
+    """
+    from .intensity import apply_microabsorption
+
+    s = np.asarray(scales, dtype=float)
+    f = np.asarray(factors, dtype=float)
+    n = s.size
+    pos = s[s > 0]
+    scale_ref = float(pos.min()) if pos.size else 1.0
+
+    def weights(vec: np.ndarray) -> np.ndarray:
+        base = np.maximum(vec, 0.0) * f
+        fracs, _tau, _mu_bar, _clamped = apply_microabsorption(
+            base, mu, float(radius_um), iterations=iterations)
+        return np.asarray(fracs, dtype=float)
+
+    jac = np.zeros((n, n))
+    for q in range(n):
+        h = max(abs(s[q]), scale_ref) * 1e-4
+        hi = s.copy()
+        hi[q] += h
+        lo = s.copy()
+        lo[q] -= h
+        w_hi = weights(hi)
+        if lo[q] >= 0.0:
+            w_lo = weights(lo)
+            jac[:, q] = (w_hi - w_lo) / (2.0 * h)
+        else:                                # 0 附近：单侧
+            jac[:, q] = (w_hi - weights(s)) / h
+    return jac
 
 
 def evaluate_goals(

@@ -123,6 +123,95 @@ def _apply_safe_render_overrides(argv: list) -> list:
     return [a for a in argv if a != "--safe-render"]
 
 
+# ── 启动期观测探针 (v5.2, P0-1) ──────────────────────────────
+#
+# 现场 (2026-10-29) 的 AV 只能定位到 "window.show() 这一行", 但 show() 内部
+# 至少有两个阶段: ① 平台窗口创建 (CreateWindowEx / 桌面合成器); ② 首帧绘制
+# (进入事件循环后)。这两类失败的**修法完全不同** (前者查 Qt 平台插件/DPI/
+# 远程桌面, 后者查 GL 上下文/子控件绘制), 所以必须在两者之间插一根探针。
+#
+# 只在主窗口这条路径上加, 且全部 try/except: 探针自身绝不能成为新的失败点。
+
+
+def _log_launch_context() -> None:
+    """记下两个"日志里看不出来"的变量 (待办 P0-1 §4-4 要求锁死的)。
+
+    现场那 15 次启动分不清 A/B 组, 根因就是日志里没有这两条:
+      * **是否管理员**: 决定 ``cod_data/cif_db`` 能不能被 mkdir 出来;
+      * **cif_db 是否已存在**: 已存在时普通用户也能过 (``exist_ok=True``
+        不校验写权限), 于是"权限"这个变量被悄悄抹平。
+    附带记会话类型 (远程桌面) 与关键渲染环境变量 —— Qt6 在 RDP / 混合 DPI 下
+    ``show()`` 崩溃有先例, 有版本号才能比对。
+    """
+    try:
+        admin = "unknown"
+        if sys.platform == "win32":
+            try:
+                import ctypes
+
+                admin = str(bool(ctypes.windll.shell32.IsUserAnAdmin()))
+                remote = bool(
+                    ctypes.windll.user32.GetSystemMetrics(0x1000)  # SM_REMOTESESSION
+                )
+            except Exception:  # noqa: BLE001
+                remote = None
+        else:
+            remote = None
+        cif_db = ""
+        try:
+            cif_db = str(get_config().paths.cif_db_path)
+        except Exception:  # noqa: BLE001 - 配置不可用时这条留空
+            cif_db = "<config unavailable>"
+        exists = Path(cif_db).is_dir() if cif_db and "<" not in cif_db else None
+        writable = startup_diag.dir_writable(cif_db) if exists else None
+        _startup_log(
+            f"context: admin={admin} remote_session={remote} "
+            f"cif_db={cif_db!r} exists={exists} writable={writable} "
+            f"opengl={os.environ.get('QT_OPENGL', '<unset>')} "
+            f"qpa={os.environ.get('QT_QPA_PLATFORM', '<unset>')} "
+            f"dpi_scale={os.environ.get('QT_ENABLE_HIGHDPI_SCALING', '<unset>')}"
+        )
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _install_first_paint_probe(app: QApplication, window) -> None:
+    """在**第一个** Paint 事件发生时打一行 ``first-paint``。
+
+    为什么不用 ``QWidget.paintEvent``: MainWindow 自己通常不重绘 (画的是子控件),
+    覆写它可能永远不触发。改用应用级事件过滤器, 只认"属于主窗口树"的 Paint,
+    第一个就够 —— 它证明"窗口创建成功且已经进过一次绘制"。
+
+    判定价值: 崩在 ``post-show`` 与 ``first-paint`` 之间 ⇒ 首帧绘制/GL 上下文;
+    连 ``post-show`` 都没有 ⇒ 平台窗口创建阶段。这条能把搜索面砍掉一半。
+    """
+    from PySide6.QtCore import QEvent, QObject
+
+    class _FirstPaintProbe(QObject):
+        def __init__(self, parent=None):
+            super().__init__(parent)
+            self._seen = False
+
+        def eventFilter(self, obj, event):  # noqa: N802 - Qt 命名
+            if not self._seen and event.type() == QEvent.Type.Paint:
+                try:
+                    owner = obj.window() if hasattr(obj, "window") else None
+                except Exception:  # noqa: BLE001
+                    owner = None
+                if owner is window:
+                    self._seen = True
+                    _startup_log("first-paint")
+            return False
+
+    try:
+        probe = _FirstPaintProbe(app)
+        app.installEventFilter(probe)
+        # 保住引用: 过滤器被回收后事件就没人接了 (Qt 不持有 Python 引用)
+        app._polyxrd_paint_probe = probe  # noqa: SLF001 - 只此一处
+    except Exception:  # noqa: BLE001
+        pass
+
+
 # ── 崩溃自愈 (v2.0.1) ────────────────────────────────────────
 #
 # 现场问题: 打包版**拷到别的机器**运行时, 偶发"启动图/主窗口一闪就退出"。
@@ -448,6 +537,8 @@ def main() -> int:
 
     app = QApplication(sys.argv)
     _startup_log("QApplication OK")
+    # P0-1 探针: 权限 / 会话类型 / cif_db 三态 —— 现场日志缺的正是这几项
+    _log_launch_context()
     app.setStyle("Fusion")
 
     app_icon_path = get_app_icon_path()
@@ -499,6 +590,9 @@ def main() -> int:
     # show() 单独包一层: 原生的窗口创建阶段若炸掉, 至少把 traceback 落盘,
     # 不再让进程"静默消失"。
     _startup_log("showing main window")
+    # 首帧探针必须在 show() **之前**装好: Paint 事件要等事件循环转起来才来,
+    # 但装上之后任何一次重绘都能抓到; show() 内部若就崩掉, 这一行本身也是证据。
+    _install_first_paint_probe(app, window)
     try:
         window.show()
     except BaseException:  # noqa: BLE001 - 兜底: 一定留下证据
@@ -517,6 +611,13 @@ def main() -> int:
     except Exception:  # noqa: BLE001
         _visible = "unknown"
     _startup_log(f"shown visible={_visible}")
+
+    # P0-1: show() 返回后到事件循环真正跑起来之间还有一段 (平台窗口映射 +
+    # 首帧)。0 ms 与 50 ms 两个点把这段切开: 崩在 post-show 与 ui-tick0 之间
+    # ⇒ 窗口映射/合成器阶段; 崩在 ui-tick0 与 settled 之间 ⇒ 首帧绘制。
+    if not under_test:
+        QTimer.singleShot(0, lambda: _startup_log("ui-tick0"))
+        QTimer.singleShot(50, lambda: _startup_log("settled"))
 
     if splash is not None:
         QTimer.singleShot(100, lambda: (splash.close(), window.activateWindow()))
