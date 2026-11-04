@@ -428,3 +428,104 @@ class TestSampleBroadeningIdentifiability:
         assert "inst.x" not in free and "inst.y" not in free
         # U/V/W/Z 仍然自由 —— 高斯分量与常数洛伦兹项没有被牵连
         assert {"inst.u", "inst.v", "inst.w", "inst.z"} <= free
+
+
+# ── 替代设置符号（真实库里的常见写法） ────────────────────────
+
+
+class TestAlternativeSettings:
+    """非规范设置的空间群符号也必须拿到晶系与约束。
+
+    2026-11-05 修的真实 bug：坐标库把针铁矿写成 ``P b n m``（Pnma 的轴置换）、
+    把吉布斯石写成 ``P 1 21/n 1``（P2₁/n 的全设置写法）。两者都不在 pymatgen 的
+    **规范符号表**里，``resolve_space_group_symbol`` 返回 ``None`` →
+    ``apply_cell_ties`` 整段被跳过 → 该相 6 个胞参全放开。
+
+    后果（7-1 七相合成铝土矿，实测）：stage 2 里针铁矿的 β 从 90° 跑到 130.8°、
+    a 4.625→4.710、b 9.990→10.120，峰位全错，线性标度塌到 1.04 wt%
+    （真值 9.98），多出来的强度被 Boehmite(+7.9)、Hematite(+3.8)、
+    Quartz(+3.5) 分掉，Σ|Δwt| = 33.35 pp。
+
+    记住：``resolve_space_group_symbol`` 保持"只认规范设置"的语义（它返回的是
+    **可回写的规范符号**，猜错了反而更糟）；要晶系请走
+    ``crystal_system_from_symbol``，它内部会在规范表失手时直接构造。
+    """
+
+    @pytest.mark.parametrize("raw,want", [
+        ("P b n m", "orthorhombic"),        # Pnma 的轴置换（针铁矿 COD 9003076）
+        ("Pbnm", "orthorhombic"),
+        ("P 1 21/n 1", "monoclinic"),       # P2₁/n 全设置写法（吉布斯石 COD 1011081）
+        ("P121/n1", "monoclinic"),
+        ("P n m a", "orthorhombic"),
+    ])
+    def test_system_from_alternative_setting(self, raw, want):
+        assert crystal_system_from_symbol(raw) == want
+
+    def test_canonical_resolver_still_strict(self):
+        """规范表这一层**不**放宽：替代设置仍返回 ``None``（回写会写坏）。"""
+        assert resolve_space_group_symbol("P b n m") is None
+        assert resolve_space_group_symbol("P 1 21/n 1") is None
+
+    def test_goethite_angles_pinned(self):
+        """针铁矿式符号：自由胞参只剩 a/b/c（原来 6 个全自由）。"""
+        got = _free_cell_tags(_problem(Cell(4.625, 9.990, 3.037, 90, 90, 90),
+                                       "P b n m"))
+        assert got == ["a", "b", "c"]
+
+    def test_gibbsite_angles_pinned(self):
+        """吉布斯石式符号：α/γ 被钉，β 自由。"""
+        got = _free_cell_tags(_problem(Cell(8.641, 5.070, 9.720, 90, 85.43, 90),
+                                       "P 1 21/n 1"))
+        assert got == ["a", "b", "c", "beta"]
+
+    def test_goethite_cell_cannot_run_away(self):
+        """核心回归：角度不在自由向量里，LM 怎么走都改不动它们。
+
+        常量约束是"建册时钉死 + 不进自由向量"（不是每轮重算的跟随约束），
+        所以这里走**拟合器真正走的那条路** —— 取自由向量、大幅扰动、写回、
+        ``apply()`` —— 而不是手工 ``set`` 一个被固定的参数。
+        """
+        prob = _problem(Cell(4.625, 9.990, 3.037, 90, 90, 90), "P b n m")
+        names = [prob.params.names()[i] for i in prob.params.free_indices()]
+        assert "phase0.cell.alpha" not in names
+        assert "phase0.cell.beta" not in names
+        assert "phase0.cell.gamma" not in names
+        # 把三个长度推 5%（原来 β 会跟着跑到 130.8°）
+        x = prob.params.to_vector()
+        for k, nm in enumerate(names):
+            x[k] *= 1.05
+        prob.params.assign(x)
+        prob.apply()
+        cell = prob.phases[0].structure.cell
+        assert cell.alpha == pytest.approx(90.0)
+        assert cell.beta == pytest.approx(90.0)
+        assert cell.gamma == pytest.approx(90.0)
+        assert cell.a == pytest.approx(4.625 * 1.05)
+
+    def test_unknown_symbol_still_permissive(self):
+        """认不出（真乱码）时行为不劣化：六个胞参全放开。"""
+        assert crystal_system_from_symbol("乱码") is None
+        assert len(_free_cell_tags(_problem(HEX_CELL, "乱码"))) == 6
+
+
+class TestMonoclinicUniqueAxis:
+    """单斜的唯一轴按**晶胞本身**判，不写死 b 唯一轴。"""
+
+    def test_default_is_b_unique(self):
+        fixed, _follow = cell_ties("monoclinic")
+        assert fixed == {"alpha": 90.0, "gamma": 90.0}
+
+    def test_b_unique_cell(self):
+        fixed, _ = cell_ties("monoclinic",
+                             cell=Cell(4.6, 5.0, 7.2, 90.0, 99.0, 90.0))
+        assert fixed == {"alpha": 90.0, "gamma": 90.0}
+
+    def test_c_unique_cell(self):
+        """γ 偏离 90° → 该钉的是 α、β，γ 才是游走的那个。"""
+        fixed, _ = cell_ties("monoclinic",
+                             cell=Cell(4.6, 5.0, 7.2, 90.0, 90.0, 105.3))
+        assert fixed == {"alpha": 90.0, "beta": 90.0}
+
+    def test_all_right_angles_falls_back_to_b(self):
+        fixed, _ = cell_ties("monoclinic", cell=Cell(4.6, 5.0, 7.2))
+        assert fixed == {"alpha": 90.0, "gamma": 90.0}

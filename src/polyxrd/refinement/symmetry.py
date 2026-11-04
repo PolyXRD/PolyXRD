@@ -107,6 +107,9 @@ _SUBSCRIPT = str.maketrans("₀₁₂₃₄₅₆₇₈₉", "0123456789")
 #: 规范符号表缓存（首次调用时建，约 230 条）
 _SYMBOLS: Optional[Tuple[str, ...]] = None
 
+#: 空间群对象缓存（原写法 → ``SpaceGroup`` 或 ``None``）
+_SG_CACHE: Dict[str, object] = {}
+
 
 def _symbol_table() -> Tuple[str, ...]:
     """pymatgen 的规范符号集合。
@@ -151,6 +154,14 @@ def _setting_from_symbol(symbol: str) -> Optional[str]:
     return tail[:1] or None
 
 
+def _clean_symbol(symbol: str) -> str:
+    """剥 setting 后缀、空格、Unicode 下标：``"P 1 21/n 1"`` → ``"P121/n1"``。"""
+    raw = str(symbol or "").strip()
+    if not raw:
+        return ""
+    return raw.split(":")[0].replace(" ", "").translate(_SUBSCRIPT)
+
+
 def resolve_space_group_symbol(symbol: str) -> Optional[str]:
     """CIF 写法 → pymatgen 的规范符号（认不出返回 ``None``）。
 
@@ -159,11 +170,14 @@ def resolve_space_group_symbol(symbol: str) -> Optional[str]:
     表现为"约束没生效"，比报错更难查。
 
     支持三种输入：规范符号、去掉下划线/空格的写法、国际表编号（``"225"``）。
+
+    .. note::
+       本函数只认**规范设置**。CIF 里大量出现替代设置（``P b n m`` 是 Pnma 的
+       轴置换、``P 1 21/n 1`` 是 P2₁/n 的全设置写法），它们不在规范表里 →
+       返回 ``None``。要拿晶系请用 :func:`crystal_system_from_symbol`，它会
+       在规范表失手时直接构造（见 :func:`_load_space_group`）。
     """
-    raw = str(symbol or "").strip()
-    if not raw:
-        return None
-    clean = raw.split(":")[0].replace(" ", "").translate(_SUBSCRIPT)
+    clean = _clean_symbol(symbol)
     if not clean:
         return None
     if clean.isdigit():
@@ -180,6 +194,41 @@ def resolve_space_group_symbol(symbol: str) -> Optional[str]:
     return None
 
 
+def _load_space_group(symbol: str):
+    """CIF 写法 → pymatgen ``SpaceGroup``；认不出返回 ``None``。
+
+    **为什么不能只查规范表**（2026-11-05 实测）：COD 的吉布斯石写
+    ``P 1 21/n 1``、针铁矿写 ``P b n m``，两者都不在规范符号表里，
+    ``resolve_space_group_symbol`` 返回 ``None`` → ``apply_cell_ties`` 整段
+    跳过 → 该相 6 个胞参全放开。7-1 的针铁矿因此把 β 从 90° 跑到 **130.8°**、
+    a/b 各错 1~2%，峰位全错、标度塌到 1.04 wt%（真值 9.98）。
+
+    而 pymatgen 的 ``SpaceGroup`` 构造器本身**能吃替代设置**（由 monty 的符号
+    表兜底，只在认不出全名时给一条 ``Full symbol not available`` 警告），
+    返回的 ``crystal_system`` 与对称操作都是对的。所以这里有第二道：
+    规范表失手就用清洗后的原写法直接构造。
+
+    构造一次约 1~3 ms（解析 8~192 条对称操作），每建一次参数册都要按相调一遍，
+    故按原写法缓存 —— ``SpaceGroup`` 建后不再变，可以安全复用。
+    """
+    key = str(symbol or "")
+    if key in _SG_CACHE:
+        return _SG_CACHE[key]
+    sg = None
+    for cand in (resolve_space_group_symbol(symbol), _clean_symbol(symbol)):
+        if not cand:
+            continue
+        try:
+            from pymatgen.symmetry.groups import SpaceGroup
+
+            sg = SpaceGroup(cand)
+            break
+        except Exception:  # noqa: BLE001 - 这个候选不行，试下一个
+            continue
+    _SG_CACHE[key] = sg
+    return sg
+
+
 def crystal_system_from_symbol(
     symbol: str,
     cell: Optional[object] = None,
@@ -192,13 +241,10 @@ def crystal_system_from_symbol(
 
     :param cell: 可选 ``Cell``，只用于三方相判断轴选择（菱形 vs 六方）
     """
-    canonical = resolve_space_group_symbol(symbol)
-    if canonical is None:
+    sg = _load_space_group(symbol)
+    if sg is None:
         return None
     try:
-        from pymatgen.symmetry.groups import SpaceGroup
-
-        sg = SpaceGroup(canonical)
         sysname = str(getattr(sg.crystal_system, "value",
                               sg.crystal_system)).lower()
     except Exception:  # noqa: BLE001 - 符号认不出
@@ -232,6 +278,22 @@ def _trigonal_axes(symbol: str, cell: Optional[object]) -> str:
     return "hexagonal"
 
 
+def _monoclinic_unique_angle(cell: Optional[object]) -> str:
+    """单斜晶胞的唯一轴对应哪个角：``"beta"``（b 唯一轴）占绝大多数。
+
+    判定 = 输入晶胞里离 90° 最远的那个角；三个角都贴着 90° 时退回 ``"beta"``。
+    """
+    best, best_dev = "beta", 0.0
+    for tag in ("alpha", "beta", "gamma"):
+        try:
+            dev = abs(float(getattr(cell, tag)) - 90.0)
+        except (AttributeError, TypeError, ValueError):
+            continue
+        if dev > best_dev:
+            best, best_dev = tag, dev
+    return best if best_dev > 1e-3 else "beta"
+
+
 def cell_ties(
     system: str,
     *,
@@ -239,6 +301,7 @@ def cell_ties(
 ) -> Tuple[Dict[str, float], Dict[str, str]]:
     """晶系 → ``(定死值, 跟随关系)``。
 
+    :param cell: 可选 ``Cell``；只有单斜/三方需要看它（唯一轴 / 菱形轴判定）
     :returns: ``({"alpha": 90.0, ...}, {"b": "a", ...})``
     """
     fixed: Dict[str, float] = {}
@@ -258,9 +321,14 @@ def cell_ties(
     elif s == "orthorhombic":
         fixed.update(_ANGLE_FIXED_90)
     elif s == "monoclinic":
-        # b 唯一轴的标准设置：α=γ=90°，β 自由
-        fixed["alpha"] = 90.0
-        fixed["gamma"] = 90.0
+        # 唯一轴**看晶胞**：绝大多数 CIF 是 b 唯一轴（α=γ=90°、β 自由），
+        # 但也有 c 唯一轴的老设置（``P 1 1 21/c 1`` 之类），那时该钉的是
+        # α、β，游走的角是 γ。按输入晶胞里"离 90° 最远的那个角"判定，
+        # 三个角都恰好 90° 时退回 b 唯一轴（常见设置）。写死 β 会在 c 唯一
+        # 轴的记录上把 γ 钉在 90° → 整个 d 序列算错，且没有任何报错。
+        for tag in ("alpha", "beta", "gamma"):
+            if tag != _monoclinic_unique_angle(cell):
+                fixed[tag] = 90.0
     elif s == "rhombohedral":
         follow.update({"b": "a", "c": "a",
                        "beta": "alpha", "gamma": "alpha"})
