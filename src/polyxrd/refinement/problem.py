@@ -25,6 +25,7 @@ import numpy as np
 
 from .background import BackgroundParams, background_basis
 from .diagnostics import Diagnostics, diagnose
+from .intensity import Roughness, apply_microabsorption
 from .linear import LinearSolve, design_stack, solve_linear
 from .optimize import FitResult, minimize_residual
 from .parameters import Parameter, ParameterSet
@@ -240,6 +241,11 @@ class PatternProblem:
     :param bg: 背景基描述
     :param kalph2: Kα2 描述；None → 单色
     :param weights: 观测权重；None → ``1/max(y,1)``（Poisson）
+    :param roughness_model: 表面粗糙度模型名（``none`` / ``sidey`` / ``suortti``
+        / ``sparks``）；实际幅度由参数 ``inst.rough`` 给出
+    :param mu_linear: 各相线吸收系数（1/cm，与 ``phases`` 同序）。给齐且
+        ``grain_radius_um > 0`` 时定量会做 Brindley 微吸收修正
+    :param grain_radius_um: 微吸收用的颗粒半径（µm）
     """
 
     def __init__(
@@ -255,6 +261,9 @@ class PatternProblem:
         weights: Optional[np.ndarray] = None,
         cutoff_fwhm: Optional[float] = DEFAULT_CUTOFF_FWHM,
         params: Optional[ParameterSet] = None,
+        roughness_model: str = "none",
+        mu_linear: Optional[Sequence[float]] = None,
+        grain_radius_um: float = 0.0,
     ) -> None:
         self.two_theta = np.asarray(two_theta, dtype=float)
         self.y_obs = np.asarray(y_obs, dtype=float)
@@ -279,6 +288,12 @@ class PatternProblem:
 
         self.shift = 0.0
         self.disp = 0.0
+        # 表面粗糙度（整样品）：由 ``inst.rough`` + 模型名决定，关闭时零开销
+        self.rough_model = str(roughness_model or "none")
+        self.roughness = Roughness(model=self.rough_model)
+        # 微吸收（Brindley）：逐相 μ（1/cm）+ 颗粒半径（µm），只进定量不进拟合
+        self.mu_linear: Tuple[float, ...] = tuple(float(v) for v in (mu_linear or ()))
+        self.grain_radius_um = float(grain_radius_um or 0.0)
         self._atom_map: Dict[int, _AtomMap] = {}
         self.params = params if params is not None else self.build_parameters()
         if not self._atom_map:
@@ -329,6 +344,21 @@ class PatternProblem:
                          label="样品位移 cosθ 项 (°)"))
         ps.add(Parameter("inst.asym", float(self.profile.asymmetry), 0.0, 0.4,
                          stage=st["asym"], label="低角不对称"))
+        # 表面粗糙度（Sidey 单参数）：S_R = (θ/90)^(s/θ)，θ 用度。
+        # 与"择优取向"的分野：PO 逐相、依赖 hkl；SR 整样品、只依赖 2θ。
+        # 界 0~2：s=0.5 已能把 2θ=10° 压掉 ~26%（实测粗粉量级），2.0 是
+        # "表面全是坑"的极限，再大就不是 SR 而是别的系统性误差了。
+        # 只允许非负 —— 负 s 会**放大**低角强度，物理上对应"表面比体相更平整"，
+        # 不存在这种机制（那是择优取向/装样密实的领域）。
+        if self.rough_model and self.rough_model.strip().lower() not in (
+                "", "none", "off", "0"):
+            # **放 stage 3（profile）而不是 4（po）**：``fast`` 档只有 2、3 两个
+            # 阶段（``V5_TIERS["fast"]["protocol"]``），挂到 4 就等于"默认档永远
+            # 碰不到它"，s 会停在播种值上白降 Rwp —— 与 ``bovr`` 同一个坑（见上）。
+            # 物理上也更贴 profile 段：u/v/w 改峰宽、SR 改峰高（2θ 的包络），
+            # 两者不共线；DBWS 的经典做法也是把 SR 与 profile 一起放开。
+            ps.add(Parameter("inst.rough", 0.0, 0.0, 2.0, stage=st["profile"],
+                             label="表面粗糙度 s"))
         # 精修里**不设** inst.eta：η 由 TCH 的宽度比导出（与 GSAS-II 一致）。
         # 设一个独立的 η 会与 x/y 抢同一自由度（η 与 FWHM 强相关），是病态的根源。
         # Caglioti U/V/W：U、V 允许为负（U<0 在实测里很常见 —— tan²θ 项在
@@ -522,6 +552,9 @@ class PatternProblem:
         g = self.params.get
         self.shift = float(g("inst.zero", 0.0) or 0.0)
         self.disp = float(g("inst.disp", 0.0) or 0.0)
+        # 粗糙度参数不存在（模型关闭）时 get 回退 0 —— Roughness 随即判 off
+        self.roughness = Roughness(model=self.rough_model,
+                                   s=float(g("inst.rough", 0.0) or 0.0))
         self.profile = replace(
             self.profile,
             u=float(g("inst.u", self.profile.u) or 0.0),
@@ -658,7 +691,8 @@ class PatternProblem:
         self._basis = design_matrix(
             self.two_theta, specs, self.profile,
             wavelength=self.wavelength, kalph2=self.kalph2,
-            cutoff_fwhm=self.cutoff_fwhm, shift=self.shift, disp=self.disp)
+            cutoff_fwhm=self.cutoff_fwhm, shift=self.shift, disp=self.disp,
+            rough=self.roughness)
         self._bg_basis = background_basis(self.two_theta, self.bg)
         self._design_key = key
         return self._basis, self._bg_basis
@@ -670,7 +704,8 @@ class PatternProblem:
                 self.profile.asymmetry)
         sample = tuple((ph.size_nm, ph.strain, ph.po_r, ph.b_overall)
                        for ph in self.phases)
-        return cells + prof + sample + (self.shift, self.disp)
+        return cells + prof + sample + (self.shift, self.disp,
+                                       self.roughness.key())
 
     def invalidate(self) -> None:
         self._basis = None
@@ -744,13 +779,21 @@ class PatternProblem:
         return pattern_metrics(self.y_obs, lin.y_calc, self.weights, n_p)
 
     def quantitative(self, *, min_fraction: float = 0.0) -> QuantResult:
-        """Hill–Howard 重量分数（用当前线性层解出的标度）。"""
+        """Hill–Howard 重量分数（用当前线性层解出的标度）。
+
+        给了 ``mu_linear`` 且 ``grain_radius_um > 0`` 时，额外施加 Brindley
+        微吸收修正（``W ∝ S·f/τ``）。**这一步不改变 Rwp** —— τ 作用在强度上
+        时会被标度吸收；它只在把标度翻译成重量分数时起作用（详见
+        ``refinement/intensity.py`` 模块讨论）。
+        """
         if self.last_linear is None:
             self.residual(None)
         scales = [float(v) for v in self.last_linear.scales]
+        mu = self.mu_linear if len(self.mu_linear) == len(self.phases) else None
         return hill_howard([ph.label for ph in self.phases], scales,
                            [ph.structure for ph in self.phases],
-                           min_fraction=min_fraction)
+                           min_fraction=min_fraction,
+                           mu=mu, radius_um=self.grain_radius_um)
 
     # ── 拟合 ───────────────────────────────────────────────────
     def fit(

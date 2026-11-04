@@ -27,6 +27,7 @@ from typing import Optional, Sequence, Tuple
 import numpy as np
 
 from .background import BackgroundParams, background_basis
+from .intensity import Roughness
 from .profile import (
     Kalpha2,
     ProfileParams,
@@ -98,6 +99,7 @@ def reflection_centers_and_intensities(
     shift: float = 0.0,
     disp: float = 0.0,
     b_overall: float = 0.0,
+    rough: Optional[Roughness] = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """把反射表展开成 ``(centers, intensities, is_ka2)``。
 
@@ -115,6 +117,9 @@ def reflection_centers_and_intensities(
         ``s = sinθ/λ = 1/(2d)``，故峰强乘 ``exp(−B/(2d²))``。与原子位点
         ``b_iso`` 的区别：这是一个**逐相**的全局量（每个反射只依赖自身 d），
         不需要重算结构因子 —— 结构自由度里最便宜的一项。
+    :param rough: 表面粗糙度描述（整样品一项）。**必须在 Kα2 拆分之前**乘到
+        强度上：SR 是"该反射的总强度被压低"，与它被拆成几条线无关；先拆再乘
+        在数学上等价，但那样每条线都要算一次 ``S_R``，白白多一倍代价。
     """
     tt = np.asarray(table.two_theta, dtype=float)
     if shift:
@@ -128,6 +133,8 @@ def reflection_centers_and_intensities(
         # s = sinθ/λ = 1/(2d) → 2B s² = B/(2d²)
         d = np.maximum(np.asarray(table.d, dtype=float), 1e-6)
         inten = inten * np.exp(-float(b_overall) / (2.0 * d * d))
+    if rough is not None and not rough.is_off:
+        inten = inten * rough.factor(table.two_theta)
     if kalph2 is None or not kalph2.separation:
         return tt, inten, np.zeros(tt.shape, dtype=bool)
     w1, w2 = kalph2.component_weights()
@@ -235,6 +242,7 @@ def phase_pattern(
     cutoff_fwhm: Optional[float] = DEFAULT_CUTOFF_FWHM,
     shift: float = 0.0,
     disp: float = 0.0,
+    rough: Optional[Roughness] = None,
     return_detail: bool = False,
 ):
     """单相"单位标度"计算谱（``scale = 1``）。
@@ -246,6 +254,7 @@ def phase_pattern(
     :param cutoff_fwhm: 窗口半宽（FWHM 倍数）；None → 全矩阵
     :param shift: 整体 2θ 平移（度），用于仪器零位
     :param disp: 样品位移项（度），``Δ2θ = disp·cosθ``
+    :param rough: 表面粗糙度（整样品）；None 或关闭时零开销
     :param return_detail: 为 True 时返回 ``(pattern, PhasePattern)``
     """
     tt = np.asarray(two_theta, dtype=float)
@@ -254,7 +263,7 @@ def phase_pattern(
 
     centers, areas, is2 = reflection_centers_and_intensities(
         spec.table, kalph2, spec.po_r, shift=shift, disp=disp,
-        b_overall=spec.b_overall)
+        b_overall=spec.b_overall, rough=rough)
 
     # 样品层（尺寸/应变）叠加到仪器层之上
     p_eff = profile.with_samples(size_nm=spec.size_nm, strain=spec.strain)
@@ -282,6 +291,7 @@ def design_matrix(
     cutoff_fwhm: Optional[float] = DEFAULT_CUTOFF_FWHM,
     shift: float = 0.0,
     disp: float = 0.0,
+    rough: Optional[Roughness] = None,
 ) -> np.ndarray:
     """``(N, n_phase)`` 设计矩阵；列 = 各相单位标度谱。
 
@@ -293,7 +303,7 @@ def design_matrix(
     for i, sp in enumerate(specs):
         out[:, i] = phase_pattern(
             tt, sp, profile, wavelength=wavelength, kalph2=kalph2,
-            cutoff_fwhm=cutoff_fwhm, shift=shift, disp=disp,
+            cutoff_fwhm=cutoff_fwhm, shift=shift, disp=disp, rough=rough,
         )
     return out
 
@@ -312,12 +322,15 @@ def synthesize(
     basis: Optional[np.ndarray] = None,
     shift: float = 0.0,
     disp: float = 0.0,
+    rough: Optional[Roughness] = None,
 ) -> np.ndarray:
     """完整 ``y_calc`` = Σ scale_p·(该相谱) + 背景。
 
     :param basis: 已算好的设计矩阵（避免重复计算）；列序须与 ``specs`` 一致
     :param shift: 整体 2θ 平移（度），仪器零位
     :param disp: 样品位移项（度），``Δ2θ = disp·cosθ``
+    :param rough: 表面粗糙度（整样品）；传了 ``basis`` 时**必须与之一致**
+        （``basis`` 里已经含了 SR 乘子）
     """
     tt = np.asarray(two_theta, dtype=float)
     n = tt.size
@@ -328,7 +341,7 @@ def synthesize(
     if specs:
         b = basis if basis is not None else design_matrix(
             tt, specs, profile, wavelength=wavelength, kalph2=kalph2,
-            cutoff_fwhm=cutoff_fwhm, shift=shift, disp=disp)
+            cutoff_fwhm=cutoff_fwhm, shift=shift, disp=disp, rough=rough)
         sc = np.asarray(scales, dtype=float).reshape(-1)
         if sc.size != b.shape[1]:
             raise ValueError(f"标度个数 {sc.size} 与相数 {b.shape[1]} 不一致")

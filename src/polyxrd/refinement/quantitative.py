@@ -31,6 +31,8 @@ import math
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
+from .intensity import apply_microabsorption
+
 __all__ = [
     "ATOMIC_MASS",
     "atomic_mass",
@@ -120,7 +122,13 @@ def _integer_z(counts: Dict[str, float], tol: float = 0.08) -> int:
 
 @dataclass(frozen=True)
 class QuantResult:
-    """定量结果。"""
+    """定量结果。
+
+    :param tau: 各相 Brindley 微吸收系数 τ（未启用时全 1）
+    :param mu_bar: 样品平均线吸收系数（1/cm，未启用时 0）
+    :param mu_clamped: 有相的 ``|(μ−μ̄)·R|`` 超出 Brindley 表的适用范围
+        （> 0.5）—— 此时 τ 已按边界值截断，定量结果只能定性参考
+    """
 
     labels: Tuple[str, ...]
     fractions: Tuple[float, ...]          # 重量分数（0~1，和为 1）
@@ -130,6 +138,9 @@ class QuantResult:
     mass_per_cell: Tuple[float, ...]
     volume: Tuple[float, ...]
     detectable: Tuple[bool, ...]          # False = 含量低于可检出水平
+    tau: Tuple[float, ...] = ()           # Brindley τ（空 = 未启用微吸收）
+    mu_bar: float = 0.0
+    mu_clamped: bool = False
 
     def percent(self) -> Tuple[float, ...]:
         return tuple(100.0 * f for f in self.fractions)
@@ -189,6 +200,9 @@ def hill_howard(
     structures: Sequence,
     *,
     min_fraction: float = 0.0,
+    mu: Optional[Sequence[float]] = None,
+    radius_um: float = 0.0,
+    mu_iterations: int = 3,
 ) -> QuantResult:
     """Hill–Howard 重量分数。
 
@@ -196,15 +210,22 @@ def hill_howard(
     :param scales: **同一轮**线性层解出的标度（不同轮的不可比）
     :param structures: 各相 ``StructureModel``（取位点、占位、胞体积）
     :param min_fraction: 低于该重量分数的相标记为"不可检出"
+    :param mu: 各相线吸收系数（1/cm）。给齐且 ``radius_um > 0`` 时施加
+        Brindley 微吸收修正（见 :mod:`polyxrd.refinement.intensity`）
+    :param radius_um: 颗粒半径（µm），只对微吸收有意义
+    :param mu_iterations: μ̄ ↔ W 的不动点迭代轮数
 
     三步：
       1. 每相算 ``Z``（各元素计数的最大公约数）与每胞质量 ``M_cell=Z·M``；
       2. 定相因子 ``f_p = M_cell,p/V_p``（见 :func:`phase_weight_factor` 的推导）；
-      3. ``W_p = S_p·f_p / Σ``。
+      3. ``W_p = S_p·f_p / Σ``（启用微吸收时先把 ``f_p`` 除以 ``τ_p``）。
 
     **陷阱**：``S`` 与 ``|F|²`` 的绝对标定无关（比例常数在归一化里消掉），
     但要求所有相用同一套散射因子与 LP，**且强度口径与定相因子配套**
     （``I∝|F|²/V²`` 配 ``M/V``；``I∝|F|²`` 配 ``M·V``；``I∝|F|²/V³`` 配 ``M``）。
+
+    微吸收口径：``τ`` 作用在"该相强度"上（``I_obs = τ·I_true``），拟合出的
+    ``S`` 已含 ``τ``，真实含量 ∝ ``S/τ`` —— 这里是**除**，不是乘。
     """
     labels = list(labels)
     scales = [float(s) for s in scales]
@@ -224,13 +245,23 @@ def hill_howard(
         vols.append(vol)
         factors.append(phase_weight_factor(st))
 
-    weighted = [max(s, 0.0) * f for s, f in zip(scales, factors)]
-    total = float(sum(weighted))
-    if total <= 0.0:
-        n = len(labels)
-        fracs = [1.0 / n] * n
+    base = [max(s, 0.0) * f for s, f in zip(scales, factors)]
+
+    taus: Tuple[float, ...] = ()
+    mu_bar = 0.0
+    mu_clamped = False
+    if mu is not None and len(mu) == len(labels) and float(radius_um) > 0.0:
+        fracs_arr, tau_arr, mu_bar, mu_clamped = apply_microabsorption(
+            base, mu, float(radius_um), iterations=mu_iterations)
+        fracs = [float(v) for v in fracs_arr]
+        taus = tuple(float(v) for v in tau_arr)
     else:
-        fracs = [w / total for w in weighted]
+        total = float(sum(base))
+        if total <= 0.0:
+            n = len(labels)
+            fracs = [1.0 / n] * n
+        else:
+            fracs = [w / total for w in base]
 
     detectable = [bool(f >= min_fraction and s > 0.0)
                   for f, s in zip(fracs, scales)]
@@ -238,4 +269,5 @@ def hill_howard(
         labels=tuple(labels), fractions=tuple(fracs), scales=tuple(scales),
         factor=tuple(factors), z=tuple(zs), mass_per_cell=tuple(masses),
         volume=tuple(vols), detectable=tuple(detectable),
+        tau=taus, mu_bar=float(mu_bar), mu_clamped=bool(mu_clamped),
     )

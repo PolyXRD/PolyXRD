@@ -1249,6 +1249,50 @@ class RietveldRefiner:
                 log(f"[v5] po auto skipped: {type(e).__name__}: {e}")
                 auto_po = {}
 
+        # 表面粗糙度（v5.2）：整样品一个参数，Sidey 单参数模型。
+        # 默认 ``none``（零开销，结果与 v5.1 逐位一致）；显式给
+        # ``roughness_model="sidey"`` 才建模，``refine_roughness=True`` 才精修
+        # 幅度（否则固定在下述播种值）。播种 0.3 而不是 0：s=0 正好在参数下界
+        # 上，虽然 dS_R/ds ≠ 0，但第一步容易被边界投影吃掉一半步长。
+        _rough_model = str(kwargs.get("roughness_model", "none") or "none").lower()
+        _rough_on = _rough_model not in ("", "none", "off", "0")
+        _rough_refine = _rough_on and bool(kwargs.get("refine_roughness", False))
+        _rough_seed = float(kwargs.get("roughness_seed", 0.3) or 0.0)
+
+        # 微吸收（v5.2）：Brindley τ 需要逐相 μ（1/cm）+ 颗粒半径。μ 有两条来源，
+        # 优先级从高到低：
+        #   ① ``mu_linear`` 显式给出（用户/脚本已知各相 μ）
+        #   ② ``microabsorption=True`` 时按**位点组成 + 晶胞体积**现算
+        #      （``linear_mu_from_sites``；M_cell 在推导里被约掉，不需要密度）。
+        # 任一行算不出（含 Z>30 未收录元素）就整条放弃并记一条日志 —— 微吸收是
+        # 定量修正，宁可不做也不能拿错的 μ 硬算。
+        _grain_r = float(kwargs.get("grain_radius_um", 0.0) or 0.0)
+        _mu_linear = kwargs.get("mu_linear")
+        _ma_on = bool(kwargs.get("microabsorption", False))
+        if _ma_on and _mu_linear is None and _grain_r > 0.0:
+            try:
+                from polyxrd.refinement import linear_mu_from_sites
+
+                _mu_linear = [
+                    linear_mu_from_sites(
+                        getattr(ph, "atomic_sites", None) or (),
+                        float(ph.lattice.volume) if getattr(ph, "lattice", None)
+                        else 0.0)
+                    for ph in phases
+                ]
+            except Exception as e:  # noqa: BLE001 - 算不出就退化成不做修正
+                log(f"[v5] microabsorption skipped: {type(e).__name__}: {e}")
+                _mu_linear = None
+            if _mu_linear is not None and any(v is None for v in _mu_linear):
+                bad = [str(getattr(ph, "name", "?"))[:24]
+                       for ph, v in zip(phases, _mu_linear) if v is None]
+                log("[v5] microabsorption skipped: mu unavailable for "
+                    + ", ".join(bad))
+                _mu_linear = None
+            elif _mu_linear is not None:
+                log("[v5] microabsorption mu (1/cm): "
+                    + ", ".join(f"{v:.1f}" for v in _mu_linear))
+
         prob = PatternProblem(
             two_theta, intensity, blocks,
             profile=ProfileParams(w=max(1e-4, fwhm0 ** 2)),
@@ -1257,6 +1301,11 @@ class RietveldRefiner:
             kalph2=Kalpha2(wavelength=lam, ratio=0.497, separation=model_ka2),
             weights=1.0 / np.maximum(intensity, 1.0),
             cutoff_fwhm=self.V5_CUTOFF_FWHM,
+            roughness_model=_rough_model,
+            # 微吸收（Brindley）：逐相 μ（1/cm）+ 颗粒半径（µm）。都给了才生效，
+            # 且**只影响定量**（τ 在强度上会被标度吸收），不改变 Rwp。
+            mu_linear=_mu_linear,
+            grain_radius_um=_grain_r,
         )
 
         # ── 参数掩码：用户在向导里取消勾选的自由度要真的钉住 ────────
@@ -1287,6 +1336,13 @@ class RietveldRefiner:
             and mask.get("b_overall", True)
         if not _bovr_on:
             frozen += [f"phase{i}.bovr" for i in range(len(prob.phases))]
+        # 表面粗糙度（v5.2）：默认没有这个参数（模型关闭）；开着但没让精修时
+        # 固定到播种值 —— 等价于"按用户给的 s 做固定修正"，不是白占自由度。
+        if _rough_on:
+            prob.params.set("inst.rough", _rough_seed)
+            prob.apply()
+            if not _rough_refine:
+                frozen += ["inst.rough"]
         for name in frozen:
             if name in prob.params:
                 prob.params.fix(name, True)
@@ -1353,6 +1409,7 @@ class RietveldRefiner:
 
         # ── 定量（Hill–Howard 密度口径）与误差棒 ───────────────────
         fracs = [0.0] * len(phases)
+        _quant = getattr(summary, "quant", None)
         try:
             goals = evaluate_goals(prob, summary)
             fr = [g for g in goals if g.name == "fraction"]
@@ -1366,6 +1423,11 @@ class RietveldRefiner:
                 fracs = [100.0 * f for f in summary.quant.fractions]
             except Exception:  # noqa: BLE001
                 fracs = [0.0] * len(phases)
+        if _quant is None:                      # 极早期 summary 无 quant 时兜底
+            try:
+                _quant = prob.quantitative()
+            except Exception:  # noqa: BLE001
+                _quant = None
 
         # ── 诊断（结构化，最多 4 条，避免刷屏）──────────────────────
         diagnostics: list[dict] = []
@@ -1445,6 +1507,22 @@ class RietveldRefiner:
                 "refine_b_overall": bool(_bovr_on),
                 "b_overall": [float(prob.params.get(f"phase{i}.bovr", 0.0) or 0.0)
                               for i in range(len(prob.phases))],
+                # 表面粗糙度（v5.2）：模型名 + 幅度 + 是否精修。GUI 状态条要能
+                # 区分"没开模型"与"开了但固定 s"。
+                "roughness_model": _rough_model,
+                "refine_roughness": bool(_rough_refine),
+                "roughness_s": float(prob.params.get("inst.rough", 0.0) or 0.0),
+                # 微吸收（v5.2）：逐相 μ + 颗粒半径 + 实际用上的 τ。τ 全 1 且
+                # mu_bar=0 表示"没启用"，GUI/报告据此区分"修正过"与"没修正"。
+                "grain_radius_um": _grain_r,
+                "mu_linear": ([float(v) for v in _mu_linear]
+                              if _mu_linear is not None else []),
+                "microabsorption_tau": ([float(v) for v in _quant.tau]
+                                        if _quant is not None else []),
+                "microabsorption_mu_bar": float(
+                    (_quant.mu_bar if _quant is not None else 0.0) or 0.0),
+                "microabsorption_clamped": bool(
+                    _quant.mu_clamped if _quant is not None else False),
                 # 择优取向（v5.1）：显式给的方向 or 自动挑的惯习面
                 "po_hkl": [list(b.po_hkl) if b.po_hkl else None for b in prob.phases],
                 "po_r": [float(prob.params.get(f"phase{i}.po.r", 1.0) or 1.0)
