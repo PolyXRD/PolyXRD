@@ -27,6 +27,8 @@ from polyxrd.refinement import (
     PatternProblem,
     Kalpha2,
     build_reflections,
+    po_direction_from_hkl,
+    select_po_directions,
     design_matrix,
     detect_ka2_doublet,
     ka2_two_theta,
@@ -622,6 +624,88 @@ class TestOverallB:
         assert prob._make_design_key() != k0
         yc1 = prob.calc_pattern()
         assert np.max(np.abs(yc1 - yc0)) > 1e-6 * max(yc0.max(), 1.0)
+
+
+class TestAutoPO:
+    """自动择优取向（`select_po_directions`）：只做"单相列 × 残差"投影排序。
+
+    真实试样上的效果（基准报告 §十六）：4-1 29.56→13.03、5-2 35.83→24.26、
+    5-3 39.47→22.76、5-2b 17.38→16.70；而 2-1/3-1/1-2（各向同性）**零改动**
+    —— 不许对无择优的谱开火。
+    """
+
+    GRID = np.linspace(15.0, 75.0, 2001)
+    HKL_TRUE = (1, 0, 1)   # 必须在候选集内（001/100/110/101）
+    R_TRUE = 0.5
+
+    @staticmethod
+    def _caf2() -> StructureModel:
+        """第二相必须**换一个结构/晶胞**。
+
+        不能用两个 ``_lfp()``：两列完全共线，"去掉该相后的残差"会被 lstsq
+        压到只剩择优差异本身，``score₀`` 塌到 1e-27 直接被弱相门拦掉 ——
+        测的就不是判据而是退化案例（2026-11-04 踩过）。
+        """
+        return StructureModel(
+            sites=(AtomSite("Ca", 0.0, 0.0, 0.0, 1.0, 0.25),
+                   AtomSite("F", 0.25, 0.25, 0.25, 1.0, 1.0)),
+            cell=Cell(5.463, 5.463, 5.463, 90.0, 90.0, 90.0), name="CaF2")
+
+    def _phase_spec(self, textured: bool):
+        st = _lfp()
+        kw = {}
+        if textured:
+            kw["po_direction"] = po_direction_from_hkl(self.HKL_TRUE, st.cell)
+        tab = build_reflections(st, two_theta_range=(14.0, 76.0), **kw)
+        return PhaseSpec(tab, po_r=self.R_TRUE if textured else 1.0)
+
+    def _synth(self, textured: bool = True, second_scale: float = 0.5):
+        prof = ProfileParams(**TRUE_PROFILE)
+        second = PhaseSpec(build_reflections(self._caf2(),
+                                             two_theta_range=(14.0, 76.0)))
+        basis = design_matrix(self.GRID, [self._phase_spec(textured), second],
+                              prof, cutoff_fwhm=CUT)
+        y = basis @ np.array([SCALE_TRUE, second_scale * SCALE_TRUE]) + 40.0
+        return y, prof
+
+    def _blocks(self):
+        return [PhaseBlock("LFP", _lfp(), index=0),
+                PhaseBlock("CaF2", self._caf2(), index=1)]
+
+    def test_textured_phase_detected(self):
+        y, prof = self._synth(True)
+        got = select_po_directions(self.GRID, y, self._blocks(), prof,
+                                   cutoff_fwhm=CUT, trace=(tr := []))
+        assert 0 in got, (got, [(t["label"], round(t["gain"], 3),
+                                 round(t["delta"], 4)) for t in tr])
+        assert tuple(got[0]["hkl"]) == self.HKL_TRUE
+        assert got[0]["gain"] >= 0.2
+        # 未择优的第二相不许被牵连
+        assert 1 not in got, got
+
+    def test_isotropic_returns_empty(self):
+        """各向同性数据：宁可什么都不选，也不许把噪声拟合成择优。"""
+        y, prof = self._synth(False)
+        got = select_po_directions(self.GRID, y, self._blocks(), prof,
+                                   cutoff_fwhm=CUT)
+        assert got == {}, got
+
+    def test_absent_phase_is_not_textured(self):
+        """谱里根本没有的第二相：基线得分趋零，比值会虚高（5-3 石英曾爆到
+        32 倍），必须靠弱相门挡掉，否则 stage 4 会追着一个不存在的择优跑到
+        边界 —— 单次精修从 30 s 涨到 20 min。"""
+        y, prof = self._synth(True, second_scale=0.0)
+        got = select_po_directions(self.GRID, y, self._blocks(), prof,
+                                   cutoff_fwhm=CUT)
+        assert 1 not in got, got
+
+    def test_blocks_are_left_clean_when_rejected(self):
+        """未采纳的相必须回到 po_hkl=None / r=1（否则 table 带着 PO 明细，
+        后面 PatternProblem 会拿到一张"偷偷加了择优"的表）。"""
+        y, prof = self._synth(False)
+        blocks = self._blocks()
+        select_po_directions(self.GRID, y, blocks, prof, cutoff_fwhm=CUT)
+        assert all(b.po_hkl is None and b.po_r == 1.0 for b in blocks)
 
 
 class TestKa2Detect:

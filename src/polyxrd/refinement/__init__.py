@@ -138,6 +138,7 @@ from polyxrd.refinement.report import (
     build_report,
     residual_stats,
 )
+from polyxrd.refinement.orientation import select_po_directions
 from polyxrd.refinement.profile import (
     FWHM_TO_SIGMA,
     PROFILE_KINDS,
@@ -285,6 +286,7 @@ __all__ = [
     "protocol_for_tier",
     "po_direction_from_hkl",
     "profile_centers",
+    "select_po_directions",
     "reciprocal_magnitudes",
     "residual_stats",
     "resolve_protocol",

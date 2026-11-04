@@ -1081,9 +1081,13 @@ class RietveldRefiner:
     #: 档位 → (背景节点间距, 协议阶段表)。阶段号是**累积语义**：跑到 n 就把
     #: ``stage <= n`` 的参数全放开（2 峰位 → 3 峰形 → 4 择优 → 5 样品展宽）。
     V5_TIERS: ClassVar[dict] = {
-        "fast": {"bg_deg": 12.0, "protocol": ((2, 40), (3, 40))},
+        # stage 4 = 择优取向 r。此前协议里没有它，导致 `po.r` 即使给了惯习面
+        # 也从不精修（只有自动 PO 的网格起点在起作用）；v5.1 补进来，放在
+        # 峰形之后（r 的效应是强度重分布，与峰宽无关）。无 PO 的相该参数是
+        # fixed，stage 4 在"全部相都无惯习面"时会被整段裁掉，不白耗算力。
+        "fast": {"bg_deg": 12.0, "protocol": ((2, 40), (3, 40), (4, 30))},
         "precise": {"bg_deg": 8.0,
-                    "protocol": ((2, 150), (3, 120), (5, 80))},
+                    "protocol": ((2, 150), (3, 120), (5, 80), (4, 40))},
     }
 
     #: 峰窗半宽（FWHM 倍数）。默认值是 ``pattern.DEFAULT_CUTOFF_FWHM`` 的 25，
@@ -1215,6 +1219,30 @@ class RietveldRefiner:
         bg = BackgroundParams("tent" if mask.get("background", True) else "none", n_bg)
 
         fwhm0 = float(kwargs.get("fwhm", 0.15) or 0.15)
+
+        # ── 择优取向（v5.1）：显式方向优先，否则自动挑惯习面 ──────────
+        # 层状矿物（Brucite/Muscovite/Kaolinite 的 001）在压片样品里强择优，
+        # 没有 PO 时这部分失配会被峰宽/晶胞吸收 —— 4-1/5-2/5-2b/5-3 输给
+        # builtin 的差距基本都在这里。自动选择只做"投影收益"排序（单相列 ×
+        # 其余相残差），不跑整拟合；门槛见 `refinement.orientation`（相对
+        # gain ≥0.2 且剩余失配占比 ≥0.005），不够就保持无 PO。
+        auto_po: dict = {}
+        if po_hkl is None and bool(kwargs.get("auto_preferred_orientation", True)) \
+                and mask.get("po", True) and len(blocks) <= 8:
+            try:
+                from polyxrd.refinement import select_po_directions
+
+                auto_po = select_po_directions(
+                    two_theta, intensity, blocks,
+                    ProfileParams(w=max(1e-4, fwhm0 ** 2)),
+                    wavelength=lam,
+                    kalph2=Kalpha2(wavelength=lam, ratio=0.497,
+                                   separation=model_ka2),
+                    cutoff_fwhm=self.V5_CUTOFF_FWHM, log=log)
+            except Exception as e:  # noqa: BLE001 - 选择失败不该影响精修
+                log(f"[v5] po auto skipped: {type(e).__name__}: {e}")
+                auto_po = {}
+
         prob = PatternProblem(
             two_theta, intensity, blocks,
             profile=ProfileParams(w=max(1e-4, fwhm0 ** 2)),
@@ -1271,8 +1299,9 @@ class RietveldRefiner:
 
         protocol = [StageSpec(st, min(int(it), max(10, max_cycles * 20)))
                     for st, it in tier["protocol"]]
-        if po_hkl is None:
-            # 无惯习面时 stage 4 零自由参数，排进去只会白耗 patience
+        if not any(b.po_hkl for b in blocks):
+            # 所有相都无惯习面时 stage 4 零自由参数，排进去只会白耗 patience
+            # （自动 PO 可能只给其中一部分相挑到方向，只要有一相有就保留）
             protocol = [s for s in protocol if s.stage != 4]
 
         progress_cb = kwargs.get("progress_cb")
@@ -1401,6 +1430,11 @@ class RietveldRefiner:
                 "refine_b_overall": bool(_bovr_on),
                 "b_overall": [float(prob.params.get(f"phase{i}.bovr", 0.0) or 0.0)
                               for i in range(len(prob.phases))],
+                # 择优取向（v5.1）：显式给的方向 or 自动挑的惯习面
+                "po_hkl": [list(b.po_hkl) if b.po_hkl else None for b in prob.phases],
+                "po_r": [float(prob.params.get(f"phase{i}.po.r", 1.0) or 1.0)
+                         for i in range(len(prob.phases))],
+                "auto_po": auto_po,
                 "param_mask": mask,
                 "v5_frozen_params": frozen,
                 "v5_tier": "fast" if _tier == "fast" else "precise",

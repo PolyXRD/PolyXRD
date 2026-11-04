@@ -327,7 +327,10 @@ class PatternProblem:
             # March–Dollase 权重恒为 1（``build_reflections`` 不写 cosα），
             # 这一列雅可比全零 —— 放出来白占一个自由度、还让 rank 检查报亏。
             # 用户后来补 po_hkl 时需重建参数书（UI 侧本来就重建）。
-            ps.add(Parameter(f"{p}.po.r", float(ph.po_r), 0.05, 20.0,
+            # r 的界取 0.2…5.0（v5.1）：March–Dollase 的物理区间，超出这个
+            # 范围基本不是"择优"而是模型在吸收别的误差（假择优会把 r 推到
+            # 边界并让 stage 4 反复试探，5-3 实测单次精修从 30 s 涨到 20 min）。
+            ps.add(Parameter(f"{p}.po.r", float(ph.po_r), 0.2, 5.0,
                              stage=st["po"], fixed=ph.po_hkl is None,
                              label=f"{ph.label} 择优 r"))
             # 整体温度因子 B（每相）：|F|²·exp(−2B s²)，只依赖各反射自身 d，
