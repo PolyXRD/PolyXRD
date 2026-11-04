@@ -541,7 +541,7 @@ def build_report(
     stage = refined_stage(summary)
     free_names = [params.names()[i] for i in params.free_indices(stage)]
     po_freed = any(n.endswith(".po.r") for n in free_names)
-    sample_freed = any(n.endswith(".size") or n.endswith(".strain")
+    sample_freed = any(n.endswith(".sizec") or n.endswith(".strain")
                        for n in free_names)
     atoms_freed = any(".atom" in n for n in free_names)
     if kalph2_modeled is None:

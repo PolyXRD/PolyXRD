@@ -117,6 +117,7 @@ from polyxrd.refinement.protocol import (
     run_tiered,
     seed_caglioti,
     seed_problem,
+    seed_sample_broadening,
     seed_zero,
     snip_baseline,
 )
@@ -297,6 +298,7 @@ __all__ = [
     "scipy_least_squares",
     "seed_caglioti",
     "seed_problem",
+    "seed_sample_broadening",
     "seed_zero",
     "site_from_dict",
     "snip_baseline",

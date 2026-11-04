@@ -427,7 +427,9 @@ class TestMetricsFreshness:
         r0 = prob.metrics()["Rwp"]
         assert r0 == pytest.approx(self._direct_rwp(prob), rel=1e-8)
 
-        prob.params.set("phase0.size", 150.0)   # 手工改动，不经过拟合器
+        # 手工改动，不经过拟合器。size 用**洛伦兹系数**（度·cosθ）参数化，
+        # 0.05 度 ≈ 159 nm（见 profile.size_coefficient）
+        prob.params.set("phase0.sizec", 0.05)
         prob.apply()
         r1 = prob.metrics()["Rwp"]
         assert r1 == pytest.approx(self._direct_rwp(prob), rel=1e-8)

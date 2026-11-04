@@ -301,7 +301,7 @@ class TestTieTracking:
 
         def _rank(prob: PatternProblem) -> tuple:
             # 只留胞参 + 峰形/零位之外的东西全部定住，专注于"胞参是否退化"
-            for pref in ("phase0.atom", "phase0.size", "phase0.strain",
+            for pref in ("phase0.atom", "phase0.sizec", "phase0.strain",
                          "phase0.po", "phase0.bovr", "inst."):
                 prob.params.fix_prefix(pref, True)
             x0 = prob.params.to_vector()
@@ -331,3 +331,100 @@ class TestTieTracking:
         assert (n_cube, rank_cube) == (1, 1)
         _, rank_cube_loose = _rank(_problem(CUBIC_CELL, ""))
         assert rank_cube_loose < 6
+
+
+class TestSampleBroadeningIdentifiability:
+    """样品展宽的可辨识性（基准报告 §十七，2026-11-04）。
+
+    两件事一起踩过：
+
+    1. ``β_size = Kλ/(D cosθ)`` 在 ``D → ∞`` 处**平坦**（``dβ/dD ∝ 1/D²``），
+       数值差分的列会在浮点上归零 —— 2-2 的 ``phase1.size`` 停在 99988 nm，
+       秩打成 15/16、SVD0=5e-15。所以参数册里存的是**洛伦兹系数**（度·cosθ），
+       ``0`` 是"无展宽"这个正常点，列恒为 ``1/cosθ``。
+    2. ``X`` 与 ``4ε``、``Y`` 与 ``Kλ/D`` 是逐字相同的基函数，一起放开只有
+       它们的和可辨识 —— stage 5 一启用就把 ``inst.x``/``inst.y`` 钉住。
+    """
+
+    @staticmethod
+    def _only_free(prob: PatternProblem, keep: str) -> None:
+        prob.params.fix_prefix("", True)          # 全定住
+        prob.params.fix(keep, False)              # 只放一个
+
+    def _column_norm(self, prob: PatternProblem, coef: float) -> float:
+        prob.params.set("phase0.sizec", coef)
+        prob.apply()
+        x0 = prob.params.to_vector()
+        r0 = prob.residual(x0)
+        h = 1e-6 * max(1.0, abs(coef))
+        x1 = x0.copy()
+        x1[0] += h
+        return float(np.linalg.norm(prob.residual(x1) - r0) / h)
+
+    def test_size_column_survives_tiny_coefficient(self):
+        """旧口径的反例：D 很大时列几乎为零（1e-11 量级），秩检查报亏。
+
+        现在参数是系数：``coef = 1e-5`` 度 ≈ 8000 nm（大晶粒、近乎无展宽），
+        列的量级必须和中等展宽（``coef = 0.03`` 度 ≈ 265 nm）时相当 ——
+        因为它们乘的是同一个基函数 ``1/cosθ``。
+        """
+        prob = _problem(HEX_CELL)
+        self._only_free(prob, "phase0.sizec")
+        big = self._column_norm(prob, 1e-5)
+        mid = self._column_norm(prob, 0.03)
+        assert mid > 0.0
+        assert big > 0.3 * mid, (big, mid)
+
+    def _rank_of(self, prob: PatternProblem, names) -> tuple:
+        prob.params.fix_prefix("", True)
+        for name in names:
+            prob.params.fix(name, False)
+        x0 = prob.params.to_vector()
+        r0 = prob.residual(x0)
+        cols = []
+        for j in range(x0.size):
+            h = 1e-6 * max(1.0, abs(x0[j]))
+            x = x0.copy()
+            x[j] += h
+            cols.append((prob.residual(x) - r0) / h)
+        jac = np.column_stack(cols)
+        sv = np.linalg.svd(jac, compute_uv=False)
+        tol = max(jac.shape) * sv[0] * 1e-8
+        return x0.size, int(np.sum(sv > tol)), sv
+
+    def test_x_with_strain_and_y_with_size_are_collinear(self):
+        """反证：``X`` 与 ``4ε``、``Y`` 与 ``Kλ/D`` 是**逐字相同**的基函数。
+
+        一起放开时方程只有它们的和可辨识 —— 单相谱上实测秩 6/8、SVD0≈1e-17。
+        这条用例存在的意义是：**任何"顺手把 inst.x/y 放开"的改动都会被它拦住**。
+        """
+        prob = _problem(HEX_CELL)
+        n, rank, _sv = self._rank_of(
+            prob, ("phase0.sizec", "phase0.strain", "inst.u", "inst.v",
+                   "inst.w", "inst.x", "inst.y", "inst.z"))
+        assert n == 8
+        assert rank < n, "x↔ε / y↔size 的共线居然消失了？先确认基函数是否被改过"
+
+    def test_rank_is_full_once_instrument_lorentz_is_frozen(self):
+        """钉住 ``inst.x``/``inst.y`` 后，剩下的方向必须满秩（6/6）。
+
+        这是 ``solver`` 实际跑的那条路径：``run_protocol`` 一看到 stage 5 就
+        调 ``freeze_instrument_lorentz()``。
+        """
+        prob = _problem(HEX_CELL)
+        prob.freeze_instrument_lorentz()
+        n, rank, _sv = self._rank_of(
+            prob, ("phase0.sizec", "phase0.strain", "inst.u", "inst.v",
+                   "inst.w", "inst.z"))
+        assert n == 6
+        assert rank == n
+
+    def test_freeze_instrument_lorentz(self):
+        prob = _problem(HEX_CELL)
+        frozen = prob.freeze_instrument_lorentz()
+        assert frozen == ["inst.x", "inst.y"]
+        names = prob.params.names()
+        free = {names[i] for i in prob.params.free_indices()}
+        assert "inst.x" not in free and "inst.y" not in free
+        # U/V/W/Z 仍然自由 —— 高斯分量与常数洛伦兹项没有被牵连
+        assert {"inst.u", "inst.v", "inst.w", "inst.z"} <= free

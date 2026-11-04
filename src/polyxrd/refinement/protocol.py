@@ -54,12 +54,53 @@ __all__ = [
     "run_tiered",
     "seed_caglioti",
     "seed_problem",
+    "seed_sample_broadening",
     "seed_zero",
     "snip_baseline",
 ]
 
 #: 协议可用的全部阶段编号（累积语义：``stage <= n`` 全放开）
 STAGE_ORDER: Tuple[int, ...] = tuple(sorted(STAGE_LABELS))
+
+#: stage 5 的尺寸起点（nm）。**不能停在 0**：``{p}.sizec = 0`` 是参数边界，
+#: 而"尺寸展宽"在起点处只由 ``1/cosθ`` 一个方向提供信息，LM 从边界出发的步长
+#: 会被压到亚阈值 —— 实测 2-2：从 0 出发停在 5e-7、Rwp 14.936；从 300 nm
+#: 等价出发收敛到 261.6 nm、Rwp 14.814（差 0.12 pp）。500 nm 对应的额外洛伦兹
+#: 宽度只有 0.016°（Cu Kα，FWHM≈0.15° 的 1/10），不会把起始峰宽撑坏。
+DEFAULT_SIZE_SEED_NM: float = 500.0
+
+
+def seed_sample_broadening(
+    problem: PatternProblem,
+    *,
+    apply: bool = True,
+    size_nm: float = DEFAULT_SIZE_SEED_NM,
+) -> List[str]:
+    """给"还没定尺寸"的相一个非边界起点（写 ``{p}.sizec``）。
+
+    只动系数仍为 0 的相 —— 用户显式给了 ``crystallite_nm`` 的相不动。
+    调用时机由 ``run_protocol`` 决定：**只有协议里真有 stage 5 时**才播种，
+    否则 fast 档会被塞进一个它无权精修的展宽项。
+
+    :return: 被播种的参数名，便于日志说明"起点是猜的"。
+    """
+    from .profile import SIZE_COEF_MIN, size_coefficient
+
+    wl = float(getattr(problem, "wavelength", 1.54056) or 1.54056)
+    k = float(getattr(problem.profile, "k_size", 0.9) or 0.9)
+    coef = size_coefficient(max(float(size_nm), 1.0), wl, k)
+    seeded: List[str] = []
+    for ph in problem.phases:
+        name = f"{ph.prefix}.sizec"
+        if name not in problem.params:
+            continue
+        if float(problem.params[name].value) > SIZE_COEF_MIN:
+            continue                      # 已有非零起点，不覆盖
+        problem.params.set(name, coef)
+        seeded.append(name)
+    if seeded and apply:
+        problem.apply()
+    return seeded
 
 
 @dataclass(frozen=True)
@@ -189,6 +230,13 @@ def run_protocol(
     last = None
     last_stage: Optional[int] = None
     flat = 0
+
+    # 样品展宽（stage 5）要起步：`{p}.sizec = 0` 是**边界**，LM 从边界出发的
+    # 步长会被压到亚阈值（实测 2-2：从 0 出发停在 5e-7、Rwp 14.936；从 300 nm
+    # 等价出发到 261.6 nm、Rwp 14.814）。只在协议确实要跑 stage 5 时播种，
+    # 否则 fast 档会被塞进一个它无权精修的展宽项。
+    if any(s.stage >= 5 for s in specs):
+        seed_sample_broadening(problem, apply=True)
 
     for i, spec in enumerate(specs):
         x0 = problem.params.to_vector(spec.stage)

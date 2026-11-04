@@ -1080,6 +1080,12 @@ class RietveldRefiner:
 
     #: 档位 → (背景节点间距, 协议阶段表)。阶段号是**累积语义**：跑到 n 就把
     #: ``stage <= n`` 的参数全放开（2 峰位 → 3 峰形 → 4 择优 → 5 样品展宽）。
+    #:
+    #: **阶段必须严格递增**（``resolve_protocol`` 会硬校验）。precise 档曾在
+    #: ``(5, 80)`` 之后追加 ``(4, 40)``，结果"5→4"直接抛
+    #: "协议阶段必须递增" —— 而该分支只在**自动择优命中**时才保留 stage 4
+    #: （无 PO 时会被裁掉、顺序恰好合法），所以 fast 档 A/B 完全看不出来。
+    #: 守卫见 ``tests/test_refinement_engine.py::TestTierProtocolOrder``。
     V5_TIERS: ClassVar[dict] = {
         # stage 4 = 择优取向 r。此前协议里没有它，导致 `po.r` 即使给了惯习面
         # 也从不精修（只有自动 PO 的网格起点在起作用）；v5.1 补进来，放在
@@ -1087,7 +1093,7 @@ class RietveldRefiner:
         # fixed，stage 4 在"全部相都无惯习面"时会被整段裁掉，不白耗算力。
         "fast": {"bg_deg": 12.0, "protocol": ((2, 40), (3, 40), (4, 30))},
         "precise": {"bg_deg": 8.0,
-                    "protocol": ((2, 150), (3, 120), (5, 80), (4, 40))},
+                    "protocol": ((2, 150), (3, 120), (4, 40), (5, 80))},
     }
 
     #: 峰窗半宽（FWHM 倍数）。默认值是 ``pattern.DEFAULT_CUTOFF_FWHM`` 的 25，
@@ -1304,6 +1310,15 @@ class RietveldRefiner:
             # （自动 PO 可能只给其中一部分相挑到方向，只要有一相有就保留）
             protocol = [s for s in protocol if s.stage != 4]
 
+        # 样品展宽（stage 5）一启用，就把仪器洛伦兹 X/Y 钉住：X 与 4ε、Y 与
+        # Kλ/D 是逐字相同的基函数，一起放开只有它们的和可辨识（§十七）。
+        if any(s.stage >= 5 for s in protocol):
+            _frozen_il = prob.freeze_instrument_lorentz()
+            if _frozen_il:
+                frozen.extend(_frozen_il)
+                log("[v5] inst Lorentzian frozen for sample broadening: "
+                    + ", ".join(_frozen_il))
+
         progress_cb = kwargs.get("progress_cb")
         total = len(protocol)
 
@@ -1435,6 +1450,11 @@ class RietveldRefiner:
                 "po_r": [float(prob.params.get(f"phase{i}.po.r", 1.0) or 1.0)
                          for i in range(len(prob.phases))],
                 "auto_po": auto_po,
+                # 样品展宽（v5.1）：参数册里存的是洛伦兹系数（度·cosθ），
+                # 这里回填**物理量** nm / ε 供报告与界面读取。系数≈0 时
+                # size_nm = 0 表示"无尺寸展宽"（§十七）。
+                "size_nm": [round(float(b.size_nm), 1) for b in prob.phases],
+                "strain": [float(b.strain) for b in prob.phases],
                 "param_mask": mask,
                 "v5_frozen_params": frozen,
                 "v5_tier": "fast" if _tier == "fast" else "precise",

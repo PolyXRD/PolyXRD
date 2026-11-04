@@ -168,7 +168,7 @@ class TestStageProtocol:
             np.linspace(10.0, 60.0, 200), np.full(200, 10.0),
             [PhaseBlock("P", _lfp())])
         assert prob.params["phase0.po.r"].stage == 4
-        assert prob.params["phase0.size"].stage == 5
+        assert prob.params["phase0.sizec"].stage == 5
         assert prob.params["phase0.atom0.occ"].stage == 6
 
 
@@ -564,8 +564,8 @@ class TestTier:
 
     def test_refined_stage_ignores_skipped(self):
         class _S:
-            stages = [{"stage": 2, "status": "converged"},
-                      {"stage": 3, "status": "skipped"}]
+            stages = ({"stage": 2, "status": "converged"},
+                      {"stage": 3, "status": "skipped"})
 
         assert refined_stage(_S()) == 2
 
@@ -718,3 +718,34 @@ class TestOneClick:
         # structure 协议 = 2,3,5,6,7；至少跑到结构阶段（6）
         assert 6 in called
         assert refined_stage(summary) is not None
+
+
+class TestSampleBroadeningSeed:
+    """stage 5 的尺寸起点必须是**非边界**值（基准报告 §十七）。
+
+    ``{p}.sizec = 0`` 是参数边界。实测 2-2：从 0 出发停在 5e-7（Rwp 14.936），
+    从 300 nm 等价出发收敛到 261.6 nm（Rwp 14.814）—— 差 0.12 pp 全丢在
+    "LM 从边界迈不出步"上。
+    """
+
+    def test_seeded_when_stage5_present(self):
+        prob = _synth_problem()
+        run_protocol(prob, protocol=[StageSpec(5, 3)])
+        assert float(prob.params["phase0.sizec"].value) > 0.0
+        assert prob.phases[0].size_nm > 100.0
+
+    def test_not_seeded_without_stage5(self):
+        """fast 档没有 stage 5，塞一个展宽项进去等于偷自由度。"""
+        prob = _synth_problem()
+        run_protocol(prob, protocol=[StageSpec(2, 3)])
+        assert float(prob.params["phase0.sizec"].value) == 0.0
+        assert prob.phases[0].size_nm == 0.0
+
+    def test_explicit_size_is_not_overwritten(self):
+        """用户给了尺寸就不许被 500 nm 种子盖掉。"""
+        from polyxrd.refinement.protocol import seed_sample_broadening
+
+        prob = _synth_problem()
+        prob.params.set("phase0.sizec", 0.06)      # ≙ 20 nm
+        assert seed_sample_broadening(prob) == []
+        assert float(prob.params["phase0.sizec"].value) == pytest.approx(0.06)

@@ -29,7 +29,8 @@ from .linear import LinearSolve, design_stack, solve_linear
 from .optimize import FitResult, minimize_residual
 from .parameters import Parameter, ParameterSet
 from .pattern import DEFAULT_CUTOFF_FWHM, PhaseSpec, design_matrix
-from .profile import Kalpha2, ProfileParams
+from .profile import (Kalpha2, ProfileParams, size_coefficient,
+                      size_from_coefficient)
 from .quantitative import QuantResult, hill_howard
 from .structure import AtomSite, Cell, ReflectionTable, StructureModel, build_reflections
 from .symmetry import apply_cell_ties
@@ -319,8 +320,17 @@ class PatternProblem:
                 ps.add(Parameter(f"{p}.cell.{tag}", float(val), lo, hi,
                                  stage=st["cell"],
                                  label=f"{ph.label} {tag}"))
-            ps.add(Parameter(f"{p}.size", float(ph.size_nm), 0.0, 100000.0,
-                             stage=st["sample"], label=f"{ph.label} 晶粒 (nm)"))
+            # 样品展宽：**尺寸用洛伦兹系数参数化，不用 D(nm)**。
+            # β_size = Kλ/(D cosθ) 与 inst.y 是同一个函数形状，而且 dβ/dD ∝ 1/D²
+            # 在 D→∞ 处彻底平坦：2-2 的 phase1.size 跑到 99988 nm，数值差分列
+            # 在浮点上归零 → 秩 15/16、SVD0=5e-15（基准报告 §十七）。
+            # 改用 coef（度·cosθ）后，"无展宽"= coef 0 是正常点，列恒为 1/cosθ。
+            # 上界 4.0 度 ≈ D 2 nm，低到不能再低；`PhaseBlock.size_nm` 仍是物理量，
+            # 由 `apply()` 从系数反算（供报告/定量读取）。
+            _coef = size_coefficient(ph.size_nm, self.wavelength, self.profile.k_size)
+            ps.add(Parameter(f"{p}.sizec", _coef, 0.0, 4.0,
+                             stage=st["sample"],
+                             label=f"{ph.label} 晶粒展宽 1/cosθ (度)"))
             ps.add(Parameter(f"{p}.strain", float(ph.strain), 0.0, 0.2,
                              stage=st["sample"], label=f"{ph.label} 应变 ε"))
             # 择优取向：**没给惯习面就不放这个自由度**。``po_hkl is None`` 时
@@ -423,11 +433,36 @@ class PatternProblem:
             )
             sites = self._sites_from_params(ph)
             ph.structure = replace(ph.structure, cell=cell, sites=tuple(sites))
-            ph.size_nm = float(g(f"{p}.size", ph.size_nm) or 0.0)
+            ph.size_nm = size_from_coefficient(
+                g(f"{p}.sizec", 0.0) or 0.0, self.wavelength, self.profile.k_size)
             ph.strain = float(g(f"{p}.strain", ph.strain) or 0.0)
             ph.po_r = float(g(f"{p}.po.r", ph.po_r) or 1.0)
             ph.b_overall = float(g(f"{p}.bovr", ph.b_overall) or 0.0)
             ph.scale = float(g(f"{p}.scale", ph.scale) or 0.0)
+
+    def freeze_instrument_lorentz(self) -> List[str]:
+        """钉住 ``inst.x`` / ``inst.y``，让样品展宽独占 ``tanθ`` / ``1/cosθ``。
+
+        洛伦兹分量是逐字相加的::
+
+            ell = X·tanθ + Y/cosθ + Z + Kλ/(D·cosθ) + 4ε·tanθ
+
+        ``X`` 与 ``4ε``、``Y`` 与 ``Kλ/D`` 是**完全相同的基函数** —— 一起放开
+        时方程里只有它们的和可辨识（v5.1 之前一直靠"大多数时候两者都停在 0"
+        侥幸避开）。惯例取"仪器洛伦兹由标样标定、样品展宽归样品"：stage 5
+        启用时把 X/Y 钉在种子值（默认 0），D/ε 才有唯一解。
+
+        注意这**不是**精度取舍：X/Y 被钉住后 D 会吸收仪器那部分 1/cosθ 展宽，
+        报出的尺寸是文献里的"表观晶粒尺寸"，这正是 Rietveld 的标准口径。
+
+        :return: 实际被钉住的参数名（参数册里没有的不算）。
+        """
+        frozen: List[str] = []
+        for name in ("inst.x", "inst.y"):
+            if name in self.params:
+                self.params[name].fixed = True
+                frozen.append(name)
+        return frozen
 
     def _sites_from_params(self, ph: PhaseBlock) -> List[AtomSite]:
         """把 atom 自由度套回全胞位点（等价位点共享同一个自由度）。"""

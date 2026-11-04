@@ -41,6 +41,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 import numpy as np
 
 from .linear import linear_sigmas
+from .profile import SIZE_COEF_MIN, size_from_coefficient
 from .quantitative import QuantResult
 
 __all__ = [
@@ -228,7 +229,8 @@ def evaluate_goals(
         return ""
 
     def _make(name: str, prm, label: str, unit: str, scale: float,
-              zero_note: str) -> GoalResult:
+              zero_note: str, *, value: Optional[float] = None,
+              sigma: Optional[float] = None) -> GoalResult:
         note = _release_note(prm)
         reliable = True
         if note:
@@ -239,16 +241,31 @@ def evaluate_goals(
             reliable, note = False, "撞边界：数据不足以定该量"
         elif prm.sigma <= 0:
             note = "无误差棒（该参数未参与最后一段）"
-        return GoalResult(name, label, scale * float(prm.value),
-                          scale * float(prm.sigma), unit, reliable, note)
+        v = scale * float(prm.value) if value is None else float(value)
+        s = scale * float(prm.sigma) if sigma is None else float(sigma)
+        return GoalResult(name, label, v, s, unit, reliable, note)
 
     if "size" in goals or "strain" in goals:
+        _wl = float(getattr(problem, "wavelength", 1.54056) or 1.54056)
+        _k = float(getattr(problem.profile, "k_size", 0.9) or 0.9)
         for ph in problem.phases:
             p = ph.prefix
-            if "size" in goals and f"{p}.size" in params:
-                out.append(_make("size", params[f"{p}.size"],
-                                 f"{ph.label} 晶粒尺寸", "nm", 1.0,
-                                 "解为 0（无展宽）"))
+            if "size" in goals and f"{p}.sizec" in params:
+                prm = params[f"{p}.sizec"]
+                coef = float(prm.value)
+                # 参数册里存的是洛伦兹系数（度·cosθ），目标是 nm —— 换算非线性，
+                # 误差棒按 dD/dc = D/c 传播（§十七）
+                if coef > SIZE_COEF_MIN:
+                    d_nm = size_from_coefficient(coef, _wl, _k)
+                    sd = d_nm * float(prm.sigma) / coef if prm.sigma > 0 else 0.0
+                    out.append(_make("size", prm, f"{ph.label} 晶粒尺寸", "nm",
+                                     1.0, "解为 0（无展宽）", value=d_nm, sigma=sd))
+                else:
+                    # 系数≈0：要么本协议没到 stage 5（_make 会给出"未释放"），
+                    # 要么确实无尺寸展宽
+                    out.append(_make("size", prm, f"{ph.label} 晶粒尺寸", "nm",
+                                     1.0, "无尺寸展宽（超出可分辨上限）",
+                                     value=0.0, sigma=0.0))
             if "strain" in goals and f"{p}.strain" in params:
                 out.append(_make("strain", params[f"{p}.strain"],
                                  f"{ph.label} 微应变", "%", 100.0,

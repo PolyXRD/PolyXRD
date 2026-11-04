@@ -237,6 +237,41 @@ def tch_widths(
     return fwhm, eta
 
 
+#: ``size`` 参数化的下限：系数小于此值即认为"展宽不可分辨"。
+#: 单位是度（``β_size = coef/cosθ``）；1e-6 度 ≈ D > 7 mm，远超任何 XRD 分辨率。
+SIZE_COEF_MIN = 1e-6
+
+
+def size_coefficient(size_nm: float, wavelength: float, k: float = 0.9) -> float:
+    """Scherrer 尺寸折算成**洛伦兹系数**（度·cosθ）：``β_size = coef/cosθ``。
+
+    为什么精修里必须用系数而不是 D（2026-11-04，基准报告 §十七）：``D`` 与
+    ``inst.y`` 是**同一个函数形状**（都进 ``ell`` 的 ``1/cosθ`` 项），而且
+    ``β(D) = Kλ/(D cosθ)`` 在 ``D → ∞`` 处彻底平坦 —— ``dβ/dD ∝ 1/D²``。
+    实测 2-2 的 ``phase1.size`` 跑到 99988 nm（上界 100000），数值差分的列
+    **在浮点上归零**，秩打成 15/16、SVD0=5e-15。改成系数后 ``coef=0``
+    是"无展宽"这个**正常点**，雅可比列恒为 ``1/cosθ``，永不塌缩。
+    """
+    if not size_nm or float(size_nm) <= 0.0 or not wavelength or wavelength <= 0:
+        return 0.0
+    return float(k) * float(wavelength) / (float(size_nm) * 10.0) * _RAD2DEG
+
+
+def size_from_coefficient(coef: float, wavelength: float, k: float = 0.9) -> float:
+    """``size_coefficient`` 的逆变换；**只有系数恰为 0 才返回 0**（= 不启用展宽）。
+
+    注意这里**不能**按 ``SIZE_COEF_MIN`` 截断：那会在 0 附近造出一个台阶，
+    雅可比列在台阶以内恒为零 —— 等价于把刚修掉的"平坦区"又搬回来
+    （2026-11-04 由 ``test_size_column_survives_tiny_coefficient`` 抓到）。
+    "太小 → 报未分辨"是**展示层**的事（``goal`` / ``report`` 用
+    ``SIZE_COEF_MIN``），不是模型层的事。
+    """
+    if not coef or float(coef) <= 0.0 or not wavelength or wavelength <= 0:
+        return 0.0
+    a_rad = max(float(coef) / _RAD2DEG, 1e-12)
+    return float(k) * float(wavelength) / a_rad / 10.0
+
+
 def tch_combine(gwhm, lwhm) -> Tuple[np.ndarray, np.ndarray]:
     """Thompson–Cox–Hastings：由高斯/洛伦兹分量 FWHM 合成 ``(FWHM, η)``。
 

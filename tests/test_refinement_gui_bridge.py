@@ -377,3 +377,35 @@ class TestOverallBService:
         assert fp["refine_b_overall"] is True
         assert len(fp["b_overall"]) == 2
         assert max(fp["b_overall"]) > 0.0       # 参数真的进了非线性向量
+
+
+class TestTierProtocolOrder:
+    """档位协议阶段必须严格递增，且只能是引擎已定义的阶段号。
+
+    这是一条**纯静态**守卫，但代价换来的是一次真实事故（2026-11-04）：precise
+    档曾写成 ``(2,150) (3,120) (5,80) (4,40)``，而 stage 4 的裁剪条件是
+    "全部相都无惯习面"—— 于是**只有自动择优命中时才保留 stage 4**，顺序恰好
+    变成 5→4，`resolve_protocol` 抛 "协议阶段必须递增"，整条精修失败回退
+    builtin。fast 档顺序正确，所以 A/B 与常规回归都看不出来。
+    """
+
+    def test_stages_strictly_increasing(self):
+        for tier, spec in RietveldRefiner.V5_TIERS.items():
+            stages = [st for st, _ in spec["protocol"]]
+            assert stages == sorted(stages), f"{tier} 档阶段未递增: {stages}"
+            assert len(set(stages)) == len(stages), f"{tier} 档阶段重复: {stages}"
+
+    def test_stages_are_known(self):
+        for tier, spec in RietveldRefiner.V5_TIERS.items():
+            for st, iters in spec["protocol"]:
+                assert 2 <= st <= 6, f"{tier} 档出现非法阶段 {st}"
+                assert iters >= 10, f"{tier} 档 stage {st} 迭代数过小: {iters}"
+
+    def test_trimmed_protocol_still_ordered(self):
+        """模拟"自动择优命中 → 保留 stage 4"与"无 PO → 裁掉 stage 4"两种裁剪，
+        结果都必须递增（这才是真正会跑的那条路径）。"""
+        for tier, spec in RietveldRefiner.V5_TIERS.items():
+            for drop4 in (True, False):
+                stages = [st for st, _ in spec["protocol"]
+                          if not (drop4 and st == 4)]
+                assert stages == sorted(stages), (tier, drop4, stages)
