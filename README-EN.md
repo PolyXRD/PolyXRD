@@ -7,7 +7,7 @@
     Peak detection &nbsp;·&nbsp; Multi-phase qualitative search &nbsp;·&nbsp; Rietveld structure refinement &nbsp;·&nbsp; Le Bail cell refinement &nbsp;·&nbsp; Indexing &nbsp;·&nbsp; 3D structure visualization &nbsp;·&nbsp; Bundled COD-Inorg polyDB default library + external COD-Full / PDF2-2004
   </p>
   <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v4.7.0-blue?style=flat-square" /></a>
+    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v5.1.0-blue?style=flat-square" /></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
     &nbsp;
@@ -15,7 +15,7 @@
     &nbsp;
     <img src="https://img.shields.io/badge/UI-PySide6%20(Qt6)-41cd52?style=flat-square" />
     &nbsp;
-    <img src="https://img.shields.io/badge/Tests-1904%20passed-brightgreen?style=flat-square" />
+    <img src="https://img.shields.io/badge/Tests-2348%20passed-brightgreen?style=flat-square" />
   </p>
   <p><i>🌐 简体中文文档：[README.md](README.md)</i></p>
 </div>
@@ -38,7 +38,27 @@ Core design philosophy:
 
 ---
 
-## 🚧 In Development v4.7.0 (2026-10-31 · unreleased)
+## 🚧 In Development v5.1.0 (2026-11-04 · unreleased)
+
+**The refinement engine moves from "peak positions match" to "intensities and quantities match"** — seven long-standing gaps closed, all driven by quantitative errors on real samples (details in Chinese: [docs/CHANGELOG.md](docs/CHANGELOG.md) §v5.1 and [docs/基准报告-精修-v5.0.0.md](docs/基准报告-精修-v5.0.0.md) §12–§21):
+
+| # | Item | Key result |
+|---|---|---|
+| 1 | **Kα2 wavelength-ratio bug + doublet detection** | λ2 default `0.99937` (shorter than Kα1) → correct `1.00249`; the satellite used to sit on the **left** of the main peak, half-failing the doublet model. After the fix 3-1 Rwp **25.73→9.93** |
+| 2 | **Sample-broadening identifiability** | `{p}.size` → Lorentzian coefficient `{p}.sizec` (0 is a normal point), stage 5 pins `inst.X/Y`, start seeded at 500 nm → rank deficiency cleared on all 4 cases |
+| 3 | **Preferred-orientation auto-selection** | direction × r grid ranked by projection gain; the criterion refuses to trade quantitative accuracy for Rwp |
+| 4 | **Per-phase overall B** | model landed (`{p}.bovr`), **frozen by default**: 4 A/B cases all lower Rwp but quantitative accuracy splits 2 good / 2 bad → stays opt-in |
+| 5 | **Wyckoff orbit merging** | sites merged by space-group orbit + stabilizer-locked axes → stage 6 finally works; synthetic corundum Rwp **37.87%→11.75%** (GOF 1.09), parameter book 150→10 |
+| 6 | **Alternative space-group settings** | `P b n m` / `P 1 21/n 1` could not be resolved → all 6 cell parameters were released (goethite β ran to 130.8° in sample 7-1). After the fix 7-1 Σ\|Δwt\| **33.35→26.19** |
+| 7 | **H-deficient structure entries** | COD hydroxide entries list H in `formula` but not in the atom loop → ties in search scoring, then underestimated basal intensities in Rietveld. Search now prefers "complete-site" entries within the same reduced key, **without moving output positions** → 7-1 Rwp **20.70→16.83**, Σ\|Δwt\| **26.19→20.87**, search metrics bit-identical |
+
+- **Three-engine cross-check (13 samples, idle machine)**: refinement median Rwp **17.46 %**, best **7/13**; `auto` now means refinement → fallback to builtin.
+- **Tests**: full regression **2348 passed / 5 skipped / 0 failed** (v4.7.0 baseline: 1904).
+- **No installer yet**: this version has no build artifacts; download the v4.7.0 package below.
+
+---
+
+## Previous release v4.7.0 (2026-10-31 · released)
 
 **Sequential multi-phase identification: confirm a phase → re-search the residual peaks → confirm the next** (see [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.7.0 and [docs/序贯多相鉴定-v4.7.0.md](docs/序贯多相鉴定-v4.7.0.md)):
 

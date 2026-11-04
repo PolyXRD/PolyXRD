@@ -7,7 +7,7 @@
     峰检测 &nbsp;·&nbsp; 多物相定性检索 &nbsp;·&nbsp; Rietveld 结构精修 &nbsp;·&nbsp; Le Bail 晶胞精修 &nbsp;·&nbsp; 指标化 &nbsp;·&nbsp; 3D 结构可视化 &nbsp;·&nbsp; 内置 COD 无机物库 (polyDB) + 多库外挂检索
   </p>
   <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v4.7.0-blue?style=flat-square" /></a>
+    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v5.1.0-blue?style=flat-square" /></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
     &nbsp;
@@ -15,7 +15,7 @@
     &nbsp;
     <img src="https://img.shields.io/badge/UI-PySide6%20(Qt6)-41cd52?style=flat-square" />
     &nbsp;
-    <img src="https://img.shields.io/badge/Tests-1904%20passed-brightgreen?style=flat-square" />
+    <img src="https://img.shields.io/badge/Tests-2348%20passed-brightgreen?style=flat-square" />
   </p>
   <p><i>🌐 English documentation: [README-EN.md](README-EN.md)</i></p>
 </div>
@@ -34,6 +34,7 @@
 - **UI 与算法分层** — MVVM 架构，`services/` 层是纯算法、不依赖 Qt，可独立单元测试。
 
 > 📋 **版本变更记录**：见 [docs/CHANGELOG.md](docs/CHANGELOG.md)。
+> 🏗️ **v5.1.0 发布检查清单（构建/产物/验收记录，开发中未发布）**：见 [docs/发布检查清单-v5.1.0.md](docs/发布检查清单-v5.1.0.md)。
 > ✅ **v4.7.0 发布检查清单（构建/产物/验收记录）**：见 [docs/发布检查清单-v4.7.0.md](docs/发布检查清单-v4.7.0.md)。
 > ⏳ **v4.4.0 发布检查清单（构建/产物/验收记录，待发布）**：见 [docs/发布检查清单-v4.4.0.md](docs/发布检查清单-v4.4.0.md)。
 > ✅ **v4.3.0 发布检查清单**：见 [docs/发布检查清单-v4.3.0.md](docs/发布检查清单-v4.3.0.md)。
@@ -46,7 +47,27 @@
 
 ---
 
-## 🆕 最新版本 v4.7.0（2026-10-31 · 已发布）
+## 🆕 最新版本 v5.1.0（2026-11-04 · 开发中，未发布）
+
+**精修引擎从"峰位对"推进到"强度与定量对"** —— 七件欠账全部落地，基准报告新增 §十二～§二十一（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §v5.1 与 [docs/基准报告-精修-v5.0.0.md](docs/基准报告-精修-v5.0.0.md)）：
+
+| # | 件 | 关键结果 |
+|---|---|---|
+| 1 | **Kα2 波长比 bug + 双线存在性判别** | λ2 默认 `0.99937`（比 Kα1 还短）→ 正确 `1.00249`；伴峰此前被放到主峰**左侧**，双线建模全程半失效。修后 3-1 Rwp **25.73→9.93** |
+| 2 | **样品展宽可辨识性** | `{p}.size` 改洛伦兹系数 `{p}.sizec`（0 是正常点）、stage 5 钉住 `inst.X/Y`、起点播种 500 nm → 4 例秩亏全清 |
+| 3 | **择优取向自动选择** | 方向 × r 网格按投影收益择优；判据不为 Rwp 牺牲定量（§20.6.1 实验否掉了"优先取层法向"的 tie-break） |
+| 4 | **每相整体温度因子 B** | 模型落地（`{p}.bovr`），默认**冻结**：4 例 A/B Rwp 全降但定量 2 好 2 坏 → 维持 opt-in |
+| 5 | **Wyckoff 轨道归并** | 位点按轨道归并 + 稳定子锁轴 → stage 6 真正可用；合成刚玉 Rwp **37.87%→11.75%**（GOF 1.09），参数册 150→10 |
+| 6 | **替代设置空间群符号** | `P b n m` / `P 1 21/n 1` 解析不出晶系 → 该相 6 个胞参全放开（7-1 针铁矿 β 跑到 130.8°）。修后 7-1 Σ\|Δwt\| **33.35→26.19** |
+| 7 | **缺氢结构条目自动择优** | COD 氢氧化物条目 `formula` 有 H、原子环里没有 → 检索阶段打分并列、进 Rietveld 后基面强线算低。改为折叠时优先"位点元素齐全"且不动输出位置 → 7-1 Rwp **20.70→16.83**、Σ\|Δwt\| **26.19→20.87**，检索指标逐位不变 |
+
+- **三引擎对拍（13 试样，空载机）**：refinement 中位数 Rwp **17.46%**、最优 **7/13**；`auto` 已改为 refinement → 失败回退 builtin。
+- **测试**：全量 **2348 passed / 5 skipped / 0 failed**（v4.7.0 基线 1904）。
+- **未出包**：本版尚无安装包，下载请用下方 v4.7.0 产物；发布需另行构建 + 5 轮稳健性验收。
+
+---
+
+## 上一版 v4.7.0（2026-10-31 · 已发布）
 
 **序贯多相鉴定：确认一相 → 剩余峰再检索 → 再确认**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.7.0 与 [docs/序贯多相鉴定-v4.7.0.md](docs/序贯多相鉴定-v4.7.0.md)）：
 
