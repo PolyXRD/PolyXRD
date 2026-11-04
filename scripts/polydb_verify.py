@@ -72,6 +72,14 @@ def verify(db: str, sample: int = 200, check_hash: bool = True,
     with open(os.path.join(db, "meta.json"), encoding="utf-8") as fh:
         meta = json.load(fh)
     rep["meta"] = {k: meta.get(k) for k in ("format", "schema_version", "variant")}
+    # 源 CIF 根目录由 meta.source.lib 决定（COD/PCOD/TCOD 三个库目录布局一致）。
+    # 缺字段时退回 COD，保持对旧库的兼容。
+    src_lib = str((meta.get("source") or {}).get("lib") or "COD").upper()
+    if src_lib not in ("COD", "PCOD", "TCOD"):
+        warn("未知 source.lib=%s，L3 回算按 COD 目录找源文件" % src_lib)
+        src_lib = "COD"
+    src_root = os.path.join(_DATA_ROOT, src_lib)
+    rep["checks"]["source_lib"] = src_lib
     if meta.get("format") != "polyDB":
         fail("meta.format != polyDB")
     if int(meta.get("schema_version", 0)) != 1:
@@ -220,7 +228,7 @@ def verify(db: str, sample: int = 200, check_hash: bool = True,
             n_cmp = 0
             for r in sorted(int(x) for x in idxs):
                 eid, cif_rel, n_pk = rows[r]
-                path = os.path.join(COD_ROOT, str(cif_rel).replace("\\", "/"))
+                path = os.path.join(src_root, str(cif_rel).replace("\\", "/"))
                 if not os.path.exists(path):
                     warn("源 CIF 缺失: %s" % cif_rel)
                     continue
