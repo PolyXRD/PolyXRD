@@ -33,7 +33,7 @@ from .profile import (Kalpha2, ProfileParams, size_coefficient,
                       size_from_coefficient)
 from .quantitative import QuantResult, hill_howard
 from .structure import AtomSite, Cell, ReflectionTable, StructureModel, build_reflections
-from .symmetry import apply_cell_ties
+from .symmetry import apply_cell_ties, orbit_decomposition
 
 __all__ = [
     "PhaseBlock",
@@ -114,6 +114,28 @@ class PhaseBlock:
                 round(c.alpha, 9), round(c.beta, 9), round(c.gamma, 9),
                 tuple(self.po_hkl) if self.po_hkl else None)
 
+    def site_key(self) -> tuple:
+        """位点指纹 —— **必须和晶胞一起进缓存键**。
+
+        结构因子 ``|F|²`` 同时依赖晶胞与位点（坐标 / 占位 / ``Biso``），
+        而 v5.0 的两级缓存只拿 ``cell_key()`` 当键。后果是结构自由度（stage 6）
+        在 LM 内部**完全失效**：``apply()`` 把坐标写进 ``ph.structure`` 了，
+        但反射表和设计矩阵都按旧键命中缓存，计算谱一位不动、雅可比列恒为零。
+        实测（合成 LFP）：把 ``atom1.x`` 挪 0.05，2001 个点的残差变化 **0 个**；
+        手工重建反射表后 ``|F|²`` 最大变化 1.17 —— 说明结构因子本身是接通的，
+        纯粹被缓存挡住了。
+
+        坐标按 1e-6 取整：低于这个量级的移动对结构因子没有数值意义，
+        取整反而能让"浮点抖动"不把缓存反复冲掉。
+        """
+        return tuple((s.element, round(s.occupancy, 6), round(s.b_iso, 6),
+                      round(s.x, 6), round(s.y, 6), round(s.z, 6))
+                     for s in self.structure.sites)
+
+    def structure_key(self) -> tuple:
+        """``(晶胞, 位点)`` —— 反射表与设计矩阵真正该用的键。"""
+        return self.cell_key() + (self.site_key(),)
+
     def ensure_table(
         self,
         two_theta_range: Tuple[float, float],
@@ -122,11 +144,11 @@ class PhaseBlock:
         noise_ratio: float = 1e-9,
         pad: float = 2.0,
     ) -> ReflectionTable:
-        """按晶胞键缓存反射表（B3 一级缓存）。"""
-        key = self.cell_key() + (round(two_theta_range[0] - pad, 6),
-                                 round(two_theta_range[1] + pad, 6),
-                                 tuple(np.atleast_1d(wavelengths).astype(float)
-                                       .ravel().tolist()))
+        """按结构键（晶胞 + 位点）缓存反射表（B3 一级缓存）。"""
+        key = self.structure_key() + (round(two_theta_range[0] - pad, 6),
+                                      round(two_theta_range[1] + pad, 6),
+                                      tuple(np.atleast_1d(wavelengths).astype(float)
+                                            .ravel().tolist()))
         if self.table is not None and key == self._table_key:
             return self.table
         po_dir = None
@@ -186,6 +208,28 @@ class FitSummary:
         }
 
 
+@dataclass
+class _AtomMap:
+    """一相的位点自由度映射（Wyckoff 轨道归并的结果，见 ``symmetry``）。
+
+    :param reps: 独立位点（轨道代表），编号即参数名里的 ``atom{k}``
+    :param slot: 长度 = 全胞位点数；每个位点所属的独立位点编号
+    :param rep_site: 长度 = 独立位点数；代表位点在全胞位点里的下标
+    :param base_all: ``(M,3)`` 全胞位点的**初始**分数坐标（作锚点，保证幂等）
+    :param mat_all: ``(M,3,3)`` 「参量位移 → 分数位移」，已含轨道操作的旋转
+    :param base_rep: ``(K,3)`` 独立位点的初始分数坐标
+    :param trivial: True = 没做轨道归并（无空间群），走逐位点快路径
+    """
+
+    reps: List[AtomSite]
+    slot: List[int]
+    rep_site: List[int]
+    base_all: np.ndarray
+    mat_all: np.ndarray
+    base_rep: np.ndarray
+    trivial: bool = True
+
+
 class PatternProblem:
     """多相全谱拟合问题（变量投影）。
 
@@ -235,10 +279,10 @@ class PatternProblem:
 
         self.shift = 0.0
         self.disp = 0.0
-        self._atom_slots: Dict[int, List[Optional[int]]] = {}
+        self._atom_map: Dict[int, _AtomMap] = {}
         self.params = params if params is not None else self.build_parameters()
-        if not self._atom_slots:
-            self._atom_slots = self._build_atom_slots()
+        if not self._atom_map:
+            self._atom_map = self._build_atom_maps()
 
         self._basis: Optional[np.ndarray] = None
         self._bg_basis: Optional[np.ndarray] = None
@@ -268,6 +312,9 @@ class PatternProblem:
         }
         if stages:
             st.update(stages)
+
+        # 轨道分解要在建位点自由度之前算好（它决定放几组、哪几轴能放）
+        maps = self._build_atom_maps()
 
         ps = ParameterSet()
         # 仪器
@@ -351,19 +398,31 @@ class PatternProblem:
                              stage=st["bovr"], label=f"{ph.label} 整体 B (Å²)"))
 
             if with_atoms:
-                # 只对**独立位点**（非对称单元）放坐标自由度：全胞展开后同一
-                # Wyckoff 轨道上的原子是同一个自由度，逐原子放开必然共线。
-                for k, site in enumerate(self._independent_sites(ph)):
-                    for tag, val, lo, hi in (
-                        ("x", site.x, -1.0, 2.0), ("y", site.y, -1.0, 2.0),
-                        ("z", site.z, -1.0, 2.0),
-                    ):
-                        ps.add(Parameter(f"{p}.atom{k}.{tag}", float(val), lo, hi,
-                                         stage=st["atom"],
-                                         label=f"{ph.label} {site.label or k} {tag}"))
-                    ps.add(Parameter(f"{p}.atom{k}.occ", float(site.occupancy),
-                                     0.0, 1.0, stage=st["atom"],
-                                     label=f"{ph.label} {site.label or k} 占位"))
+                # 只对**独立位点**放坐标自由度。``StructureModel`` 存的是已展开的
+                # P1 全胞：同一 Wyckoff 轨道上的原子是同一个自由度，逐原子放开
+                # 必然共线（刚玉 30 位点 → 90 个坐标列，秩只有 2）。
+                # 轨道归并由 ``symmetry.orbit_decomposition`` 做；代表点落在特殊
+                # 位置上时，方向也被限制在稳定子不变子空间里 —— 用不了的轴直接
+                # 钉死（``fixed=True``），免得往拟合里塞恒零列。
+                amap = maps.get(ph.index)
+                reps = amap.reps if amap else self._independent_sites(ph)
+                for k, site in enumerate(reps):
+                    mat = self._rep_matrix(amap, k)
+                    for a, (tag, val) in enumerate(
+                            (("x", site.x), ("y", site.y), ("z", site.z))):
+                        locked = mat is not None and float(np.abs(mat[:, a]).max()) < 1e-12
+                        ps.add(Parameter(
+                            f"{p}.atom{k}.{tag}", float(val), -1.0, 2.0,
+                            fixed=locked, stage=st["atom"],
+                            label=(f"{ph.label} {site.label or k} {tag}"
+                                   + ("（特殊位置锁定）" if locked else ""))))
+                    ps.add(Parameter(
+                        f"{p}.atom{k}.occ", float(site.occupancy), 0.0, 1.0,
+                        fixed=float(site.occupancy) >= 1.0 - 1e-9,
+                        stage=st["atom"],
+                        label=(f"{ph.label} {site.label or k} 占位"
+                               + ("（满占位，与标度退化）"
+                                  if float(site.occupancy) >= 1.0 - 1e-9 else ""))))
                     ps.add(Parameter(f"{p}.atom{k}.biso", float(site.b_iso),
                                      0.0, 50.0, stage=st["atom"],
                                      label=f"{ph.label} {site.label or k} B"))
@@ -378,18 +437,23 @@ class PatternProblem:
             apply_cell_ties(ps, ph.prefix,
                             getattr(ph.structure, "space_group", "") or "",
                             getattr(ph.structure, "cell", None))
-        self._atom_slots = self._build_atom_slots()
+        self._atom_map = maps
         return ps
+
+    @staticmethod
+    def _rep_matrix(amap: Optional["_AtomMap"], k: int) -> Optional[np.ndarray]:
+        """独立位点 ``k`` 的位移矩阵（轨道成员共享，未归并时返回 ``None``）。"""
+        if amap is None or amap.trivial or k >= len(amap.rep_site):
+            return None
+        return amap.mat_all[amap.rep_site[k]]
 
     @staticmethod
     def _independent_sites(ph: PhaseBlock) -> List[AtomSite]:
         """按 (元素, 坐标, 占位, B) 去重 —— 只去掉**真的完全相同**的位点。
 
-        注意：这**不是** Wyckoff 轨道归并。``StructureModel`` 存的是已展开的
-        全胞（P1），同一轨道上的原子坐标各不相同，所以这里照样会全部返回。
-        高对称相（刚玉 30 个 O、方解石 30 个位点）放开坐标会有大量共线自由度，
-        真 Rietveld 需要"按轨道只放独立位点"—— 该归并尚未实现（v5.1 待办）。
-        默认协议止步于样品展宽，不会碰到这一步。
+        兼容入口：真正的轨道归并在 :meth:`_build_atom_maps`（见
+        ``symmetry.orbit_decomposition``）。本函数只做精确去重，供不需要
+        空间群的调用方使用。
         """
         seen: Dict[tuple, AtomSite] = {}
         for s in ph.structure.sites:
@@ -398,6 +462,57 @@ class PatternProblem:
             if key not in seen:
                 seen[key] = s
         return list(seen.values())
+
+    # ── 位点自由度（Wyckoff 轨道）────────────────────────────────
+    def _build_atom_maps(self) -> Dict[int, "_AtomMap"]:
+        """每相一次的轨道分解：全胞位点 → 独立位点 + 位移矩阵。
+
+        只在建参数书之前算一次（``ph.structure`` 还是 CIF 原样），之后每次
+        ``apply()`` 都拿冻结的 ``base`` 做锚点，因此对**多次**反复写回是幂等的。
+
+        没有空间群（P1 / 符号认不出）时退化成"一位点一自由量"，
+        ``_AtomMap.trivial=True``，走与 v5.0 完全一样的快路径。
+        """
+        maps: Dict[int, _AtomMap] = {}
+        for ph in self.phases:
+            sites = list(ph.structure.sites)
+            if not sites:
+                maps[ph.index] = _AtomMap(
+                    reps=[], slot=[], rep_site=[], base_all=np.zeros((0, 3)),
+                    mat_all=np.zeros((0, 3, 3)), base_rep=np.zeros((0, 3)))
+                continue
+            ops = None
+            try:
+                from polyxrd.services.phase_cif import space_group_ops
+
+                ops = space_group_ops(
+                    getattr(ph.structure, "space_group", "") or "")
+            except Exception:  # noqa: BLE001 - 认不出空间群 → 逐位点放开
+                ops = None
+            dec = orbit_decomposition(
+                ops,
+                [[s.x, s.y, s.z] for s in sites],
+                [s.element for s in sites],
+                [s.occupancy for s in sites],
+            )
+            base_all = np.array([[s.x, s.y, s.z] for s in sites], dtype=float)
+            # 每个全胞位点自己的"参量位移 → 分数位移"：轨道成员的变换 = R_op · M
+            mat_all = np.zeros((len(sites), 3, 3), dtype=float)
+            for i, oi in enumerate(dec.op_of):
+                m = dec.mats[dec.rep_of[i]]
+                if oi is None or ops is None:
+                    mat_all[i] = m
+                else:
+                    mat_all[i] = np.asarray(ops[oi].rotation_matrix,
+                                            dtype=float) @ m
+            reps = [sites[i] for i in dec.rep_site]
+            base_rep = np.array([[s.x, s.y, s.z] for s in reps], dtype=float) \
+                if reps else np.zeros((0, 3))
+            maps[ph.index] = _AtomMap(
+                reps=reps, slot=list(dec.rep_of), rep_site=list(dec.rep_site),
+                base_all=base_all, mat_all=mat_all, base_rep=base_rep,
+                trivial=dec.trivial)
+        return maps
 
     # ── 参数 → 状态 ────────────────────────────────────────────
     def apply(self) -> None:
@@ -465,47 +580,65 @@ class PatternProblem:
         return frozen
 
     def _sites_from_params(self, ph: PhaseBlock) -> List[AtomSite]:
-        """把 atom 自由度套回全胞位点（等价位点共享同一个自由度）。"""
+        """把 atom 自由度套回全胞位点（同一 Wyckoff 轨道共享一组自由度）。
+
+        两条路径：
+
+        * **未归并**（无空间群，``trivial``）：一位点一自由量，坐标直接取参数
+          —— 与 v5.0 完全一致，包括"参数以外的东西原样保留"的语义。
+        * **已归并**：代表位点的位移先经稳定子投影（``mat_all``），再按各自的
+          轨道操作旋转到成员位点上。位移以**初始**坐标 ``base_all`` 为锚点，
+          所以反复调用是幂等的，不会因为上一轮的写回而漂移。
+        """
         p = ph.prefix
         g = self.params.get
         if f"{p}.atom0.x" not in self.params:
             return list(ph.structure.sites)
 
-        slots = self._atom_slots.get(ph.index)
-        if slots is None:
-            slots = self._build_atom_slots()[ph.index]
-        out: List[AtomSite] = []
-        for site, slot in zip(ph.structure.sites, slots):
-            if slot is None:
-                out.append(site)     # 无自由度的位点原样保留
-                continue
-            k = slot
-            out.append(replace(
-                site,
-                x=float(g(f"{p}.atom{k}.x", site.x)),
-                y=float(g(f"{p}.atom{k}.y", site.y)),
-                z=float(g(f"{p}.atom{k}.z", site.z)),
-                occupancy=float(g(f"{p}.atom{k}.occ", site.occupancy)),
-                b_iso=float(g(f"{p}.atom{k}.biso", site.b_iso)),
-            ))
-        return out
+        amap = self._atom_map.get(ph.index)
+        if amap is None:
+            amap = self._build_atom_maps()[ph.index]
+        sites = list(ph.structure.sites)
+        if not sites or not amap.slot:
+            return sites
 
-    def _build_atom_slots(self) -> Dict[int, List[Optional[int]]]:
-        """``{相下标: [每个全胞位点对应的独立位点编号]}``。"""
-        slots: Dict[int, List[Optional[int]]] = {}
-        for ph in self.phases:
-            indep = self._independent_sites(ph)
-            lookup: Dict[tuple, int] = {}
-            for k, s in enumerate(indep):
-                lookup[(s.element, round(s.x, 6), round(s.y, 6), round(s.z, 6),
-                        round(s.occupancy, 6), round(s.b_iso, 6))] = k
-            row: List[Optional[int]] = []
-            for s in ph.structure.sites:
-                row.append(lookup.get(
-                    (s.element, round(s.x, 6), round(s.y, 6), round(s.z, 6),
-                     round(s.occupancy, 6), round(s.b_iso, 6))))
-            slots[ph.index] = row
-        return slots
+        if amap.trivial:
+            out: List[AtomSite] = []
+            for site, k in zip(sites, amap.slot):
+                out.append(replace(
+                    site,
+                    x=float(g(f"{p}.atom{k}.x", site.x)),
+                    y=float(g(f"{p}.atom{k}.y", site.y)),
+                    z=float(g(f"{p}.atom{k}.z", site.z)),
+                    occupancy=float(g(f"{p}.atom{k}.occ", site.occupancy)),
+                    b_iso=float(g(f"{p}.atom{k}.biso", site.b_iso)),
+                ))
+            return out
+
+        k_rep = len(amap.reps)
+        par = np.empty((k_rep, 3), dtype=float)
+        occ = np.empty(k_rep, dtype=float)
+        bis = np.empty(k_rep, dtype=float)
+        for k in range(k_rep):
+            site = amap.reps[k]
+            par[k, 0] = float(g(f"{p}.atom{k}.x", site.x))
+            par[k, 1] = float(g(f"{p}.atom{k}.y", site.y))
+            par[k, 2] = float(g(f"{p}.atom{k}.z", site.z))
+            occ[k] = float(g(f"{p}.atom{k}.occ", site.occupancy))
+            bis[k] = float(g(f"{p}.atom{k}.biso", site.b_iso))
+
+        slot = np.asarray(amap.slot, dtype=int)
+        delta = par - amap.base_rep                       # (K,3) 参量相对起点
+        xyz = amap.base_all + np.einsum(
+            "sij,sj->si", amap.mat_all, delta[slot])      # (M,3) 分数坐标
+        # 越界才回绕：落在 [0,1) 里的坐标保持**逐位不变**，不给结构加浮点噪声
+        over = (xyz < 0.0) | (xyz >= 1.0)
+        if bool(over.any()):
+            xyz = np.where(over, xyz - np.floor(xyz), xyz)
+        return [replace(site, x=float(xyz[i, 0]), y=float(xyz[i, 1]),
+                        z=float(xyz[i, 2]),
+                        occupancy=float(occ[slot[i]]), b_iso=float(bis[slot[i]]))
+                for i, site in enumerate(sites)]
 
     # ── 设计矩阵（B3 二级缓存）────────────────────────────────
     def design(self) -> Tuple[np.ndarray, np.ndarray]:
@@ -531,7 +664,7 @@ class PatternProblem:
         return self._basis, self._bg_basis
 
     def _make_design_key(self) -> tuple:
-        cells = tuple(ph.cell_key() for ph in self.phases)
+        cells = tuple(ph.structure_key() for ph in self.phases)
         prof = (self.profile.u, self.profile.v, self.profile.w, self.profile.x,
                 self.profile.y, self.profile.z, self.profile.eta,
                 self.profile.asymmetry)

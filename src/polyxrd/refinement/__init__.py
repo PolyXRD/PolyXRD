@@ -179,10 +179,14 @@ from polyxrd.refinement.structure import (
 from polyxrd.refinement.symmetry import (
     CRYSTAL_SYSTEMS,
     INDEPENDENT_CELL_PARAMS,
+    SITE_TOL,
+    OrbitDecomposition,
     apply_cell_ties,
     cell_ties,
     crystal_system_from_symbol,
+    orbit_decomposition,
     resolve_space_group_symbol,
+    site_displacement_matrix,
 )
 
 __all__ = [
@@ -193,6 +197,7 @@ __all__ = [
     "BackgroundParams",
     "CRYSTAL_SYSTEMS",
     "Cell",
+    "OrbitDecomposition",
     "Constraint",
     "ConstraintSystem",
     "DEFAULT_CUTOFF_FWHM",
@@ -280,6 +285,7 @@ __all__ = [
     "minimize_residual",
     "normalize_element",
     "normalize_wavelengths",
+    "orbit_decomposition",
     "pattern_metrics",
     "phase_pattern",
     "phase_weight_factor",
@@ -300,6 +306,8 @@ __all__ = [
     "seed_problem",
     "seed_sample_broadening",
     "seed_zero",
+    "SITE_TOL",
+    "site_displacement_matrix",
     "site_from_dict",
     "snip_baseline",
     "solve_linear",

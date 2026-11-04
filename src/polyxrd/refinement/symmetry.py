@@ -35,21 +35,51 @@
   ``b`` 都停在旧值 → 六方相瞬间变成 a≠b 的假单斜，整个 d 值序列都错。
   ``ConstraintSystem`` 的 ``apply`` 挂在 ``ParameterSet.assign`` 之后，每次写回
   都会重算依赖参数，正好是这里需要的语义。
+
+位点自由度（v5.1）
+------------------
+胞参只是一半。位点坐标同样受空间群约束，而且约束形式更隐蔽：``StructureModel``
+存的是**已展开的 P1 全胞**，刚玉 R-3c 有 30 个位点、方解石 30 个位点 —— 逐位点
+放开 90 个坐标自由度，实际独立量只有 2 个（Al 的 z、O 的 x），Hessian 必然秩亏。
+
+真实 Rietveld 的规则是：**同一 Wyckoff 轨道的原子共享一组自由度**，且轨道代表
+点若落在特殊位置上，只有稳定子（stabilizer）允许的方向能走。本模块
+:func:`orbit_decomposition` 就是这两条规则的显式实现：
+
+1. **轨道归并**：逐位点用空间群操作生成轨道，同元素、同占位的轨道成员并成一个
+   独立位点；记录"用哪条操作能把代表点搬到它"，于是代表点一动，整条轨道跟着动。
+2. **稳定子锁轴**：代表点的稳定子（把它映回自身的操作集合）决定哪些方向是
+   不变子空间 —— ``P = mean(R_stab)`` 是到不变子空间的正交投影，``P·e_a``
+   为零的轴必须钉死（否则就是"把原子推离特殊位置"的假自由度）。
+   等价方向（如 ``(x,x,x)`` 上的三个轴给出同一个方向）只保留第一个，
+   其余钉死 —— 宁可少放，不放共线列。
+
+投影之后每个参量还有 1:1 的物理含义：位移矩阵取 ``(P·e_a)/|P·e_a|²``，
+普通位置上它就等于 ``e_a``（参数就是坐标），``(x,x,x)`` 上则是 "x 一动
+三个分量一起动同样多"。
 """
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Sequence, Tuple
+
+import numpy as np
 
 from .constraints import Constraint, ConstraintSystem
 
 __all__ = [
     "CRYSTAL_SYSTEMS",
     "INDEPENDENT_CELL_PARAMS",
+    "SITE_TOL",
+    "OrbitDecomposition",
     "crystal_system_from_symbol",
     "resolve_space_group_symbol",
     "cell_ties",
     "apply_cell_ties",
+    "orbit_decomposition",
+    "site_displacement_matrix",
+    "stabilizer_projection",
 ]
 
 CRYSTAL_SYSTEMS: Tuple[str, ...] = (
@@ -286,3 +316,205 @@ def apply_cell_ties(params, prefix: str, symbol: str,
                 cons.add(c)
             cons.apply(params)          # 立刻对齐一次，别等第一次 assign
     return touched
+
+
+# ── 位点：Wyckoff 轨道归并 + 稳定子锁轴 ──────────────────────────────
+#: 判定"两个分数坐标是同一个点"的容差（周期性回绕后比较）
+#:
+#: 取 1e-3 而不是机器精度：COD 里的坐标只印 4~6 位小数，同一条轨道上的
+#: 等价位点展开回来往往差 1e-4 量级（例如 0.3333 与 1/3）。容差放大到 1e-3
+#: 会把两个真实不同的位点并掉的概率极低（0.3 pm 以内），却能把"轨道根本没
+#: 闭合"的脏结构整条挡在门外。
+SITE_TOL: float = 1e-3
+
+
+def _ops_arrays(ops: Sequence) -> Tuple[np.ndarray, np.ndarray]:
+    """pymatgen ``SymmOp`` 序列 → ``(rots (n,3,3), trans (n,3))``。"""
+    rots = np.array([np.asarray(op.rotation_matrix, dtype=float) for op in ops],
+                    dtype=float)
+    trans = np.array([np.asarray(op.translation_vector, dtype=float) for op in ops],
+                     dtype=float)
+    return rots, trans
+
+
+def _periodic_delta(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """``a - b`` 的周期性最短差（逐分量落在 ``[-0.5, 0.5]``）。"""
+    d = np.asarray(a, dtype=float) - np.asarray(b, dtype=float)
+    return d - np.round(d)
+
+
+def _projection(rots: np.ndarray, trans: np.ndarray, frac: np.ndarray,
+                tol: float = SITE_TOL) -> np.ndarray:
+    """到"稳定子不变子空间"的正交投影 ``P``（3×3）。
+
+    稳定子 = 把 ``frac`` 映回自身的操作（周期性意义下）；``P = mean(R_stab)``
+    对有限群是幂等对称矩阵，把任意位移投影到"不破坏位点对称性"的方向上。
+
+    没有非恒等稳定子（一般位置）时返回单位阵。稳定子**不含**恒等操作说明
+    ``frac`` 与空间群不自洽（脏数据）→ 也返回单位阵，让调用方退回逐位点放开。
+    """
+    imgs = rots @ frac + trans
+    hit = np.all(np.abs(_periodic_delta(imgs, frac)) < tol, axis=1)
+    if not np.any(hit):
+        return np.eye(3)
+    return rots[hit].mean(axis=0)
+
+
+def stabilizer_projection(ops: Sequence, frac, tol: float = SITE_TOL) -> np.ndarray:
+    """见 :func:`_projection`；对外入口（拿 ``SymmOp`` 序列直接调）。"""
+    if ops is None or len(ops) == 0:
+        return np.eye(3)
+    rots, trans = _ops_arrays(ops)
+    return _projection(rots, trans, np.asarray(frac, dtype=float), tol)
+
+
+def _displacement_matrix(P: np.ndarray) -> np.ndarray:
+    """``P`` → 「参量位移 → 分数位移」矩阵 ``M``（3×3）。
+
+    逐轴：``M[:,a] = (P·e_a)/|P·e_a|²``。
+
+    * 一般位置（``P=I``）：``M=I`` —— 参数就是坐标，完全向后兼容。
+    * ``(x,0,1/4)`` 这类位置：``P·e_y = P·e_z = 0`` → 那两列全零，调用方据此
+      **钉死** ``y``/``z`` 两个参量。
+    * ``(x,x,x)``：三列都是 ``(1,1,1)/3``，只有第一个是独立方向 → 后两列清零，
+      ``M[:,x] = (1,1,1)``，于是"x 参量一动，三个分量一起动同样多"。
+
+    除以 ``|P·e_a|²`` 而不是 ``|P·e_a|`` 是刻意的：它让参量与坐标保持 1:1，
+    ``atom{k}.x`` 报出的数就是原子的 x 坐标（而不是被投影缩过的量）。
+    """
+    M = np.zeros((3, 3), dtype=float)
+    kept: List[int] = []
+    for a in range(3):
+        v = np.asarray(P, dtype=float)[:, a]
+        nv = float(np.linalg.norm(v))
+        if nv < 1e-8:
+            continue                       # 该方向被稳定子完全锁死
+        if kept:
+            B = np.column_stack([np.asarray(P, dtype=float)[:, b] for b in kept])
+            resid = v - B @ np.linalg.lstsq(B, v, rcond=None)[0]
+            if float(np.linalg.norm(resid)) < 1e-6 * max(1.0, nv):
+                continue                    # 与已保留方向共线 → 钉死，避免重复列
+        M[:, a] = v / float(v @ v)
+        kept.append(a)
+    return M
+
+
+def site_displacement_matrix(ops: Sequence, frac,
+                             tol: float = SITE_TOL) -> np.ndarray:
+    """位点 ``frac`` → 位移矩阵 ``M``（3×3，零列 = 该轴被对称性锁死）。"""
+    if ops is None or len(ops) == 0:
+        return np.eye(3)
+    rots, trans = _ops_arrays(ops)
+    return _displacement_matrix(_projection(rots, trans,
+                                            np.asarray(frac, dtype=float), tol))
+
+
+@dataclass(eq=False, frozen=True)
+class OrbitDecomposition:
+    """全胞位点 → 独立位点（Wyckoff 轨道代表）的映射。
+
+    :param rep_of: 长度 = 位点数；每个位点所属的独立位点编号
+    :param op_of: 长度 = 位点数；把独立位点搬到该位点的对称操作下标
+        （``None`` = 恒等，坐标直接取独立位点）
+    :param rep_site: 长度 = 独立位点数；代表位点在输入里的下标
+    :param mats: 长度 = 独立位点数；3×3 位移矩阵（见 :func:`_displacement_matrix`）
+    :param trivial: True = 没做归并（空间群缺失 / P1 / 认不出）：
+        一位点一自由量，``mats`` 全是单位阵
+    """
+
+    rep_of: Tuple[int, ...]
+    op_of: Tuple[Optional[int], ...]
+    rep_site: Tuple[int, ...]
+    mats: Tuple[np.ndarray, ...]
+    trivial: bool = False
+
+    @property
+    def n_rep(self) -> int:
+        return len(self.rep_site)
+
+
+def _trivial(m: int) -> OrbitDecomposition:
+    return OrbitDecomposition(
+        rep_of=tuple(range(m)), op_of=(None,) * m, rep_site=tuple(range(m)),
+        mats=tuple(np.eye(3) for _ in range(m)), trivial=True)
+
+
+def orbit_decomposition(
+    ops: Optional[Sequence],
+    positions,
+    elements: Sequence[str],
+    occupancy=None,
+    tol: float = SITE_TOL,
+) -> OrbitDecomposition:
+    """把全胞位点按空间群轨道归并成独立位点。
+
+    **为什么要归并**：``StructureModel`` 存的是已展开的 P1 全胞。刚玉 R-3c 的
+    30 个位点里只有 2 个是独立的（Al 12c 的 z、O 18e 的 x）；逐位点放开 90 个
+    坐标自由度，Hessian 立刻秩亏（实测秩 14/47，LM 步长被边界投影吃掉）。
+
+    **归并规则**：同元素、同占位（容差内）、且能被某条空间群操作从同一个代表点
+    生成 —— 三条全满足才并。任何一条不满足就各算各的（退化成逐位点），
+    所以"轨道没闭合"的脏结构不会把不相干的原子并在一起。
+
+    :param ops: 对称操作序列（``phase_cif.space_group_ops`` 的返回值）；
+        ``None`` / 空 / 只有恒等 → 返回 ``trivial=True`` 的逐位点分解
+    :param positions: ``(M,3)`` 分数坐标
+    :param elements: 长度 M 的元素符号（轨道不跨元素）
+    :param occupancy: 长度 M 的占位；``None`` → 全 1.0
+    """
+    pos = np.asarray(positions, dtype=float)
+    m = int(pos.shape[0]) if pos.ndim == 2 else 0
+    if m == 0:
+        return _trivial(0)
+    if ops is None or len(ops) <= 1:
+        return _trivial(m)
+
+    rots, trans = _ops_arrays(ops)
+    if rots.shape[1:] != (3, 3):          # 保险丝：操作数组形状不对 → 不归并
+        return _trivial(m)
+    elems = [str(e or "") for e in elements]
+    if len(elems) != m:
+        return _trivial(m)
+    occ = np.ones(m, dtype=float) if occupancy is None \
+        else np.asarray(occupancy, dtype=float).reshape(-1)
+    if occ.size != m:
+        return _trivial(m)
+
+    pool_by_elem: Dict[str, List[int]] = {}
+    for i, e in enumerate(elems):
+        pool_by_elem.setdefault(e, []).append(i)
+
+    used = np.zeros(m, dtype=bool)
+    rep_of: List[int] = [-1] * m
+    op_of: List[Optional[int]] = [None] * m
+    rep_site: List[int] = []
+    mats: List[np.ndarray] = []
+    for i in range(m):
+        if used[i]:
+            continue
+        k = len(rep_site)
+        rep_of[i] = k
+        op_of[i] = None
+        used[i] = True
+        rep_site.append(i)
+        mats.append(_displacement_matrix(_projection(rots, trans, pos[i], tol)))
+        for oi in range(rots.shape[0]):
+            q = rots[oi] @ pos[i] + trans[oi]
+            q = q - np.floor(q)
+            pool = [j for j in pool_by_elem[elems[i]] if not used[j]]
+            if not pool:
+                break
+            d = np.abs(pos[pool] - q)
+            d = np.minimum(d, 1.0 - d)
+            hit = np.nonzero(np.all(d < tol, axis=1))[0]
+            if hit.size == 0:
+                continue
+            j = pool[int(hit[0])]
+            if abs(occ[j] - occ[i]) > tol:
+                continue                    # 轨道内占位不一致（无序）→ 不并
+            rep_of[j] = k
+            op_of[j] = oi
+            used[j] = True
+    return OrbitDecomposition(rep_of=tuple(rep_of), op_of=tuple(op_of),
+                              rep_site=tuple(rep_site), mats=tuple(mats),
+                              trivial=False)
