@@ -9,5 +9,5 @@ PolyXRD - X射线衍射仪数据分析软件
 - 结果导出与报告生成
 """
 
-__version__ = "5.1.0"
+__version__ = "5.2.0"
 __author__ = "PolyXRD Team"

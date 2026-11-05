@@ -7,7 +7,7 @@
     Peak detection &nbsp;·&nbsp; Multi-phase qualitative search &nbsp;·&nbsp; Rietveld structure refinement &nbsp;·&nbsp; Le Bail cell refinement &nbsp;·&nbsp; Indexing &nbsp;·&nbsp; 3D structure visualization &nbsp;·&nbsp; Bundled COD-Inorg polyDB default library + external COD-Full / PDF2-2004
   </p>
   <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v5.1.0-blue?style=flat-square" /></a>
+    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v5.2.0-blue?style=flat-square" /></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
     &nbsp;
@@ -38,23 +38,30 @@ Core design philosophy:
 
 ---
 
-## 🚧 In Development v5.1.0 (2026-11-04 · unreleased)
+## 🆕 Latest version v5.2.0 (2026-11-05)
 
-**The refinement engine moves from "peak positions match" to "intensities and quantities match"** — seven long-standing gaps closed, all driven by quantitative errors on real samples (details in Chinese: [docs/CHANGELOG.md](docs/CHANGELOG.md) §v5.1 and [docs/基准报告-精修-v5.0.0.md](docs/基准报告-精修-v5.0.0.md) §12–§21):
+**After "getting the numbers right", now "getting the intensities right"** — v5.1 fixed peak
+positions, broadening, preferred orientation and structure refinement; v5.2 handles the two
+remaining classes of **systematic intensity error** and turns "this quantification is not
+trustworthy" from invisible into an explicit on-screen warning (details in Chinese:
+[docs/CHANGELOG.md](docs/CHANGELOG.md) §v5.2 and
+[docs/RELEASE-NOTES-v5.2.0.md](docs/RELEASE-NOTES-v5.2.0.md)):
 
 | # | Item | Key result |
 |---|---|---|
-| 1 | **Kα2 wavelength-ratio bug + doublet detection** | λ2 default `0.99937` (shorter than Kα1) → correct `1.00249`; the satellite used to sit on the **left** of the main peak, half-failing the doublet model. After the fix 3-1 Rwp **25.73→9.93** |
-| 2 | **Sample-broadening identifiability** | `{p}.size` → Lorentzian coefficient `{p}.sizec` (0 is a normal point), stage 5 pins `inst.X/Y`, start seeded at 500 nm → rank deficiency cleared on all 4 cases |
-| 3 | **Preferred-orientation auto-selection** | direction × r grid ranked by projection gain; the criterion refuses to trade quantitative accuracy for Rwp |
-| 4 | **Per-phase overall B** | model landed (`{p}.bovr`), **frozen by default**: 4 A/B cases all lower Rwp but quantitative accuracy splits 2 good / 2 bad → stays opt-in |
-| 5 | **Wyckoff orbit merging** | sites merged by space-group orbit + stabilizer-locked axes → stage 6 finally works; synthetic corundum Rwp **37.87%→11.75%** (GOF 1.09), parameter book 150→10 |
-| 6 | **Alternative space-group settings** | `P b n m` / `P 1 21/n 1` could not be resolved → all 6 cell parameters were released (goethite β ran to 130.8° in sample 7-1). After the fix 7-1 Σ\|Δwt\| **33.35→26.19** |
-| 7 | **H-deficient structure entries** | COD hydroxide entries list H in `formula` but not in the atom loop → ties in search scoring, then underestimated basal intensities in Rietveld. Search now prefers "complete-site" entries within the same reduced key, **without moving output positions** → 7-1 Rwp **20.70→16.83**, Σ\|Δwt\| **26.19→20.87**, search metrics bit-identical |
+| 1 | **Surface roughness SR** (opt-in) | three models (Sidey / Suortti / Sparks), the multiplier enters the forward model (2θ-dependent, so the scale factor cannot absorb it). A/B on 4 samples: s converges to ~0 → stays opt-in |
+| 2 | **Microabsorption MA** (opt-in) | Brindley τ enters Hill–Howard quantification **only, never the fit vector** (a per-phase constant would be absorbed by the scale factor). A/B shows Rwp bit-identical — the hard check that the wiring is right. **R must come from the user**; a wrong R is worse than none |
+| 3 | **μ table rebuilt from NIST** | H…U (Z=1…92) at the 8.000 keV column, **no fitting by Z** (2.5× cliff at the L edges). Also fixes six transcription errors: Fe 325→306, Mg 47→40.6 |
+| 4 | **Uncertainties include τ propagation** | the closed-form propagation of `W = S·f/ΣS·f` breaks with microabsorption (τ depends on W again) → numerical Jacobian; R→0 degenerates back to the closed form within 1e-9 |
+| 5 | **Discriminating-peak guard** | a large-cell phase brings its own width parameters and can flatten the mismatch away → 15.6 wt% for a phase that is not there, with Rwp improving. Two new codes `PHASE_UNSUPPORTED` / `PHASE_FRACTION_UNVERIFIABLE`, **report only, never auto-delete a phase** |
+| 6 | **Which diagnostics reach the UI** | previously the top 4 were cut in alphabetical order, so three noisy hints crowded out "can this wt% be used at all". Now conclusion-grade codes win within the same severity, and everything beyond the 4th goes to the execution log |
+| 7 | **Built-in R-3c coordinates fixed** | calcite/corundum O sites were missing `z=1/4` → 48 expanded sites instead of 30, breaking multi-phase quantification. Now **0.0% difference** against pymatgen peak-by-peak, main peaks back at the literature positions |
+| 8 | **GSAS-II bridge, three fixes** | phase-count-adaptive timeout; new sample-displacement and preferred-orientation inputs; **GOF is no longer 0** (15.727 on sample 2-1, previously hard-coded 0.00) |
+| 9 | **PDF2-2004 repacked as polyDB** | the legacy sqlite channel (214 MB) is retired → polyDB **154 MB**, 163,834 phases, sharing the COD reader / bitmap prefilter / scoring |
 
-- **Three-engine cross-check (13 samples, idle machine)**: refinement median Rwp **17.46 %**, best **7/13**; `auto` now means refinement → fallback to builtin.
-- **Tests**: full regression **2348 passed / 5 skipped / 0 failed** (v4.7.0 baseline: 1904).
-- **No installer yet**: this version has no build artifacts; download the v4.7.0 package below.
+- **Three-engine cross-check (13 samples, idle machine)**: refinement median Rwp **17.46 %**, best **7/13**.
+- **Tests**: full regression **2567 passed / 4 skipped / 0 failed**.
+- **This release also contains all seven items of v5.1** (v5.1.0 was closed but never shipped separately).
 
 ---
 
