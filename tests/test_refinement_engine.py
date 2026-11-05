@@ -473,6 +473,58 @@ class TestCaching:
         prob.apply()
         assert prob._make_design_key() != k0
 
+    # ── 按列缓存（2026-11-06）：全局量不变时，扰动相 i 只重建第 i 列 ──
+
+    @staticmethod
+    def _two_phase():
+        grid = np.linspace(12.0, 60.0, 601)
+        prob = PatternProblem(
+            grid, np.full(grid.size, 100.0),
+            [PhaseBlock("LFP", _lfp()), PhaseBlock("LFP2", _lfp(), index=1)],
+            bg=BackgroundParams("none"),
+        )
+        prob.residual(None)
+        return prob
+
+    def test_column_cache_bitwise_matches_fresh(self):
+        """扰动相 0 的晶胞后，缓存路径的结果必须与全新重建**逐位一致**。
+
+        这是缓存类改动最要命的地方（历史坑：改 inst.u 后计算谱一位不变）：
+        键漏了什么量，这里就立刻翻车。
+        """
+        prob = self._two_phase()
+        prob.params.set("phase0.cell.a", 10.35)
+        prob.apply()
+        cached = prob.design()[0].copy()
+        fresh = PatternProblem(
+            prob.two_theta, prob.y_obs,
+            [PhaseBlock("LFP", _lfp()), PhaseBlock("LFP2", _lfp(), index=1)],
+            bg=BackgroundParams("none"),
+        )
+        fresh.params.set("phase0.cell.a", 10.35)
+        fresh.apply()
+        assert np.array_equal(cached, fresh.design()[0])
+
+    def test_column_cache_touches_only_changed_column(self):
+        prob = self._two_phase()
+        before = prob.design()[0].copy()
+        prob.params.set("phase0.cell.a", 10.35)
+        prob.apply()
+        after = prob.design()[0]
+        assert not np.array_equal(after[:, 0], before[:, 0])   # 变的列真的变了
+        assert np.array_equal(after[:, 1], before[:, 1])       # 没动的列逐位不变
+        # 且 metrics 是新鲜的（残差真的用了新列，不是旧快照）
+        assert prob.metrics()["Rwp"] > 0.0
+
+    def test_profile_change_invalidates_all_columns(self):
+        prob = self._two_phase()
+        before = prob.design()[0].copy()
+        prob.params.set("inst.w", 0.05)
+        prob.apply()
+        after = prob.design()[0]
+        assert not np.array_equal(after[:, 0], before[:, 0])
+        assert not np.array_equal(after[:, 1], before[:, 1])
+
 
 class TestDisp:
     """``inst.disp``：样品位移项 ``Δ2θ = disp·cosθ``（v5.1，P1-8 第 1 件）。

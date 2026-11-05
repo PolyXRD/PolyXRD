@@ -29,7 +29,7 @@ from .intensity import Roughness, apply_microabsorption
 from .linear import LinearSolve, design_stack, solve_linear
 from .optimize import FitResult, minimize_residual
 from .parameters import Parameter, ParameterSet
-from .pattern import DEFAULT_CUTOFF_FWHM, PhaseSpec, design_matrix
+from .pattern import DEFAULT_CUTOFF_FWHM, PhaseSpec, phase_pattern
 from .profile import (Kalpha2, ProfileParams, size_coefficient,
                       size_from_coefficient)
 from .quantitative import QuantResult, hill_howard
@@ -302,6 +302,12 @@ class PatternProblem:
         self._basis: Optional[np.ndarray] = None
         self._bg_basis: Optional[np.ndarray] = None
         self._design_key: tuple = ()
+        # 按列缓存：全局量（峰形/位移/粗糙度/Kα2/网格）不变时，扰动相 i
+        # 只重建第 i 列。数值雅可比逐参数扰动，5 相问题的晶胞/PO 段参数
+        # 都是单相归属 —— 全量重建会把 4 列白白重算（2026-11-06 实测 5-3
+        # 的 _numeric_jacobian 占 91% 时间）。
+        self._global_key: tuple = ()
+        self._col_keys: List[tuple] = []
         self.last_linear: Optional[LinearSolve] = None
 
     # ── 参数书构建 ──────────────────────────────────────────────
@@ -674,27 +680,73 @@ class PatternProblem:
                 for i, site in enumerate(sites)]
 
     # ── 设计矩阵（B3 二级缓存）────────────────────────────────
+    def _global_design_key(self) -> tuple:
+        """影响**所有列**的量。变了 → 全部列重算；不变 → 只重算变了的相。"""
+        prof = (self.profile.u, self.profile.v, self.profile.w, self.profile.x,
+                self.profile.y, self.profile.z, self.profile.eta,
+                self.profile.asymmetry)
+        ka = self.kalph2
+        ka_key = ((ka.wavelength, ka.ratio, ka.separation)
+                  if ka is not None else None)
+        tt = self.two_theta
+        return prof + (self.shift, self.disp, self.roughness.key(),
+                       ka_key,
+                       self.wavelength, self.cutoff_fwhm,
+                       (int(tt.size),
+                        float(tt[0]) if tt.size else 0.0,
+                        float(tt[-1]) if tt.size else 0.0))
+
+    def _col_key(self, ph) -> tuple:
+        """单列的完整输入：结构键 + 样品层标量。"""
+        return ph.structure_key() + (ph.size_nm, ph.strain, ph.po_r,
+                                     ph.b_overall)
+
     def design(self) -> Tuple[np.ndarray, np.ndarray]:
-        """返回 ``(相基 (N,n_phase), 背景基 (N,n_bg))``。"""
-        key = self._make_design_key()
-        if self._basis is not None and key == self._design_key:
-            return self._basis, self._bg_basis
+        """返回 ``(相基 (N,n_phase), 背景基 (N,n_bg))``。
+
+        缓存分两层：
+
+        * **全局层**：``_global_design_key()`` 不变时列缓存有效；变了全部重算。
+        * **按列层**：每列按 ``_col_key()`` 缓存。数值雅可比逐参数扰动 ——
+          晶胞 / PO / 尺寸应变 / 位点参数都只属于一个相，扰动它时其余
+          n−1 列逐位不变，重算是纯浪费。
+
+        每列走的是与 ``design_matrix`` 完全相同的 ``phase_pattern`` 路径，
+        数值逐位一致。
+        """
+        gkey = self._global_design_key()
+        n_ph = len(self.phases)
+        full_miss = (self._basis is None
+                     or len(self._col_keys) != n_ph
+                     or gkey != self._global_key)
 
         tmin = float(self.two_theta[0]) if self.two_theta.size else 0.0
         tmax = float(self.two_theta[-1]) if self.two_theta.size else 0.0
-        specs = []
-        for ph in self.phases:
+
+        if full_miss:
+            self._basis = np.zeros((self.two_theta.size, n_ph), dtype=float)
+            self._col_keys = [()] * n_ph
+            self._global_key = gkey
+
+        for i, ph in enumerate(self.phases):
+            ckey = self._col_key(ph)
+            if not full_miss and ckey == self._col_keys[i]:
+                continue
             ph.ensure_table((tmin, tmax), (self.wavelength,))
-            specs.append(PhaseSpec(table=ph.table, size_nm=ph.size_nm,
-                                   strain=ph.strain, po_r=ph.po_r,
-                                   b_overall=ph.b_overall))
-        self._basis = design_matrix(
-            self.two_theta, specs, self.profile,
-            wavelength=self.wavelength, kalph2=self.kalph2,
-            cutoff_fwhm=self.cutoff_fwhm, shift=self.shift, disp=self.disp,
-            rough=self.roughness)
-        self._bg_basis = background_basis(self.two_theta, self.bg)
-        self._design_key = key
+            spec = PhaseSpec(table=ph.table, size_nm=ph.size_nm,
+                             strain=ph.strain, po_r=ph.po_r,
+                             b_overall=ph.b_overall)
+            self._basis[:, i] = phase_pattern(
+                self.two_theta, spec, self.profile,
+                wavelength=self.wavelength, kalph2=self.kalph2,
+                cutoff_fwhm=self.cutoff_fwhm, shift=self.shift,
+                disp=self.disp, rough=self.roughness)
+            self._col_keys[i] = ckey
+
+        if full_miss:
+            # 背景基只在全局层失配时重建（取决于背景阶数与网格，极廉价）；
+            # 纯列命中时直接复用 —— 与旧的全键命中口径一致。
+            self._bg_basis = background_basis(self.two_theta, self.bg)
         return self._basis, self._bg_basis
 
     def _make_design_key(self) -> tuple:
@@ -710,6 +762,8 @@ class PatternProblem:
     def invalidate(self) -> None:
         self._basis = None
         self._design_key = ()
+        self._global_key = ()
+        self._col_keys = []
         for ph in self.phases:
             ph.invalidate()
 
