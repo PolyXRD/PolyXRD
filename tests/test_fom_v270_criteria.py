@@ -25,11 +25,14 @@ def test_default_miss_weight_is_one():
 
 
 def test_spec_weight_locked_to_tuned_value():
-    """0.50 是 13 试样消融实测最优点, 锁定以防被无意改回。
+    """0.60 是 v5.2（2026-11-05）两套口径复测的实测最优点, 锁定防被无意改回。
 
-    0.30 = v2.6.0 旧值 (B top10 44/49); 0.55 起组合相级退化到 44/49。
+    历史: 0.30 = v2.6.0 旧值; v2.7.0 标定到 0.50（当时 0.55 起组合退化）；
+    v5.2 重测（基线已被 v3.x/v4.x 检索改动挪动）: 内建库组合相级 42→43/49、
+    试样级 9→10/13，polyDB 口径 MRR 0.284→0.287 / 0.213→0.217 且 MISS
+    逐位不变；同时把 OW.txt 的少峰相 H0.5 O3 W 从 #2 压到 #3。依据见常量注释。
     """
-    assert foam._FOM_SPEC_WEIGHT == 0.50
+    assert foam._FOM_SPEC_WEIGHT == 0.60
 
 
 def test_spec_weight_actually_scales_score(monkeypatch):
