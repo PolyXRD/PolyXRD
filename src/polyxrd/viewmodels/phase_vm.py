@@ -102,12 +102,12 @@ class PhaseViewModel(QObject):
     def reload_databases(self) -> None:
         """外挂数据库被导入/取消挂载后, 丢掉持有旧路径的缓存。
 
-        v4.2.0 起本地 COD sqlite 运行时已移除, `PhaseIdentifier` 不再缓存
-        库连接 (每次调用现开/现关), 所以这里只需让 `db_import.reload_caches`
-        清 PDF2 侧的模块级实例与 polyDB 挂载点。
+        v5.2 起所有检索库都是 polyDB，而 :class:`PhaseIdentifier` 每次调用
+        现开现关、不缓存连接与 mmap，所以这里只要清掉 db_mounts 的探测缓存
+        （挂载表的行状态、size/rows 都是按路径缓存的）。
         """
-        from polyxrd.services import db_import
-        db_import.reload_caches()
+        from polyxrd.services import db_mounts
+        db_mounts.clear_probe_cache()
 
     def set_data_source(self, data):
         """设置数据源 (用于后续操作)"""
@@ -268,39 +268,24 @@ class PhaseViewModel(QObject):
         if not self._ensure_mount_usable(mount):
             return None
         # 按**引擎**分发而不是按 kind: 自定义类型可以复用现成引擎
-        # (MountKind.engine = "polydb" / "pdf2" / "user"), 只要容器结构与
+        # (MountKind.engine = "polydb" / "user"), 只要容器结构与
         # 引擎预期一致; 没有引擎的类型必须明确报错, 不能静默退回内置库。
         engine = (mount.engine if mount is not None else "") or ""
-        # 兼容历史语义: 内置项不传显式路径 (按配置解析); 用户自加项传路径。
-        explicit = None
-        if mount is not None and not mount.builtin:
-            explicit = mount.path
-        # polyDB 是目录容器, 两个变体是两份独立的库: 必须把路径/变体带下去,
-        # 否则「COD 全库 (polyDB)」会被当成无机库那一份来查。
+        # polyDB 是目录容器, 各变体是各自独立的库: 必须把路径/变体带下去,
+        # 否则「COD 全库」会被当成无机库那一份、PDF2 会被当成 COD 来查。
         poly_path = None
         if engine == "polydb" and mount is not None and mount.exists:
             poly_path = mount.path
-            explicit = None
         pool = ({"prefilter_limit": int(prefilter_limit)}
                 if prefilter_limit else {})
-        if engine and engine not in ("pdf2", "user", "polydb"):
+        if engine and engine not in ("user", "polydb"):
             self.error.emit(tr(
                 "error.db_unusable",
                 name=(mount.display_name() if mount is not None else db_source),
                 detail=f"unsupported engine: {engine}"))
             return None
         try:
-            if engine == "pdf2":
-                results = self._identifier.identify_with_pdf2(
-                    data,
-                    peaks=peaks,
-                    element_filter=element_filter,
-                    top_n=top_n,
-                    tolerance=tolerance,
-                    db_path=explicit,
-                    **pool,
-                )
-            elif engine == "user":
+            if engine == "user":
                 # v2.6.0: 用户自建库 (同构 sqlite)。与 COD 无机库同一套
                 # 预筛/评分, 但返回的 Phase 自带晶胞+原子坐标, 可直接精修。
                 results = self._identifier.identify_with_user_db(
@@ -358,8 +343,8 @@ class PhaseViewModel(QObject):
         FoM 排序对它是废动作。直接取预筛行能把"200 候选"从数十秒压到
         数秒 (复杂谱/慢机器差异更大)。
 
-        其它引擎 (PDF2/用户库/自定义) 继续复用常规检索拿候选 —— 它们的
-        预筛规模小或没有独立的"只预筛"接口, 收益不足以再复制一套取相逻辑。
+        其它引擎 (用户库/自定义) 继续复用常规检索拿候选 —— 它们的预筛规模
+        小或没有独立的"只预筛"接口, 收益不足以再复制一套取相逻辑。
         """
         if engine == "polydb" and hasattr(self._identifier,
                                           "prescreen_with_polydb"):
@@ -406,7 +391,9 @@ class PhaseViewModel(QObject):
                 :mod:`polyxrd.services.db_mounts` 解析成 (kind, path) 后分发:
 
                 - ``builtin``: 内置 118 物相库 (无外挂库时的兜底);
-                - ``pdf2`` / ``user``: ICDD PDF-2 / 用户自建库;
+                - ``pdf2``: ICDD PDF-2 2004，v5.2 起是 polyDB 变体
+                  ``pdf2-2004``（kind=polydb，id 保持 ``pdf2`` 兼容历史项目）;
+                - ``user``: 用户自建库;
                 - ``polydb:cod-inorg`` / ``polydb:cod-full``: 内置的两个
                   polyDB 变体;
                 - **任意挂载项 id** (``<kind>:<摘要>``, 例如
@@ -785,7 +772,7 @@ class PhaseViewModel(QObject):
         v4.6.0: 数据源不再固定为内置 118 相库 ——
 
         * `builtin` (或无挂载项能解析): 对内置参考库做全谱拟合 (原行为);
-        * 外挂库 (polyDB / PDF2 / 用户库): 先用该库的 d-I 预筛取
+        * 外挂库 (polyDB 各变体 / 用户库): 先用该库的 d-I 预筛取
           :data:`PROFILE_EXTERNAL_POOL` 个候选, 再对这批候选做全谱拟合重排。
           7.7 万相逐相生成理论谱不可行, 所以"预筛 + 重排"是外挂库上唯一的
           可行做法; 预筛用的是与常规检索同一套 Hanawalt 口径, 排序由全谱

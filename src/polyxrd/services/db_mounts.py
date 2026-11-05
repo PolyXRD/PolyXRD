@@ -58,18 +58,16 @@ from typing import Callable, Iterable, Optional
 #: 支持的挂载类型 → 检索引擎。
 #: 引擎名即 ``PhaseIdentifier.identify_with_*`` 的后缀, 便于按 kind 分发。
 #:
-#: v4.1.0 起**只有三种**: 默认参考库是 polyDB（COD-Inorg / COD-Full 两个变体），
-#: PDF2 是用户自备的 ICDD 商业库，``user`` 是用户自建库。旧 sqlite 槽位
-#: ``cod_inorganics`` / ``cod_index`` / ``xinmatch`` 连同对应检索引擎一起删除。
+#: v5.2 起**只有两种**: 参考库一律是 polyDB（COD-Inorg / COD-Full /
+#: PDF2-2004 三个变体共用同一套 reader 与打分），``user`` 是用户自建库。
+#: PDF2-2004 的独立 sqlite 通道（kind ``pdf2``）已随旧格式一并删除。
 KIND_ENGINE: dict[str, str] = {
-    "pdf2": "pdf2",
     "polydb": "polydb",
     "user": "user",
 }
 
 #: 类型 → i18n 键 (内置项显示名)。用户自己加的多份库用"类型名 · 目录名"区分。
 KIND_LABEL_KEY: dict[str, str] = {
-    "pdf2": "db_manager.kind.pdf2",
     "polydb": "db_mounts.kind.polydb_inorg",
     "user": "db_mounts.kind.user",
 }
@@ -91,13 +89,20 @@ _LEGACY_ALIASES: dict[str, str] = {
 }
 
 #: 「内置」挂载项 id → polyDB 变体。空串表示不是 polyDB。
-_POLYDB_DEFAULT_IDS = {"polydb:cod-inorg": "cod-inorg", "polydb:cod-full": "cod-full"}
+#:
+#: ``pdf2`` 这个 id 故意保持不变：历史项目文件的 ``db_source="pdf2"`` 与
+#: 历史测试里的字面量都还要能用，只是它现在指向 polyDB 变体 ``pdf2-2004``。
+_POLYDB_DEFAULT_IDS = {
+    "polydb:cod-inorg": "cod-inorg",
+    "polydb:cod-full": "cod-full",
+    "pdf2": "pdf2-2004",
+}
 
-#: polyDB 变体 → i18n 键。两个变体是两份独立的库 (无机子集 / 全库),
-#: 在列表里必须能一眼区分, 所以各有各的显示名。
+#: polyDB 变体 → i18n 键。各变体是独立的库，在列表里必须能一眼区分。
 _POLYDB_LABEL_KEY = {
     "cod-inorg": "db_mounts.kind.polydb_inorg",
     "cod-full": "db_mounts.kind.polydb_full",
+    "pdf2-2004": "db_manager.kind.pdf2",
 }
 
 
@@ -315,7 +320,6 @@ def default_mounts() -> list[Mount]:
     for mid, variant in _POLYDB_DEFAULT_IDS.items():
         _add(mid, "polydb", cfg.get_polydb_path(variant),
              _POLYDB_LABEL_KEY[variant], variant)
-    _add("pdf2", "pdf2", cfg.get_pdf2_db_path(), KIND_LABEL_KEY["pdf2"])
     # 用户自建库: 位置由 user_db 固定管理, 这里只作为"可检索的一行"出现
     try:
         from polyxrd.services import user_db
@@ -459,16 +463,12 @@ def remove_mount(mount_id: str) -> None:
     if m is None:
         raise KeyError(mount_id)
     if m.builtin:
-        from polyxrd.services import db_import
+        from polyxrd.config import get_config
 
         if m.kind == "polydb":
-            from polyxrd.config import get_config
-
             get_config().set_polydb_path(None, m.variant or "cod-inorg")
         elif m.kind == "user":
             raise ValueError("用户自建库请在其管理界面清空, 不能在此卸载")
-        else:
-            db_import.clear_import(m.kind)
         if active_id() == mount_id:
             set_active("")
         return
@@ -608,54 +608,31 @@ def is_polydb_dir(path: str | Path) -> bool:
             and (p / "meta.json").is_file())
 
 
-def _detect_sqlite(p: Path, want: str = "pdf2") -> bool:
-    """sqlite 文件的判别 (内置只有 PDF2 一类, 走 db_import 的表名/列名判据)。
-
-    自定义 sqlite 格式应注册自己的 ``detect``, 不要往这里塞 if/elif ——
-    那正是本次改造要消灭的写法。
-    """
-    try:
-        from polyxrd.services.db_import import inspect_db_file
-
-        ins = inspect_db_file(p)
-        return bool(ins.ok and ins.kind == want)
-    except Exception:  # noqa: BLE001 - 判别失败按"不是"处理, 原因由上层给
-        return False
-
-
 def _detect_any(p: Path) -> tuple[str, str]:
     """按注册表判别路径, 返回 ``(kind, 失败说明)``。
 
     探测顺序是**后注册的优先**: 插件新增的格式通常比内置类型更具体, 让插件
-    先认, 内置的通用 sqlite 判据 (pdf2) 兜底; 内置三类之间目录/文件互斥,
-    顺序不影响结果。
+    先认。v5.2 起内置只有 polyDB（目录型）与用户库（不参与自动判别）。
     """
     if p.is_dir():
         for spec in reversed(iter_kinds()):
             if spec.is_dir and spec.detect(p):
                 return spec.key, ""
-        # 保持 v4.1.0 的原话: 内置目录型库只有 polyDB, 提示直接指到它的判据
         return "", "目录里没有 meta.json + index.sqlite, 不是 polyDB 目录"
     for spec in reversed(iter_kinds()):
         if not spec.is_dir and spec.detect(p):
             return spec.key, ""
-    # 文件没有任何注册类型认领: 借 db_import 再 inspect 一次, 只为拿到
-    # "缺哪一列 / 表名不对" 这类可执行原因。挂载失败是低频路径, 多一次只读
-    # 打开可以接受; 正常路径 (pdf2 命中) 仍然只 inspect 一次。
-    from polyxrd.services.db_import import inspect_db_file
-
-    ins = inspect_db_file(p)
-    if not ins.ok:
+    # 文件路径没有任何注册类型认领。v5.2 起物相库只支持 polyDB 目录容器，
+    # 旧的 PDF2 / COD sqlite 通道已删除 —— 这里给的是可执行的迁移指引。
+    if p.suffix.lower() in _DB_SUFFIXES:
         if _looks_like_legacy_cod(p):
             return "", (
-                "旧格式 COD / XinMatch sqlite 检索库：自 v4.1.0 起只支持 polyDB 检索"
-                "（旧库不再兼容）。请改用 PolyXRD-DataBase 的 polyDB 库；"
-                "PDF2-2004 仍可挂载。")
-        detail = ins.error + (f" ({ins.hint})" if ins.hint else "")
-        return "", f"不是可用的数据库文件: {detail}"
-    # inspect 认得但注册表里没有对应类型 (例如内置 pdf2 被注销): 不静默接受,
-    # 否则会挂上一行"永远检索不到东西"的库。
-    return "", f"不支持的数据库类型: {ins.kind}"
+                "旧格式 COD / XinMatch sqlite 检索库：自 v4.1.0 起只支持 polyDB。"
+                "请改用 PolyXRD-DataBase 的 polyDB 库。")
+        return "", (
+            "旧格式 sqlite 物相库：自 v5.2 起只支持 polyDB 目录"
+            "（PDF2-2004 也已改为 polyDB，请用 build_pdf2_polydb.py 重打包）。")
+    return "", f"不是可用的数据库文件: {p.name}"
 
 
 def detect_kind(path: str | Path, expect: str | None = None) -> tuple[str, str]:
@@ -738,30 +715,14 @@ def probe(mount: Mount, use_cache: bool = True) -> dict:
         if spec is not None:
             res.update(spec.probe(p))
         else:
-            # 未注册的 kind 仍按 sqlite 文件探测: 与扩展前"else 分支"的行为
-            # 一致, 避免旧调用方自己在内存里构造的 Mount 突然探测不了。
-            res.update(_probe_sqlite(p))
+            # 未注册的 kind（旧 json 残留）：明确报"类型未知"，不再尝试任何
+            # 旧格式探测 —— v5.2 起只认注册表里的类型。
+            res.update({"error": "unknown_kind", "detail": mount.kind})
     except Exception as e:  # noqa: BLE001 - 探测失败原因原样给 UI
         res.update({"error": "probe_error", "detail": f"{e}"})
     if use_cache:
         _PROBE_CACHE[key] = dict(res)
     return res
-
-
-def _probe_sqlite(p: Path) -> dict:
-    """单个 sqlite 库文件的探测 (内置 PDF2 / 自定义单文件库的默认实现)。"""
-    from polyxrd.services.db_import import inspect_db_file
-
-    ins = inspect_db_file(p)
-    return {
-        "ok": ins.ok,
-        "rows": ins.rows,
-        "size_mb": ins.size_mb,
-        "error": ins.error,
-        "hint": ins.hint,
-        "has_top_peaks": ins.has_top_peaks,
-        "detail": "",
-    }
 
 
 def _probe_polydb(p: Path) -> dict:
@@ -889,9 +850,19 @@ def _why_not_mounted(path: Path, reasons: list[str] | None = None) -> str:
     if not path.exists():
         return f"路径不存在：{path}"
     if path.is_dir():
-        if not _iter_db_files(path) and not _iter_polydb_dirs(path):
-            return ("该文件夹下没有 .sqlite / .db 文件，也没有 polyDB 目录"
-                    "（含 meta.json + index.sqlite）；只扫本层，不递归子目录。")
+        if not _iter_polydb_dirs(path):
+            # 目录里可能全是旧格式 sqlite（用户照着老教程找来的）。只说"没有
+            # polyDB 目录"会让他以为指错了文件夹 —— 把旧库点名并给出迁移方向。
+            legacy = _iter_db_files(path)
+            if legacy:
+                names = "、".join(f.name for f in legacy[:3])
+                if len(legacy) > 3:
+                    names += f" 等 {len(legacy)} 个"
+                return (f"该文件夹下没有 polyDB 目录（含 meta.json + index.sqlite）；"
+                        f"发现旧格式 sqlite 库 {names} —— 自 v5.2 起不再支持，"
+                        f"请改用 polyDB 目录（PDF2-2004 需用 build_pdf2_polydb.py 重打包）。")
+            return ("该文件夹下没有 polyDB 目录（含 meta.json + index.sqlite）；"
+                    "只扫本层与下一层，不递归更深。")
     detail = ""
     if reasons:
         detail = "；".join(reasons[:3])
@@ -902,8 +873,20 @@ def _why_not_mounted(path: Path, reasons: list[str] | None = None) -> str:
     return f"这个路径上没有可用的数据库：{path}"
 
 
-#: 目录扫描时认的 sqlite 后缀（v4.1.0 起只剩 PDF2 一类 sqlite 库）。
+#: 目录扫描时用于**识别并给出迁移提示**的 sqlite 后缀（v5.2 起不再挂载）。
 _DB_SUFFIXES = (".sqlite", ".sqlite3", ".db", ".db3", ".sqlite2")
+
+
+def _is_backup_name(name: str) -> bool:
+    """备份命名 (``.bak`` / 名字带 ``~`` / ``.tmp``) —— 一律不当成库。
+
+    备份有两种写法: ``x.sqlite~`` 与 ``x~.sqlite``; 目录形式同样会有
+    ``X.polyDB.bak`` / ``X~.polyDB``。手工建库或复制库时常留下这种目录,
+    它们同样有 meta.json + index.sqlite, 单看内容分辨不出来 —— 挂上去了
+    用户会在数据源下拉里看到两个同名库, 分不清哪份是备份。
+    """
+    n = name.lower()
+    return ".bak" in n or "~" in n or n.endswith(".tmp")
 
 
 def _iter_db_files(path: Path) -> list[Path]:
@@ -913,9 +896,7 @@ def _iter_db_files(path: Path) -> list[Path]:
         for p in sorted(path.iterdir()):
             if not p.is_file():
                 continue
-            name = p.name.lower()
-            # 备份命名有两种写法: `x.sqlite~` 与 `x~.sqlite`, 一律按"名字里带 ~"排除
-            if ".bak" in name or "~" in name or name.endswith(".tmp"):
+            if _is_backup_name(p.name):
                 continue
             if p.suffix.lower() in _DB_SUFFIXES:
                 out.append(p)
@@ -925,7 +906,7 @@ def _iter_db_files(path: Path) -> list[Path]:
 
 
 def _iter_polydb_dirs(path: Path) -> list[Path]:
-    """目录**本层与下一层**的 polyDB 容器。
+    """目录**本层与下一层**的 polyDB 容器 (排除备份目录)。
 
     下一层也扫, 是因为常见布局是 ``PolyXRD-DataBase/polydb/<xxx>.polyDB`` ——
     用户指到 ``polydb`` 目录时应当一次把里面几份库都挂上。
@@ -933,14 +914,15 @@ def _iter_polydb_dirs(path: Path) -> list[Path]:
     out: list[Path] = []
     try:
         for d in sorted(path.iterdir()):
-            if not d.is_dir():
+            if not d.is_dir() or _is_backup_name(d.name):
                 continue
             if is_polydb_dir(d):
                 out.append(d)
             else:
                 try:
                     out.extend(sorted(x for x in d.iterdir()
-                                      if x.is_dir() and is_polydb_dir(x)))
+                                      if x.is_dir() and is_polydb_dir(x)
+                                      and not _is_backup_name(x.name)))
                 except OSError:
                     continue
     except OSError:
@@ -982,17 +964,19 @@ def mount_any_report(path: str | Path) -> tuple[list[Mount], list[str]]:
     if not p.exists():
         raise ValueError(_why_not_mounted(p))
 
-    if is_polydb_dir(p):
-        candidates: list[Path] = [p]
-    elif p.is_file():
-        candidates = [p]
-    elif p.is_dir():
-        candidates = _iter_polydb_dirs(p) + _iter_db_files(p)
+    if p.is_dir() and not is_polydb_dir(p):
+        candidates: list[Path] = _iter_polydb_dirs(p)
+        legacy = _iter_db_files(p)
     else:
-        candidates = []
+        candidates = [p]
+        legacy = []
 
     mounted: list[Mount] = []
     reasons: list[str] = []
+    # 目录里躺着的旧 sqlite 库：不再尝试挂载，但要说清为什么被跳过。
+    for f in legacy:
+        reasons.append(
+            f"{f.name}: 旧格式 sqlite 物相库自 v5.2 起不再支持，请改用 polyDB 目录")
     for cand in candidates:
         try:
             mounted.append(add_mount(cand))
@@ -1022,7 +1006,7 @@ def mount_any(path: str | Path) -> list[Mount]:
 # ── 内置类型种子 ──────────────────────────────────────────────
 
 def _seed_builtin_kinds() -> None:
-    """把内置三类登记进注册表 (在三处探测/判别函数都定义完之后调用)。
+    """把内置两类登记进注册表 (在三处探测/判别函数都定义完之后调用)。
 
     probe/detect 一律写成**薄包装**而不是直接绑函数对象: 测试与本模块使用者
     会 monkeypatch ``_probe_polydb`` / ``_probe_user`` 这些模块级函数, 包一层
@@ -1030,20 +1014,14 @@ def _seed_builtin_kinds() -> None:
     ``replace=True`` 是给"模块被 reload / 测试里重复 seed"留的余地; 正常
     导入时注册表是空的, 不会覆盖任何人的插件类型。
     """
-    # 默认参考库: 目录容器, 判据 = meta.json + index.sqlite。
+    # 参考库（COD-Inorg / COD-Full / PDF2-2004 三个变体）: 目录容器,
+    # 判据 = meta.json + index.sqlite。PDF2 已是 polyDB，不再有独立 kind。
     register_kind(MountKind(
         key="polydb", engine="polydb",
         label_key=KIND_LABEL_KEY["polydb"],
         probe=lambda p: _probe_polydb(p),
         detect=lambda p: is_polydb_dir(p),
         is_dir=True), replace=True)
-    # ICDD PDF-2 2004: sqlite dump, 判据在 db_import (表名 + 列名)。
-    register_kind(MountKind(
-        key="pdf2", engine="pdf2",
-        label_key=KIND_LABEL_KEY["pdf2"],
-        probe=lambda p: _probe_sqlite(p),
-        detect=lambda p: _detect_sqlite(p),
-        is_dir=False), replace=True)
     # 用户自建库: 位置由 user_db 自己管, 不参与自动判别 (detect 恒 False),
     # 只作为内置的一行出现在列表里。
     register_kind(MountKind(

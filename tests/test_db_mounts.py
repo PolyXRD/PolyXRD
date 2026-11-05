@@ -50,7 +50,6 @@ def isolated(tmp_path, monkeypatch):
     cfg = get_config()
     empty = tmp_path / "empty"
     empty.mkdir()
-    monkeypatch.setattr(cfg, "pdf2_db_path", empty / "n_pdf2.sqlite")
     monkeypatch.setattr(cfg, "cif_db_path", empty)
     monkeypatch.setattr(cfg, "user_db_dir", lambda: empty)
     # 默认 polyDB 的自动发现也要隔离, 否则本机真实产物会让断言飘
@@ -109,7 +108,7 @@ def test_builtin_polydb_labels_are_distinct(isolated):
     ("cod_full", "polydb"),
     ("cod_local", "polydb"),
     ("polydb", "polydb"),
-    ("pdf2", "pdf2"),
+    ("pdf2", "polydb"),
 ])
 def test_legacy_aliases_resolve(isolated, legacy, expected_kind):
     m = db_mounts.resolve_mount(legacy)
@@ -164,12 +163,12 @@ def test_same_kind_multiple_mounts_are_distinct(isolated, tmp_path):
 
 
 def test_add_mount_rejects_old_cod_sqlite(isolated, tmp_path):
-    """旧格式 COD 无机物库不再被接受（v4.1.0 删掉该类槽位）。"""
+    """旧格式 sqlite 库不再被接受（v5.2 删掉 sqlite 通道，只认 polyDB 目录）。"""
     old = _sqlite(tmp_path / "old.sqlite", OLD_COD_DDL, OLD_COD_ROW)
     with pytest.raises(ValueError) as ei:
         db_mounts.add_mount(old)
-    # 表名对得上 phases 但缺 pearson/name 签名 → no_matching_schema
-    assert "no_matching_s" in str(ei.value) or "不合格" in str(ei.value)
+    # 报错必须**指向下一步**（改用 polyDB 目录），否则用户只看到"挂不上"
+    assert "polyDB" in str(ei.value)
     assert db_mounts.detect_kind(old)[0] == ""
 
 
@@ -198,12 +197,15 @@ def test_remove_builtin_polydb_disables_variant(isolated, monkeypatch):
 
 
 def test_remove_builtin_pdf2_clears_slot(isolated, monkeypatch):
-    from polyxrd.services import db_import
+    """PDF2 现在也是 polyDB 变体：卸载 = 清 ``pdf2-2004`` 槽位。"""
+    from polyxrd.config import get_config
 
-    seen: list[str] = []
-    monkeypatch.setattr(db_import, "clear_import", lambda kind: seen.append(kind))
+    seen: list[tuple] = []
+    monkeypatch.setattr(
+        get_config(), "set_polydb_path",
+        lambda path, variant="cod-inorg": seen.append((path, variant)))
     db_mounts.remove_mount("pdf2")
-    assert seen == ["pdf2"]
+    assert seen == [(None, "pdf2-2004")]
 
 
 def test_user_db_cannot_be_removed_here(isolated):
@@ -225,7 +227,7 @@ def test_set_active_and_clear(isolated, tmp_path):
 # ── 4. 探测 ─────────────────────────────────────────────────
 
 def test_probe_missing_file(isolated):
-    m = db_mounts.Mount(id="pdf2", kind="pdf2", path=Path("D:/no/such.sqlite"))
+    m = db_mounts.Mount(id="pdf2", kind="polydb", path=Path("D:/no/such.polyDB"))
     res = db_mounts.probe(m)
     assert res["ok"] is False and res["error"] == "missing"
 
@@ -249,9 +251,11 @@ def test_source_entries_carry_mount_fields(isolated):
 
 # ── 5. 类型判别 / 整目录挂载 ────────────────────────────────
 
-def test_detect_kind_pdf2_file(isolated, tmp_path):
+def test_detect_kind_rejects_legacy_pdf2_sqlite(isolated, tmp_path):
+    """v5.2: 旧 PDF2 sqlite 不再被识别，报错必须指向 polyDB 迁移。"""
     f = _sqlite(tmp_path / "PDF2_2004.sqlite", PDF2_DDL, PDF2_ROW)
-    assert db_mounts.detect_kind(f)[0] == "pdf2"
+    kind, why = db_mounts.detect_kind(f)
+    assert kind == "" and "polyDB" in why
 
 
 def test_detect_kind_rejects_plain_dir(isolated, tmp_path):
@@ -263,18 +267,19 @@ def test_detect_kind_rejects_plain_dir(isolated, tmp_path):
 
 def test_detect_kind_expect_mismatch(isolated, tmp_path):
     poly = _polydb(tmp_path / "libs", "A.polyDB")
-    kind, why = db_mounts.detect_kind(poly, expect="pdf2")
-    assert kind == "" and "pdf2" in why
+    kind, why = db_mounts.detect_kind(poly, expect="user")
+    assert kind == "" and "user" in why
 
 
-def test_mount_any_folder_collects_polydb_and_pdf2(isolated, tmp_path):
+def test_mount_any_folder_collects_polydb_and_skips_legacy(isolated, tmp_path):
+    """混合文件夹：polyDB 全挂上，旧 sqlite 跳过并给出原因（不静默丢弃）。"""
     root = tmp_path / "drop"
     _polydb(root, "A.polyDB")
     _polydb(root, "B.polyDB", variant="cod-full")
     _sqlite(root / "PDF2_2004.sqlite", PDF2_DDL, PDF2_ROW)
-    mounted = db_mounts.mount_any(root)
-    kinds = sorted(m.kind for m in mounted)
-    assert kinds == ["pdf2", "polydb", "polydb"]
+    mounted, skipped = db_mounts.mount_any_report(root)
+    assert sorted(m.kind for m in mounted) == ["polydb", "polydb"]
+    assert len(skipped) == 1 and "v5.2" in skipped[0]
 
 
 def test_mount_any_empty_folder_raises(isolated, tmp_path):

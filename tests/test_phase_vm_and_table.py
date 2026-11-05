@@ -189,18 +189,19 @@ class TestPolyDbDispatch:
         from polyxrd.services import db_mounts
         from polyxrd.services.db_mounts import Mount
 
-        gone = tmp_path / "gone.sqlite"
-        mount = Mount(id="pdf2:cafe", kind="pdf2", path=gone, builtin=False)
+        gone = tmp_path / "gone.polyDB"
+        mount = Mount(id="polydb:cafe", kind="polydb", path=gone, builtin=False,
+                      variant="cod-inorg")
         monkeypatch.setattr(db_mounts, "resolve_mount",
-                            lambda mid: mount if mid == "pdf2:cafe" else None)
+                            lambda mid: mount if mid == "polydb:cafe" else None)
 
         vm = self._vm_with_peaks()
         errs: list[str] = []
         vm.error.connect(errs.append)
         called: list[int] = []
-        monkeypatch.setattr(vm._identifier, "identify_with_pdf2",
+        monkeypatch.setattr(vm._identifier, "identify_with_polydb",
                             lambda *a, **k: called.append(1) or [])
-        vm.identify_phases(None, db_source="pdf2:cafe")
+        vm.identify_phases(None, db_source="polydb:cafe")
         assert errs, "库文件被挪走后必须报错, 不能静默返回空结果"
         assert not called, "不可用的挂载项不该再进检索引擎"
 

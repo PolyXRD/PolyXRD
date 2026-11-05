@@ -507,12 +507,8 @@ class PhaseView(QWidget):
 
     # ── 数据源可用性 (2026-09-10: 补 PDF2-2004; 0.10.0: 库外挂化;
     #    v4.0.0: 列表式挂载 —— 下拉项由挂载注册表现算) ──
-    #: 内置库类型的显示名在 ``vw.phase_view.*`` 下; polyDB 变体等用注册表自带的
-    #: ``label_key`` (与「外挂数据库管理」列表同一套文案, 两处口径必须一致)。
-    #: v4.1.0: 只剩 PDF2 一类 sqlite 库, 其余（polyDB）一律走注册表文案。
-    _DB_LABEL_KEYS: ClassVar[dict[str, str]] = {
-        "pdf2": "vw.phase_view.db_pdf2",
-    }
+    #: v5.2: 所有参考库（含 PDF2-2004）都已是 polyDB，显示名一律取挂载行自带的
+    #: ``label_key``（与「外挂数据库管理」列表同一套文案，两处口径必须一致）。
 
     def _build_db_entries(self) -> list[str]:
         """按挂载列表重建下拉条目, 返回显示文案 (key 同步写入 ``_db_source_keys``)。
@@ -543,8 +539,7 @@ class PhaseView(QWidget):
                 # 用户自建库固定排在最后一项 (与 v2.6.0 的位置保持一致)
                 user_rows = int(r["rows"] or 0)
                 continue
-            base = tr(self._DB_LABEL_KEYS.get(r["kind"], "")) \
-                if r["kind"] in self._DB_LABEL_KEYS else tr(r["label_key"] or "")
+            base = tr(r["label_key"] or "") if r["label_key"] else ""
             if not base:
                 base = r["label"] or r["id"]
             if r["ok"] and r["rows"]:
@@ -598,53 +593,43 @@ class PhaseView(QWidget):
         )
 
     def _pdf2_coverage_line(self) -> str:
-        """PDF2 库实际覆盖率 (可选行; 读取失败则省略)。
+        """PDF2-2004 库的晶胞/空间群覆盖率（读 polyDB 的 meta.json）。
 
-        结果按库文件 (路径, mtime, size) 缓存: ``coverage()`` 会对 phases 表做
-        全表聚合, 而本方法会被 ``refresh_db_sources`` 间接反复调用 (切语言、
-        关一次管理对话框都会触发)。库文件被替换时 mtime/size 变化, 自动失效。
+        v5.2 起 PDF2 已是 polyDB：覆盖率在**建库时**就算好写进
+        ``meta.build``（``with_cell`` / ``with_sg``），不必再对 16 万行做全表
+        聚合。仍按 meta.json 的 (路径, mtime, size) 缓存 —— 切语言、开关管理
+        对话框会反复触发本方法。
         """
         try:
+            import json
+
             from polyxrd.config import get_config
 
-            db_file = Path(get_config().get_pdf2_db_path())
-            try:
-                st = db_file.stat()
-                key: tuple = (str(db_file), st.st_mtime_ns, st.st_size)
-            except OSError:
-                key = (str(db_file), 0, 0)
+            db_dir = get_config().get_polydb_path("pdf2-2004")
+            if not db_dir:
+                return ""
+            meta_file = Path(db_dir) / "meta.json"
+            st = meta_file.stat()
+            key: tuple = (str(meta_file), st.st_mtime_ns, st.st_size)
             cached = self._pdf2_cov_cache
             if cached is not None and cached[0] == key:
                 return cached[1]
-            line = self._compute_pdf2_coverage_line(db_file, key)
+            meta = json.loads(meta_file.read_text(encoding="utf-8"))
+            build = meta.get("build") or {}
+            n = int((meta.get("counts") or {}).get("phases") or 0)
+            if n <= 0 or not build:
+                line = ""
+            else:
+                line = tr(
+                    "vw.phase_view.pdf2_coverage",
+                    total=f"{n:,}",
+                    sg=round(100.0 * int(build.get("with_sg") or 0) / n, 1),
+                    cell=round(100.0 * int(build.get("with_cell") or 0) / n, 1),
+                )
             self._pdf2_cov_cache = (key, line)
             return line
         except Exception:  # noqa: BLE001 - tooltip 不该因探测失败而崩
             return ""
-
-    @staticmethod
-    def _compute_pdf2_coverage_line(db_file: Path, key: tuple) -> str:
-        from polyxrd.services.pdf2_database import PDF2Database
-
-        db = PDF2Database(db_file)
-        if not db.is_available():
-            return ""
-        # 再确认一次文件身份, 避免探测期间刚被替换 (mtime 变) 的库被缓存成旧值
-        try:
-            st = db_file.stat()
-            if (str(db_file), st.st_mtime_ns, st.st_size) != key:
-                return ""
-        except OSError:
-            return ""
-        cov = db.coverage()
-        if not cov:
-            return ""
-        return tr(
-            "vw.phase_view.pdf2_coverage",
-            total=f"{cov['total']:,}",
-            sg=cov["pct_space_group"],
-            cell=cov["pct_cell"],
-        )
 
     def _mark_unavailable_db_sources(self) -> None:
         """未挂载的数据源在下拉里置灰, 避免选中后静默返回空结果。"""

@@ -56,10 +56,10 @@ from PySide6.QtWidgets import (
 )
 
 from polyxrd.i18n import tr
-from polyxrd.services import db_import, db_mounts, user_db
+from polyxrd.services import db_mounts, user_db
 
-#: kind key → DBKind; 保留给"下载包提示"用 (DB_KINDS 的顺序即优先级, 这里按 key 查)
-DB_KINDS_BY_KEY = db_import.KIND_BY_KEY
+#: PDF2-2004 的 polyDB 变体名（用于版权提示与"无发布包"文案）。
+_PDF2_VARIANT = "pdf2-2004"
 
 _ROW_ID = Qt.ItemDataRole.UserRole
 
@@ -446,28 +446,25 @@ class DatabaseManagerDialog(QDialog):
         return f"{dataset}　{line}" if dataset else line
 
     def _pkg_hint(self, row: dict) -> str:
-        spec = DB_KINDS_BY_KEY.get(row["kind"])
-        if spec is None:
-            # polyDB 库包统一由独立仓库 PolyXRD-DataBase 发布（v4.1.1 政策：
-            # 主仓库 Release 只发程序、不上传数据库）；默认库已内置, 这里给的是
-            # “扩展库去哪下”的指引, 不再编造主仓库附件名。
-            if row["kind"] == "polydb":
-                return tr(
-                    "db_mounts.pkg_polydb_repo",
-                    url="https://github.com/PolyXRD/PolyXRD-DataBase/releases")
-            return tr("db_mounts.pkg_free")
-        version = _app_version()
-        pkg = db_import.release_package_name(spec.key, version)
-        fname = db_import.PKG_FILENAME.get(spec.key, "")
-        if pkg:
-            return tr("db_manager.pkg_hint", pkg=pkg, file=fname)
-        return tr("db_manager.pkg_hint_local", file=fname)
+        if row.get("kind") == "polydb":
+            # PDF2-2004 是 ICDD 版权库：永远没有发布包，只能用户自备后建库。
+            if row.get("variant") == _PDF2_VARIANT:
+                return tr("db_manager.pkg_hint_local", file="PDF2-2004.polyDB")
+            return tr(
+                "db_mounts.pkg_polydb_repo",
+                url="https://github.com/PolyXRD/PolyXRD-DataBase/releases")
+        return tr("db_mounts.pkg_free")
 
     @staticmethod
     def _notice_of(row: dict) -> str:
-        spec = DB_KINDS_BY_KEY.get(row["kind"])
-        key = getattr(spec, "notice_key", "") if spec else ""
-        return tr(key) if key else ""
+        """合规提示：PDF2-2004 必须显示"请确认正版授权"。
+
+        v5.2 起 PDF2 已并入 polyDB（kind=polydb, variant=pdf2-2004），提示
+        改按**变体**判而不是按 kind —— 否则版权提示会跟着旧 kind 一起消失。
+        """
+        if row.get("variant") == _PDF2_VARIANT:
+            return tr("db_manager.notice.pdf2")
+        return ""
 
     # ── 交互 ──────────────────────────────────────────────
     def _on_mount_file(self) -> None:
@@ -503,7 +500,6 @@ class DatabaseManagerDialog(QDialog):
                 tr("db_manager.mount_partial_body",
                    n=len(mounted), skipped=len(skipped),
                    detail="\n".join(f"· {s}" for s in skipped[:6])))
-        db_import.reload_caches()
         self.reload()
         self.databases_changed.emit()
         lines: list[str] = []
@@ -552,7 +548,6 @@ class DatabaseManagerDialog(QDialog):
         except Exception as e:  # noqa: BLE001
             QMessageBox.critical(self, tr("db_manager.btn_unmount"), str(e))
             return
-        db_import.reload_caches()
         self.reload()
         self.databases_changed.emit()
 
@@ -594,15 +589,6 @@ class DatabaseManagerDialog(QDialog):
         dlg.changed.connect(self.databases_changed.emit)
         dlg.exec()
         self.reload()
-
-
-def _app_version() -> str:
-    try:
-        from polyxrd.config import get_config
-
-        return get_config().app_version
-    except Exception:  # noqa: BLE001
-        return ""
 
 
 def _probe_rows(m: db_mounts.Mount) -> int:

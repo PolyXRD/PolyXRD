@@ -40,12 +40,12 @@ def _isolate_store(tmp: Path) -> None:
     """挂载表指到临时文件：不碰开发机 ~/.polyxrd 的真实挂载。"""
     db_mounts._store_file = lambda: tmp / "db_mounts.json"
     db_mounts.clear_probe_cache()
-    # 内置项也隔离：否则本机真实 PDF2 / 默认 polyDB 会混进列表。
+    # 内置项也隔离：否则本机真实默认 polyDB 会混进列表（含 PDF2-2004 变体，
+    # 它也是 polyDB 槽位，v5.2 起不再有独立的 pdf2_db_path）。
     from polyxrd.config import get_config
 
     cfg = get_config()
     cfg.get_polydb_path = lambda *a, **k: None
-    cfg.get_pdf2_db_path = lambda *a, **k: tmp / "none.sqlite"
 
 
 def _find_polydb_files() -> list[Path]:

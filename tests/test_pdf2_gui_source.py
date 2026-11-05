@@ -4,12 +4,16 @@ PDF2-2004 数据源的 GUI 对接测试 (offscreen)
 覆盖 2026-09-10 补的 PDF2 检索源接入:
 
 1. 「物相分析」面板的数据库源下拉含 PDF2-2004, key 与文案一一对齐
-2. 选中 PDF2 → PhaseViewModel.identify_phases 走 identify_with_pdf2 分支
+2. 选中 PDF2 → PhaseViewModel.identify_phases 走 identify_with_polydb 分支,
+   且把 ``variant="pdf2-2004"`` 一路带下去 (v5.2: PDF2 已是 polyDB 变体,
+   独立 sqlite 通道与 kind ``pdf2`` 一并删除)
 3. PDF2 库缺失时该项置灰 (不让用户选中后静默返回空结果)
 4. 候选列表行尾带空间群标记, tooltip 带化学式/空间群/晶胞
 5. 空间群/晶胞缺失的老卡片不会让标记/tooltip 出现 "None"
 """
 from __future__ import annotations
+
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -43,15 +47,17 @@ def pv(qapp, tmp_path, monkeypatch):
 # (``polyxrd.services.db_mounts``) 现算 —— 挂了几份库就有几项。所以这里
 # 一律 patch ``db_mounts.source_entries``, 断言与开发机上真实挂了什么库无关。
 
-#: (挂载 id, 类型, 路径, 相数, i18n 键) —— 与 probe_all 的行同形
-#: v4.1.0: 只剩 polyDB 两变体 + PDF2 + 用户库 (旧 COD sqlite / XinMatch 槽位已删)
+#: (挂载 id, 类型, polyDB 变体, 路径, 相数, i18n 键) —— 与 probe_all 的行同形
+#: v5.2: 只剩 polyDB 三个变体 + 用户库; PDF2-2004 已并入 polyDB 家族
+#: (``kind="polydb"`` / ``variant="pdf2-2004"``), 独立的 ``pdf2`` 类型已删。
 _STD_SOURCES = (
-    ("polydb:cod-inorg", "polydb", r"D:\db\COD-Inorg.polyDB", 77500,
+    ("polydb:cod-inorg", "polydb", "cod-inorg", r"D:\db\COD-Inorg.polyDB", 77500,
      "db_mounts.kind.polydb_inorg"),
-    ("polydb:cod-full", "polydb", r"D:\db\COD-Full.polyDB", 521361,
+    ("polydb:cod-full", "polydb", "cod-full", r"D:\db\COD-Full.polyDB", 521361,
      "db_mounts.kind.polydb_full"),
-    ("pdf2", "pdf2", r"D:\db\PDF2_2004.sqlite", 163834, ""),
-    ("user", "user", r"D:\db\user_phases.sqlite", 5, "db_mounts.kind.user"),
+    ("pdf2", "polydb", "pdf2-2004", r"D:\db\PDF2-2004.polyDB", 163834,
+     "db_manager.kind.pdf2"),
+    ("user", "user", "", r"D:\db\user_phases.sqlite", 5, "db_mounts.kind.user"),
 )
 
 
@@ -60,12 +66,12 @@ def _fake_sources(ok=True, user_rows: int = 5) -> list[dict]:
     from pathlib import Path as _P
 
     out: list[dict] = []
-    for mid, kind, path, rows, label_key in _STD_SOURCES:
+    for mid, kind, variant, path, rows, label_key in _STD_SOURCES:
         good = ok if isinstance(ok, bool) else ok.get(mid, True)
         n = user_rows if kind == "user" else rows
         out.append({
             "id": mid, "kind": kind, "path": path, "exists": True,
-            "builtin": True, "variant": "", "label_key": label_key,
+            "builtin": True, "variant": variant, "label_key": label_key,
             "label": _P(path).name, "ok": good, "rows": n if good else 0,
             "size_mb": 1.0, "engine": kind,
             "error": "" if good else "missing", "hint": "", "detail": "",
@@ -197,8 +203,28 @@ class TestDbSourceCombo:
 
 # ── 2. 识别分支 ──────────────────────────────────────────────
 
+class _FakePdf2Mount:
+    """PDF2-2004 挂载项的替身 (不碰真实库, 只验路由与变体透传)。"""
+
+    id = "pdf2"
+    kind = "polydb"
+    engine = "polydb"
+    variant = "pdf2-2004"
+    exists = True
+    path = Path(r"D:\db\PDF2-2004.polyDB")
+
+    def display_name(self) -> str:
+        return "PDF2-2004 库"
+
+
 class TestIdentifyRouting:
-    def test_vm_routes_pdf2_to_identify_with_pdf2(self, pv, monkeypatch):
+    def test_vm_routes_pdf2_to_identify_with_polydb(self, pv, monkeypatch):
+        """db_source="pdf2" 必须落到 identify_with_polydb(variant="pdf2-2004")。
+
+        v5.2 起 PDF2-2004 是 polyDB 的一个变体, 与 COD 两变体共用同一套
+        reader/打分; 老字面量 ``db_source="pdf2"`` 由注册表别名映射到这一行,
+        历史项目文件不需要迁移。
+        """
         view, vm = pv
         calls: list[dict] = []
 
@@ -206,7 +232,12 @@ class TestIdentifyRouting:
             calls.append(kwargs)
             return []
 
-        monkeypatch.setattr(vm._phase_vm._identifier, "identify_with_pdf2", _spy)
+        monkeypatch.setattr(vm._phase_vm._identifier,
+                            "identify_with_polydb", _spy)
+        monkeypatch.setattr(vm._phase_vm, "_resolve_mount",
+                            lambda db_source: _FakePdf2Mount())
+        monkeypatch.setattr(vm._phase_vm, "_ensure_mount_usable",
+                            lambda mount: True)
         # 造一个非空峰列表 (identify_phases 会先检查)
         from polyxrd.models.peak import Peak, PeakList
         vm._phase_vm._peaks = PeakList(peaks=[
@@ -216,10 +247,14 @@ class TestIdentifyRouting:
             data=object(), top_n=5, db_source="pdf2",
             element_filter={"must_have": ["Ca"]},
         )
-        assert len(calls) == 1, "未走 PDF2 分支"
+        assert len(calls) == 1, "未走 polyDB 分支"
         assert calls[0]["top_n"] == 5
         # 元素过滤必须透传 (PDF2 与 COD 共用四态过滤)
         assert calls[0]["element_filter"] == {"must_have": ["Ca"]}
+        # 变体 + 库路径都必须带下去: 少了 variant 会当成 COD 无机库查,
+        # 少了 db_path 会在槽位变更后查到另一份库。
+        assert calls[0]["variant"] == "pdf2-2004"
+        assert calls[0]["db_path"] == str(_FakePdf2Mount.path)
 
     def test_vm_routes_polydb_to_identify_with_polydb(self, pv, monkeypatch):
         """db_source="polydb:cod-inorg" 必须落到 identify_with_polydb (默认库)。"""

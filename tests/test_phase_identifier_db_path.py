@@ -1,14 +1,15 @@
-"""显式 ``db_path`` 转发与"不污染实例状态"回归测试 (v4.1.0)
+"""显式 ``db_path`` 转发与"不污染实例状态"回归测试 (v4.1.0, v5.2 收窄)
 ==========================================================
 
-列表式多库挂载之后, ``PhaseIdentifier`` 有两个**可以同时挂多份**的引擎:
-``identify_with_polydb`` (polyDB 目录) 与 ``identify_with_pdf2`` (ICDD sqlite)。
-界面每次检索都把"当前选中那一行"的位置显式传下来, 所以这里钉住:
+列表式多库挂载之后, polyDB 的三个变体 (``cod-inorg`` / ``cod-full`` /
+``pdf2-2004``) 共用 ``identify_with_polydb`` 一个引擎。v5.2 删除了 PDF2 的
+独立 sqlite 通道 (``identify_with_pdf2`` / ``PDF2Database``), 于是原来"两个
+引擎各测一遍"的用例收敛成一组 —— 但契约本身没变, 这里继续钉住:
 
 1. **显式路径只对本次调用生效** —— 传了就按传的查, 不写进配置、不缓存到实例
    (修复前的坑: 显式库粘在实例上, 切回默认库时静默查错库);
-2. **省略路径时按变体选槽位** —— ``variant="cod-full"`` 必须拿全库那份, 不能
-   悄悄退到无机库;
+2. **省略路径时按变体选槽位** —— ``variant="cod-full"`` 必须拿全库那份,
+   ``variant="pdf2-2004"`` 必须拿 PDF2 那份, 不能悄悄退到无机库;
 3. **库不可用就返回空, 绝不静默回退** —— 用户选了"COD 全库"但那份没挂载时,
    宁可空结果也不能拿另一份库冒充。
 """
@@ -59,23 +60,8 @@ class _FakePoly:
         return None
 
 
-class _FakePdf2:
-    calls: list[object] = []
-    available = True
-
-    def __init__(self, db_path=None):
-        type(self).calls.append(db_path)
-
-    def is_available(self) -> bool:
-        return type(self).available
-
-    def search_by_d_peaks(self, *a, **k):
-        return []
-
-
 import pytest  # noqa: E402
 
-import polyxrd.services.pdf2_database as pdf2_mod   # noqa: E402
 import polyxrd.services.polydb as polydb_mod         # noqa: E402
 from polyxrd.services.phase_identifier import PhaseIdentifier  # noqa: E402
 
@@ -84,10 +70,7 @@ from polyxrd.services.phase_identifier import PhaseIdentifier  # noqa: E402
 def _reset_fakes(monkeypatch, tmp_path):
     _FakePoly.calls = []
     _FakePoly.ready = True
-    _FakePdf2.calls = []
-    _FakePdf2.available = True
     monkeypatch.setattr(polydb_mod, "PolyDatabase", _FakePoly)
-    monkeypatch.setattr(pdf2_mod, "PDF2Database", _FakePdf2)
     # 配置全部隔离到临时目录: 任何"偷偷写配置"的行为都会留下痕迹
     from polyxrd.config import AppConfig
     monkeypatch.setattr(AppConfig, "_user_db_paths_file",
@@ -139,21 +122,37 @@ def test_polydb_calls_are_independent(_reset_fakes):
     assert [c["variant"] for c in _FakePoly.calls] == ["cod-inorg", "cod-full"]
 
 
-# ── PDF2: 显式路径转发 ──────────────────────────────────────
+# ── PDF2-2004: 走同一个引擎, 变体必须原样带下去 ─────────────
 
-def test_pdf2_forwards_explicit_db_path(_reset_fakes, tmp_path):
-    PhaseIdentifier().identify_with_pdf2(
-        _make_data(), peaks=_make_peaks(), db_path=str(tmp_path / "pdf2.sqlite"))
-    assert _FakePdf2.calls == [str(tmp_path / "pdf2.sqlite")]
+def test_pdf2_variant_is_forwarded(_reset_fakes, tmp_path):
+    """PDF2 并入 polyDB 后: 显式路径交给同一个引擎, 按显式路径开库。
+
+    v5.2 之前这段验的是 ``identify_with_pdf2(db_path=...)``。引擎合并后契约
+    不变 —— "用户选中的那一行"必须逐字生效, 不能悄悄换成默认无机库。
+    显式路径下 ``variant`` 只是槽位提示 (开库后按 meta.json 自我校正),
+    所以这里断言的是路径, 不是构造参数。
+    """
+    target = str(tmp_path / "PDF2-2004.polyDB")
+    PhaseIdentifier().identify_with_polydb(
+        _make_data(), peaks=_make_peaks(),
+        db_path=target, variant="pdf2-2004")
+    assert [c["db_path"] for c in _FakePoly.calls] == [target]
 
 
-def test_pdf2_omitted_path_lets_config_decide(_reset_fakes):
-    PhaseIdentifier().identify_with_pdf2(_make_data(), peaks=_make_peaks())
-    assert _FakePdf2.calls == [None], "省略路径时不该自己猜位置"
+def test_pdf2_variant_omitted_path_lets_registry_decide(_reset_fakes):
+    """省略路径时按 variant 取槽位 (对应旧 ``pdf2_db_path`` 配置的作用)。
+
+    这一条是 PDF2 变体接线的关键: 变体没传下去就会静默查 COD 无机库,
+    结果"有候选"但全是别的相 —— 比报错更难发现。
+    """
+    PhaseIdentifier().identify_with_polydb(
+        _make_data(), peaks=_make_peaks(), variant="pdf2-2004")
+    assert _FakePoly.calls == [{"db_path": None, "variant": "pdf2-2004"}]
 
 
-def test_pdf2_unavailable_returns_empty(_reset_fakes, tmp_path):
-    _FakePdf2.available = False
-    res = PhaseIdentifier().identify_with_pdf2(
-        _make_data(), peaks=_make_peaks(), db_path=str(tmp_path / "nope.sqlite"))
+def test_pdf2_variant_not_ready_returns_empty(_reset_fakes):
+    _FakePoly.ready = False
+    res = PhaseIdentifier().identify_with_polydb(
+        _make_data(), peaks=_make_peaks(),
+        db_path="D:/gone.polyDB", variant="pdf2-2004")
     assert res == []

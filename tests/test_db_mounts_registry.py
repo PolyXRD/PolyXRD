@@ -44,7 +44,6 @@ def isolated(tmp_path, monkeypatch):
     cfg = get_config()
     empty = tmp_path / "empty"
     empty.mkdir(exist_ok=True)
-    monkeypatch.setattr(cfg, "pdf2_db_path", empty / "n_pdf2.sqlite")
     monkeypatch.setattr(cfg, "cif_db_path", empty)
     monkeypatch.setattr(cfg, "user_db_dir", lambda: empty)
     monkeypatch.setattr(cfg, "get_polydb_path", lambda *a, **k: None)
@@ -133,18 +132,19 @@ def _stored(store: Path) -> dict:
 # ── 1. 注册表本身 ────────────────────────────────────────────
 
 def test_builtin_kinds_are_seeded(isolated):
-    """内置三类是注册表的种子, Mount 的 is_dir / engine 也改由注册表回答。"""
+    """v5.2 内置只剩两类：polyDB（含 PDF2 变体）与用户库。"""
     keys = [k.key for k in db_mounts.iter_kinds()]
-    assert {"polydb", "pdf2", "user"} <= set(keys)
+    assert {"polydb", "user"} <= set(keys)
+    assert "pdf2" not in keys
     assert db_mounts.KIND_ENGINE["polydb"] == "polydb"
-    assert db_mounts.KIND_ENGINE["pdf2"] == "pdf2"
     assert db_mounts.get_kind("polydb").is_dir is True
-    assert db_mounts.get_kind("pdf2").is_dir is False
 
     poly = db_mounts.Mount(id="polydb:x", kind="polydb", path=Path("somewhere"))
     assert poly.is_dir is True and poly.engine == "polydb"
-    pdf = db_mounts.Mount(id="pdf2:x", kind="pdf2", path=Path("a.sqlite"))
-    assert pdf.is_dir is False and pdf.engine == "pdf2"
+    # PDF2 行仍是独立 id，但类型/引擎都是 polyDB
+    pdf = db_mounts.get_mount("pdf2")
+    assert pdf is not None and pdf.kind == "polydb" and pdf.variant == "pdf2-2004"
+    assert pdf.engine == "polydb" and pdf.is_dir is True
 
 
 def test_duplicate_registration_requires_replace(isolated):

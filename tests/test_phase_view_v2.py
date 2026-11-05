@@ -169,43 +169,40 @@ class TestDbSourceRefresh:
         pv._db_source_labels()
         assert pv._preferred_db_source_index() == 0
 
-    def test_pdf2_coverage_scanned_once_per_db_version(self, pv, tmp_path,
-                                                       monkeypatch):
-        from polyxrd.config import get_config
-        from polyxrd.services import pdf2_database
-
-        fake_db = tmp_path / "PDF2_2004.sqlite"
-        fake_db.write_bytes(b"fake")
-        monkeypatch.setattr(get_config(), "get_pdf2_db_path", lambda: fake_db)
-
-        calls: list[int] = []
-
-        class _FakePDF2:
-            def __init__(self, db_path=None):
-                self.db_path = db_path
-
-            def is_available(self):
-                return True
-
-            def coverage(self):
-                calls.append(1)
-                return {"total": 10, "pct_space_group": 100.0,
-                        "pct_cell": 100.0}
-
-        monkeypatch.setattr(pdf2_database, "PDF2Database", _FakePDF2)
-        pv._pdf2_cov_cache = None
-        pv.refresh_db_sources()
-        assert len(calls) == 1
-        for _ in range(3):
-            pv.refresh_db_sources()
-        assert len(calls) == 1, "库没换就不该重复做全表覆盖率聚合"
-
-        # 库文件被替换 (size/mtime 变) → 必须重新统计
-        fake_db.write_bytes(b"fake-and-longer")
+    def test_pdf2_coverage_reads_polydb_meta_once(self, pv, tmp_path,
+                                                  monkeypatch):
+        """PDF2 已是 polyDB：覆盖率读 meta.json，按 (路径, mtime, size) 缓存。"""
+        import json
         import os
-        os.utime(fake_db, (fake_db.stat().st_atime, fake_db.stat().st_mtime + 5))
-        pv.refresh_db_sources()
-        assert len(calls) == 2
+
+        from polyxrd.config import get_config
+
+        db = tmp_path / "PDF2-2004.polyDB"
+        db.mkdir()
+        meta = db / "meta.json"
+        meta.write_text(json.dumps({
+            "counts": {"phases": 10},
+            "build": {"with_sg": 8, "with_cell": 9},
+        }), encoding="utf-8")
+        monkeypatch.setattr(get_config(), "get_polydb_path",
+                            lambda variant="cod-inorg": db)
+
+        pv._pdf2_cov_cache = None
+        line = pv._pdf2_coverage_line()
+        assert "10" in line and "80" in line and "90" in line
+        cached = pv._pdf2_cov_cache
+        for _ in range(3):
+            assert pv._pdf2_coverage_line() == line
+        assert pv._pdf2_cov_cache == cached, "库没换就不该重读 meta"
+
+        # 库被替换 (mtime 变) → 必须重新读取
+        meta.write_text(json.dumps({
+            "counts": {"phases": 20},
+            "build": {"with_sg": 10, "with_cell": 20},
+        }), encoding="utf-8")
+        os.utime(meta, (meta.stat().st_atime, meta.stat().st_mtime + 5))
+        line2 = pv._pdf2_coverage_line()
+        assert line2 != line and "20" in line2
 
     def test_selecting_non_mount_source_clears_active(self, pv, tmp_path,
                                                       monkeypatch):

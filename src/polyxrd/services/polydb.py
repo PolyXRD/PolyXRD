@@ -76,6 +76,16 @@ _REQUIRED_FILES = ("meta.json", "index.sqlite", "peaks_d.f32", "peaks_i.u16",
                    "bins.u8", "elem.u8", "sites.bin", "sites_off.i64")
 _REQUIRED_SECTIONS = ("peaks_d.f32", "peaks_i.u16", "bins.u8", "elem.u8")
 
+#: ``entries`` 的可选列（缺失时必须退化，不能报错）。
+#:
+#: 规范 §5 允许「新增可选列 = schema_version 不变」。PDF2-2004 的库就把 ICDD
+#: 卡片上的 ``name``（化合物名）/ ``pearson`` / ``sg_setting`` 与约化晶胞
+#: 一并写进了 entries —— 这些在 CIF 家族里没有对应字段。reader 一律用
+#: ``SELECT *`` + ``dict.get``，老库无这些列时取到空串。
+_OPTIONAL_ENTRY_COLUMNS = ("name", "pearson", "sg_setting",
+                           "red_a", "red_b", "red_c",
+                           "red_alpha", "red_beta", "red_gamma", "red_vol")
+
 
 @dataclass
 class PolyDBStats:
@@ -173,6 +183,7 @@ class PolyDatabase:
         self._stats: Optional[PolyDBStats] = None
         self._elem_mask_cache: dict[frozenset, np.ndarray] = {}
         self._eid_arr: Optional[np.ndarray] = None
+        self._entry_cols: Optional[set[str]] = None
         self._lock = threading.Lock()
 
     # ── 基础状态 ──────────────────────────────────────────
@@ -205,6 +216,7 @@ class PolyDatabase:
             self.meta = {}
             self._elem_mask_cache.clear()
             self._eid_arr = None
+            self._entry_cols = None
 
     def close(self) -> None:
         self.reload()
@@ -242,6 +254,11 @@ class PolyDatabase:
             try:
                 with open(self.path / "meta.json", encoding="utf-8") as fh:
                     self.meta = json.load(fh)
+                # 以 meta 为准：用 db_path 构造时调用方一般不给 variant，
+                # 若不回填就会把 PDF2 库当成 cod-inorg（display_id/文案会错）。
+                mv = str(self.meta.get("variant") or "")
+                if mv:
+                    self.variant = mv
                 c = self.meta["counts"]
                 n = int(c["phases"])
                 k = int(c["k"])
@@ -403,9 +420,15 @@ class PolyDatabase:
 
         bins = arr["bins"]
         nbins = arr["nbins"]
+        # 位图窗口必须与精确打分同口径：tolerance_rel > 0 时单峰容差是
+        # max(绝对, 相对×d)，只按绝对容差开窗会让"相对容差命中"的相根本进不了
+        # 候选池（默认 tolerance_rel=0 时与旧行为逐字一致）。
+        trel = float(tolerance_rel or 0.0)
         for k in range(md.size):
-            lo = md[k] - tolerance
-            hi = md[k] + tolerance
+            tol_k = max(float(tolerance), trel * float(md[k])) if trel > 0 \
+                else float(tolerance)
+            lo = md[k] - tol_k
+            hi = md[k] + tol_k
             b0 = max(0, int(lo / _BIN_WIDTH))
             b1 = min(nbins - 1, int(hi / _BIN_WIDTH))
             if hi >= 25.0:
@@ -597,17 +620,19 @@ class PolyDatabase:
         return int(r[0]) if r and r[0] is not None else -1
 
     def get_phase(self, eid: int) -> Optional[dict]:
-        """取一条相详情，键与 ``phase_search.fetch_phase_record`` 同构。"""
+        """取一条相详情，键与 ``phase_search.fetch_phase_record`` 同构。
+
+        用 ``SELECT *`` 而不是固定列清单：规范允许 entries 附带可选列
+        （PDF2 库的 ``name`` / ``pearson`` / 约化晶胞），老库缺列时
+        ``dict.get`` 退化为空值，不抛 KeyError。
+        """
         conn = self._get_conn()
         arr = self._get_arrays()
         if conn is None or arr is None:
             return None
         try:
             r = conn.execute(
-                "SELECT row_idx, eid, formula, formula_red, mineral, space_group, "
-                "sg_number, elements, a, b, c, alpha, beta, gamma, volume, "
-                "density, z, n_peaks, cif_rel FROM entries WHERE eid=?",
-                (int(eid),)).fetchone()
+                "SELECT * FROM entries WHERE eid=?", (int(eid),)).fetchone()
         except sqlite3.Error:
             return None
         if r is None or r["row_idx"] is None:
@@ -615,33 +640,65 @@ class PolyDatabase:
         row = int(r["row_idx"])
         if row < 0 or row >= arr["n"]:
             return None
+        rec = dict(r)
         d = np.asarray(arr["d"][row], dtype=np.float64)
         i = np.asarray(arr["i"][row], dtype=np.float64) / 65535.0 * 1000.0
         m = d > 0
         return {
-            "cod_id": int(r["eid"]),
-            "ref_id": int(r["eid"]),
-            "display_id": int(r["eid"]),
-            "formula": r["formula"] or "",
-            "formula_red": r["formula_red"] or "",
-            "mineral_name": r["mineral"] or "",
-            "space_group": r["space_group"] or "",
-            "sg_number": int(r["sg_number"] or 0),
-            "elements_list": [t.strip() for t in (r["elements"] or "").split(",") if t.strip()],
-            "cell_a": float(r["a"] or 0.0), "cell_b": float(r["b"] or 0.0),
-            "cell_c": float(r["c"] or 0.0),
-            "cell_alpha": float(r["alpha"] or 90.0),
-            "cell_beta": float(r["beta"] or 90.0),
-            "cell_gamma": float(r["gamma"] or 90.0),
-            "volume": float(r["volume"] or 0.0),
-            "density": float(r["density"] or 0.0),
-            "z": int(r["z"] or 0),
-            "n_peaks": int(r["n_peaks"] or int(m.sum())),
-            "cif_rel": r["cif_rel"] or "",
+            "cod_id": int(rec["eid"]),
+            "ref_id": int(rec["eid"]),
+            "display_id": self._display_id(int(rec["eid"])),
+            "formula": rec.get("formula") or "",
+            "formula_red": rec.get("formula_red") or "",
+            "mineral_name": rec.get("mineral") or "",
+            # PDF2 专有：ICDD 卡片上的化合物名（CIF 家族恒为空）
+            "name": rec.get("name") or "",
+            "pearson": rec.get("pearson") or "",
+            "space_group": rec.get("space_group") or "",
+            "sg_number": int(rec.get("sg_number") or 0),
+            "elements_list": [t.strip() for t in (rec.get("elements") or "").split(",") if t.strip()],
+            "cell_a": float(rec.get("a") or 0.0), "cell_b": float(rec.get("b") or 0.0),
+            "cell_c": float(rec.get("c") or 0.0),
+            "cell_alpha": float(rec.get("alpha") or 90.0),
+            "cell_beta": float(rec.get("beta") or 90.0),
+            "cell_gamma": float(rec.get("gamma") or 90.0),
+            "volume": float(rec.get("volume") or 0.0),
+            "density": float(rec.get("density") or 0.0),
+            "z": int(rec.get("z") or 0),
+            "n_peaks": int(rec.get("n_peaks") or int(m.sum())),
+            "cif_rel": rec.get("cif_rel") or "",
             "peaks_d_list": d[m].tolist(),
             "peaks_i_list": i[m].tolist(),
             "source": "polydb",
         }
+
+    def _display_id(self, eid: int) -> str:
+        """对外展示编号：按**库变体**决定前缀。
+
+        COD 家族沿用 ``97-xxxxxxx``（v4.2.1 兼容老 MCP 客户端的字段契约）；
+        PDF2-2004 用 ICDD 卡片号 ``PDF2-000123`` —— 与旧 sqlite 通道逐字一致，
+        用户手上的卡片号能直接对上。
+        """
+        if self._meta_variant().startswith("pdf2"):
+            return f"PDF2-{eid:06d}"
+        return self._legacy_display_id(eid)
+
+    def _meta_variant(self) -> str:
+        """库变体名（以 ``meta.json`` 为准，构造参数只是兜底）。
+
+        单独取一次而不是依赖 :meth:`_get_arrays`：``search_entries`` 与
+        ``display_id`` 只碰 sqlite，不该为了知道"这是不是 PDF2 库"去 mmap
+        上百 MB 的数组段。
+        """
+        if not self.meta and self.path is not None:
+            try:
+                with open(self.path / "meta.json", encoding="utf-8") as fh:
+                    data = json.load(fh)
+                if isinstance(data, dict):
+                    self.meta = data
+            except (OSError, ValueError):
+                pass
+        return str(self.meta.get("variant") or self.variant or "")
 
     @staticmethod
     def _legacy_display_id(eid: int) -> str:
@@ -670,6 +727,130 @@ class PolyDatabase:
             return int(core)
         return None
 
+    @staticmethod
+    def _formula_ratio_key(formula: str) -> tuple[tuple[str, float], ...] | None:
+        """化学式 → **按最小计数归一**的比例键，用于跨记法匹配。
+
+        COD 库对同一种相有两种记法：整数配比（``O49 W18``）与小数下标
+        （``O2.72 W``、``O2.9 W``）。用户习惯按整数写（``W20O58``、``W18O49``），
+        ``normalize_cod_formula`` 只做元素排序+去空格，两者字符串仍不等 →
+        检索返回 0 条（P2-4 就是被这一点误判成"缺标准卡"）。
+
+        这里把元素计数除以最小计数，得到与配比写法无关的键：
+
+        * ``W20O58`` → ``{O: 2.9, W: 1.0}``
+        * ``O2.9 W`` → ``{O: 2.9, W: 1.0}``  → 命中
+        * ``O3 W``   → ``{O: 3.0, W: 1.0}``  → 不命中（正确区分）
+
+        解析失败返回 ``None``（调用方退回纯文本 LIKE）。
+        """
+        if not formula or not formula.strip():
+            return None
+        try:
+            from polyxrd.utils.formula_parser import parse_formula_detailed
+
+            counts = parse_formula_detailed(formula)
+        except Exception:  # noqa: BLE001 - 解析失败退回文本匹配
+            return None
+        vals = {k: float(v) for k, v in (counts or {}).items() if float(v) > 0}
+        if len(vals) < 2:      # 单元素式没有"比例"可言（Fe3 之类按原样比）
+            return None
+        base = min(vals.values())
+        if base <= 0:
+            return None
+        return tuple(sorted((el, round(v / base, 3)) for el, v in vals.items()))
+
+    @classmethod
+    def _ratio_equal(cls, a, b, tol: float = 0.02) -> bool:
+        """两个比例键是否等价（元素集必须完全相同，计数差 ≤ tol）。"""
+        if not a or not b or len(a) != len(b):
+            return False
+        for (ea, va), (eb, vb) in zip(a, b):
+            if ea != eb or abs(va - vb) > tol:
+                return False
+        return True
+
+    def _entry_columns(self) -> set[str]:
+        """``entries`` 实际列集合（缓存）。用于判断可选列能否出现在 SQL 里。"""
+        if self._entry_cols is None:
+            cols: set[str] = set()
+            conn = self._get_conn()
+            if conn is not None:
+                try:
+                    cols = {r[1] for r in conn.execute(
+                        "PRAGMA table_info(entries)")}
+                except sqlite3.Error:
+                    cols = set()
+            self._entry_cols = cols
+        return self._entry_cols
+
+    def _search_by_ratio(self, query: str, limit: int,
+                         exclude: set[int]) -> list[dict]:
+        """按**元素配比**补充检索（``W20O58`` ↔ 库内 ``O2.9 W``）。
+
+        先用 SQL 把候选收敛到"元素集相同"的条目（``GLOB`` 区分大小写，
+        避免 ``*O*`` 命中 ``Ho``），再在 Python 里比归一化比例。只在
+        精确归一化匹配没命中时调用，代价可忽略（W-O 类元素对几十~几百行）。
+        """
+        key = self._formula_ratio_key(query)
+        if not key:
+            return []
+        conn = self._get_conn()
+        if conn is None:
+            return []
+        elems = [el for el, _ in key]
+        # 元素集预筛：只有点分/空格分隔的化学式列能这么查
+        clauses = " AND ".join(["formula GLOB ?" for _ in elems])
+        params = [f"*{el}*" for el in elems]
+        cols = "*"
+        try:
+            rows = conn.execute(
+                f"SELECT {cols} FROM entries WHERE {clauses} "
+                "ORDER BY n_peaks DESC", params).fetchall()
+        except sqlite3.Error:
+            return []
+        hits = []
+        for r in rows:
+            if int(r["eid"]) in exclude:
+                continue
+            cand = self._formula_ratio_key(r["formula"] or "")
+            if not self._ratio_equal(key, cand):
+                continue
+            # 元素集必须**完全相同**：比例键已按元素名排序，长度相等 + 逐元素
+            # 相等即等价；这里再挡一次"表观比例相同但多一个元素"的假阳性。
+            cand_elems = {el for el, _ in (cand or ())}
+            if cand_elems != set(elems):
+                continue
+            hits.append(r)
+            if len(hits) >= limit:
+                break
+        return [self._row_to_entry(r) for r in hits]
+
+    def _row_to_entry(self, r) -> dict:
+        """entries 行 → 对外 dict（字段契约见 ``search_entries``）。"""
+        rec = dict(r)
+        eid_i = int(rec["eid"])
+        return {
+            "cod_id": eid_i,
+            "ref_id": self._legacy_ref_id(eid_i),
+            "display_id": self._display_id(eid_i),
+            "formula": rec.get("formula") or "",
+            "formula_red": rec.get("formula_red") or "",
+            "mineral_name": rec.get("mineral") or "",
+            "name": rec.get("name") or "",
+            "space_group": rec.get("space_group") or "",
+            "sg_number": int(rec.get("sg_number") or 0),
+            "cell_a": float(rec.get("a") or 0.0),
+            "cell_b": float(rec.get("b") or 0.0),
+            "cell_c": float(rec.get("c") or 0.0),
+            "cell_alpha": float(rec.get("alpha") or 90.0),
+            "cell_beta": float(rec.get("beta") or 90.0),
+            "cell_gamma": float(rec.get("gamma") or 90.0),
+            "volume": float(rec.get("volume") or 0.0),
+            "density": float(rec.get("density") or 0.0),
+            "n_peaks": int(rec.get("n_peaks") or 0),
+        }
+
     def search_entries(self, query: str, limit: int = 20) -> list[dict]:
         """按 化学式 / 约化式 / 矿名 / 空间群 / 编号 模糊查相（只读）。
 
@@ -689,9 +870,16 @@ class PolyDatabase:
         if not q:
             return []
         n = max(1, min(int(limit or 20), 500))
-        cols = ("eid, formula, formula_red, mineral, space_group, sg_number, "
-                "a, b, c, alpha, beta, gamma, volume, density, n_peaks")
+        cols = "*"
+        # PDF2 库有 ``name``（ICDD 化合物名）列，用户会按 "Aluminum Oxide" 搜；
+        # CIF 家族的库没有该列，SQL 里不能出现它 —— 先探测。
+        has_name = "name" in self._entry_columns()
         eid = self._parse_eid_query(q)
+        # PDF2 的卡片号是 5~6 位（10001 / 10837），与 COD 的七位 eid 不同规则；
+        # 用户直接输卡片号必须能命中。仅对 pdf2 变体放宽，避免 COD 库里
+        # "10001" 这种短数字被误当主键（COD eid 从 1,000,000 起）。
+        if eid is None and self._meta_variant().startswith("pdf2") and q.isdigit():
+            eid = int(q)
         try:
             if eid is not None:
                 rows = conn.execute(
@@ -704,6 +892,9 @@ class PolyDatabase:
                     "REPLACE(space_group, ' ', '') LIKE ?",
                 ]
                 params = [pat, pat, pat, f"%{q.replace(' ', '')}%"]
+                if has_name:
+                    clauses.append("name LIKE ?")
+                    params.append(pat)
                 norm = ""
                 try:
                     from polyxrd.utils.formula_parser import normalize_cod_formula
@@ -732,28 +923,19 @@ class PolyDatabase:
                 ).fetchall()
         except sqlite3.Error:
             return []
-        out: list[dict] = []
-        for r in rows[:n]:
-            eid_i = int(r["eid"])
-            out.append({
-                "cod_id": eid_i,
-                "ref_id": self._legacy_ref_id(eid_i),
-                "display_id": self._legacy_display_id(eid_i),
-                "formula": r["formula"] or "",
-                "formula_red": r["formula_red"] or "",
-                "mineral_name": r["mineral"] or "",
-                "space_group": r["space_group"] or "",
-                "sg_number": int(r["sg_number"] or 0),
-                "cell_a": float(r["a"] or 0.0),
-                "cell_b": float(r["b"] or 0.0),
-                "cell_c": float(r["c"] or 0.0),
-                "cell_alpha": float(r["alpha"] or 90.0),
-                "cell_beta": float(r["beta"] or 90.0),
-                "cell_gamma": float(r["gamma"] or 90.0),
-                "volume": float(r["volume"] or 0.0),
-                "density": float(r["density"] or 0.0),
-                "n_peaks": int(r["n_peaks"] or 0),
-            })
+        out: list[dict] = [self._row_to_entry(r) for r in rows[:n]]
+        # v5.2 (P2-4): 比例兜底 —— 整数配比写法 ↔ 小数下标写法
+        # （``W20O58`` ↔ ``O2.9 W``、``W18O49`` ↔ ``O2.72 W``）。同一个相在
+        # COD 里两种记法并存，只做字符串归一化必然漏 —— 这里按元素配比补，
+        # 命中排在精确/模糊命中之后（调用方取前 N 条的语义不变）。
+        if len(out) < n:
+            try:
+                extra = self._search_by_ratio(
+                    q, n - len(out), {r["cod_id"] for r in out})
+            except Exception:  # noqa: BLE001 - 兜底失败不影响主检索
+                extra = []
+            if extra:
+                out = out + extra
         return out
 
     def get_atomic_sites(self, eid: int) -> list[dict]:
@@ -917,7 +1099,7 @@ class PolyDatabase:
         final: list[dict] = []
         for rec, eid in zip(out[:limit], eids):
             rec = {k: v for k, v in rec.items() if k != "_row"}
-            rec.update(cod_id=eid, ref_id=eid, display_id=eid)
+            rec.update(cod_id=eid, ref_id=eid, display_id=self._display_id(eid))
             final.append(rec)
         out = final
         # 补齐展示字段（只对最终 limit 条查询，避免 N 次元数据查询）

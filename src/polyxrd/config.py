@@ -64,9 +64,8 @@ class AppConfig:
     # v4.2.0: 本地 COD sqlite 运行时（全库索引、无机物库两个 sqlite 以及
     # COD SVN 源目录）已彻底移除，相关字段与 getter 一并删除。物相检索改由
     # 外挂 polyDB（v4.0.0+ 格式）承担，见下方 polyDB 挂载路径。
-    # PDF2-2004 数据库: ICDD PDF-2 2004 版, 自用验证库
-    # (v2.1 P3: 原先硬编码开发机绝对路径的 pdf2_raw_path 字段已删除 —— 零调用点)
-    pdf2_db_path: Path = field(default_factory=lambda: AppConfig._PROJECT_ROOT / "cod_data" / "PDF2_2004.sqlite")
+    # v5.2: PDF2-2004 也不再保留独立 sqlite 通道 —— 它被重打包成 polyDB
+    # （variant ``pdf2-2004``），与 COD 家族共用同一套 reader/打分。
     export_dir: Path = field(default_factory=lambda: Path.home() / "PolyXRD_exports")
     log_dir: Path = field(default_factory=lambda: Path.home() / ".polyxrd" / "logs")
 
@@ -101,24 +100,6 @@ class AppConfig:
         落点 —— 就是这里。放在这里的库即使没走 GUI 导入也会被自动发现。
         """
         return Path.home() / self._HOME_CIF_DB_REL
-
-    def _resolve_db_path(self, key: str, default: Path,
-                         alt_names: tuple[str, ...]) -> Path:
-        """统一的库路径解析: 用户导入 > 默认位置 > 用户目录兜底。
-
-        默认位置**存在**时优先于用户目录兜底 —— 开发/内嵌整包场景下项目内
-        的库才是预期数据源, 不该被用户目录里同名的旧库悄悄顶掉。
-        """
-        imported = self.user_db_path(key)
-        if imported is not None:
-            return imported
-        if default.exists():
-            return default
-        for name in alt_names:
-            cand = self.user_db_dir() / name
-            if cand.exists():
-                return cand
-        return default
 
     def get_cif_db_path(self) -> Path:
         return self.cif_db_path
@@ -170,28 +151,16 @@ class AppConfig:
             return Path(p)
         return None
 
-    # ── PDF2-2004 数据库路径 ────────────────────────────────
-
-    def get_pdf2_db_path(self) -> Path:
-        """获取当前 PDF2-2004 SQLite 索引路径。
-
-        优先级:用户导入的外部库 > 项目内默认路径 > 用户目录兜底。
-        """
-        return self._resolve_db_path(
-            "pdf2_db_path", self.pdf2_db_path, ("PDF2_2004.sqlite",))
-
-    def set_pdf2_db_path(self, path: str | Path) -> None:
-        """设置 PDF2-2004 SQLite 路径并持久化 (空值 = 清除, 回退默认)。"""
-        self._update_user_db_path("pdf2_db_path", path)
-
     # ── polyDB 外挂库路径 (v4.0.0) ──────────────────────────
 
     #: polyDB 变体 → user_db_paths.json 里的槽位 key。
-    #: polyDB 是**目录容器**（不是单个文件），两个变体各自独立挂载。
+    #: polyDB 是**目录容器**（不是单个文件），每个变体各自独立挂载。
     #: ClassVar: 这是全类共享的常量映射, 不是实例字段 (ruff RUF012)。
     POLYDB_VARIANTS: ClassVar[dict[str, str]] = {
         "cod-inorg": "polydb_inorg_path",
         "cod-full": "polydb_full_path",
+        # v5.2: ICDD PDF-2 2004 重打包成 polyDB，与 COD 家族同一套 reader。
+        "pdf2-2004": "pdf2_polydb_path",
     }
 
     #: polyDB 变体 → 目录名兜底关键字（小写）。正常以 ``meta.json`` 的
@@ -199,6 +168,7 @@ class AppConfig:
     _POLYDB_NAME_HINTS: ClassVar[dict[str, tuple[str, ...]]] = {
         "cod-inorg": ("cod-inorg", "inorg"),
         "cod-full": ("cod-full", "full"),
+        "pdf2-2004": ("pdf2",),
     }
 
     #: 记住"用户显式取消挂载过哪些变体"的键。没有它的话, 取消挂载后下次
@@ -231,6 +201,9 @@ class AppConfig:
             roots.append(repo / "databases")
             # 源码态开发: 构库仓库与软件仓库同级 (不写死盘符 —— 换机器/换盘即失效)
             roots.append(repo.parent / "PolyXRD-DataBase" / "polydb")
+            # ICDD PDF-2 2004（版权库，永不入库/随包分发）只在开发机本地构建，
+            # 产物固定落在仓库的 cod_data/ 下（该目录被 .gitignore 屏蔽）。
+            roots.append(repo / "cod_data")
         return roots
 
     def discover_polydb(self, variant: str = "cod-inorg") -> Optional[Path]:

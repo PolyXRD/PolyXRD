@@ -1,16 +1,15 @@
 """
 AppConfig 数据库路径持久化测试
 =============================
-PDF2-2004 sqlite、polyDB 挂载点等多个库的路径**共用**
-``~/.polyxrd/user_db_paths.json``。历史上暴露过两个真实缺陷：
+所有外挂库的挂载点**共用** ``~/.polyxrd/user_db_paths.json``。历史上暴露过
+两个真实缺陷：
 
 1. 某个库的 setter 整体覆盖写文件 → 抹掉别的库已保存的键；
-2. ``get_pdf2_db_path()`` 不回读用户设置 → ``set_pdf2_db_path()`` 是死 setter。
+2. setter 写了但 getter 不回读 → 死 setter。
 
-本文件把这两条钉成回归守卫。v4.2.0 起本地 COD sqlite 运行时被删除
-（``cod_db_path`` / ``cod_index_db_path`` 两个键不再存在），"多键共存"
-的验证改用 polyDB 挂载槽位（``polydb_inorg_path``）承担 —— 它同样走
-``_update_user_db_path`` 的增量合并路径，语义完全一致。
+本文件把这两条钉成回归守卫。v5.2 起 PDF2-2004 不再是独立 sqlite 槽位，而是
+polyDB 的第三个变体（``pdf2-2004`` → ``pdf2_polydb_path``），"多键共存"的
+验证就落在三个变体之间 —— 它们同样走 ``_update_user_db_path`` 的增量合并。
 """
 from __future__ import annotations
 
@@ -27,10 +26,15 @@ from polyxrd.config import AppConfig
 
 @pytest.fixture
 def cfg(tmp_path, monkeypatch):
-    """AppConfig 实例, user_db_paths.json 重定向到 tmp_path。"""
+    """AppConfig 实例, user_db_paths.json 重定向到 tmp_path。
+
+    同时关掉"自动发现默认库"：开发机 ``cod_data/PDF2-2004.polyDB`` 真实存在，
+    不隔离的话"未挂载应为 None"一类断言会被它顶掉。
+    """
     c = AppConfig()
     fake = tmp_path / "user_db_paths.json"
     monkeypatch.setattr(c, "_user_db_paths_file", lambda: fake)
+    monkeypatch.setattr(c, "discover_polydb", lambda variant="cod-inorg": None)
     return c
 
 
@@ -41,83 +45,72 @@ def _read(c: AppConfig) -> dict:
     return json.loads(f.read_text(encoding="utf-8"))
 
 
+def _mkdb(root: Path, name: str) -> Path:
+    d = root / name
+    d.mkdir(parents=True)
+    (d / "meta.json").write_text('{"format":"polyDB","schema_version":1}',
+                                 encoding="utf-8")
+    (d / "index.sqlite").write_bytes(b"x")
+    return d
+
+
 # ── 基本读写往返 ─────────────────────────────────────────────
 
-def test_pdf2_set_get_roundtrip(cfg, tmp_path):
-    db = tmp_path / "pdf2.sqlite"
-    db.write_bytes(b"x")
-    cfg.set_pdf2_db_path(db)
-    assert cfg.get_pdf2_db_path() == db.resolve()
-    assert _read(cfg)["pdf2_db_path"] == str(db.resolve())
+def test_pdf2_variant_set_get_roundtrip(cfg, tmp_path):
+    db = _mkdb(tmp_path, "PDF2-2004.polyDB")
+    cfg.set_polydb_path(db, variant="pdf2-2004")
+    assert cfg.get_polydb_path("pdf2-2004") == db.resolve()
+    assert _read(cfg)["pdf2_polydb_path"] == str(db.resolve())
 
 
-def test_pdf2_falls_back_to_default_when_unset(cfg):
-    assert cfg.get_pdf2_db_path() == cfg.pdf2_db_path
+def test_pdf2_variant_falls_back_to_discovery(cfg):
+    assert cfg.get_polydb_path("pdf2-2004") is None
 
 
-def test_pdf2_falls_back_when_persisted_path_missing(cfg, tmp_path):
-    """持久化路径已不存在 → 回退默认。"""
-    cfg.set_pdf2_db_path(tmp_path / "gone.sqlite")
-    assert cfg.get_pdf2_db_path() == cfg.pdf2_db_path
+def test_pdf2_variant_falls_back_when_persisted_path_missing(cfg, tmp_path):
+    """持久化路径已不存在 → 回退自动发现（此处被隔离为 None）。"""
+    cfg.set_polydb_path(tmp_path / "gone.polyDB", variant="pdf2-2004")
+    assert cfg.get_polydb_path("pdf2-2004") is None
 
 
-def test_pdf2_clear_reverts_to_default(cfg, tmp_path):
-    db = tmp_path / "pdf2.sqlite"
-    db.write_bytes(b"x")
-    cfg.set_pdf2_db_path(db)
-    cfg.set_pdf2_db_path("")
-    assert cfg.get_pdf2_db_path() == cfg.pdf2_db_path
-    assert "pdf2_db_path" not in _read(cfg)
+def test_pdf2_variant_clear_reverts_to_discovery(cfg, tmp_path):
+    db = _mkdb(tmp_path, "PDF2-2004.polyDB")
+    cfg.set_polydb_path(db, variant="pdf2-2004")
+    cfg.set_polydb_path(None, variant="pdf2-2004")
+    assert "pdf2_polydb_path" not in _read(cfg)
+    assert cfg.get_polydb_path("pdf2-2004") is None
 
 
 # ── 多个 key 共存 (核心回归) ─────────────────────────────────
 
-def test_set_polydb_does_not_wipe_pdf2(cfg, tmp_path):
-    """回归: 挂载 polyDB 不得抹掉已保存的 PDF2 路径。"""
-    pdf2 = tmp_path / "pdf2.sqlite"
-    pdf2.write_bytes(b"x")
-    polydb = tmp_path / "COD-Inorg-x"
-    (polydb / "sub").mkdir(parents=True)
+def test_set_pdf2_variant_does_not_wipe_cod(cfg, tmp_path):
+    """回归: 挂载 PDF2 不得抹掉已保存的 COD 路径。"""
+    cod = _mkdb(tmp_path, "COD-Inorg-x.polyDB")
+    pdf2 = _mkdb(tmp_path, "PDF2-2004.polyDB")
 
-    cfg.set_pdf2_db_path(pdf2)
-    cfg.set_polydb_path(polydb, variant="cod-inorg")
+    cfg.set_polydb_path(cod, variant="cod-inorg")
+    cfg.set_polydb_path(pdf2, variant="pdf2-2004")
 
     data = _read(cfg)
-    assert data["pdf2_db_path"] == str(pdf2.resolve())
-    assert data["polydb_inorg_path"] == str(polydb.resolve())
-    assert cfg.get_pdf2_db_path() == pdf2.resolve()
-    assert cfg.get_polydb_path("cod-inorg") == polydb.resolve()
+    assert data["polydb_inorg_path"] == str(cod.resolve())
+    assert data["pdf2_polydb_path"] == str(pdf2.resolve())
+    assert cfg.get_polydb_path("cod-inorg") == cod.resolve()
+    assert cfg.get_polydb_path("pdf2-2004") == pdf2.resolve()
 
 
-def test_set_pdf2_does_not_wipe_polydb(cfg, tmp_path):
-    pdf2 = tmp_path / "pdf2.sqlite"
-    pdf2.write_bytes(b"x")
-    polydb = tmp_path / "COD-Inorg-y"
-    (polydb / "sub").mkdir(parents=True)
+def test_clear_cod_keeps_pdf2(cfg, tmp_path):
+    """回归: 清除某个变体只删自己的 key, 不写空 {}。"""
+    cod = _mkdb(tmp_path, "COD-Inorg-z.polyDB")
+    pdf2 = _mkdb(tmp_path, "PDF2-2004.polyDB")
 
-    cfg.set_polydb_path(polydb, variant="cod-inorg")
-    cfg.set_pdf2_db_path(pdf2)
-
-    data = _read(cfg)
-    assert data["polydb_inorg_path"] == str(polydb.resolve())
-    assert data["pdf2_db_path"] == str(pdf2.resolve())
-
-
-def test_clear_polydb_keeps_pdf2(cfg, tmp_path):
-    """回归: 清除某个库的自定义路径只删自己的 key, 不写空 {}。"""
-    pdf2 = tmp_path / "pdf2.sqlite"
-    pdf2.write_bytes(b"x")
-    polydb = tmp_path / "COD-Inorg-z"
-    (polydb / "sub").mkdir(parents=True)
-
-    cfg.set_pdf2_db_path(pdf2)
-    cfg.set_polydb_path(polydb, variant="cod-inorg")
+    cfg.set_polydb_path(cod, variant="cod-inorg")
+    cfg.set_polydb_path(pdf2, variant="pdf2-2004")
     cfg.set_polydb_path(None, variant="cod-inorg")
 
     data = _read(cfg)
     assert "polydb_inorg_path" not in data
-    assert data["pdf2_db_path"] == str(pdf2.resolve())
-    assert cfg.get_pdf2_db_path() == pdf2.resolve()
+    assert data["pdf2_polydb_path"] == str(pdf2.resolve())
+    assert cfg.get_polydb_path("pdf2-2004") == pdf2.resolve()
 
 
 # ── 容错 ─────────────────────────────────────────────────────
@@ -128,81 +121,26 @@ def test_corrupt_json_recovers(cfg, tmp_path):
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text("{ not json", encoding="utf-8")
 
-    assert cfg.get_pdf2_db_path() == cfg.pdf2_db_path
+    assert cfg.get_polydb_path("pdf2-2004") is None
 
-    db = tmp_path / "pdf2.sqlite"
-    db.write_bytes(b"x")
-    cfg.set_pdf2_db_path(db)
-    assert cfg.get_pdf2_db_path() == db.resolve()
+    db = _mkdb(tmp_path, "PDF2-2004.polyDB")
+    cfg.set_polydb_path(db, variant="pdf2-2004")
+    assert cfg.get_polydb_path("pdf2-2004") == db.resolve()
 
 
 def test_non_dict_json_recovers(cfg):
     f = cfg._user_db_paths_file()
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text("[1, 2, 3]", encoding="utf-8")
-    assert cfg.get_pdf2_db_path() == cfg.pdf2_db_path
+    assert cfg.get_polydb_path("pdf2-2004") is None
 
 
-# ── 用户目录兜底 (0.10.0 数据库外挂) ─────────────────────────
+# ── 变体表与发现关键字 ───────────────────────────────────────
 
-class _FakeCfg(AppConfig):
-    """把默认位置与用户目录都指到 tmp, 用于验证优先级。"""
-
-    def __init__(self, default_dir: Path, user_dir: Path):
-        super().__init__()
-        self.pdf2_db_path = default_dir / "PDF2_2004.sqlite"
-        self._user_dir = user_dir
-
-    def user_db_dir(self) -> Path:
-        return self._user_dir
-
-
-@pytest.fixture
-def fake_cfg(tmp_path, monkeypatch):
-    """构造 fake_cfg 并把 user_db_paths.json 也重定向到 tmp。"""
-    def _build(default_dir: Path, user_dir: Path):
-        c = _FakeCfg(default_dir, user_dir)
-        monkeypatch.setattr(c, "_user_db_paths_file",
-                            lambda: tmp_path / "user_db_paths.json")
-        return c
-    return _build
-
-
-def test_user_dir_fallback_used_when_default_absent(fake_cfg, tmp_path):
-    """安装目录里没有库时, 用户目录 (~/.polyxrd/cif_db) 里的库应被自动发现。"""
-    default_dir, user_dir = tmp_path / "install", tmp_path / "userdir"
-    user_dir.mkdir(parents=True)
-    (user_dir / "PDF2_2004.sqlite").write_bytes(b"x")
-    c = fake_cfg(default_dir, user_dir)
-
-    assert c.get_pdf2_db_path() == user_dir / "PDF2_2004.sqlite"
-
-
-def test_default_wins_over_user_dir(fake_cfg, tmp_path):
-    """开发/内嵌整包场景: 默认位置存在时不该被用户目录里的同名旧库顶掉。"""
-    default_dir, user_dir = tmp_path / "install", tmp_path / "userdir"
-    default_dir.mkdir(parents=True)
-    user_dir.mkdir(parents=True)
-    (default_dir / "PDF2_2004.sqlite").write_bytes(b"new")
-    (user_dir / "PDF2_2004.sqlite").write_bytes(b"old")
-    c = fake_cfg(default_dir, user_dir)
-
-    assert c.get_pdf2_db_path() == default_dir / "PDF2_2004.sqlite"
-
-
-def test_user_import_beats_both(fake_cfg, tmp_path):
-    """GUI 导入的路径优先级最高。"""
-    default_dir, user_dir = tmp_path / "install", tmp_path / "userdir"
-    default_dir.mkdir(parents=True)
-    user_dir.mkdir(parents=True)
-    (default_dir / "PDF2_2004.sqlite").write_bytes(b"new")
-    (user_dir / "PDF2_2004.sqlite").write_bytes(b"old")
-    imported = tmp_path / "imported.sqlite"
-    imported.write_bytes(b"imported")
-    c = fake_cfg(default_dir, user_dir)
-    c.set_pdf2_db_path(imported)
-
-    assert c.get_pdf2_db_path() == imported.resolve()
+def test_pdf2_variant_registered():
+    """PDF2 必须有独立的槽位键与目录名提示，否则装不上也发现不了。"""
+    assert AppConfig.POLYDB_VARIANTS["pdf2-2004"] == "pdf2_polydb_path"
+    assert "pdf2" in AppConfig._POLYDB_NAME_HINTS["pdf2-2004"]
 
 
 def test_user_db_dir_is_under_home():

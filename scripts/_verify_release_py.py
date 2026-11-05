@@ -24,6 +24,9 @@ DB_KINDS = [
 ]
 BANNED_NAMES = {'cod_index.sqlite', 'COD_inorganics.sqlite',
                 'COD_inorganics_index.sqlite', 'PDF2_2004.sqlite'}
+# v5.2: PDF2-2004 已是 polyDB 目录容器（不再是单个 sqlite），按**路径片段**拦：
+# 只要 zip 里出现这份目录的任何一段，就说明版权库被误打包了。
+BANNED_FRAGMENTS = ('PDF2-2004.polyDB', 'PDF2_2004.polyDB', 'PDF2-2004.PolyDB')
 ALLOWED = 'pymatgen/symmetry/symm_data_magnetic.sqlite'
 FAILS = []
 
@@ -51,6 +54,7 @@ def check_portable(ver):
             fail('包内缺少 PolyXRD.exe')
         bad = [n for n in names
                if os.path.basename(n) in BANNED_NAMES
+               or any(f in n for f in BANNED_FRAGMENTS)
                or ((n.endswith('.sqlite') or n.endswith('.sqlite3') or n.endswith('.db'))
                    and ALLOWED not in n)]
         if bad:

@@ -1,11 +1,17 @@
-"""外挂数据库管理对话框测试 (offscreen, v4.1.0)
+"""外挂数据库管理对话框测试 (offscreen, v5.2)
 ==============================================
 
 界面是**列表式多库挂载**: 一行 = 一个已挂载的数据库, 想挂几份挂几份, 选中
-某行「设为当前」就用它检索。v4.1.0 之后可挂的只有两类:
+某行「设为当前」就用它检索。v5.2 之后可挂的只有两类:
 
 * ``polydb`` —— 目录容器 (有 ``meta.json`` + ``index.sqlite``), **默认参考库**;
-* ``pdf2``   —— ICDD PDF-2 2004 的 sqlite dump (需自行准备, 受版权限制)。
+  COD-Inorg / COD-Full / PDF2-2004 都是它的**变体**, 同一套 reader 与打分;
+* ``user``   —— 用户自建库 (由「导入 CIF」维护)。
+
+PDF2-2004 不再是独立的 ``pdf2`` 类型: 旧 sqlite 通道 (``db_import`` /
+``PDF2Database``) 已随旧格式一并删除, 现在它是一份 ``variant="pdf2-2004"``
+的 polyDB。**版权提示改按变体判** —— 类型合并了, 但"这份数据要用户自己负责
+授权"这条合规要求没变。
 
 本文件钉住四条契约:
 
@@ -13,9 +19,10 @@
    且各自可独立卸载;
 2. **选中哪行就用哪行** —— 「设为当前」写进注册表, 并发出 ``databases_changed``
    让物相页下拉跟着换; 不可用的库不能设为当前;
-3. **下载包 / 授权提示要讲清** —— polyDB 指明随 Release 的那个 zip; PDF2-2004
-   是 ICDD 商业库, 提示必须出现在用户挂载它的地方且**不得**提示下载;
-4. **卸载不删库文件** —— 这只是"从列表里去掉一行"; 旧格式 COD sqlite 不再能挂。
+3. **下载包 / 授权提示要讲清** —— COD 类 polyDB 指明随 PolyXRD-DataBase 仓库
+   发布; PDF2-2004 是 ICDD 商业库, 提示必须出现在用户挂载它的地方且**不得**
+   提示下载;
+4. **卸载不删库文件** —— 这只是"从列表里去掉一行"; 旧格式 sqlite 库不再能挂。
 """
 from __future__ import annotations
 
@@ -33,7 +40,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from polyxrd.config import AppConfig, get_config   # noqa: E402
 from polyxrd.i18n import tr                        # noqa: E402
 from polyxrd.i18n.translations import en_US, ja_JP, zh_CN  # noqa: E402
-from polyxrd.services import db_import, db_mounts  # noqa: E402
+from polyxrd.services import db_mounts  # noqa: E402
 from polyxrd.views.widgets import database_dialog  # noqa: E402
 from polyxrd.views.widgets.database_dialog import (  # noqa: E402
     DatabaseManagerDialog,
@@ -66,8 +73,6 @@ def isolated(tmp_path, monkeypatch):
     # 内置项一律指到不存在的路径: 列表内容完全由本用例自己挂
     empty = tmp_path / "empty"
     cfg = get_config()
-    monkeypatch.setattr(cfg, "get_pdf2_db_path",
-                        lambda *a, _e=empty, **k: _e / "none.sqlite")
     monkeypatch.setattr(cfg, "get_polydb_path", lambda *a, **k: None)
     monkeypatch.setattr(db_mounts, "_probe_user",
                         lambda p: {"ok": False, "rows": 0, "error": "user_db_empty"})
@@ -130,11 +135,6 @@ OLD_COD_DDL = ("CREATE TABLE phases (cod_id TEXT, formula TEXT, n_peaks INTEGER,
 OLD_COD_ROW = ("9001", "SiO2", 2, "3.34,4.26", "100,45", 4.913)
 OLD_COD_INS = "INSERT INTO phases VALUES (?,?,?,?,?,?)"
 
-PDF2_DDL = ("CREATE TABLE phases (cod_id TEXT, formula TEXT, name TEXT,"
-            " pearson TEXT, n_peaks INTEGER, peaks_d TEXT, peaks_i TEXT, cell_a REAL)")
-PDF2_ROW = ("00-046-1045", "SiO2", "Quartz", "hP9", 2, "3.34,4.26", "100,22", 4.913)
-PDF2_INS = "INSERT INTO phases VALUES (?,?,?,?,?,?,?,?)"
-
 
 def _make_db(path: Path, ddl: str, row: tuple, insert: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -157,6 +157,12 @@ def _make_polydb(root: Path, name: str, variant: str = "cod-inorg",
     }), encoding="utf-8")
     (d / "index.sqlite").write_bytes(b"")
     return d
+
+
+def _make_pdf2_polydb(root: Path, phases: int = 163834) -> Path:
+    """PDF2-2004 的 polyDB 变体 (v5.2 起 PDF2 就是这个形态, 不再是独立 sqlite)。"""
+    return _make_polydb(root, "PDF2-2004.polyDB", variant="pdf2-2004",
+                        phases=phases)
 
 
 def _set_polydb_meta(path: Path, **fields) -> None:
@@ -227,16 +233,20 @@ def test_each_row_shows_its_own_package(qapp, isolated, tmp_path):
     """详情区写明该行对应哪个下载包 / 解压出什么。
 
     v4.1.1 政策: 数据库由独立仓库 PolyXRD-DataBase 发布 (主仓库 Release 只发程序),
-    polyDB 行必须指到该仓库 Releases; PDF2-2004 受 ICDD 版权限制永不随任何包发布。
+    COD 类 polyDB 行必须指到该仓库 Releases; PDF2-2004 受 ICDD 版权限制,
+    永不随任何包发布 —— 即便它现在也是 polyDB 变体, 提示文案仍要分开。
     """
     poly = _make_polydb(tmp_path, "COD-Inorg-Mine.polyDB")
-    pdf = _make_db(tmp_path / "p.sqlite", PDF2_DDL, PDF2_ROW, PDF2_INS)
+    pdf = _make_pdf2_polydb(tmp_path)
     dlg = DatabaseManagerDialog()
     dlg.mount_path(str(poly))
     dlg.mount_path(str(pdf))
 
-    poly_row = next(r for r in dlg._rows if r["kind"] == "polydb" and r["ok"])
-    pdf_row = next(r for r in dlg._rows if r["kind"] == "pdf2" and r["ok"])
+    poly_row = next(r for r in dlg._rows
+                    if r["kind"] == "polydb" and r["ok"]
+                    and r.get("variant") != "pdf2-2004")
+    pdf_row = next(r for r in dlg._rows
+                   if r.get("variant") == "pdf2-2004" and r["ok"])
     poly_pkg = dlg._pkg_hint(poly_row)
     pdf_pkg = dlg._pkg_hint(pdf_row)
 
@@ -244,7 +254,7 @@ def test_each_row_shows_its_own_package(qapp, isolated, tmp_path):
     assert "releases" in poly_pkg.lower()
     assert ".zip" not in poly_pkg, "数据库包不再从主仓库下载, 不应给 zip 文件名"
     assert ".zip" not in pdf_pkg, "PDF2 不得提示下载 —— 该库不上传 Release"
-    assert "PDF2_2004.sqlite" in pdf_pkg
+    assert "PDF2-2004.polyDB" in pdf_pkg
     assert poly_pkg != pdf_pkg, "各行文案不能雷同, 否则用户看不出区别"
 
 
@@ -304,16 +314,20 @@ def test_cannot_set_active_for_unavailable_db(qapp, isolated, tmp_path):
 
 # ── 3. 自动判别与失败提示 ────────────────────────────────────
 
-def test_mount_folder_picks_up_every_kind(qapp, isolated, tmp_path):
-    """指到文件夹时, 该目录下不同类的库要一次全挂上。"""
+def test_mount_folder_picks_up_every_variant(qapp, isolated, tmp_path):
+    """指到文件夹时, 该目录下各变体的 polyDB 要一次全挂上。
+
+    v5.2 起"不同类"就是 polyDB 的不同变体: COD 无机库 + PDF2-2004 都要进列表,
+    且各自带自己的变体/文案 (不能因为共用 kind 就合并成一项)。
+    """
     folder = tmp_path / "data"
     _make_polydb(folder, "COD-Inorg-Mine.polyDB")
-    _make_db(folder / "PDF2_2004.sqlite", PDF2_DDL, PDF2_ROW, PDF2_INS)
+    _make_pdf2_polydb(folder)
 
     dlg = DatabaseManagerDialog()
     assert dlg.mount_path(str(folder)) is True
-    kinds = {r["kind"] for r in dlg._rows if r["ok"]}
-    assert {"polydb", "pdf2"} <= kinds
+    variants = {r.get("variant") for r in dlg._rows if r["ok"]}
+    assert {"cod-inorg", "pdf2-2004"} <= variants
 
 
 def test_mount_reports_failure_without_touching_list(qapp, isolated, tmp_path, monkeypatch):
@@ -332,7 +346,11 @@ def test_mount_reports_failure_without_touching_list(qapp, isolated, tmp_path, m
 
 
 def test_old_cod_sqlite_cannot_be_mounted(qapp, isolated, tmp_path, monkeypatch):
-    """旧格式 COD 无机库 (phases 但缺 pearson/name) 必须被拒 (v4.1.0 删槽位)。"""
+    """旧格式 sqlite 库 (无论 COD 还是 PDF2) 一律拒绝, 并给出迁移指引。
+
+    v5.2 删掉了 sqlite 物相库通道: 只认 polyDB 目录。用户手里还留着老库时,
+    光说"挂不上"会让他以为程序坏了 —— 提示必须指向"改用 polyDB 目录"。
+    """
     shown: list[str] = []
     monkeypatch.setattr(QMessageBox, "warning",
                         lambda *a, **k: shown.append(a[2]) or None)
@@ -343,59 +361,93 @@ def test_old_cod_sqlite_cannot_be_mounted(qapp, isolated, tmp_path, monkeypatch)
     assert dlg.mount_path(str(old)) is False
     assert shown
     assert len(dlg._rows) == before
-    assert all(r["kind"] != "cod_inorganics" for r in dlg._rows)
+    assert all(r["kind"] != "pdf2" for r in dlg._rows), "旧 pdf2 类型不该复活"
 
 
-def test_backup_files_are_ignored(qapp, isolated, tmp_path):
-    """目录里的备份不能被当成库挂上。"""
+def test_old_sqlite_in_folder_is_skipped_with_reason(qapp, isolated, tmp_path,
+                                                     monkeypatch):
+    """混合文件夹: polyDB 照挂, 同目录的旧 sqlite 被跳过但要说明原因。"""
     folder = tmp_path / "data"
-    good = _make_db(folder / "PDF2_2004.sqlite", PDF2_DDL, PDF2_ROW, PDF2_INS)
-    _make_db(folder / "PDF2_2004.bak-20261011.sqlite", PDF2_DDL, PDF2_ROW, PDF2_INS)
-    _make_db(folder / "PDF2_2004~.sqlite", PDF2_DDL, PDF2_ROW, PDF2_INS)
+    good = _make_polydb(folder, "COD-Inorg-Mine.polyDB")
+    _make_db(folder / "PDF2_2004.sqlite", OLD_COD_DDL, OLD_COD_ROW, OLD_COD_INS)
+
+    shown: list[str] = []
+    monkeypatch.setattr(QMessageBox, "warning",
+                        lambda *a, **k: shown.append(a[2]) or None)
+    dlg = DatabaseManagerDialog()
+    assert dlg.mount_path(str(folder)) is True
+    paths = [r["path"] for r in dlg._rows if r["ok"]]
+    assert str(good) in paths
+    assert not any(p.endswith(".sqlite") for p in paths)
+    assert shown and "polyDB" in shown[0], "跳过的旧库必须说明为什么"
+
+
+def test_backup_dirs_are_ignored(qapp, isolated, tmp_path):
+    """目录里的备份不能被当成库挂上 (与 sqlite 时代同一口径)。
+
+    备份目录同样带 meta.json + index.sqlite, 单看内容分辨不出来 —— 挂上了
+    用户会在数据源下拉里看到两个同名库, 分不清哪份是备份。
+    """
+    folder = tmp_path / "data"
+    good = _make_polydb(folder, "Good.polyDB")
+    for name in ("Good.polyDB.bak", "Good~.polyDB", "Good.polyDB.tmp"):
+        _make_polydb(folder, name)
 
     dlg = DatabaseManagerDialog()
-    dlg.mount_path(str(folder))
+    assert dlg.mount_path(str(folder)) is True
     paths = [r["path"] for r in dlg._rows if r["ok"]]
     assert str(good) in paths
     assert not any(".bak" in p for p in paths), paths
     assert not any("~" in p for p in paths), paths
+    assert not any(p.endswith(".tmp") for p in paths), paths
 
 
 # ── 4. 商业库授权提示 ────────────────────────────────────────
 
-def test_licence_notice_only_on_non_free_db(qapp, isolated):
-    """只有"数据本身要用户自己负责授权"的库带提示 —— v4.1.0 只剩 PDF2。"""
-    kinds_with_notice = {k.key for k in db_import.DB_KINDS if k.notice_key}
-    assert kinds_with_notice == {"pdf2"}
+def test_licence_notice_only_on_pdf2_variant(qapp, isolated, tmp_path):
+    """只有 PDF2-2004 变体带授权提示 —— v5.2 合并了 kind, 提示改按变体判。
+
+    这是合规要求: 若跟着旧 kind 一起消失, 商业库就会在界面上"看起来可以被
+    随便分发"。所以这里钉住"COD 变体没有提示 / PDF2 变体有提示"。
+    """
+    cod = _make_polydb(tmp_path, "COD-Inorg-Mine.polyDB")
+    pdf = _make_pdf2_polydb(tmp_path)
+    dlg = DatabaseManagerDialog()
+    dlg.mount_path(str(cod))
+    dlg.mount_path(str(pdf))
+
+    notices = {r.get("variant"): dlg._notice_of(r) for r in dlg._rows
+               if r.get("variant")}
+    assert notices["pdf2-2004"], "PDF2-2004 必须带授权提示"
+    assert not notices.get("cod-inorg"), "COD 库不该出现商业授权提示"
 
 
 def test_pdf2_notice_shown_when_selected(qapp, isolated, tmp_path):
-    """选中 PDF2 行才显示授权提示; 选中 polyDB 时不该出现。"""
-    pdf = _make_db(tmp_path / "p.sqlite", PDF2_DDL, PDF2_ROW, PDF2_INS)
+    """选中 PDF2 行才显示授权提示; 选中 COD polyDB 时不该出现。"""
+    pdf = _make_pdf2_polydb(tmp_path)
     poly = _make_polydb(tmp_path, "COD-Inorg-Mine.polyDB")
     dlg = DatabaseManagerDialog()
     dlg.mount_path(str(pdf))
     dlg.mount_path(str(poly))
 
-    pdf_idx = next(i for i, r in enumerate(dlg._rows) if r["kind"] == "pdf2")
+    pdf_idx = next(i for i, r in enumerate(dlg._rows)
+                   if r.get("variant") == "pdf2-2004")
     dlg._table.selectRow(pdf_idx)
     assert "正版授权" in dlg._detail_notice.text()
 
     poly_idx = next(i for i, r in enumerate(dlg._rows)
-                    if r["kind"] == "polydb" and r["ok"])
+                    if r["kind"] == "polydb" and r["ok"]
+                    and r.get("variant") != "pdf2-2004")
     dlg._table.selectRow(poly_idx)
     assert dlg._detail_notice.text() == ""
 
 
 def test_notice_keys_resolve_in_all_languages(qapp, isolated):
-    """notice_key 拼错会**静默退化成原始键名**显示给用户, 所以三语都得查得到。"""
-    for kind in db_import.DB_KINDS:
-        if not kind.notice_key:
-            continue
-        for mod in (zh_CN, en_US, ja_JP):
-            assert _resolve(mod.translations, kind.notice_key), (
-                f"{kind.key}: {kind.notice_key} 在 {mod.__name__} 中缺失"
-            )
+    """提示文案键拼错会**静默退化成原始键名**显示给用户, 所以三语都得查得到。"""
+    for mod in (zh_CN, en_US, ja_JP):
+        assert _resolve(mod.translations, "db_manager.notice.pdf2"), (
+            f"db_manager.notice.pdf2 在 {mod.__name__} 中缺失"
+        )
 
 
 # ── 5. 多库规模 / 元数据 / 重命名 ─────────────────────────────
@@ -409,11 +461,14 @@ def test_polydb_type_column_shows_variant(qapp, isolated, tmp_path):
     assert dlg._table.item(idx, 2).text() == tr(
         "db_manager.type_variant", variant="cod-full")
 
-    pdf = _make_db(tmp_path / "p.sqlite", PDF2_DDL, PDF2_ROW, PDF2_INS)
+    # v5.2: PDF2-2004 也是 polyDB 变体 → 同样走 "polyDB · pdf2-2004" 文案,
+    # 不再有独立的 "PDF2-2004 库" 类型名。
+    pdf = _make_pdf2_polydb(tmp_path)
     dlg.mount_path(str(pdf))
-    pdf_idx = next(i for i, r in enumerate(dlg._rows) if r["kind"] == "pdf2")
-    assert dlg._table.item(pdf_idx, 2).text() == tr("db_manager.kind.pdf2"), (
-        "非 polyDB 行仍按类型名显示")
+    pdf_idx = next(i for i, r in enumerate(dlg._rows)
+                   if r.get("variant") == "pdf2-2004" and r["path"] == str(pdf))
+    assert dlg._table.item(pdf_idx, 2).text() == tr(
+        "db_manager.type_variant", variant="pdf2-2004")
 
 
 def test_detail_meta_line_shows_polydb_metadata(qapp, isolated, tmp_path):
@@ -432,10 +487,9 @@ def test_detail_meta_line_shows_polydb_metadata(qapp, isolated, tmp_path):
               built="2026-10-21") in text
     assert not dlg._detail_meta.isHidden(), "有元数据时这一行必须显示"
 
-    # 非 polyDB (PDF2) 没有 meta: 这一行整行隐藏, 不能留下空占位。
-    pdf = _make_db(tmp_path / "p.sqlite", PDF2_DDL, PDF2_ROW, PDF2_INS)
-    dlg.mount_path(str(pdf))
-    _select(dlg, next(r["id"] for r in dlg._rows if r["kind"] == "pdf2"))
+    # 没有库位置的行 (内置项未挂载 / 用户库未建) 取不到 meta: 整行隐藏,
+    # 不能留下空占位。v5.2 起所有能挂的库都是 polyDB, "非 polyDB" 只剩这些。
+    _select(dlg, "user")
     assert dlg._detail_meta.isHidden()
 
 
@@ -515,6 +569,8 @@ def test_new_keys_resolve_in_all_languages(qapp, isolated):
         "db_mounts.kind.polydb_inorg", "db_mounts.kind.polydb_full",
         "db_mounts.type.polydb", "db_mounts.pkg_free",
         "status.internal_tooltip",
+        # v5.2: PDF2-2004 并入 polyDB 后, 版权提示按**变体**判
+        "db_manager.notice.pdf2", "db_manager.kind.pdf2",
         # v4.6 多库体验 / 重命名 / 元数据 / 物相页接线用的新键
         "db_manager.btn_rename", "db_manager.rename_title",
         "db_manager.rename_empty", "db_manager.rename_done",

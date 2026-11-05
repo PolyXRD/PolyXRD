@@ -1993,7 +1993,17 @@ class PhaseIdentifier:
         eid = int(cand["cod_id"])
         formula = detail.get("formula", "") or ""
         mineral = (detail.get("mineral_name") or "").strip()
-        label = f"{mineral} - {formula}" if mineral and mineral != formula else formula
+        # PDF2-2004 库已并入 polyDB（variant=pdf2-2004），但它多带一个 ICDD
+        # 化合物名，且历史显示格式是 "(PDF2 123456)"。名称优先级沿用旧口径：
+        # 矿物名（行业习惯）> ICDD 主名称 > 化学式。
+        variant = str(getattr(db, "variant", "") or "")
+        is_pdf2 = variant.startswith("pdf2")
+        icdd_name = (detail.get("name") or "").strip()
+        if is_pdf2:
+            disp = mineral or icdd_name or formula
+            label = f"{disp} (PDF2 {eid})" if disp else f"PDF2 {eid}"
+        else:
+            label = f"{mineral} - {formula}" if mineral and mineral != formula else formula
         lattice = LatticeParams(
             a=float(detail.get("cell_a") or 0.0),
             b=float(detail.get("cell_b") or 0.0),
@@ -2019,7 +2029,7 @@ class PhaseIdentifier:
                 pass
         els = {e for e in detail.get("elements_list") or [] if e}
         return Phase(
-            name=f"{label} (COD {eid})",
+            name=label,
             formula=formula,
             space_group=detail.get("space_group", "") or "",
             lattice=lattice if lattice.a else None,
@@ -2061,129 +2071,3 @@ class PhaseIdentifier:
             db_id=cid,
         )
 
-    def identify_with_pdf2(
-        self,
-        data: XRDData,
-        peaks: Optional[PeakList] = None,
-        element_filter: Optional[dict] = None,
-        top_n: int = 5,
-        tolerance: float = 0.15,
-        prefilter_limit: int = 100,
-        prefilter_tolerance: float = 0.02,
-        prefilter_tolerance_rel: float = 0.0,
-        prefilter_min_match: int = 3,
-        prefilter_max_ref_peaks: int = 40,
-        db_path: str | Path | None = None,
-    ) -> list[PhaseMatchResult]:
-        """物相识别: PDF2-2004 数据库 (ICDD PDF-2 2004 版)。
-
-        与 COD 无机库检索流程完全一致, 唯一区别是
-        数据源从 COD 无机物库切换为 PDF2-2004 SQLite 索引。
-        用于自用验证: 对照 COD 库结果与 PDF2 商用数据库的差异。
-
-        Args:
-            data: XRD 数据
-            peaks: 可选峰列表 (自动检测)
-            element_filter: 三态元素过滤
-            top_n: 返回候选数
-            tolerance: 2θ 容差 (FOM 匹配用)
-            prefilter_limit: d-I 预筛保留的候选数
-            prefilter_tolerance: 预筛 d 容差绝对下限 (Å)
-            prefilter_tolerance_rel: 预筛 d 容差相对分量
-            prefilter_min_match: 预筛最少反向匹配测量峰数
-            prefilter_max_ref_peaks: 预筛每物相参与匹配的最大主要峰数
-        """
-        if peaks is None:
-            peaks = default_peak_list(data)
-
-        try:
-            from polyxrd.services.pdf2_database import PDF2Database
-        except Exception:
-            return []
-
-        pdb = PDF2Database(db_path) if db_path else PDF2Database()
-        if not pdb.is_available():
-            return []
-
-        wavelength = self._effective_wavelength(data)
-
-        # 1. 实验峰 2θ → d 值
-        d_list: list[float] = []
-        i_list: list[float] = []
-        for p in peaks.peaks:
-            sin_theta = np.sin(np.radians(p.two_theta / 2.0))
-            if sin_theta <= 1e-6:
-                continue
-            d_list.append(wavelength / (2.0 * sin_theta))
-            i_list.append(float(p.intensity))
-        if not d_list:
-            return []
-
-        # 2. Hanawalt d-I 预筛
-        ef = normalize_element_filter(element_filter) if element_filter else None
-        allowed_pool = set(ef["must_have"]) | set(ef["has"]) | set(ef["maybe"]) if ef else set()
-        elements_allowed = allowed_pool if allowed_pool else None
-        try:
-            cands = pdb.search_by_d_peaks(
-                d_list, i_list, tolerance=prefilter_tolerance,
-                tolerance_rel=prefilter_tolerance_rel,
-                min_match=prefilter_min_match,
-                max_ref_peaks=prefilter_max_ref_peaks,
-                limit=prefilter_limit,
-                elements_allowed=elements_allowed,
-            )
-        except Exception:
-            return []
-        if not cands:
-            return []
-
-        tt_min, tt_max = float(data.two_theta[0]), float(data.two_theta[-1])
-
-        # 3. 候选 → Phase → 统一 FOM 评分
-        results: list[tuple[dict, PhaseMatchResult]] = []
-        for c in cands:
-            detail = pdb.get_phase(c["cod_id"])
-            if not detail:
-                continue
-            ref_peaks = []
-            for d_val, i_val in zip(detail.get("peaks_d_list", []),
-                                    detail.get("peaks_i_list", [])):
-                if d_val <= 0:
-                    continue
-                sin_theta = wavelength / (2.0 * d_val)
-                if sin_theta > 1.0:
-                    continue
-                tt = 2.0 * float(np.degrees(np.arcsin(sin_theta)))
-                if tt_min <= tt <= tt_max:
-                    ref_peaks.append(((0, 0, 0), tt, float(i_val)))
-            if not ref_peaks:
-                continue
-
-            formula = detail.get("formula", "") or ""
-            # 名称优先级: 矿物名 (行业习惯) > PDF2 主名称 > 化学式。
-            # 主名称常见 "Calcium Carbonate Oxide" 这类冗长写法, 矿物名
-            # "Calcite" 更贴近检索习惯。
-            disp_name = (
-                detail.get("mineral") or detail.get("name") or formula
-            ).strip()
-            phase = Phase(
-                name=f"{disp_name} (PDF2 {c['cod_id']})" if disp_name
-                else f"PDF2 {c['cod_id']}",
-                formula=formula,
-                space_group=detail.get("space_group", "") or "",
-                lattice=pdb.get_lattice(c["cod_id"]),
-                reference_peaks=ref_peaks,
-                elements=elements_from_db_formula(formula),
-            )
-            if ef and not elements_match_filter(
-                phase.elements,
-                has=ef["has"], maybe=ef["maybe"], exclude=ef["exclude"],
-                must_have=ef["must_have"],
-            ):
-                continue
-            results.append((c, self._match_phase_fom(phase, peaks, tolerance)))
-
-        # 排序口径必须与 COD 路径**同一个函数** —— 0.9.11 曾在这里复制了一份
-        # 旧口径, 排序一改就会悄悄漂移。PDF2 与 COD 共用 cod_rank_score。
-        results.sort(key=lambda it: -cod_rank_score(it))
-        return [r for _, r in results[:top_n]]

@@ -141,6 +141,10 @@ PDF2_2004.sqlite
 **/PDF2_2004.sqlite
 **/PDF2*.sqlite
 **/PDF2*.xinDB
+# v5.2: PDF2 重打包成 polyDB（目录容器），同样是 ICDD 版权数据
+**/PDF2*.polyDB/
+**/PDF2*.polyDB
+cod_data/*.polyDB/
 cod_data/*.xinDB
 **/PolyXRD*PDF2*.zip
 

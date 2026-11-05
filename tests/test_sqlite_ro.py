@@ -1,7 +1,10 @@
 """只读打开 SQLite 库的公共实现测试。
 
 覆盖 2026-10-29 装机踩到的两条：URI 转义、WAL 库在只读目录下的降级。
-不依赖真实 PDF2 库（214 MB, gitignored），全部用 tmp_path 现场建。
+全部用 tmp_path 现场建库。
+
+v5.2 起只服务 polyDB 的 ``index.sqlite``：PDF2 的独立 sqlite 库已改为
+polyDB 变体，随之而来的 ``PDF2Database`` / ``_SCHEMA_SQL`` 相关用例一并删除。
 """
 from __future__ import annotations
 
@@ -103,46 +106,6 @@ class TestConnectReadonly:
         assert conn.execute("SELECT COUNT(*) FROM phases").fetchone()[0] == 1
         conn.close()
 
-
-class TestPdf2LastError:
-    def test_missing_db_sets_last_error(self, tmp_path: Path):
-        from polyxrd.services.pdf2_database import PDF2Database
-
-        db = PDF2Database(tmp_path / "nope.sqlite")
-        assert db.phase_count() == 0
-        assert db.last_error and "不存在" in db.last_error
-
-    def test_close_is_idempotent(self, tmp_path: Path):
-        from polyxrd.services.pdf2_database import PDF2Database
-
-        p = _make_db(tmp_path / "ok.sqlite")
-        db = PDF2Database(p)
-        assert db.phase_count() == 1
-        db.close()
-        db.close()  # 重复关闭不能炸
-        assert db.last_error is None
-
-
-class TestBuilderSelfContained:
-    def test_built_db_is_not_wal(self, tmp_path: Path):
-        """建库产物必须是自包含单文件（journal_mode=DELETE）。
-
-        这是"拷一个 .sqlite 到只读目录就能用"的前提 —— WAL 模式写进库头后，
-        库必须带着 -shm 才能被只读打开。
-        """
-        from polyxrd.services.pdf2_database import _SCHEMA_SQL
-
-        db = tmp_path / "built.sqlite"
-        conn = sqlite3.connect(str(db))
-        conn.executescript(_SCHEMA_SQL)
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA journal_mode=DELETE").fetchone()  # build() 的收尾动作
-        conn.close()
-        assert not Path(str(db) + "-shm").exists()
-        assert not Path(str(db) + "-wal").exists()
-        check = sqlite3.connect(str(db))
-        assert check.execute("PRAGMA journal_mode").fetchone()[0] == "delete"
-        check.close()
 
 
 if __name__ == "__main__":

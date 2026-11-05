@@ -90,7 +90,7 @@ class TestScan:
         paths, store = cfg_files
         _write(paths, store,
                {"polydb_inorg_path": "D:/a", "polydb_full_path": "D:/b",
-                "pdf2_db_path": "D:/c", "polydb_disabled": ["cod-full"]},
+                "pdf2_polydb_path": "D:/c", "polydb_disabled": ["cod-full"]},
                {"version": 1, "active": "", "mounts": []})
         assert not L.scan(paths, store)
 
