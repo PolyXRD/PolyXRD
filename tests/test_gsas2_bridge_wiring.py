@@ -72,7 +72,10 @@ class TestBridgeAppliers:
             }))
         return types.SimpleNamespace(phases=lambda: phases)
 
-    def test_apply_pref_ori_sets_md_axis_and_r(self):
+    def test_apply_pref_ori_sets_md_axis_and_r(self, monkeypatch):
+        # 精修标志随模式走（见 TestPoMode）；这里只验落值，固定成 lebail 免得
+        # 默认值一改就误伤。
+        monkeypatch.setenv("POLYXRD_G2_PO_MODE", "lebail")
         gpx = self._fake_gpx()
         bridge._apply_pref_ori(gpx, {"pref_ori": {"hkl": [0, 0, 1],
                                                   "r": 0.8}})
@@ -110,6 +113,86 @@ class TestBridgeAppliers:
 
     def test_read_rvals_missing_returns_empty(self):
         assert bridge._read_rvals(types.SimpleNamespace(data={})) == {}
+
+
+# ──────────────────────────────────────────────────────────────
+# 峰形策略开关 + 择优取向初值网格（P1-9②，v5.2）
+# ──────────────────────────────────────────────────────────────
+class TestProfileMode:
+    """``POLYXRD_G2_PROFILE`` 默认必须是 legacy。
+
+    2026-11-05 的 A/B（2-1，wR_rietveld）：legacy 43.77 / seed 46.20 /
+    rounds 45.64 / auto 46.31 —— 三项新策略**全都更差**，所以默认只能是
+    legacy；一旦有人把默认改回 seed/auto，这条用例会立刻红。
+    """
+
+    def test_default_is_legacy(self, monkeypatch):
+        monkeypatch.delenv("POLYXRD_G2_PROFILE", raising=False)
+        assert bridge._profile_mode() == "legacy"
+
+    def test_blank_falls_back_to_legacy(self, monkeypatch):
+        monkeypatch.setenv("POLYXRD_G2_PROFILE", "   ")
+        assert bridge._profile_mode() == "legacy"
+
+    def test_explicit_values_pass_through(self, monkeypatch):
+        for val in ("legacy", "seed", "rounds", "auto", "SEED"):
+            monkeypatch.setenv("POLYXRD_G2_PROFILE", val)
+            assert bridge._profile_mode() == val.strip().lower()
+
+
+class TestPoMode:
+    """``POLYXRD_G2_PO_MODE`` 默认必须是 alt（交替）。
+
+    2026-11-05 A/B（2-1，定量 wR / wt%）：无 PO 43.87 / 57.2-42.8、
+    ``lebail`` 48.45 / 73.6-26.4、``freeze`` 44.62 / 57.2-42.8、
+    ``alt`` **22.08 / 52.9-47.1**（真值 50/50）。旧默认 ``lebail`` 还不可
+    复现：r 初值 0.5~0.9 能把定量 wR 从 23.3% 推到 48.7%，而 Le Bail 阶段
+    的 wR 全是 24.5（评分区分不出来）。默认一旦被改回去，这条会红。
+    """
+
+    def test_default_is_alt(self, monkeypatch):
+        monkeypatch.delenv("POLYXRD_G2_PO_MODE", raising=False)
+        assert bridge._po_mode() == "alt"
+
+    def test_unknown_value_falls_back_to_alt(self, monkeypatch):
+        for val in ("", "   ", "whatever", "LEDAIL"):
+            monkeypatch.setenv("POLYXRD_G2_PO_MODE", val)
+            assert bridge._po_mode() == "alt"
+
+    def test_known_values_pass_through(self, monkeypatch):
+        for val in ("alt", "lebail", "freeze", "FReeze"):
+            monkeypatch.setenv("POLYXRD_G2_PO_MODE", val)
+            assert bridge._po_mode() == val.strip().lower()
+
+    def test_lebail_mode_refines_r_during_lebail(self, monkeypatch):
+        monkeypatch.setenv("POLYXRD_G2_PO_MODE", "lebail")
+        gpx = TestBridgeAppliers()._fake_gpx()
+        bridge._apply_pref_ori(gpx, {"pref_ori": {"hkl": [1, 0, 4], "r": 0.7}})
+        p = gpx.phases()[0].data["Histograms"]["PWDR"]["Pref.Ori."]
+        assert p == ["MD", 0.7, True, [1, 0, 4]]
+
+    def test_alt_mode_only_seeds_r(self, monkeypatch):
+        """Le Bail 里不精修 r —— 强度是自由变量，r 在那里不可辨识。"""
+        monkeypatch.setenv("POLYXRD_G2_PO_MODE", "alt")
+        gpx = TestBridgeAppliers()._fake_gpx()
+        bridge._apply_pref_ori(gpx, {"pref_ori": {"hkl": [1, 0, 4], "r": 0.7}})
+        p = gpx.phases()[0].data["Histograms"]["PWDR"]["Pref.Ori."]
+        assert p == ["MD", 0.7, False, [1, 0, 4]]
+
+    def test_has_pref_ori_truth_table(self):
+        """没有真请求就绝不开 PO 精修。
+
+        踩过的坑：`alt` 分支最初只判模式不判请求，于是没要求织构的谱也被打开
+        了 HAP 默认的 `["MD", 1.0, False, [0,0,1]]` 精修 → 2-1 基线从 43.87%
+        "变好"到 24.08%、2-2 的 PO(001) 臂与无 PO 臂逐位相同（模型被偷换）。
+        """
+        assert bridge._has_pref_ori({"pref_ori": {"hkl": [1, 0, 4],
+                                                  "r": 0.7}}) is True
+        assert bridge._has_pref_ori({"pref_ori": {"r": 1.0}}) is False
+        assert bridge._has_pref_ori({"pref_ori": {"r": "x"}}) is False
+        assert bridge._has_pref_ori({"pref_ori": {"r": float("nan")}}) is False
+        assert bridge._has_pref_ori({"pref_ori": None}) is False
+        assert bridge._has_pref_ori({}) is False
 
 
 # ──────────────────────────────────────────────────────────────

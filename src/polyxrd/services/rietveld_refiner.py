@@ -685,6 +685,10 @@ class RietveldRefiner:
                 "gsas2_nobs": int(out.get("Nobs") or 0),
                 "gsas2_nvar": int(out.get("Nvar") or 0),
                 "gsas2_pref_ori": bool(req.get("pref_ori")),
+                "gsas2_pref_ori_mode": (out.get("engine_meta") or {}).get(
+                    "po_mode"),
+                "gsas2_po_seed_r": (out.get("engine_meta") or {}).get(
+                    "po_seed_r"),
                 "gsas2_sample_displace": req.get("sample_displace"),
                 # v0.11.0: 定量阶段结果 (全相有 CIF 时才有)
                 "wR_rietveld": out.get("wR_rietveld"),

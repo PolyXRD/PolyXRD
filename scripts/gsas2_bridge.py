@@ -105,6 +105,147 @@ def _estimate_gw(tt: np.ndarray, intens: np.ndarray) -> float:
     return float(min(max(gw, 1.0), 2500.0))
 
 
+def _peak_fwhm(tt: np.ndarray, intens: np.ndarray, ipeak: int,
+               half_win: float = 0.6) -> Optional[float]:
+    """单峰半高全宽（度）。基线取窗口两端最小值（吸收背景斜率）。
+
+    峰两侧用线性插值求半高交叉；任一侧找不到（邻峰重叠/窗口太窄）返回 None。
+    """
+    n = len(tt)
+    lo = ipeak
+    while lo > 0 and tt[ipeak] - tt[lo] < half_win:
+        lo -= 1
+    hi = ipeak
+    while hi < n - 1 and tt[hi] - tt[ipeak] < half_win:
+        hi += 1
+    if hi - lo < 4:
+        return None
+    seg_t, seg_y = tt[lo:hi + 1], intens[lo:hi + 1]
+    base = float(min(seg_y[0], seg_y[-1]))
+    top = float(intens[ipeak])
+    if top - base < 1e-9:
+        return None
+    half = base + 0.5 * (top - base)
+
+    def cross(step: int) -> Optional[float]:
+        i = ipeak
+        while lo <= i + step <= hi and seg_y[i - lo] >= half:
+            i += step
+        j = i - step
+        if not (lo <= i <= hi) or not (lo <= j <= hi):
+            return None
+        ya, yb = float(seg_y[j - lo]), float(seg_y[i - lo])
+        if abs(yb - ya) < 1e-12:
+            return float(seg_t[j - lo])
+        return float(seg_t[j - lo]) + (half - ya) / (yb - ya) * (
+            seg_t[i - lo] - seg_t[j - lo])
+
+    xl, xr = cross(-1), cross(+1)
+    if xl is None or xr is None or xr <= xl:
+        return None
+    return xr - xl
+
+
+def _profile_mode() -> str:
+    """峰形策略开关（消融用），默认 ``legacy``。
+
+    ``POLYXRD_G2_PROFILE`` 取值：
+
+    | 值 | 初值 | 峰形轮次 | 2-1 实测 wR_rietveld |
+    |---|---|---|---|
+    | ``legacy``（默认） | 最强峰常数 GW | 2 轮 / 5 cyc | **44.00 %** |
+    | ``seed`` | 多峰 Caglioti | 2 轮 / 5 cyc | 46.20 % |
+    | ``rounds`` | 最强峰常数 GW | 3 轮 / 8 cyc | 45.64 % |
+    | ``auto`` | 多峰 Caglioti | 3 轮 / 8 cyc | 46.31 % |
+
+    2026-11-05 的 A/B 说明"峰形初值不是 2-1 的瓶颈"：把峰宽改成随 2θ
+    增长的 Caglioti 模型、以及给峰形更多精修轮次，两种改动**都让 wR 变差**。
+    真实瓶颈是择优取向（见 :func:`_po_mode`：改成交替精修后同一谱
+    44.00 % → 22.19 %），详见 `docs/基准报告-精修-v5.0.0.md` §二十五。
+    新策略在拿到仪器标样（LaB6）前只能算"未验证"，故不作为默认。
+    """
+    raw = (os.environ.get("POLYXRD_G2_PROFILE") or "legacy").strip().lower()
+    return raw or "legacy"
+
+
+def _seed_caglioti(tt: np.ndarray, intens: np.ndarray,
+                   lam: Optional[float] = None) -> dict:
+    """v5.2 (P1-9②): 多峰 FWHM → Caglioti (GU, GV, GW) 播种。
+
+    GSAS-II CW 口径 (``GSASIIpwd.getWidthsCW``)::
+
+        sig2(0.01 deg^2) = GU*tan^2θ + GV*tanθ + GW
+        sigma_deg        = sqrt(sig2)/100
+
+    旧实现只从**最强峰**估 GW（``_estimate_gw``），且把 X 直接设成
+    ``sqrt(GW)`` —— 等价于"整条谱峰宽恒定"。真实谱的峰宽随 2θ 明显增长
+    (2-1 实测 15° 处 FWHM≈0.13°、80° 处 ≈0.24°)，一个常数项撑不起两端。
+
+    ⚠️ 但 A/B 证明**这不是 2-1 卡在 44 % 的原因**：换成 Caglioti 播种反而升到
+    46.2 %（见 :func:`_profile_mode`）。函数保留供有仪器标样时复用，默认不启用。
+
+    本函数对检出峰逐个量 FWHM（局部基线 + 亚点插值），按上式对
+    ``(tan²θ, tanθ, 1)`` 做最小二乘，给出三参数起点；GU 为负时固定 0 重解
+    （物理上 GU ≥ 0），仍失败则退回单峰 GW。
+
+    返回 ``{"gu","gv","gw","n_peaks","method"}``（单位均为 0.01°²）。
+    """
+    fallback = {"gu": 0.0, "gv": 0.0, "gw": _estimate_gw(tt, intens),
+                "n_peaks": 0, "method": "single-peak"}
+    n = len(tt)
+    if n < 40:
+        return fallback
+    edge = max(5, n // 30)
+    try:
+        bg = float(np.median(np.concatenate([intens[:edge], intens[-edge:]])))
+    except Exception:  # noqa: BLE001
+        return fallback
+    try:
+        peaks = _find_peaks(tt, intens, bg, rel=0.05)[:12]
+    except Exception:  # noqa: BLE001
+        return fallback
+    if len(peaks) < 3:
+        return fallback
+
+    rows, rhs = [], []
+    for p in peaks:
+        i = int(np.argmin(np.abs(tt - p)))
+        fw = _peak_fwhm(tt, intens, i)
+        if fw is None:
+            continue
+        sig2 = (fw / 2.3548 * 100.0) ** 2
+        # 剔除明显离群（极窄尖峰 / 宽包）：Caglioti 只描述"正常"仪器峰宽
+        if not (0.5 <= sig2 <= 4000.0):
+            continue
+        th = math.radians(float(tt[i]) / 2.0)
+        t = math.tan(th)
+        rows.append([t * t, t, 1.0])
+        rhs.append(sig2)
+    if len(rows) < 3:
+        return fallback
+    A = np.asarray(rows, dtype=float)
+    b = np.asarray(rhs, dtype=float)
+    try:
+        coef, *_ = np.linalg.lstsq(A, b, rcond=None)
+    except Exception:  # noqa: BLE001
+        return fallback
+    gu, gv, gw = (float(v) for v in coef)
+    if gu < 0:      # GU 物理上非负 → 固定 0 重解两参数
+        A2 = A[:, 1:]
+        try:
+            c2, *_ = np.linalg.lstsq(A2, b, rcond=None)
+            gv, gw = float(c2[0]), float(c2[1])
+        except Exception:  # noqa: BLE001
+            return fallback
+        gu = 0.0
+    # 保证预测宽度在合理区间（避免把过窄/过宽峰带进精修）
+    gw = min(max(gw, 1.0), 2500.0)
+    gv = min(max(gv, -200.0), 200.0)
+    gu = min(max(gu, 0.0), 200.0)
+    return {"gu": gu, "gv": gv, "gw": gw,
+            "n_peaks": len(rows), "method": "caglioti"}
+
+
 def _find_peaks(tt: np.ndarray, intens: np.ndarray,
                 bg: float, rel: float = 0.08) -> list[float]:
     """返回按 2θ 升序排列的强峰位置 (局部极大 + 阈值过滤 + 去簇)。"""
@@ -218,10 +359,13 @@ def _ka2_of(lam: float) -> Optional[float]:
 
 
 def _make_inst_prm_lines(lam: float, gw: float,
-                         gx: Optional[float] = None) -> list[str]:
+                         gx: Optional[float] = None,
+                         gu: float = 0.0, gv: float = 0.0) -> list[str]:
     """CW PseudoVoigt 仪器参数 (单位: 平方百分度 / 百分度)。
 
     ``gw`` = W (高斯项, σ² 单位 0.01°²); ``gx`` = X (洛伦兹项 FWHM, 0.01°)。
+    ``gu`` / ``gv`` = GU / GV（v5.2 起由多峰 Caglioti 播种，见
+    :func:`_seed_caglioti`；旧行为两者恒 0 = 峰宽不随 2θ 变化）。
 
     v5.0.1: 原先 X=Y=Z=0 即**纯高斯**峰形。实测数据峰形由洛伦兹主导
     (PolyXRD 内置引擎拟合 eta≈1.00), 纯高斯无法匹配峰尾。
@@ -244,7 +388,7 @@ def _make_inst_prm_lines(lam: float, gw: float,
         "INS  1I HEAD  DUMMY INCIDENT SPECTRUM FOR X-RAY DIFFRACTOMETER",
         "INS  1I ITYP    0    0.0000  180.0000         1",
         "INS  1PRCF1     3    8      0.01",
-        f"INS  1PRCF11    0.000000E+00   0.000000E+00   {gw:12.6E}   0.000000E+00",
+        f"INS  1PRCF11    {gu:12.6E}   {gv:12.6E}   {gw:12.6E}   0.000000E+00",
         f"INS  1PRCF12    {gx:12.6E}   0.000000E+00   0.000000E+00   0.000000E+00",
     ]
 
@@ -329,6 +473,23 @@ def _apply_sample_displace(hist, req: dict) -> None:
     dx[1] = True
 
 
+def _has_pref_ori(req: dict) -> bool:
+    """请求里是否**真的**要求了择优取向：键存在、是 dict、r 有限且 ≠ 1。
+
+    三处判据必须一致（`:func:`_apply_pref_ori` 的播种、`_final_refine` 的
+    交替分支、r=1 时"当成没请求"），否则会出现"没播种却打开精修标志" ——
+    等价于替用户认定这谱有织构。
+    """
+    po = req.get("pref_ori")
+    if not isinstance(po, dict):
+        return False
+    try:
+        r = float(po.get("r", 1.0))
+    except (TypeError, ValueError):
+        return False
+    return bool(np.isfinite(r)) and abs(r - 1.0) > 1e-9
+
+
 def _apply_pref_ori(gpx, req: dict) -> None:
     """v5.2 (P1-9③): req["pref_ori"] = {"hkl": [h,k,l], "r": float} → March-Dollase。
 
@@ -337,14 +498,19 @@ def _apply_pref_ori(gpx, req: dict) -> None:
     与 RefineOptions.preferred_orientation 的"全局一个方向"对齐 ——
     应用于工程内**所有相**（v5 引擎的 _po_direction 也是全相同语义）。
     r=1（无择优）时不设置。
+
+    v5.2 (P1-9②): 是否在 **Le Bail 阶段**放开 r 由 :func:`_po_mode` 决定。
+    默认 ``lebail``（保持既有行为）；``freeze`` / ``alt`` 下这里只播种不精修
+    —— 因为 Le Bail 的强度本身是自由变量，能吸收任意织构，PO 与它代数上
+    退化，在 Le Bail 里"精修"r 得到的是一个不可解释的数（实测同一谱
+    r0=0.5/0.65/0.7/0.9 都能收敛，但后续定量 wR 在 23%~39% 之间乱跳）。
     """
-    po = req.get("pref_ori")
-    if not isinstance(po, dict):
+    if not _has_pref_ori(req):
         return
+    po = req["pref_ori"]
     r = float(po.get("r", 1.0))
-    if not np.isfinite(r) or abs(r - 1.0) < 1e-9:
-        return
     hkl = [int(v) for v in po.get("hkl", (0, 0, 1))]
+    refine_now = _po_mode() == "lebail"
     for ph in gpx.phases():
         for hname, hap in (ph.data.get("Histograms") or {}).items():
             p = hap.get("Pref.Ori.")
@@ -352,8 +518,40 @@ def _apply_pref_ori(gpx, req: dict) -> None:
                 continue
             p[0] = "MD"
             p[1] = r
-            p[2] = True   # 打开精修: 起点给对方向, r 让 LSQ 自己找
+            p[2] = refine_now
             p[3] = hkl
+
+
+def _po_mode() -> str:
+    """择优取向策略开关（消融用），默认 ``alt``（交替）。
+
+    | 值 | Le Bail 阶段 | Rietveld 定量阶段 |
+    |---|---|---|
+    | ``alt``（默认） | r 固定（用户初值） | **交替**：先 PO 两轮，再 Scale 四轮 |
+    | ``lebail`` | r 参与精修 | 冻结 PO，只修 Scale |
+    | ``freeze`` | r 固定 | 冻结 PO，只修 Scale（PO 只在 Le Bail 起作用） |
+
+    为什么默认改了（2026-11-05，2-1，两相 Zn/方解石，真值 50/50）：
+
+    | 模式 | wR_LeBail | wR_Rietveld | GOF | wt% |
+    |---|---|---|---|---|
+    | 无 PO（基线） | 43.87 | 43.87 | — | 57.2 / 42.8 |
+    | ``lebail`` | 24.57 | **48.45** | 17.34 | 73.6 / 26.4 |
+    | ``freeze`` | 24.55 | 44.62 | 15.97 | 57.2 / 42.8 |
+    | ``alt`` | 24.57 | **22.08** | **7.90** | **52.9 / 47.1** |
+
+    旧默认（``lebail``）的致命处不是绝对值，而是**不可复现**：r 初值 0.5/0.6/
+    0.65/0.7/0.75/0.8/0.9 对应的定量 wR 是 48.7/37.6/23.3/38.7/48.3/48.7/
+    38.3 —— 同一条谱、同一个引擎，只因为初值不同就差 25 个百分点，而 Le Bail
+    阶段的 wR 全是 24.5（评分完全区分不出）。原因：Le Bail 的强度本身是自由
+    变量，能吸收任意织构，在那里"精修"r 是在拟合一个不可辨识的量。
+
+    ``alt`` 把两个退化方向**分时**解开（修 r 时 Scale 冻着、修 Scale 时 r 冻着），
+    r 在 Rietveld 阶段被重新优化，于是对初值不敏感：r0 = 0.5/0.6/0.7 给出
+    21.99/22.01/22.08，wt 全是 52.9/47.1。
+    """
+    raw = (os.environ.get("POLYXRD_G2_PO_MODE") or "alt").strip().lower()
+    return raw if raw in ("alt", "lebail", "freeze") else "alt"
 
 #: Rietveld 定量阶段的 set 字典 —— **必须显式 LeBail=False**。
 #: ``do_refinements`` 的 ``set`` 会重新打开 Le Bail, 把上面
@@ -387,6 +585,7 @@ def _score_seed(req, xy_path, iparm_path, iparm_lines, scale):
 
 def _final_refine(req, xy_path, iparm_path, iparm_lines, scale):
     """从选定种子做最终精修 (Cell+背景 4x10 轮 + 非致命 U/V/W), 返回结果 dict。"""
+    po_mode = _po_mode()
     from GSASII import GSASIIstrMain as G2strMain
     from GSASII import GSASIIscriptable as G2sc
 
@@ -404,15 +603,23 @@ def _final_refine(req, xy_path, iparm_path, iparm_lines, scale):
     rounds = 0
     gpx.do_refinements([{"set": dict(_CELL_BKG)} for _ in range(4)])
     rounds += 4
-    # 附加 U/V/W 峰形精修: 非致命, 失败不影响晶胞结果
+    # 附加 U/V/W/X 峰形精修: 非致命, 失败不影响晶胞结果。
+    # v5.2 (P1-9②): 轮次可调，**默认仍是 2 轮/5 cyc**。加密到 3 轮/8 cyc
+    # （`POLYXRD_G2_PROFILE=rounds|auto`）在 2-1 上实测变差 43.77→45.64%，
+    # 因为 U/V/W 在此谱上高度共线（U-V 97.5%、V-W 98.5%），多给轮次只让
+    # LSQ 在退化方向多走几步。留成开关供将来有标样时复测。
+    _pmode = _profile_mode()
+    _prof_rounds = 3 if _pmode in ("rounds", "auto") else 2
+    _prof_cyc = 8 if _pmode in ("rounds", "auto") else 5
     try:
         gpx.reload()
         ctrl = gpx.data["Controls"]["data"]
-        ctrl["max cyc"] = 5
+        ctrl["max cyc"] = _prof_cyc
         gpx.save()
         gpx.do_refinements([{"set": dict(_CELL_BKG, **{
-            "Instrument Parameters": ["U", "V", "W", "X"]})} for _ in range(2)])
-        rounds += 2
+            "Instrument Parameters": ["U", "V", "W", "X"]})}
+            for _ in range(_prof_rounds)])
+        rounds += _prof_rounds
     except Exception:
         pass
     gpx.reload()
@@ -448,6 +655,17 @@ def _final_refine(req, xy_path, iparm_path, iparm_lines, scale):
     # "GOF": None, 诊断表整列恒 0, 不能当"GOF 更好"的判据。位置兼容两代:
     # Controls['Rvals'] 与 Controls['data']['Rvals']。
     rvals = _read_rvals(gpx)
+    # v5.2 诊断: Le Bail 后 PO 的实际值（确认精修是否真的动过 r）
+    po_after = {}
+    try:
+        for ph in gpx.phases():
+            for _hn, _hap in (ph.data.get("Histograms") or {}).items():
+                _p = _hap.get("Pref.Ori.")
+                if isinstance(_p, list) and len(_p) > 3 and _p[0] == "MD":
+                    po_after[ph.name] = [float(_p[1]), list(_p[3]),
+                                         bool(_p[2])]
+    except Exception:  # noqa: BLE001
+        pass
 
     # ── v0.11.0 定量阶段: 全相有 CIF 结构时关 LeBail, 用 |F|² 精修相分数 ──
     # Le Bail 模式下相分数无语义 (强度是自由变量); 只有回到真 Rietveld
@@ -469,6 +687,17 @@ def _final_refine(req, xy_path, iparm_path, iparm_lines, scale):
             for ph in proj_phases:
                 ph.set_refinements({"LeBail": False})
                 ph.set_HAP_refinements({"Scale": True}, histograms="all")
+                # v5.2 (P1-9③收尾): 定量阶段必须**冻结**择优取向。
+                # PO 在 Le Bail 阶段已精修到可信值（2-1 实测把 wR 从 44% 压到
+                # 24.5%）；若在 Rietveld 阶段继续放开，它与相 Scale 强相关 →
+                # SVD 奇异 → 定量整段失败被 except 吞掉，wt 退化成"胞内质量比"
+                # （实测 21.3/78.7，真值 50/50），wR_rietveld 还会残留成
+                # Le Bail 值或 100（缺省）。固定 PO、只精修 Scale 才有可解释 wt%。
+                try:
+                    ph.set_HAP_refinements({"Pref.Ori.": False},
+                                           histograms="all")
+                except Exception as e:  # noqa: BLE001
+                    print(f"[bridge] freeze PO skipped: {e}", file=sys.stderr)
             # 冻结 U/V/W: Le Bail 阶段已把它们精修到近乎共线 (实测 U-V 97.5%、
             # V-W 98.5%), Rietveld 里再放开会命中 SVD 奇异, chi^2 从 3.9e6 直接
             # 飙到 4.9e12, 随后 "Invalid metric tensor", 整段定量失败。
@@ -529,6 +758,53 @@ def _final_refine(req, xy_path, iparm_path, iparm_lines, scale):
                     _dbg(f"scale-init k={_k:.6g} num={_num:.5g} den={_den:.5g}")
             except Exception as e:  # noqa: BLE001 - 初始化失败仍走原路径
                 print(f"[bridge] scale init skipped: {e}", file=sys.stderr)
+
+            # ---- v5.2 (P1-9②): 交替模式 —— 先放 PO 修 r，再冻 PO 修 Scale ----
+            # 同时放开会因 PO×Scale 强相关命中 SVD 奇异（实测定量整段失败、
+            # wt 退化成胞内质量比 21/79、wR 残留 100）；而 PO 在 Le Bail 阶段
+            # 又与自由强度退化，拿不到可信初值。分时解开才有两边的好处。
+            #
+            # ⚠️ 必须 `_has_pref_ori(req)` 才进 —— 没请求择优取向的谱，
+            # GSAS-II 的 HAP 里照样有一个默认 `["MD", 1.0, False, [0,0,1]]`，
+            # 无条件打开精修标志等于**替用户决定"这谱有织构"**：实测 2-1
+            # 基线会从 44.00% 悄悄变成 24.08%、wt 从 57.2/42.8 变成 52.1/47.9，
+            # 看起来"变好了"其实是偷换了模型（2-2 的 PO(001) 臂与"无 PO"臂
+            # 给出逐位相同的数字，就是这条无守卫的直接证据）。
+            if po_mode == "alt" and _has_pref_ori(req):
+                try:
+                    for ph in gpx.phases():
+                        ph.set_HAP_refinements({"Scale": False},
+                                               histograms="all")
+                        ph.set_HAP_refinements({"Pref.Ori.": True},
+                                               histograms="all")
+                    gpx.save()
+                    for _ in range(2):
+                        gpx.do_refinements([{"set": dict(
+                            _CELL_BKG_RIET, Cell=False,
+                            **{"Instrument Parameters": ["Zero"]})}])
+                        rounds += 1
+                    if dbg:
+                        gpx.reload()
+                        for ph in gpx.phases():
+                            _p = None
+                            for _hn, _hap in (
+                                    ph.data.get("Histograms") or {}).items():
+                                _p = _hap.get("Pref.Ori.")
+                            _dbg(f"after PO rounds {ph.name}: {_p}")
+                        gpx.save()
+                except Exception as e:  # noqa: BLE001 - 交替失败退回冻结
+                    print(f"[bridge] PO rounds skipped: {e}", file=sys.stderr)
+                # 交替结束: 冻 PO, 回到"只修 Scale"
+                for ph in gpx.phases():
+                    try:
+                        ph.set_HAP_refinements({"Pref.Ori.": False},
+                                               histograms="all")
+                        ph.set_HAP_refinements({"Scale": True},
+                                               histograms="all")
+                    except Exception as e:  # noqa: BLE001
+                        print(f"[bridge] re-freeze PO skipped: {e}",
+                              file=sys.stderr)
+                gpx.save()
 
             # Le Bail → Rietveld 切换时若同时放开晶胞, 第一步 LSQ 也会把晶胞
             # 拉爆 (实测 "Invalid metric tensor ... values (A): -0.1220")。
@@ -597,7 +873,8 @@ def _final_refine(req, xy_path, iparm_path, iparm_lines, scale):
             "ycalc": ycalc,
             "GOF": (float(rvals["GOF"]) if rvals.get("GOF") is not None else None),
             "Nobs": int(rvals.get("Nobs") or 0),
-            "Nvar": int(rvals.get("Nvar") or 0)}
+            "Nvar": int(rvals.get("Nvar") or 0),
+            "pref_ori": po_after or None}
 
 
 def _read_rvals(gpx) -> dict:
@@ -685,8 +962,19 @@ def main() -> int:
         return 1
 
     lam = float(req.get("wavelength", 1.5406))
-    gw = _estimate_gw(tt, I)
-    iparm_lines = _make_inst_prm_lines(lam, gw)
+    # v5.2 (P1-9②): 峰形模板候选 —— 多峰 FWHM 拟合 Caglioti (GU/GV/GW)，
+    # 取代"最强峰常数宽度"。见 _seed_caglioti / _profile_mode 的说明；
+    # **默认 legacy**（实测新模板在 2-1 上更差），开关仅用于消融与将来有
+    # 仪器标样时的复测。
+    mode = _profile_mode()
+    if mode in ("legacy", "rounds"):
+        gw = _estimate_gw(tt, I)
+        seed = {"gu": 0.0, "gv": 0.0, "gw": gw, "n_peaks": 0,
+                "method": "single-peak"}
+    else:
+        seed = _seed_caglioti(tt, I, lam=lam)
+        gw = float(seed["gw"])
+    iparm_lines = _make_inst_prm_lines(lam, gw, gu=seed["gu"], gv=seed["gv"])
 
     workdir = tempfile.mkdtemp(prefix="polyxrd_gsas_")
     xy_path = os.path.join(workdir, "data.xy")
@@ -732,6 +1020,7 @@ def main() -> int:
     if best_scale is None:
         best_scale = 1.0  # 全部评分失败 -> 退回用户晶胞
 
+
     # ---- 最终精修 (失败时依次回退更保守种子) ----
     result = None
     last_err = None
@@ -761,11 +1050,16 @@ def main() -> int:
         "phase_fractions": result.get("phase_fractions"),
         "wR_rietveld": result.get("wR_rietveld"),
         "ycalc": result.get("ycalc"),
+        "pref_ori_after": result.get("pref_ori"),
         "gpx": result["gpx"],
         "engine_meta": {
             "gw_est": round(gw, 3),
+            "profile_mode": mode,
+            "profile_seed": seed.get("method"),
+            "profile_seed_peaks": seed.get("n_peaks"),
             "seed_scale": best_scale,
             "seed_wR": best_wR,
+            "po_mode": _po_mode(),
         },
     })
     return 0
