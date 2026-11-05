@@ -44,6 +44,12 @@ ALL_CODES = [
      {"mu_bar": 272.0, "tau_min": 0.99, "tau_max": 1.25}),
     ("diag.refinement.scale_correlated",
      {"phase_a": "Quartz low", "phase_b": "Kaolinite", "rho": -0.98}),
+    ("diag.refinement.phase_unsupported",
+     {"phase": "W20O58", "fraction": 0.156, "strongest_2theta": 24.66,
+      "strongest_rel": 0.67, "n_unique_strong": 7.0, "zero_shift": 0.02}),
+    ("diag.refinement.phase_fraction_unverifiable",
+     {"phase": "W20O58", "fraction": 0.156, "n_strong": 5.0,
+      "min_gap": 0.03, "zero_shift": 0.02}),
 ]
 
 

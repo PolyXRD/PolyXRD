@@ -44,11 +44,60 @@ __all__ = [
     "FitReport",
     "audit",
     "build_report",
+    "observed_peaks",
     "residual_stats",
 ]
 
 #: 严重度排序（越小越严重）
 SEVERITY_RANK: Dict[str, int] = {"error": 0, "warn": 1, "info": 2}
+
+#: 「份额有没有谱线支撑」的判据（P2-10）—— 该相自身 I/Imax 到多少算强线
+UNSUPPORTED_STRONG_REL = 0.30
+#: 别的相要**多强**的线才算"能解释这个峰"（见 ``_phase_support`` 的掩膜说明）
+UNSUPPORTED_MASK_REL = 0.05
+#: 与**别的相**反射相距 ≤ 该值 → 这条强线被遮盖，不能当"这相存在"的证据
+UNSUPPORTED_OVERLAP_TOL = 0.30
+#: 别的相在同位置上的**加权强度**（rel×份额）比本相高这么多倍 → 本相那条线被埋掉
+UNSUPPORTED_BURY_RATIO = 2.0
+#: 观测峰与模型峰位的容差（模型反射表是 Bragg 位置、不含仪器零点，故另估偏移）
+UNSUPPORTED_OBS_TOL = 0.20
+
+
+def _noise_sigma(y: np.ndarray) -> float:
+    """由二阶差分稳健估噪声 σ（``var(d2)=6σ²``，不受局部斜率影响）。"""
+    if y.size < 5:
+        return 0.0
+    d2 = y[1:-1] - 2.0 * y[:-2] + y[2:]
+    return float(1.4826 * float(np.median(np.abs(d2))) / math.sqrt(6.0))
+
+
+def observed_peaks(two_theta, y_obs, *, rel: float = 0.01,
+                   snr: float = 5.0) -> List[Tuple[float, float]]:
+    """观测峰表 ``[(2θ, 突出度/Imax)]``，判据是 **prominence**。
+
+    与 ``scripts/bench_wo3_validate.py`` 同一口径（P2-5 定稿，2026-11-05）。
+    为什么不用"绝对局部极大"：主峰陡降尾巴上的噪声起伏会被判成峰 —— WO3 实测
+    里 ``24.64:978 > 24.66:896 > 24.68:812`` 就这么把 24.34° 主峰的衰减段
+    报成了"24.66° 有峰"。prominence 对单调坡上的噪声包给 0（左肩根本没有
+    下坡），对坐在大峰肩上的真峰给出"翻过山坳"的正突出度，两类都能分开。
+    """
+    from scipy.signal import find_peaks
+
+    x = np.asarray(two_theta, dtype=float).reshape(-1)
+    y = np.asarray(y_obs, dtype=float).reshape(-1)
+    if x.size != y.size or y.size < 9:
+        return []
+    y = y - float(np.percentile(y, 1))
+    if float(y.max()) <= 0:
+        return []
+    ys = np.convolve(y, np.array([0.25, 0.5, 0.25]), mode="same")
+    ys[:2] = y[:2]
+    ys[-2:] = y[-2:]
+    ymax = float(ys.max())
+    prom = max(float(snr) * _noise_sigma(y), float(rel) * ymax)
+    idx, props = find_peaks(ys, prominence=prom)
+    return [(float(x[i]), float(p) / ymax)
+            for i, p in zip(idx, props["prominences"])]
 
 
 @dataclass(frozen=True)
@@ -186,6 +235,165 @@ def noise_scale(y_obs, resid_sigma: float) -> float:
     return max(float(resid_sigma), poisson)
 
 
+def _phase_support(
+    x: np.ndarray,
+    y: np.ndarray,
+    phase_peaks,
+    quant: Optional[QuantResult],
+    calc_centers,
+    *,
+    min_fraction: float = 0.01,
+    strong_rel: float = UNSUPPORTED_STRONG_REL,
+    mask_rel: float = UNSUPPORTED_MASK_REL,
+    overlap_tol: float = UNSUPPORTED_OVERLAP_TOL,
+    bury_ratio: float = UNSUPPORTED_BURY_RATIO,
+    obs_tol: float = UNSUPPORTED_OBS_TOL,
+) -> List[Finding]:
+    """P2-10：份额非零，但**没有一条强线能独立支撑它** → 这个 wt% 不可信。
+
+    :param phase_peaks: ``[(label, two_theta, intensity)]``，各相的反射表
+        （``ReflectionTable.intensity`` = ``|F|²·LP·w_λ`` 归并和，未乘标度）。
+
+    为什么不能只看份额与 Rwp：**大胞相自带独立峰宽参数**，能把样品展宽造成的
+    失配整块摊平，于是 Rwp 变好、份额非零，而该相在谱上其实没有任何独立证据。
+    WO3 实测（2026-11-05）：W20O58 分到 15.6 %、Rwp 降 3.0 pp，但它最强判别线
+    24.66°（该相 I/Imax 0.67）是主峰 24.34° 的单调衰减尾巴；同批对照里"不该有"
+    的 MoO3 分到 1.3 %、WO2 2.8 %、α/γ 同相异型互分 28~98 %。
+
+    判据逐条强线（自身 I/Imax ≥ ``strong_rel``）算**加权强度**
+    ``w = rel × 份额``，再看同位置（±``overlap_tol``）上别的相能不能给出
+    ``≥ bury_ratio × w``：
+
+    * 能 → 这条线被埋掉，**不构成证据**（位置重合还不够，得看谁更强；
+      只看位置重合会把主相自己判成"全部重叠"，实测就撞过）；
+    * 不能 → **可作证据**，再看 ±``obs_tol`` 内有没有观测峰。
+
+    然后分三支：
+
+    * 有可作证据的线且有观测峰 → 该相有支撑，**不报**；
+    * 有可作证据的线但一条都没观测到 → ``PHASE_UNSUPPORTED``（硬证据：
+      MoO3 对照臂就是这一支，1.29 %、27.51° 那条线谱上没有）；
+    * **一条可作证据的线都没有** → ``PHASE_FRACTION_UNVERIFIABLE``（软证据：
+      该 wt% 完全由峰宽/背景自由度决定。W20O58 就是这一支：引擎算出的 5 条强线
+      23.55 / 24.39 / 24.36 / 34.16 / 23.05 全落在 WO3 的 23.08 / 24.18 / 23.67 /
+      34.09 / 33.30 的 0.30° 内，最小间距 0.03°，加权后又被主相压 5 倍）。
+
+    ⚠ 掩膜必须按强度筛，不能用整张反射表：引擎的 ``ReflectionTable`` 是**计算**
+    反射表（``noise_ratio=1e-9`` 全收），WO3 在 20–90° 有 **323** 条、W20O58 有
+    **762** 条。70° 里 323 条线、平均间距 0.22° —— 拿全表当掩膜，等于任何位置都
+    "被主相盖住"，守卫会 100% 沉默（2026-11-05 首次端到端验收就栽在这里：
+    W20O58 15.63 wt% 没报，反倒只报了 MoO3）。
+    """
+    tabs = [(str(lab), np.asarray(tt, dtype=float).ravel(),
+             np.asarray(ii, dtype=float).ravel())
+            for lab, tt, ii in (phase_peaks or ()) if np.size(tt)]
+    if not tabs or y.size == 0:
+        return []
+    obs = observed_peaks(x, y)
+    if not obs:
+        return []                       # 峰表不可用就沉默，不凭空的"没峰"定罪
+    o = np.asarray([t for t, _ in obs], dtype=float)
+
+    fracs: Dict[str, float] = {}
+    if quant is not None and getattr(quant, "labels", None):
+        fracs = {str(l): float(f) for l, f in zip(quant.labels, quant.fractions)}
+
+    # 反射表是 Bragg 位置（不含仪器零点），用"观测峰 ↔ 计算峰位"的中位偏移对齐；
+    # 不先对齐的话，一个 0.3° 的零点就会把所有相都判成"无支撑"
+    shift = 0.0
+    if calc_centers is not None and np.size(calc_centers):
+        cal = np.sort(np.asarray(calc_centers, dtype=float).ravel())
+        offs = []
+        for t in o:
+            d = float(t - cal[int(np.argmin(np.abs(cal - t)))])
+            if abs(d) <= 0.5:
+                offs.append(d)
+        if len(offs) >= 3:
+            shift = float(np.median(offs))
+
+    out: List[Finding] = []
+    for i, (lab, tt, ii) in enumerate(tabs):
+        frac = fracs.get(lab, 1.0)
+        imax = float(ii.max()) if ii.size else 0.0
+        if frac < min_fraction or not tt.size or imax <= 0:
+            continue
+        rel_i = ii / imax
+        sel = rel_i >= strong_rel
+        if not sel.any():
+            continue
+        pos = tt[sel] + shift
+        rel_s = rel_i[sel]
+        n_strong = int(pos.size)
+        # 掩膜 = 别的相里**真能被看见**的线（I ≥ mask_rel），带**加权强度**
+        # w = rel × 份额：位置重合只是"可能被解释"，得看谁更强才算埋掉。
+        # 只按位置筛会把主相自己判成"全部重合"（实测撞过：WO3 84 wt% 被报）。
+        m_pos: List[float] = []
+        m_w: List[float] = []
+        for j, (l2, tt2, ii2) in enumerate(tabs):
+            f2 = fracs.get(l2, 1.0)
+            if j == i or f2 < min_fraction:
+                continue
+            m2 = float(ii2.max()) if ii2.size else 0.0
+            if m2 <= 0:
+                continue
+            rel2 = ii2 / m2
+            sel2 = rel2 >= mask_rel
+            m_pos.extend((tt2[sel2] + shift).ravel().tolist())
+            m_w.extend((rel2[sel2] * f2).ravel().tolist())
+        gap_min = None
+        if m_pos:
+            mp = np.asarray(m_pos, dtype=float)
+            mw = np.asarray(m_w, dtype=float)
+            gaps, bury = [], []
+            for p, r in zip(pos, rel_s):
+                near = np.abs(mp - p) <= overlap_tol
+                gaps.append(float(np.min(np.abs(mp[near] - p))) if near.any() else 99.0)
+                # 同位置的"别人最强"能给出多少加权强度
+                bury.append(float(np.max(mw[near])) if near.any() else 0.0)
+            gaps = np.asarray(gaps)
+            bury = np.asarray(bury)
+            gap_min = float(np.min(gaps)) if gaps.size else None
+            w_self = rel_s * frac
+            capable = bury < bury_ratio * w_self
+            pos, rel_s = pos[capable], rel_s[capable]
+        if not pos.size:
+            # 一条能独立支撑的强线都没有 → 份额由峰宽/背景自由度决定
+            out.append(Finding(
+                "PHASE_FRACTION_UNVERIFIABLE", "warn",
+                f"{lab} 被定量到 {100 * frac:.2f} wt%，但它 {n_strong} 条强线"
+                f"（I/Imax ≥ {strong_rel:.0%}）在谱上都被其它相更强的线压住"
+                f"（最近间距 {gap_min:.2f}°）——该份额完全由峰宽/背景自由度决定，"
+                "数据没有独立约束它",
+                "补一条属于该相、且与主相分开 >0.3° 的线（换靶/延长扫描/更高"
+                "分辨率）再定量；否则只报检出、不报数字。份额非零 ≠ 该相存在"
+                "（详见 docs/待办清单.md P2-10）",
+                {"phase": lab,
+                 "fraction": float(frac),
+                 "n_strong": float(n_strong),
+                 "min_gap": float(gap_min) if gap_min is not None else 0.0,
+                 "zero_shift": float(shift)}))
+            continue
+        if any(float(np.min(np.abs(o - p))) <= obs_tol for p in pos):
+            continue
+        k = int(np.argmax(rel_s))
+        out.append(Finding(
+            "PHASE_UNSUPPORTED", "warn",
+            f"{lab} 被定量到 {100 * frac:.2f} wt%，但它 {pos.size} 条唯一强线"
+            f"（该相 I/Imax ≥ {strong_rel:.0%}）在实测中一条都没出现"
+            f"（最强 {pos[k]:.2f}° 应有 I/Imax={rel_s[k]:.2f}）"
+            "—— 这个份额没有谱线支撑",
+            "先确认这条线是否在扫描窗口内、是否被择优取向压低；都不是就把该相"
+            "删掉重拟合。份额非零 ≠ 该相存在：多出来的衍射强度会被峰宽/背景"
+            "自由度吸收，Rwp 反而更低（详见 docs/待办清单.md P2-10）",
+            {"phase": lab,
+             "fraction": float(frac),
+             "strongest_2theta": float(pos[k]),
+             "strongest_rel": float(rel_s[k]),
+             "n_unique_strong": float(pos.size),
+             "zero_shift": float(shift)}))
+    return out
+
+
 def audit(
     two_theta,
     y_obs,
@@ -196,6 +404,8 @@ def audit(
     diagnostics: Optional[Diagnostics] = None,
     quant: Optional[QuantResult] = None,
     calc_centers: Optional[Sequence[float]] = None,
+    phase_peaks: Optional[Sequence[Tuple[str, Sequence[float],
+                                          Sequence[float]]]] = None,
     kalph2_modeled: bool = True,
     po_freed: bool = False,
     sample_freed: bool = False,
@@ -214,6 +424,8 @@ def audit(
     :param calc_centers: 当前模型全部计算峰位（用于判断「残差峰有没有对应的
         反射」）；给 ``None`` 则跳过「疑似未识别相」这条规则 —— 没有对照就
         断言「多了个相」是不负责任的。
+    :param phase_peaks: 各相自己的反射表 ``[(label, 2θ, 强度)]``，用于 P2-10
+        的「份额有没有谱线支撑」；给 ``None`` 则跳过该规则（单相问题不存在）。
     :param kalph2_modeled: 前向模型里有没有 Kα2 双线
     :param po_freed / sample_freed: 择优取向 / 样品展宽是否已释放（决定能否
         把「低角差」归因到织构、「高角差」归因到峰宽）
@@ -484,6 +696,13 @@ def audit(
                      "phase_a": str(quant.labels[i]),
                      "phase_b": str(quant.labels[j])}))
 
+    # ── 12. 份额有没有谱线支撑（P2-10，v5.2）────────────────────
+    # 份额、Rwp、各相 σ 三者都看不出这件事：大胞相用独立峰宽把失配摊平后，
+    # Rwp 反而更低。只有"该相最强的那几条唯一线在实测里到底有没有峰"能证伪它。
+    if phase_peaks:
+        out.extend(_phase_support(x, y, phase_peaks, quant, calc_centers,
+                                  min_fraction=min_phase_fraction))
+
     out.sort(key=lambda f: (SEVERITY_RANK.get(f.severity, 9), f.code))
     return out
 
@@ -637,12 +856,16 @@ def build_report(
         kalph2_modeled = getattr(problem, "kalph2", None) is not None
 
     centers: List[np.ndarray] = []
+    phase_peaks: List[Tuple[str, np.ndarray, np.ndarray]] = []
     tmin = float(problem.two_theta[0]) if problem.two_theta.size else 0.0
     tmax = float(problem.two_theta[-1]) if problem.two_theta.size else 0.0
     for ph in problem.phases:
         try:
             ph.ensure_table((tmin, tmax), (problem.wavelength,))
             centers.append(np.asarray(ph.table.two_theta, dtype=float))
+            phase_peaks.append((str(ph.label),
+                                np.asarray(ph.table.two_theta, dtype=float),
+                                np.asarray(ph.table.intensity, dtype=float)))
         except Exception:  # noqa: BLE001 - 反射表不可用就不做未识别相判断
             pass
     calc_centers = np.concatenate(centers) if centers else None
@@ -651,6 +874,7 @@ def build_report(
         problem.two_theta, problem.y_obs, y_calc, problem.weights,
         metrics=metrics, diagnostics=diag, quant=quant,
         calc_centers=calc_centers,
+        phase_peaks=phase_peaks,
         kalph2_modeled=bool(kalph2_modeled),
         po_freed=po_freed, sample_freed=sample_freed, atoms_freed=atoms_freed,
         scale_corr=_scale_correlations(problem, summary))

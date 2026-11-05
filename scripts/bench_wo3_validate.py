@@ -265,11 +265,58 @@ def cmd_two_phase(db, spectra, extra=None):
                   f"Rwp={res.wR:6.2f} %")
 
 
+def cmd_guard(db, data):
+    """P2-10 的**端到端**验收：判别峰守卫能不能把 W20O58 的假份额拦下来。
+
+    判据落在 ``refinement.report.build_report`` → ``PHASE_UNSUPPORTED``，
+    经服务层以 ``v5_findings`` 返回。期望：
+    单相 WO3 不报；+W20O58 报；+MoO3（对照，库里有但谱里没有）也报。
+    """
+    from bench_engines_v500 import build_phases
+    from polyxrd.services.rietveld_refiner import RietveldRefiner
+
+    arms = [(None, None), (1538317, "W20O58"), (1011043, "MoO3 (对照)")]
+    print("── 判别峰守卫（P2-10）：份额有没有谱线支撑 ──")
+    for fn, d in data.items():
+        for eid, name in arms:
+            want = [(2106382, "WO3 γ")]
+            if eid is not None:
+                want.append((eid, name))
+            phases, miss = build_phases(db, d, want)
+            if miss:
+                print(f"  {fn:22} {name:18} 缺: {miss}")
+                continue
+            res = RietveldRefiner().refine(d, phases, engine="refinement",
+                                           perf_profile="fast", max_cycles=12)
+            wt = [float(p.weight_fraction) for p in res.phases]
+            finds = (res.fit_params or {}).get("v5_findings") or []
+            hit = [f for f in finds
+                   if f.get("code") in ("PHASE_UNSUPPORTED",
+                                        "PHASE_FRACTION_UNVERIFIABLE")]
+            tag = "单相 WO3" if eid is None else f"+{name}"
+            verdict = "报" if hit else "不报"
+            detail = ""
+            if hit:
+                ev = hit[0].get("evidence") or {}
+                frac = 100 * float(ev.get("fraction", 0))
+                if hit[0].get("code") == "PHASE_UNSUPPORTED":
+                    detail = (f"  ← {ev.get('phase')} {frac:.2f} wt%，"
+                              f"最强线 {float(ev.get('strongest_2theta', 0)):.2f}° "
+                              f"不在谱上（无支撑）")
+                else:
+                    detail = (f"  ← {ev.get('phase')} {frac:.2f} wt%，"
+                              f"{float(ev.get('n_strong', 0)):.0f} 条强线全部"
+                              f"与主相重合（最小间距 "
+                              f"{float(ev.get('min_gap', 0)):.2f}°，份额不可独立验证）")
+            print(f"  {fn:22} {tag:18} 份额={wt[-1]:6.2f} %  Rwp={res.wR:6.2f} %"
+                  f"  守卫={verdict}{detail}")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default=str(DEFAULT_DATA))
     ap.add_argument("--only", default="all",
-                    choices=["all", "peaks", "single", "two", "control"])
+                    choices=["all", "peaks", "single", "two", "control", "guard"])
     args = ap.parse_args()
 
     from polyxrd.services.polydb import PolyDatabase
@@ -294,6 +341,8 @@ def main() -> int:
     if args.only in ("all", "control"):
         print("\n── 对照臂：不该出现的相能骗到多少份额 ──")
         cmd_two_phase(db, data, extra=CONTROLS)
+    if args.only in ("all", "guard"):
+        cmd_guard(db, data)
     return 0
 
 
