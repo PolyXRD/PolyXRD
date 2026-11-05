@@ -235,12 +235,33 @@ def _bundled_phase_count() -> str:
     return '内置默认库'
 
 
-def write_version(ver: str) -> int:
+#: flavor → VERSION.txt 首行变体名。未知值不回落到"Release"（那正是 P2-6 想
+#: 避免的"内部版自称正式版"），而是原样大写，至少让人看出不对劲。
+_FLAVOR_LABEL = {
+    "release": "Release",
+    "internal": "Internal Evaluation",
+}
+
+
+def _resolve_flavor(explicit: str | None = None) -> str:
+    """构建变体：显式参数 > 环境变量 POLYXRD_FLAVOR > release。
+
+    build.bat 在第 35 行就把 ``POLYXRD_FLAVOR`` 定好（默认 release），
+    所以这里读环境变量即可与构建链变体一致，无需再传参。
+    """
+    raw = (explicit or os.environ.get("POLYXRD_FLAVOR") or "release").strip()
+    return raw.lower() or "release"
+
+
+def write_version(ver: str, flavor: str | None = None) -> int:
     stamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    fl = _resolve_flavor(flavor)
+    label = _FLAVOR_LABEL.get(fl, fl.upper())
     text = (
-        f"PolyXRD v{ver} Release\n"
+        f"PolyXRD v{ver} {label}\n"
         f"Build Date: {stamp}\n"
         f"Version    : {ver}\n"
+        f"Flavor     : {fl}\n"
         "ICU: 依赖系统 icuuc shim (PySide6 6.11 不自带 ICU)\n"
         f"Databases: v4.1.0 起**内置默认库** COD-Inorg (polyDB, {_bundled_phase_count()}) ——\n"
         "           解压/安装即可检索, 无需任何下载或挂载。\n"
@@ -353,7 +374,7 @@ def write_portable_extras(ver: str = "") -> int:
 def main() -> int:
     if len(sys.argv) < 2:
         print('usage: _build_post.py [icu|bundle-polydb|db-layout|no-db|'
-          'version <ver>|portable-extras [ver]]')
+          'version <ver> [flavor]|portable-extras [ver]]')
         return 2
     cmd = sys.argv[1]
     if cmd == 'icu':
@@ -369,7 +390,9 @@ def main() -> int:
         if not ver:
             print('version 子命令需要版本号参数')
             return 2
-        return write_version(ver)
+        # 可选第三参数: flavor（缺省读 POLYXRD_FLAVOR，见 _resolve_flavor）
+        fl = sys.argv[3] if len(sys.argv) > 3 else None
+        return write_version(ver, fl)
     if cmd == 'portable-extras':
         ver = sys.argv[2] if len(sys.argv) > 2 else ''
         return write_portable_extras(ver)
