@@ -15,13 +15,18 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 
 from polyxrd.refinement.report import (
     UNSUPPORTED_OBS_TOL,
+    Finding,
     observed_peaks,
+    prioritise,
 )
+from polyxrd.services.rietveld_refiner import _finding_log_lines, _v5_diagnostics
 
 RNG = np.random.default_rng(20261105)
 
@@ -203,3 +208,106 @@ class TestPhaseUnsupported:
     def test_obs_tol_is_documented_threshold(self):
         """常量本身要被用到（防止以后改判据时忘记同步容差语义）。"""
         assert 0.0 < UNSUPPORTED_OBS_TOL <= 0.35
+
+
+# ── 界面只收 4 条：谁该露头 ─────────────────────────────────────────────
+class TestPrioritise:
+    """``prioritise``：同级内高价值码优先，别让无关 warn 把结论挤出去。
+
+    起因（2026-11-05 实测四相拟合）：``audit`` 的排序键是
+    ``(severity, code)``，全是 warn 时**纯按字母**，于是
+    AT_BOUND / BACKGROUND_TREND / HIGH_CORRELATION 三条"改了也看不出"
+    的提示占满前三，把 PHASE_FRACTION_UNVERIFIABLE（这份 wt% 到底能不
+    能用）挤到第 4；再多一条 NEGATIVE_CALC 就静默丢了。
+    """
+
+    @staticmethod
+    def _f(code, severity="warn", **ev):
+        return Finding(code=code, severity=severity, message=code,
+                       evidence=dict(ev))
+
+    def test_high_value_beats_alphabetical(self):
+        findings = [
+            self._f("AT_BOUND"), self._f("BACKGROUND_TREND"),
+            self._f("HIGH_CORRELATION"), self._f("NEGATIVE_CALC"),
+            self._f("PHASE_FRACTION_UNVERIFIABLE"),
+        ]
+        got = [f.code for f in prioritise(findings, limit=4)]
+        # 高价值两条（AT_BOUND / PHASE_FRACTION_UNVERIFIABLE）提到最前，
+        # 且保持各自在传入序列里的先后（稳定排序）。
+        assert got[:2] == ["AT_BOUND", "PHASE_FRACTION_UNVERIFIABLE"]
+        assert "NEGATIVE_CALC" not in got       # 字母最靠前的那条让位
+
+    def test_error_outranks_warn(self):
+        findings = [self._f("PHASE_FRACTION_UNVERIFIABLE"),
+                    self._f("RANK_DEFICIENT", "error")]
+        assert [f.code for f in prioritise(findings, limit=1)] == [
+            "RANK_DEFICIENT"]
+
+    def test_info_never_reaches_ui(self):
+        assert prioritise([self._f("AT_BOUND", "info")], limit=4) == []
+
+    def test_same_weight_keeps_input_order(self):
+        """同级同权重时用稳定排序，不因 sort 打乱（否则界面顺序随机跳动）。"""
+        findings = [self._f(f"ZZ_{i}") for i in range(6)]
+        assert [f.code for f in prioritise(findings, limit=2)] == [
+            "ZZ_0", "ZZ_1"]
+
+
+class TestServiceDiagnostics:
+    """服务层 ``_v5_diagnostics``：``diagnostics`` 少而准，``v5_findings`` 不丢。"""
+
+    @staticmethod
+    def _report(*codes):
+        return SimpleNamespace(findings=[
+            Finding(code=c, severity="warn", message=c, evidence={"x": 1.0})
+            for c in codes])
+
+    def test_full_findings_preserved(self):
+        rep = self._report("AT_BOUND", "PHASE_NOT_DETECTED")
+        diag, full = _v5_diagnostics(rep)
+        assert [d["code"] for d in full] == ["AT_BOUND", "PHASE_NOT_DETECTED"]
+        assert len(diag) == 2
+
+    def test_codes_carry_diag_prefix(self):
+        """``render_diagnostics`` 按 ``tr(code)`` 查表，前缀少了界面就显码名。"""
+        diag, _ = _v5_diagnostics(self._report("PHASE_UNSUPPORTED"))
+        assert diag[0]["code"] == "diag.refinement.phase_unsupported"
+
+    def test_noise_warns_do_not_crowd_out(self):
+        rep = self._report("AT_BOUND", "BACKGROUND_TREND", "HIGH_CORRELATION",
+                           "NEGATIVE_CALC", "PHASE_FRACTION_UNVERIFIABLE")
+        diag, _ = _v5_diagnostics(rep)
+        codes = [d["code"] for d in diag]
+        assert len(codes) == 4                 # 仍然只收 4 条，不刷屏
+        assert "diag.refinement.phase_fraction_unverifiable" in codes
+        # 纯按字母的话 NEGATIVE_CALC 会挤进来、把"份额不可信"顶掉
+        assert "diag.refinement.negative_calc" not in codes
+
+    def test_string_evidence_does_not_kill_group(self):
+        """``SCALE_CORRELATED`` 带相名（字符串）；旧代码一律 float() 会整组崩。"""
+        f = Finding(code="SCALE_CORRELATED", severity="warn", message="m",
+                    evidence={"phase": "WO3", "rho": -1.0})
+        diag, _ = _v5_diagnostics(SimpleNamespace(findings=[f]))
+        assert diag[0]["params"] == {"phase": "WO3", "rho": -1.0}
+
+    def test_dropped_findings_reach_the_log(self):
+        """P2-11：``diagnostics`` 只挂 4 条，剩下的一度**哪都看不到** ——
+        ``fit_params["v5_findings"]`` 全仓库没有消费者，界面只读 diagnostics。
+        现在全量进执行日志；这条锁住"被截掉的那条也在日志里且码名对得上"。"""
+        rep = self._report("AT_BOUND", "BACKGROUND_TREND", "HIGH_CORRELATION",
+                           "NEGATIVE_CALC", "PHASE_FRACTION_UNVERIFIABLE")
+        diag, full = _v5_diagnostics(rep)
+        lines = _finding_log_lines(full)
+        assert len(lines) == 5                     # 全量，不是 4
+        assert any("NEGATIVE_CALC" in ln for ln in lines)
+        shown = {d["code"].rsplit(".", 1)[-1].upper() for d in diag}
+        assert shown <= {ln.split()[2] for ln in lines}   # 界面码都能在日志里找到
+
+    def test_log_line_is_technical_not_prose(self):
+        """服务层日志不依赖 i18n：只写码名 + 数值，中文 message 不许混进去。"""
+        f = Finding(code="AT_BOUND", severity="warn", message="参数撞界了",
+                    evidence={"n_at_bound": 2, "note": "abc"})
+        (line,) = _finding_log_lines([{**f.as_dict()}])
+        assert "参数撞界了" not in line
+        assert "n_at_bound=2" in line and "note=abc" in line

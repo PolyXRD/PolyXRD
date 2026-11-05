@@ -30,6 +30,64 @@ from polyxrd.models.xrd_data import XRDData
 logger = logging.getLogger("polyxrd.rietveld_refiner")
 
 
+def _v5_diagnostics(report, *, limit: int = 4):
+    """把 ``FitReport`` 拆成「界面收的 ``diagnostics``」+「全量 ``v5_findings``」。
+
+    为什么单独拎出来做函数：界面只留前 ``limit`` 条 error/warn，而
+    ``FitReport.findings`` 的排序键是 ``(severity, code)`` —— 同级内**纯按
+    字母**。实测四相拟合里 ``AT_BOUND`` / ``BACKGROUND_TREND`` /
+    ``HIGH_CORRELATION`` 三条"改了也看不出"的 warn 排在前面，把决定"这份
+    wt% 能不能用"的 ``PHASE_FRACTION_UNVERIFIABLE`` 挤到第 4；再多一条
+    ``NEGATIVE_CALC``（字母更靠前）就静默丢掉了 —— 用户看到的正好是最没
+    用的那几条。``prioritise`` 在同级内把 ``HIGH_VALUE_CODES`` 提前。
+
+    码前缀必须是 ``diag.``：``render_diagnostics`` 一律按 ``tr(code)`` 查
+    翻译，而翻译表是 ``diag`` 段下的嵌套键（``diag.refinement.rank_deficient``）。
+    原来写的是裸 ``refinement.rank_deficient``，整组 v5 诊断在界面上都显示
+    成原始码名。
+    """
+    findings = list(getattr(report, "findings", None) or ())
+    v5_findings = [f.as_dict() for f in findings]
+    try:
+        from polyxrd.refinement import prioritise
+
+        picked = prioritise(findings, limit=limit)
+    except Exception:  # noqa: BLE001 - 旧版包/引擎缺失：退回顺序截断
+        picked = [f for f in findings if f.severity in ("error", "warn")][:limit]
+
+    diagnostics: list[dict] = []
+    for f in picked:
+        # evidence 里不全是数：``SCALE_CORRELATED`` 带相名（字符串）。原来
+        # 一律 float()，一个字符串就让**整组** v5 诊断抛异常被吞掉（界面上
+        # 一条都不显示，看着像没做诊断）。数值仍转 float，其余保留原文。
+        diagnostics.append({
+            "code": f"diag.refinement.{f.code.lower()}",
+            "params": {
+                k: (float(v) if isinstance(v, (int, float)) else str(v))
+                for k, v in f.evidence.items()
+            },
+        })
+    return diagnostics, v5_findings
+
+
+def _finding_log_lines(v5_findings) -> list[str]:
+    """全量 findings → 执行日志行（技术符号 + 数值，不含自然语言）。
+
+    界面只挂 4 条，被截掉的那些**必须**在别处留下一份可查的痕迹：全量数据
+    在 ``fit_params["v5_findings"]`` 里（项目文件能回读），但普通用户不会去
+    看 JSON，所以同时写进执行日志。措辞保持服务层"不依赖 i18n"的约定：
+    码名与 ``render_diagnostics`` 同一套，能对上界面已显示的那几条。
+    """
+    out: list[str] = []
+    for f in v5_findings or ():
+        ev = " ".join(
+            f"{k}={(f'{v:.4g}' if isinstance(v, float) else v)}"
+            for k, v in (f.get("evidence") or {}).items())
+        tag = f"[v5] finding {f.get('code')} {f.get('severity')}"
+        out.append(f"{tag}: {ev}" if ev else tag)
+    return out
+
+
 class RietveldRefiner:
     """Rietveld结构精修服务
 
@@ -1479,26 +1537,14 @@ class RietveldRefiner:
         diagnostics: list[dict] = []
         v5_findings: list[dict] = []
         try:
-            rep = build_report(prob, summary)
-            for f in rep.findings:
-                v5_findings.append(f.as_dict())
-                if f.severity in ("error", "warn") and len(diagnostics) < 4:
-                    # 码前缀必须是 ``diag.``：render_diagnostics 一律按
-                    # ``tr(code)`` 查翻译，而翻译表是 ``diag`` 段下的嵌套键
-                    # （``diag.refinement.rank_deficient``）。原来写的是裸
-                    # ``refinement.rank_deficient``，整组 v5 诊断在界面上都
-                    # 显示成原始码名。
-                    diagnostics.append({
-                        "code": f"diag.refinement.{f.code.lower()}",
-                        # evidence 里不全是数：新增的 SCALE_CORRELATED 带相名
-                        # （字符串）。原来一律 float()，一个字符串就让**整组**
-                        # v5 诊断抛异常被吞掉（界面上一条都不显示，看着像没做
-                        # 诊断）。数值仍转 float，其余保留原文。
-                        "params": {
-                            k: (float(v) if isinstance(v, (int, float)) else str(v))
-                            for k, v in f.evidence.items()
-                        },
-                    })
+            diagnostics, v5_findings = _v5_diagnostics(build_report(prob, summary))
+            # 界面只挂 4 条（多了刷屏），但**被截掉的不能凭空消失**：全量
+            # 逐条落到执行日志。日志按模块约定只写技术符号+数值（服务层不
+            # 依赖 i18n），码名与 `render_diagnostics` 用同一套，能对上界面
+            # 已显示的那几条。``fit_params["v5_findings"]`` 另存全量，项目
+            # 文件回读时还在。
+            for _line in _finding_log_lines(v5_findings):
+                log(_line)
         except Exception as e:  # noqa: BLE001
             log(f"[v5] report skipped: {type(e).__name__}: {e}")
 

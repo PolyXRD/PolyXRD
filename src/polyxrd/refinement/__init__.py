@@ -153,9 +153,11 @@ from polyxrd.refinement.quantitative import (
 from polyxrd.refinement.report import (
     Finding,
     FitReport,
+    HIGH_VALUE_CODES,
     ResidualStats,
     audit,
     build_report,
+    prioritise,
     residual_stats,
 )
 from polyxrd.refinement.orientation import select_po_directions
@@ -275,6 +277,7 @@ __all__ = [
     "brindley_tau",
     "build_reflections",
     "build_report",
+    "prioritise",
     "caglioti_fwhm",
     "cell_angle_cosines",
     "cell_ties",

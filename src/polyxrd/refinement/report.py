@@ -42,14 +42,27 @@ __all__ = [
     "Finding",
     "ResidualStats",
     "FitReport",
+    "HIGH_VALUE_CODES",
     "audit",
     "build_report",
     "observed_peaks",
+    "prioritise",
     "residual_stats",
 ]
 
 #: 严重度排序（越小越严重）
 SEVERITY_RANK: Dict[str, int] = {"error": 0, "warn": 1, "info": 2}
+
+#: 告诉用户「这个结果本身错了」的码 —— 界面只显示前几条时它们不能被挤掉
+HIGH_VALUE_CODES = frozenset({
+    "RANK_DEFICIENT",
+    "PHASE_NOT_DETECTED",
+    "PHASE_UNSUPPORTED",
+    "PHASE_FRACTION_UNVERIFIABLE",
+    "AT_BOUND",
+    "SCALE_CORRELATED",
+    "MICROABSORPTION_CLAMPED",
+})
 
 #: 「份额有没有谱线支撑」的判据（P2-10）—— 该相自身 I/Imax 到多少算强线
 UNSUPPORTED_STRONG_REL = 0.30
@@ -61,6 +74,22 @@ UNSUPPORTED_OVERLAP_TOL = 0.30
 UNSUPPORTED_BURY_RATIO = 2.0
 #: 观测峰与模型峰位的容差（模型反射表是 Bragg 位置、不含仪器零点，故另估偏移）
 UNSUPPORTED_OBS_TOL = 0.20
+
+
+def prioritise(findings: Sequence[Finding], limit: int = 4,
+               severities: Sequence[str] = ("error", "warn")) -> List[Finding]:
+    """挑出送进界面的前 ``limit`` 条（同级内 ``HIGH_VALUE_CODES`` 优先）。
+
+    为什么需要它：服务层只把前 4 条 error/warn 写进 ``diagnostics``，而
+    ``audit`` 的排序键是 ``(severity, code)`` —— 同级内**纯按字母**。实测
+    WO3+W20O58 那条 ``PHASE_FRACTION_UNVERIFIABLE`` 正好排第 4；再多一条
+    ``NEGATIVE_CALC``（字母更靠前）就会被静默截掉，而它恰恰是"这个 wt% 不可信"
+    的唯一提示。宁可少报一条无关紧要的提示，也不能把"结果本身错了"挤出去。
+    """
+    pool = [f for f in findings if f.severity in severities]
+    pool.sort(key=lambda f: (SEVERITY_RANK.get(f.severity, 9),
+                             0 if f.code in HIGH_VALUE_CODES else 1))
+    return pool[:limit]
 
 
 def _noise_sigma(y: np.ndarray) -> float:
