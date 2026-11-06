@@ -1289,12 +1289,41 @@ class RietveldRefiner:
         # ── 择优取向：方向/系数由 refine() 从 options 里摘下 ────────
         po_dir = kwargs.get("_po_direction")
         po_r = float(kwargs.get("_po_r", 1.0) or 1.0)
-        po_hkl = tuple(po_dir) if (po_dir and abs(po_r - 1.0) > 1e-9) else None
+        # 逐相入口（v5.3）：``_po_directions`` / ``_po_rs`` 可以是 list 或
+        # {相下标: 值}。真实多相试样里各相惯习面**不一样**（S3 只有萤石有
+        # (110)、S7 是高岭石 001 + 萤石 110），旧实现把**一个方向套给所有相**，
+        # 于是只有一相的 r 有意义、其余被钉在 1.0 —— 等于白给自由度还担风险。
+        _po_dirs = kwargs.get("_po_directions")
+        _po_rs = kwargs.get("_po_rs")
+
+        def _dir_for(i: int):
+            if _po_dirs is not None:
+                if isinstance(_po_dirs, dict):
+                    v = _po_dirs.get(i)
+                else:
+                    v = _po_dirs[i] if i < len(_po_dirs) else None
+                return tuple(int(round(float(t))) for t in v) if v else None
+            return tuple(po_dir) if po_dir else None
+
+        def _r_for(i: int) -> float:
+            if _po_rs is not None:
+                if isinstance(_po_rs, dict):
+                    return float(_po_rs.get(i, 1.0) or 1.0)
+                return float(_po_rs[i]) if i < len(_po_rs) else 1.0
+            return po_r
+
+        # 给了方向就用（r 的初值只影响起点，stage 4 会精修它）。
+        # 旧实现要求 ``|po_r−1| > 1e-9`` 才算"有 PO"，于是用户只传方向、
+        # 不传 r 时 **择优被静默丢弃** —— 实测 S3 因此停在 22.97%，而同方向
+        # 带 r 起点时是 12.53%（2026-11-06 复现）。
+        # 另一个同源 bug：``po_r`` 从未写进 PhaseBlock，所以 r 起点 1.2 / 1.5 /
+        # 0.8 三种取值给出**逐位相同**的结果（12.531）。
 
         blocks = [
             PhaseBlock(label=str(getattr(ph, "name", f"phase{i}") or f"phase{i}"),
                        structure=st, index=i,
-                       po_hkl=po_hkl,
+                       po_hkl=_dir_for(i),
+                       po_r=_r_for(i),
                        size_nm=float(kwargs.get("crystallite_nm", 0.0) or 0.0))
             for i, (ph, st) in enumerate(zip(phases, structures))
         ]
@@ -1335,9 +1364,11 @@ class RietveldRefiner:
         # 没有 PO 时这部分失配会被峰宽/晶胞吸收 —— 4-1/5-2/5-2b/5-3 输给
         # builtin 的差距基本都在这里。自动选择只做"投影收益"排序（单相列 ×
         # 其余相残差），不跑整拟合；门槛见 `refinement.orientation`（相对
-        # gain ≥0.2 且剩余失配占比 ≥0.005），不够就保持无 PO。
+        # gain ≥0.15 且剩余失配占比 ≥0.005），不够就保持无 PO。
+        # 判据按**逐相**：只给了一部分相显式方向时，其余相仍然参与自动挑选。
         auto_po: dict = {}
-        if po_hkl is None and bool(kwargs.get("auto_preferred_orientation", True)) \
+        if not any(b.po_hkl for b in blocks) \
+                and bool(kwargs.get("auto_preferred_orientation", True)) \
                 and mask.get("po", True) and len(blocks) <= 8:
             try:
                 from polyxrd.refinement import select_po_directions
@@ -1653,8 +1684,10 @@ class RietveldRefiner:
                 "v5_weight_basis_note": "Hill–Howard: W ∝ S·M_cell/V",
                 "v5_findings": v5_findings,
                 "v5_seed_notes": list(getattr(seeds, "notes", ()) or ()),
-                "v5_po_hkl": list(po_hkl) if po_hkl else None,
-                "v5_po_r": float(po_r) if po_hkl else 1.0,
+                # 逐相择优：每相一项（未启用为 None / 1.0）
+                "v5_po_hkl": [list(b.po_hkl) if b.po_hkl else None
+                              for b in prob.phases],
+                "v5_po_r": [float(b.po_r) for b in prob.phases],
                 # 位点补齐记录（无补齐则为空列表）：来源 + 匹配方式 + 位点数
                 "v5_structure_fills": structure_fills,
             },

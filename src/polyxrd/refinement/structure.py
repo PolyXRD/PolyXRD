@@ -146,7 +146,9 @@ class StructureModel:
                 from polyxrd.services.phase_cif import expand_sites_by_symmetry
 
                 expanded = expand_sites_by_symmetry(
-                    raw_sites, getattr(phase, "space_group", None)
+                    raw_sites, getattr(phase, "space_group", None),
+                    # CIF 自带非标准设置的显式对称操作时优先用它
+                    ops=getattr(phase, "symmetry_ops", None),
                 )
                 if expanded:
                     raw_sites = list(expanded)

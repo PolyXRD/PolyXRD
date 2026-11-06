@@ -744,6 +744,44 @@ class TestAutoPO:
                                    cutoff_fwhm=CUT)
         assert got == {}, got
 
+    def test_gain_in_gray_band_is_accepted(self):
+        """gain 落在 [0.15, 0.2) 的真实择优不能再被丢弃（2026-11-06）。
+
+        ``gain`` 是**相对 score₀ 的比值**：强相只要绝对收益够大就能让 Rwp
+        掉十个点，比值却仍压在 0.2 以下。S3 的 CaF2 正是 (110)/r=2.2、
+        ``gain=0.190``、Rwp 22.97 → 12.53 —— 旧阈值 0.2 让它整段被跳过。
+        这里用 r=0.65 的合成谱复现同一灰带（gain≈0.185、delta≈0.12）。
+        """
+        self.R_TRUE = 0.65
+        try:
+            y, prof = self._synth(True)
+        finally:
+            self.R_TRUE = 0.5
+        tr: list = []
+        got = select_po_directions(self.GRID, y, self._blocks(), prof,
+                                   cutoff_fwhm=CUT, trace=tr)
+        assert 0 in got, [(t["label"], round(t["gain"], 3),
+                           round(t["delta"], 4)) for t in tr]
+        assert 0.15 <= got[0]["gain"] < 0.2, got[0]["gain"]
+        # 显式给回旧阈值时必须仍被拒 —— 证明是"阈值"而不是判据本身在起作用
+        self.R_TRUE = 0.65
+        try:
+            y2, prof2 = self._synth(True)
+        finally:
+            self.R_TRUE = 0.5
+        assert select_po_directions(self.GRID, y2, self._blocks(), prof2,
+                                    cutoff_fwhm=CUT, min_gain=0.2) == {}
+
+    def test_gain_still_rejects_weak_texture(self):
+        """r=0.80 的弱织构（gain≈0.037）必须继续被拒，阈值不许一松到底。"""
+        self.R_TRUE = 0.80
+        try:
+            y, prof = self._synth(True)
+        finally:
+            self.R_TRUE = 0.5
+        assert select_po_directions(self.GRID, y, self._blocks(), prof,
+                                    cutoff_fwhm=CUT) == {}
+
     def test_absent_phase_is_not_textured(self):
         """谱里根本没有的第二相：基线得分趋零，比值会虚高（5-3 石英曾爆到
         32 倍），必须靠弱相门挡掉，否则 stage 4 会追着一个不存在的择优跑到

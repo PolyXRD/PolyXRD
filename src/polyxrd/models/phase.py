@@ -93,6 +93,12 @@ class Phase:
     # 放宽到 int|str。消费方 (phase_cif_export) 本来就用 ``isinstance(.., int)``
     # 判别, 非 int 会退回按名字解析, 因此放宽不改变既有行为。
     db_id: Optional[int | str] = None
+    # 显式对称操作 (pymatgen SymmOp 列表), **运行时字段、不参与序列化**。
+    # 仅当 CIF 自带 ``_symmetry_equiv_pos_as_xyz`` 且 ``space_group`` 符号是
+    # 非标准设置时由 ``phase_cif.cif_to_phase`` 填入 —— 此时按符号查标准设置
+    # 会得到错误的轨道多重度 (石英 ``P 32 2 1 S``: 3 个 Si 被展成 6 个)。
+    # ``compare=False`` 让 dataclass 等值比较不受影响（SymmOp 未实现 __eq__）。
+    symmetry_ops: Optional[list] = field(default=None, compare=False, repr=False)
 
     def get_reference_peaks(self) -> list[tuple[tuple[int, int, int], float, float]]:
         """获取参考峰的 (hkl, 2θ, 强度) 列表

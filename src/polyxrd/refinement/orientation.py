@@ -34,6 +34,14 @@
      "结构失配冒充择优"（Cristobalite 条目 bug）0.07…0.11 —— 0.11 与 0.62
      之间是空档，取 0.2 两侧都留余量。
 
+     2026-11-06 修正为 **0.15**：S3（CaF2+石英+锐钛矿+刚玉+金红石）的 CaF2
+     有真择优 (110)/r=2.2，``gain=0.190`` 却因差 0.01 被丢弃 —— 代价是整条
+     精修 Rwp **22.97% → 12.53%**（同一组数据、只差这个判据）。原因是
+     ``gain`` 是相对 ``score₀`` 的**比值**：强相（CaF2 ``score₀`` 4.1e4、
+     占总残差 33%）只要绝对收益大就足以让 Rwp 掉 10 pp，比值却仍压在 0.2
+     以下。0.15 仍在 0.11 与 0.62 的空档内，且合成谱 r=0.65（gain 0.185、
+     delta 0.121）自此可被采纳，r=0.80 以下（gain ≤0.037）依旧被拒。
+
 候选方向取**低指数面**（001/100/110/101）：层状矿物是 001、针状是 100/010、
 板状是 110。不做全局搜索 —— March–Dollase 只有一个自由度，方向选错时 r 会
 跑向边界，得分自然低，低指数候选已覆盖常见惯习。
@@ -73,7 +81,7 @@ def select_po_directions(
     cutoff_fwhm: Optional[float] = 12.0,
     candidates: Sequence[Sequence[int]] = DEFAULT_CANDIDATES,
     r_grid: Sequence[float] = DEFAULT_R_GRID,
-    min_gain: float = 0.2,
+    min_gain: float = 0.15,
     min_delta: float = 0.005,
     log=None,
     trace: Optional[list] = None,
@@ -84,7 +92,8 @@ def select_po_directions(
     写入 ``block.po_hkl`` / ``block.po_r`` / 刷新 ``block.table``，调用方直接
     用它建 ``PatternProblem`` 即可。
 
-    :param min_gain: 主判据 = 相对 isotropic（r=1）的得分提升比例，默认 0.2。
+    :param min_gain: 主判据 = 相对 isotropic（r=1）的得分提升比例，默认 0.15
+        （2026-11-06 由 0.2 下调，见模块 docstring 的标定说明）。
         标定依据（7 试样 21 相，基准报告 §十六）：真择优 0.62…16.4，各向同性
         与"结构失配冒充择优"（Cristobalite 条目）0.00…0.11 —— 中间是空档。
     :param min_delta: 兜底判据 = 纹理额外解释的剩余失配比例，默认 0.005。

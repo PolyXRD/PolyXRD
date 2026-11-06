@@ -25,6 +25,7 @@ from typing import Optional, Union
 import numpy as np
 
 from polyxrd.models.phase import Phase, LatticeParams
+from polyxrd.utils.formula_parser import VALID_ELEMENTS
 
 
 def _format_value(v) -> str:
@@ -84,6 +85,123 @@ def _element_from_label(label: str) -> str:
     return m.group(1) if m else ""
 
 
+def _normalise_element(sym: object) -> str:
+    """元素符号规范化：大小写纠正 + :data:`VALID_ELEMENTS` 校验，认不出返回 ``""``。
+
+    为什么需要 (2026-11-06)：COD/ICDD 派生 CIF 里 ``_atom_site_label`` 常写成
+    **全小写**（``mg1`` / ``c1`` / ``o2``），而 :func:`_element_from_label` 的
+    正则 ``[A-Z][a-z]?`` 对小写首字母匹配不到 → 返回 ``""`` →
+    :func:`expand_sites_by_symmetry` 在 ``if not elem`` 处**早退**，结构停在
+    非对称单元（方解石 3 个位点而非 30 个），模拟峰整体失真、Rwp 虚高到 60% 量级。
+    这里做宽松识别（``mg`` → ``Mg``）但**用元素表兜底**，避免把 ``Ow`` 之类
+    乱猜成元素。
+
+    与 :func:`_element_from_label` 的分工：后者是**严格**语义（只看首字母大写），
+    被多处生产代码复用，故不改它，只在本模块解析 CIF 时用本函数。
+    """
+    s = str(sym or "").strip()
+    if not s:
+        return ""
+    if s in VALID_ELEMENTS:
+        return s
+    # 'mg' / 'MG' / 'Mg2+' / 'Ca1a' → 'Mg' / 'Mg' / 'Mg' / 'Ca'
+    m = re.match(r"([A-Za-z]{1,2})", s)
+    if not m:
+        return ""
+    cand = m.group(1).capitalize()
+    return cand if cand in VALID_ELEMENTS else ""
+
+
+def _kv_value(s: str) -> str:
+    """``_key value`` 单行取值；值写在下一行时返回 ``""``（不抛 IndexError）。"""
+    parts = s.split(None, 1)
+    if len(parts) < 2:
+        return ""
+    return parts[1].strip().strip("'\"")
+
+
+#: CIF 里承载"对称操作三元组"的两套字段名（新旧 IUCr 命名）
+_SYMOP_KEYS = ("_symmetry_equiv_pos_as_xyz", "_space_group_symop_operation_xyz")
+
+#: CIF 行 tokenizer：尊重单/双引号（``1 'x, y, z'`` → ``["1", "x, y, z"]``）
+_CIF_ROW_TOKEN = re.compile(r"'([^']*)'|\"([^\"]*)\"|(\S+)")
+
+
+def _tokenize_cif_row(s: str) -> list[str]:
+    out: list[str] = []
+    for m in _CIF_ROW_TOKEN.finditer(s):
+        v = m.group(1)
+        if v is None:
+            v = m.group(2)
+        if v is None:
+            v = m.group(3)
+        out.append(v)
+    return out
+
+
+def _symbol_is_standard(space_group: object) -> bool:
+    """符号本身能否**不经任何后备清洗**被识别（即它指的是标准设置）。"""
+    sg = re.sub(r"\s*:\s*[A-Za-z0-9]{1,2}$", "", str(space_group or "").strip())
+    sg = re.sub(r"\s+", "", sg)
+    if not sg:
+        return False
+    try:
+        from pymatgen.symmetry.groups import SpaceGroup
+
+        SpaceGroup(sg)
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _parse_symop_xyz(cif_text: str) -> Optional[list]:
+    """解析 CIF 自带的显式对称操作 loop → ``SymmOp`` 列表；没有/解析失败 → ``None``."""
+    lines = [ln.strip() for ln in cif_text.splitlines()]
+    n = len(lines)
+    i = 0
+    while i < n:
+        if lines[i] != "loop_":
+            i += 1
+            continue
+        j = i + 1
+        cols: list[str] = []
+        while j < n and lines[j].startswith("_"):
+            cols.append(lines[j].split()[0].lower())
+            j += 1
+        rows: list[str] = []
+        while j < n and lines[j] and lines[j] != "loop_" \
+                and not lines[j].startswith("_"):
+            if not lines[j].startswith("#"):
+                rows.append(lines[j])
+            j += 1
+        if rows and cols:
+            for k, col in enumerate(cols):
+                if col not in _SYMOP_KEYS:
+                    continue
+                try:
+                    from pymatgen.core.operations import SymmOp
+                except Exception:  # noqa: BLE001 - 无 pymatgen 就别硬撑
+                    return None
+                # pymatgen 各版本方法名不一（新版 from_xyz_str，部分分支 from_xyz_string）
+                parse = (getattr(SymmOp, "from_xyz_str", None)
+                         or getattr(SymmOp, "from_xyz_string", None))
+                if parse is None:
+                    return None
+                ops = []
+                for r in rows:
+                    toks = _tokenize_cif_row(r)
+                    if len(toks) != len(cols):
+                        continue
+                    try:
+                        ops.append(parse(toks[k]))
+                    except Exception:  # noqa: BLE001 - 单行脏 → 跳过
+                        continue
+                if ops:
+                    return ops
+        i = j if j > i else i + 1
+    return None
+
+
 def space_group_ops(space_group: object) -> Optional[list]:
     """空间群符号 → 对称操作列表；**解析不出时返回 ``None``**。
 
@@ -102,17 +220,24 @@ def space_group_ops(space_group: object) -> Optional[list]:
     sg_clean = re.sub(r"\s+", "", sg_clean)
     if not sg_clean:
         return None
-    try:
-        from pymatgen.symmetry.groups import SpaceGroup
+    # 尾部单字母 setting 记号（石英 CIF 的 ``P 32 2 1 S``、方解石的 ``R-3cH``）
+    cands = [sg_clean]
+    if len(sg_clean) > 4 and sg_clean[-1].isalpha():
+        cands.append(sg_clean[:-1])
+    for cand in cands:
+        try:
+            from pymatgen.symmetry.groups import SpaceGroup
 
-        return list(SpaceGroup(sg_clean).symmetry_ops)
-    except Exception:  # noqa: BLE001 - 符号认不出 → 交给调用方决定
-        return None
+            return list(SpaceGroup(cand).symmetry_ops)
+        except Exception:  # noqa: BLE001 - 符号认不出 → 试下一个候选
+            continue
+    return None
 
 
 def expand_sites_by_symmetry(sites: list[dict], space_group: object,
                              max_sites: int = 2000,
-                             strict: bool = False) -> Optional[list[dict]]:
+                             strict: bool = False,
+                             ops: Optional[list] = None) -> Optional[list[dict]]:
     """把非对称单元位点按空间群对称操作展开成完整晶胞内容 (P1 全胞).
 
     **为什么需要** (v0.15.2 修复): COD CIF 的原子环一般只列非对称单元,
@@ -133,13 +258,18 @@ def expand_sites_by_symmetry(sites: list[dict], space_group: object,
 
         注意 ``strict=True`` 下 ``space_group`` 为空 / 认不出也算"展不开" →
         ``None``: 调用方拿不到空间群就不该假设位点是全胞。
+
+    :param ops: 显式对称操作列表（``pymatgen`` 的 ``SymmOp``）。给出时**直接用它**
+        而非按 ``space_group`` 查表 —— 用于 CIF 自带 ``_symmetry_equiv_pos_as_xyz``
+        且符号是**非标准设置**的情形（如石英的 ``P 32 2 1 S``：符号查标准设置
+        会把 3 个 Si 展开成 6 个，胞内原子数多一倍 → 结构因子与定量全错）。
     """
     import numpy as np
 
     out_sites = list(sites) if sites else []
     if not out_sites:
         return out_sites
-    ops = space_group_ops(space_group)
+    ops = list(ops) if ops else space_group_ops(space_group)
     if ops is None:  # 空间群缺失 / 符号认不出 → 不展开（原样返回）
         return None if strict else out_sites
     if len(ops) <= 1:  # P1 / C1 无对称操作 → 位点本身就是全胞
@@ -522,7 +652,11 @@ def cif_to_phase(cif_text: str, fallback_name: str = "phase") -> Phase:
             if len(parts) >= len(atom_cols):
                 row = dict(zip(atom_cols, parts))
                 lbl = row.get("_atom_site_label", "X1")
-                elem = row.get("_atom_site_type_symbol") or _element_from_label(lbl)
+                # ``_atom_site_type_symbol`` 缺列 / label 小写都要能认出元素
+                # （见 :func:`_normalise_element` 的注释：认不出 → 展开被跳过）
+                elem = (_normalise_element(row.get("_atom_site_type_symbol"))
+                        or _normalise_element(lbl)
+                        or _element_from_label(lbl))
                 try:
                     sites.append({
                         "label": lbl,
@@ -541,11 +675,17 @@ def cif_to_phase(cif_text: str, fallback_name: str = "phase") -> Phase:
             atom_cols = []
         # 单值字段
         if s.startswith("_chemical_name_common"):
-            name = s.split(None, 1)[1].strip().strip("'\"") or name
+            name = _kv_value(s) or name
         elif s.startswith("_chemical_formula_sum"):
-            formula = s.split(None, 1)[1].strip().strip("'\"")
+            formula = _kv_value(s)
         elif s.startswith("_space_group_name_H-M_alt"):
-            space_group = s.split(None, 1)[1].strip().strip("'\"")
+            space_group = _kv_value(s)
+        elif s.startswith("_symmetry_space_group_name_H-M") and not space_group:
+            # 非 IUCr 首选字段名，但 COD/ICDD 派生 CIF 普遍用它
+            # （本项目 7 组实测 CIF 全是 ``_symmetry_space_group_name_H-M 'R -3 c'``）。
+            # 只认 ``_space_group_name_H-M_alt`` 会让 space_group 恒为空 →
+            # 结构不展开 → 峰位/强度全错。
+            space_group = _kv_value(s)
         elif s.startswith("_cell_length_a"):
             try:
                 cell.a = float(s.split()[1].split("(")[0])
@@ -577,10 +717,19 @@ def cif_to_phase(cif_text: str, fallback_name: str = "phase") -> Phase:
             except (ValueError, IndexError):
                 pass
 
+    # 非标准设置（符号查不到标准操作 / 要剥尾部 setting 记号才认）时，
+    # 必须用 CIF 自带的显式对称操作，否则轨道多重度会错：
+    # 石英 ``P 32 2 1 S`` 按标准 P3221 展开会得到 6 个 Si（应为 3 个）→ 胞内
+    # 原子数翻倍 → 结构因子与定量全错。标准设置下不启用（保持既有行为不变）。
+    explicit_ops: Optional[list] = None
+    if space_group and not _symbol_is_standard(space_group):
+        explicit_ops = _parse_symop_xyz(cif_text)
+
     return Phase(
         name=name,
         formula=formula,
         space_group=space_group,
         lattice=cell,
         atomic_sites=sites,
+        symmetry_ops=explicit_ops,
     )
