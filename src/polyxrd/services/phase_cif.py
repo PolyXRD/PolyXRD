@@ -123,6 +123,9 @@ def _kv_value(s: str) -> str:
 #: CIF 里承载"对称操作三元组"的两套字段名（新旧 IUCr 命名）
 _SYMOP_KEYS = ("_symmetry_equiv_pos_as_xyz", "_space_group_symop_operation_xyz")
 
+#: 判断一个 ``_atom_site_*`` loop 是不是**位点表**（而不是热参数表）的依据
+_ATOM_COORD_COLS = ("_atom_site_fract_x", "_atom_site_fract_y", "_atom_site_fract_z")
+
 #: CIF 行 tokenizer：尊重单/双引号（``1 'x, y, z'`` → ``["1", "x, y, z"]``）
 _CIF_ROW_TOKEN = re.compile(r"'([^']*)'|\"([^\"]*)\"|(\S+)")
 
@@ -139,9 +142,26 @@ def _tokenize_cif_row(s: str) -> list[str]:
     return out
 
 
+#: 冒号设置记号：``:1`` / ``:2`` 是**原点选择**，``:H`` / ``:R`` 是**轴设置**
+_SETTING_SUFFIX = re.compile(r":\s*[A-Za-z0-9]{1,2}$")
+
+
+def has_origin_choice(space_group: object) -> bool:
+    """符号是否显式声明了原点选择（``I 41/a m d :2`` 的 ``:2``）。"""
+    return bool(re.search(r":\s*[12]\s*$", str(space_group or "").strip()))
+
+
 def _symbol_is_standard(space_group: object) -> bool:
-    """符号本身能否**不经任何后备清洗**被识别（即它指的是标准设置）。"""
-    sg = re.sub(r"\s*:\s*[A-Za-z0-9]{1,2}$", "", str(space_group or "").strip())
+    """符号本身能否**不经任何后备清洗**被识别（即它指的是标准设置）。
+
+    ``:1`` / ``:2``（原点选择）一律算**非标准**：pymatgen 的默认设置未必是
+    CIF 声明的那一个（锆石 ``I 41/a m d :2`` vs pymatgen 默认 choice 1），
+    这种 CIF 自带的显式对称操作才是权威 —— 返回 ``False`` 让调用方走
+    ``_parse_symop_xyz`` 路径。
+    """
+    if has_origin_choice(space_group):
+        return False
+    sg = _SETTING_SUFFIX.sub("", str(space_group or "").strip())
     sg = re.sub(r"\s+", "", sg)
     if not sg:
         return False
@@ -205,25 +225,40 @@ def _parse_symop_xyz(cif_text: str) -> Optional[list]:
 def space_group_ops(space_group: object) -> Optional[list]:
     """空间群符号 → 对称操作列表；**解析不出时返回 ``None``**。
 
-    与 :func:`expand_sites_by_symmetry` 共用同一套符号清洗（剥 setting 后缀
-    ``:H`` / ``:R``、去空格：``R -3 c :H`` → ``R-3c``）。
+    符号清洗顺序（**先保后缀、后降级**）：
+    ``I 41/a m d :2`` → ``I41/amd:2``（原样）→ ``I41/amd``（剥设置后缀）
+    → ``I41/am``（剥尾部单字母 setting 记号）。
 
     为什么单独暴露：展开函数对"解析失败"是**原样返回**，调用方看不出
     "本来就是全胞"与"展不开"的区别 —— v4.4.0 验收里 polyDB 的
     ``_expanded_sites`` 正是因此把非对称单位当全胞用了（真实库
     555/77,500 条目命中）。需要区分时先用本函数探路。
+
+    **设置后缀必须保留**（2026-11-06 锆石事故）：pymatgen 的
+    ``SpaceGroup("I41/amd")`` 默认是 **origin choice 1**，而 COD 的锆石 CIF
+    声明 ``I 41/a m d :2``。旧实现无条件剥掉 ``:2`` → 用 choice-1 的 32 个
+    操作去展开 choice-2 的坐标，``4a``/``4b`` 不再是特殊位置，Zr、Si 轨道
+    各**翻倍**（4→8、4→8，O 的 16h 侥幸不变）→ 胞内 32 原子（应 24）、
+    ``M_cell`` 1210.46（应 733.22）、结构因子与定量全错。修后
+    ``orbit((0,0.75,0.125)) == 4``。
+
+    同类"两个原点选择"的空间群：``Fd-3m``/``Fd-3``/``I41/amd``/``I41/acd``/
+    ``Ia-3d``/``I-43d``/``Pn-3n`` 等 —— 全部靠保后缀解决。
     """
     sg_raw = str(space_group or "").strip()
     if not sg_raw:
         return None
-    sg_clean = re.sub(r"\s*:\s*[A-Za-z0-9]{1,2}$", "", sg_raw)
-    sg_clean = re.sub(r"\s+", "", sg_clean)
-    if not sg_clean:
+    sg_tight = re.sub(r"\s+", "", sg_raw)
+    if not sg_tight:
         return None
-    # 尾部单字母 setting 记号（石英 CIF 的 ``P 32 2 1 S``、方解石的 ``R-3cH``）
-    cands = [sg_clean]
-    if len(sg_clean) > 4 and sg_clean[-1].isalpha():
-        cands.append(sg_clean[:-1])
+    # ① 原样（保留 :1/:2/:H/:R）；② 剥冒号后缀；③ 再剥尾部单字母 setting
+    cands: list[str] = [sg_tight]
+    sg_clean = _SETTING_SUFFIX.sub("", sg_tight)
+    if sg_clean and sg_clean != sg_tight:
+        cands.append(sg_clean)
+    for base in list(cands):
+        if len(base) > 4 and base[-1].isalpha() and base[:-1] not in cands:
+            cands.append(base[:-1])
     for cand in cands:
         try:
             from pymatgen.symmetry.groups import SpaceGroup
@@ -532,7 +567,11 @@ def phase_to_cif_text(phase: Phase) -> str:
     emit: list[tuple[dict, int]] = [(s, 1) for s in sites]
     emit_sg = sg
     ops = space_group_ops(phase.space_group)
-    if sites and ops is not None:
+    # 原点选择（``:1``/``:2``）的相**不做**归并：``sg`` 是剥掉后缀的符号，而
+    # 归并出的代表点坐标属于 CIF 声明的那个 choice —— 两者拼在一起会让
+    # 下游（GSAS-II/MAUD）按另一个 choice 展开，原子位置与多重度全错。
+    # 宁可退到"全胞 + P1"（语义无歧义，见下方注释），也不赌对方认哪个设置。
+    if sites and ops is not None and not has_origin_choice(phase.space_group):
         reduced = reduce_sites_to_asymmetric(sites, phase.space_group)
         if reduced is not None and _same_site_set(
             expand_sites_by_symmetry([s for s, _ in reduced], phase.space_group),
@@ -644,19 +683,29 @@ def cif_to_phase(cif_text: str, fallback_name: str = "phase") -> Phase:
         # _atom_site_* 列头 (累积到 atom_cols)
         if s.startswith("_atom_site_"):
             atom_cols.append(s)
-            in_atom_loop = True
+            # 只有含分数坐标列的 loop 才是原子位点表。``_atom_site_aniso_*``
+            # 同前缀但是**热参数** loop —— 当成原子表会造出一批坐标 (0,0,0) 的
+            # 假原子（Muscovite 12 个、Gehlenite 7 个、Zircon 3 个 "X1"），
+            # 它们混进 ``Phase.atomic_sites`` 后一路带到导出 CIF 里。
+            in_atom_loop = any(c in _ATOM_COORD_COLS for c in atom_cols)
             continue
         # 数据行 (非 _ 开头, 在 atom loop 内)
         if not s.startswith("_") and in_atom_loop and atom_cols:
             parts = s.split()
             if len(parts) >= len(atom_cols):
                 row = dict(zip(atom_cols, parts))
+                if not all(c in row for c in _ATOM_COORD_COLS):
+                    continue  # 没有分数坐标 → 不是位点行（缺坐标不能默认 0）
                 lbl = row.get("_atom_site_label", "X1")
                 # ``_atom_site_type_symbol`` 缺列 / label 小写都要能认出元素
                 # （见 :func:`_normalise_element` 的注释：认不出 → 展开被跳过）
                 elem = (_normalise_element(row.get("_atom_site_type_symbol"))
                         or _normalise_element(lbl)
                         or _element_from_label(lbl))
+                if elem and elem not in VALID_ELEMENTS:
+                    # 占位符（AMCSD 的 "X"、空位标记）不是元素 —— 留着会让
+                    # ``expand_sites_by_symmetry`` 展开出一整条假轨道
+                    elem = ""
                 try:
                     sites.append({
                         "label": lbl,
