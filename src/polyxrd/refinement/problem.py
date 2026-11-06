@@ -100,6 +100,9 @@ class PhaseBlock:
     size_nm: float = 0.0
     strain: float = 0.0
     po_r: float = 1.0
+    #: Legendre（纤维对称）织构系数 (c2, c4, c6, c8)；空元组 = 不用该模型。
+    #: 长度决定放开几个自由度，是"模型开关"而不是"结果"
+    po_c: Tuple[float, ...] = ()
     b_overall: float = 0.0
     scale: float = 1.0
     table: Optional[ReflectionTable] = None
@@ -423,9 +426,21 @@ class PatternProblem:
             # r 的界取 0.2…5.0（v5.1）：March–Dollase 的物理区间，超出这个
             # 范围基本不是"择优"而是模型在吸收别的误差（假择优会把 r 推到
             # 边界并让 stage 4 反复试探，5-3 实测单次精修从 30 s 涨到 20 min）。
+            # Legendre 织构启用时 MD 的 r 必须钉住：``P = W_MD(r)·P_leg``
+            # 两者作用在同一个 cosα 上，一起放开会互相抵消（秩亏 + 定量漂移）。
             ps.add(Parameter(f"{p}.po.r", float(ph.po_r), 0.2, 5.0,
-                             stage=st["po"], fixed=ph.po_hkl is None,
+                             stage=st["po"],
+                             fixed=ph.po_hkl is None or bool(ph.po_c),
                              label=f"{ph.label} 择优 r"))
+            # Legendre（纤维对称）织构级数：``po_c`` 的长度就是自由度个数
+            # —— 空元组 = 只用 March–Dollase（旧行为，逐位不变）。系数上限
+            # ±1.5 是"别让级数在 cosα 上振出第二个假峰"的护栏（S3 的萤石
+            # 只有 18 条反射，MAUD 的 6 阶 Harmonic 在那里给了 −5.8 的系数）。
+            for _k, _v in enumerate(ph.po_c):
+                _l = 2 * (_k + 1)
+                ps.add(Parameter(f"{p}.po.c{_l}", float(_v), -1.5, 1.5,
+                                 stage=st["po"], fixed=ph.po_hkl is None,
+                                 label=f"{ph.label} 织构 c{_l}"))
             # 整体温度因子 B（每相）：|F|²·exp(−2B s²)，只依赖各反射自身 d，
             # 因此不需要重算结构因子。与原子级 biso（stage 6）的区别是它把
             # 所有位点一起压 —— 缺它会系统性高估高角强度（builtin W22-a 同口径，
@@ -591,6 +606,9 @@ class PatternProblem:
                 g(f"{p}.sizec", 0.0) or 0.0, self.wavelength, self.profile.k_size)
             ph.strain = float(g(f"{p}.strain", ph.strain) or 0.0)
             ph.po_r = float(g(f"{p}.po.r", ph.po_r) or 1.0)
+            if ph.po_c:
+                ph.po_c = tuple(float(g(f"{p}.po.c{2 * (k + 1)}", v) or 0.0)
+                                for k, v in enumerate(ph.po_c))
             ph.b_overall = float(g(f"{p}.bovr", ph.b_overall) or 0.0)
             ph.scale = float(g(f"{p}.scale", ph.scale) or 0.0)
 
@@ -699,6 +717,7 @@ class PatternProblem:
     def _col_key(self, ph) -> tuple:
         """单列的完整输入：结构键 + 样品层标量。"""
         return ph.structure_key() + (ph.size_nm, ph.strain, ph.po_r,
+                                     tuple(round(float(c), 10) for c in ph.po_c),
                                      ph.b_overall)
 
     def design(self) -> Tuple[np.ndarray, np.ndarray]:
@@ -734,7 +753,7 @@ class PatternProblem:
                 continue
             ph.ensure_table((tmin, tmax), (self.wavelength,))
             spec = PhaseSpec(table=ph.table, size_nm=ph.size_nm,
-                             strain=ph.strain, po_r=ph.po_r,
+                             strain=ph.strain, po_r=ph.po_r, po_c=ph.po_c,
                              b_overall=ph.b_overall)
             self._basis[:, i] = phase_pattern(
                 self.two_theta, spec, self.profile,
@@ -754,7 +773,9 @@ class PatternProblem:
         prof = (self.profile.u, self.profile.v, self.profile.w, self.profile.x,
                 self.profile.y, self.profile.z, self.profile.eta,
                 self.profile.asymmetry)
-        sample = tuple((ph.size_nm, ph.strain, ph.po_r, ph.b_overall)
+        sample = tuple((ph.size_nm, ph.strain, ph.po_r,
+                        tuple(round(float(c), 10) for c in ph.po_c),
+                        ph.b_overall)
                        for ph in self.phases)
         return cells + prof + sample + (self.shift, self.disp,
                                        self.roughness.key())

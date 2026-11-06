@@ -1196,9 +1196,24 @@ class RietveldRefiner:
         # 峰形之后（r 的效应是强度重分布，与峰宽无关）。无 PO 的相该参数是
         # fixed，stage 4 在"全部相都无惯习面"时会被整段裁掉，不白耗算力。
         "fast": {"bg_deg": 12.0, "protocol": ((2, 40), (3, 40), (4, 30))},
+        # stage 6 = 结构（独立位点坐标 / Biso）。**只在 precise 档**：它是
+        # 2026-11-06 对标 MAUD 定下来的最后一个强度层自由度，7 组实测把
+        # 平均 Rwp/MAUD 从 1.36 拉到 1.09（S6b 0.67、S5b 0.85、S4b 0.94 反超）。
+        # 代价是雅可比多 N 列、跑时约 ×1.6~4.8 —— 与"精确档"的定位一致。
+        # 期间量过：bovr 在 stage 6 生效后再放开只多 0.07 pp（S7 16.53→16.46）
+        # 却让耗时翻倍（132 s→232 s），说明**整体 B 只是 Biso 的粗糙替身**，
+        # 所以 `refine_b_overall` 继续默认冻结，不因为 stage 6 顺带打开。
         "precise": {"bg_deg": 8.0,
-                    "protocol": ((2, 150), (3, 120), (4, 40), (5, 80))},
+                    "protocol": ((2, 150), (3, 120), (4, 40), (5, 80),
+                                 (6, 80))},
     }
+
+    #: stage 6 自由参数上限（坐标 ×3 + Biso，按**独立位点**计）。
+    #: 实测最重的 5b（高岭石 13 + 针铁矿 4 + 氟磷灰石 7 + 石英 2 + 钙铝黄长石 7
+    #: = 132 名义值）仍在 160 以内且收益最大（18.43→12.66），所以不按它设卡；
+    #: 这道保险丝只拦"独立位点上百、反射数却不够"的病态结构（大分子 CIF /
+    #: 超胞未归并），那时 stage 6 只会把系统误差拟合成假键长。
+    V5_ATOM_MAX_PARAMS: ClassVar[int] = 160
 
     #: 峰窗半宽（FWHM 倍数）。默认值是 ``pattern.DEFAULT_CUTOFF_FWHM`` 的 25，
     #: 在真实试样上代价极高：窗口长度 ∝ cutoff，每次峰形参数变动都要重建整个
@@ -1319,6 +1334,21 @@ class RietveldRefiner:
         # 另一个同源 bug：``po_r`` 从未写进 PhaseBlock，所以 r 起点 1.2 / 1.5 /
         # 0.8 三种取值给出**逐位相同**的结果（12.531）。
 
+        # 织构模型（v5.3 P0-B）：``march_dollase``（默认，单参数）| ``legendre``
+        # （纤维对称偶阶级数）。选 legendre 时每相放开 ``texture_degree//2`` 个
+        # 系数（默认 6 阶 → c2/c4/c6），MD 的 r 同时被钉住（两者作用在同一个
+        # cosα 上，一起放开会互相抵消）。**默认仍是 MD** —— 级数是 opt-in，
+        # 与 v5.2 的 SR/微吸收同一策略：新自由度先证明净正收益再改默认。
+        _tex_model = str(kwargs.get("texture_model", "march_dollase")
+                         or "march_dollase").strip().lower()
+        _tex_on = _tex_model in ("legendre", "fiber", "harmonic")
+        try:
+            _tex_deg = int(kwargs.get("texture_degree", 6) or 6)
+        except (TypeError, ValueError):
+            _tex_deg = 6
+        _tex_deg = max(2, min(8, _tex_deg))
+        _tex_n = max(1, _tex_deg // 2)
+
         blocks = [
             PhaseBlock(label=str(getattr(ph, "name", f"phase{i}") or f"phase{i}"),
                        structure=st, index=i,
@@ -1383,6 +1413,17 @@ class RietveldRefiner:
             except Exception as e:  # noqa: BLE001 - 选择失败不该影响精修
                 log(f"[v5] po auto skipped: {type(e).__name__}: {e}")
                 auto_po = {}
+
+        # 织构级数只在**有织构轴**的相上启用：没有 po_hkl 就没有 cosα，
+        # ``reweight_texture`` 拿不到 po_detail，放出来的系数列恒零。
+        if _tex_on and mask.get("po", True):
+            n_tex = 0
+            for b in blocks:
+                if b.po_hkl:
+                    b.po_c = (0.0,) * _tex_n
+                    n_tex += 1
+            log(f"[v5] texture model=legendre degree={_tex_deg} "
+                f"phases={n_tex}/{len(blocks)}")
 
         # 表面粗糙度（v5.2）：整样品一个参数，Sidey 单参数模型。
         # 默认 ``none``（零开销，结果与 v5.1 逐位一致）；显式给
@@ -1494,12 +1535,51 @@ class RietveldRefiner:
         except Exception as e:  # noqa: BLE001 - 播种失败不该阻断精修
             log(f"[v5] seed skipped: {type(e).__name__}: {e}")
 
-        protocol = [StageSpec(st, min(int(it), max(10, max_cycles * 20)))
+        # 注意 ``StageSpec`` 的第二个位置参数是 **label**，不是 ``max_iter``
+        # （签名 ``StageSpec(stage, label="", max_iter=100, method="auto")``）。
+        # 这里曾经写成 ``StageSpec(st, min(it, ...))`` —— 迭代预算被当成展示名，
+        # ``max_iter`` 一直取默认 100，于是**档位表里的 150/120/40/80 与
+        # ``max_cycles`` 从来没生效过**，唯一线索是执行日志里每段都显示 ``≤100``。
+        # 已改为关键字传参；守卫见 ``tests/test_v53_stage6.py::TestProtocolBudget``。
+        protocol = [StageSpec(st, max_iter=min(int(it), max(10, max_cycles * 20)))
                     for st, it in tier["protocol"]]
         if not any(b.po_hkl for b in blocks):
             # 所有相都无惯习面时 stage 4 零自由参数，排进去只会白耗 patience
             # （自动 PO 可能只给其中一部分相挑到方向，只要有一相有就保留）
             protocol = [s for s in protocol if s.stage != 4]
+
+        # ── 结构层（stage 6）：三道闸 ─────────────────────────────
+        # ① 档位协议里根本没有 stage 6（fast 档）→ 参数是自由的但从不释放，
+        #    报"精修过结构"就是假话，计 0；
+        # ② 用户显式关掉（`refine_structure=False`）→ 整段裁掉；
+        # ③ 没有任何独立位点（免结构相 / 全被特殊位置锁死）→ 零自由参数，
+        #    排进去只会让 patience 白等；
+        # ④ 自由参数超过 `V5_ATOM_MAX_PARAMS` → 病态结构，宁可不动结构。
+        #
+        # ``v5_atom_params`` 的语义是"**这一轮真的放开了几个原子参数**"，
+        # 不是"参数册里有多少个不 fixed 的原子参数" —— 两者在 fast 档不等
+        # （实测 16 vs 0），报告侧据此判断结构有没有被精修过，不能混。
+        n_atom_free = 0
+        if any(s.stage == 6 for s in protocol):
+            n_atom_free = sum(1 for n in prob.params.names()
+                              if ".atom" in n and not prob.params[n].fixed)
+            if not bool(kwargs.get("refine_structure", True)):
+                protocol = [s for s in protocol if s.stage != 6]
+                n_atom_free = 0
+                log("[v5] stage 6 (structure) disabled by "
+                    "refine_structure=False")
+            elif n_atom_free == 0:
+                protocol = [s for s in protocol if s.stage != 6]
+                log("[v5] stage 6 (structure) skipped: no free atomic parameter")
+            elif n_atom_free > self.V5_ATOM_MAX_PARAMS:
+                protocol = [s for s in protocol if s.stage != 6]
+                log(f"[v5] stage 6 (structure) skipped: {n_atom_free} free "
+                    f"atomic parameters > cap {self.V5_ATOM_MAX_PARAMS} "
+                    "(unmerged or over-large structure)")
+                n_atom_free = 0
+            else:
+                log(f"[v5] stage 6 (structure): {n_atom_free} free atomic "
+                    "parameters")
 
         # 样品展宽（stage 5）一启用，就把仪器洛伦兹 X/Y 钉住：X 与 4ε、Y 与
         # Kλ/D 是逐字相同的基函数，一起放开只有它们的和可辨识（§十七）。
@@ -1688,6 +1768,18 @@ class RietveldRefiner:
                 "v5_po_hkl": [list(b.po_hkl) if b.po_hkl else None
                               for b in prob.phases],
                 "v5_po_r": [float(b.po_r) for b in prob.phases],
+                # 织构级数（v5.3 P0-B）：模型名 + 逐相系数；未启用时 degree=0
+                "v5_texture_model": ("legendre" if _tex_on else "march_dollase"),
+                "v5_texture_degree": (int(_tex_deg) if _tex_on else 0),
+                "v5_texture_coef": [
+                    [round(float(prob.params.get(f"phase{i}.po.c{2 * (k + 1)}",
+                                                 0.0) or 0.0), 5)
+                     for k in range(len(b.po_c))]
+                    for i, b in enumerate(prob.phases)],
+                # 结构层（stage 6）实际放开的自由参数个数：0 = 未启用
+                # （快档 / 检出关掉 / 无独立位点 / 超上限），报告侧据此说明
+                # "晶胞与结构有没有真的精修过"。
+                "v5_atom_params": int(n_atom_free),
                 # 位点补齐记录（无补齐则为空列表）：来源 + 匹配方式 + 位点数
                 "v5_structure_fills": structure_fills,
             },

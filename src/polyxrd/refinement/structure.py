@@ -307,12 +307,90 @@ class ReflectionTable:
 
         ``r == 1`` 或无明细时直接返回原数组（零开销）。
         """
-        if self.po_detail is None or not np.isfinite(r) or abs(float(r) - 1.0) < 1e-12:
+        return self.reweight(r)
+
+    def reweight(self, r: float = 1.0, coefs: Sequence[float] = ()) -> np.ndarray:
+        """织构重加权总入口：March–Dollase（``r``）× Legendre 级数（``coefs``）。
+
+        两者都是**同一个 cosα 上的权重**，所以必须先相乘再一次归并 —— 分别
+        调用会得到两次 ``reduceat`` 的结果，第二个调用看到的已是归并后的数组，
+        峰数对不上。
+
+        ``r == 1`` 且 ``coefs`` 全零时返回原数组（零开销）。
+        """
+        if self.po_detail is None:
+            return self.intensity
+        use_md = np.isfinite(r) and abs(float(r) - 1.0) > 1e-12
+        use_tex = bool(coefs) and any(abs(float(c)) > 1e-12 for c in coefs)
+        if not use_md and not use_tex:
             return self.intensity
         values, cos_a, offsets = self.po_detail
-        weight = march_dollase_weight(cos_a, r)
+        weight = None
+        if use_md:
+            weight = march_dollase_weight(cos_a, r)
+        if use_tex:
+            tex = legendre_texture_weight(cos_a, coefs)
+            weight = tex if weight is None else weight * tex
         seg = values * weight
         return np.add.reduceat(seg, offsets[:-1]) if seg.size else self.intensity
+
+    def reweight_texture(self, coefs: Sequence[float]) -> np.ndarray:
+        """按 Legendre（纤维对称）织构级数重加权，返回新的 ``intensity``。
+
+        与 ``reweight_po`` 的区别：March–Dollase 是**一个**形状固定的分布
+        （``r`` 一个自由度），这里放开成 ``P(cosα) = 1 + Σ c_l·P_l(cosα)``
+        的偶阶级数 —— 片状相的真实取向分布不是 MD 那种单峰形状（XRD 压片
+        样品里常是"基面极强 + 非基面偏弱 + 中间过渡"），一个 r 拟合不了。
+
+        ``coefs`` 只用偶数阶（l = 2, 4, 6, 8…）：极图必须满足
+        ``P(cosα) = P(−cosα)``（晶体的 +d 与 −d 是同一组面），奇价项恒零。
+
+        **球面平均恒为 1**（``∮P_l dΩ = 0, l>0``）—— 这是选 Legendre 而不是
+        随手写个函数的核心理由：定量分析（Hill–Howard）用的是"随机取向"的
+        强度基准，取向分布的平均若不是 1，标度就会系统性带偏 wt%。MAUD 的
+        Harmonic 模型在 S7 高岭石上跑出 **−2.43** 的负因子（``_rita_harmonic_
+        cut_negative false``），那种解连强度正定性都没有；这里统一钳到
+        ``TEXTURE_FLOOR`` 之上，宁可少拟合一点，也不给出非物理的负强度。
+        """
+        coefs = tuple(float(c) for c in (coefs or ()))
+        if self.po_detail is None or not coefs or not any(abs(c) > 1e-12 for c in coefs):
+            return self.intensity
+        return self.reweight(1.0, coefs)
+
+
+#: 织构权重下限：低于它的取向概率被钳住，防止强度变负
+TEXTURE_FLOOR = 0.02
+
+#: 偶数阶 Legendre 多项式（P2/P4/P6/P8），显式展开比 ``Legendre.basis`` 快，
+#: 且避免每次调用都构造对象（design 重建是热点路径）
+_LEGENDRE_EVEN = (
+    lambda x: 0.5 * (3.0 * x * x - 1.0),
+    lambda x: 0.125 * (35.0 * x ** 4 - 30.0 * x * x + 3.0),
+    lambda x: 0.0625 * (231.0 * x ** 6 - 315.0 * x ** 4 + 105.0 * x * x - 5.0),
+    lambda x: 0.0078125 * (6435.0 * x ** 8 - 12012.0 * x ** 6
+                           + 6930.0 * x ** 4 - 1260.0 * x * x + 35.0),
+)
+
+
+def legendre_texture_weight(cos_alpha, coefs: Sequence[float],
+                            floor: float = TEXTURE_FLOOR) -> np.ndarray:
+    """纤维对称织构权重 ``P(cosα) = 1 + Σ c_l·P_l(cosα)``，``l = 2,4,6,8``。
+
+    :param coefs: 依次对应 l=2,4,6,8 的系数；多于 4 个的部分忽略。
+    :param floor: 权重下限（物理上强度不能为负）。
+    """
+    cos_a = np.asarray(cos_alpha, dtype=float)
+    if cos_a.size == 0:
+        return np.ones_like(cos_a)
+    x = np.clip(cos_a, -1.0, 1.0)
+    w = np.ones_like(x)
+    for k, c in enumerate(coefs):
+        if k >= len(_LEGENDRE_EVEN):
+            break
+        c = float(c)
+        if abs(c) > 1e-12:
+            w = w + c * _LEGENDRE_EVEN[k](x)
+    return np.maximum(w, floor)
 
 
 def march_dollase_weight(cos_alpha, r: float) -> np.ndarray:

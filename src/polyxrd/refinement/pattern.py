@@ -58,6 +58,8 @@ class PhaseSpec:
     :param size_nm: 该相相干域尺寸（nm），0 = 不限
     :param strain: 该相微观应变 ε，0 = 无
     :param po_r: March–Dollase ``r``，1 = 无择优（走零开销分支）
+    :param po_c: Legendre（纤维对称）织构系数 ``(c2, c4, c6, c8)``，全零/空 =
+        不用该模型。与 ``po_r`` 同时给时两者相乘（正常路径只会启用其中一个）。
     :param b_overall: 该相整体温度因子 B（Å²），0 = 无修正。``|F|² ∝
         exp(−2B·s²)``，``s = sinθ/λ = 1/(2d)`` → 峰强乘 ``exp(−B/(2d²))``
     """
@@ -66,6 +68,7 @@ class PhaseSpec:
     size_nm: float = 0.0
     strain: float = 0.0
     po_r: float = 1.0
+    po_c: Tuple[float, ...] = ()
     b_overall: float = 0.0
 
     @property
@@ -100,6 +103,7 @@ def reflection_centers_and_intensities(
     disp: float = 0.0,
     b_overall: float = 0.0,
     rough: Optional[Roughness] = None,
+    po_c: Sequence[float] = (),
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """把反射表展开成 ``(centers, intensities, is_ka2)``。
 
@@ -128,7 +132,7 @@ def reflection_centers_and_intensities(
         # 位移项用**未平移**的 2θ 算 cosθ 即可：shift/disp 都是小量（≪1°），
         # cos(θ+δ) 与 cosθ 的差是 δ·sinθ 的高阶小量，远低于峰位有效精度。
         tt = tt + float(disp) * np.cos(np.radians(tt) / 2.0)
-    inten = np.asarray(table.reweight_po(po_r), dtype=float)
+    inten = np.asarray(table.reweight(po_r, po_c), dtype=float)
     if b_overall:
         # s = sinθ/λ = 1/(2d) → 2B s² = B/(2d²)
         d = np.maximum(np.asarray(table.d, dtype=float), 1e-6)
@@ -263,7 +267,7 @@ def phase_pattern(
 
     centers, areas, is2 = reflection_centers_and_intensities(
         spec.table, kalph2, spec.po_r, shift=shift, disp=disp,
-        b_overall=spec.b_overall, rough=rough)
+        b_overall=spec.b_overall, rough=rough, po_c=spec.po_c)
 
     # 样品层（尺寸/应变）叠加到仪器层之上
     p_eff = profile.with_samples(size_nm=spec.size_nm, strain=spec.strain)
