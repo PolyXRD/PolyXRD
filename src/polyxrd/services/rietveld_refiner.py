@@ -30,6 +30,50 @@ from polyxrd.models.xrd_data import XRDData
 logger = logging.getLogger("polyxrd.rietveld_refiner")
 
 
+def _phase_linear_mu(blocks, phases) -> list:
+    """逐相线吸收系数 μ（1/cm），**用全胞成分**算。
+
+    为什么不能用 ``Phase.atomic_sites``：那份位点是**非对称单元**（``cif_to_phase``
+    只放独立位点），而 ``linear_mu_from_sites`` 的约定是"全胞计数"。直接传进去
+    μ 会按 ``1/Z`` 偏低 —— 实测（真值样 2-1/3-1/4-1 的 COD CIF，Cu Kα）：
+
+    ==========  ============  ============  ============
+    相           位点表 μ      全胞 μ         NIST 期望
+    ==========  ============  ============  ============
+    ZnO          140.5         281.1         ~277
+    Corundum     **None**      127.8         ~124
+    Fluorite     73.7          307.2         ~305
+    Kaolinite    40.4          80.7          ~81
+    Gibbsite     **None**      59.4          ~59
+    ==========  ============  ============  ============
+
+    两个后果都很糟：τ 偏小 ⇒ 微吸收**几乎不起作用**（v5.2 的卖点悄悄失效）；
+    返回 ``None`` ⇒ 整条修正被放弃且只留一行日志（4-1 就是这样）。全胞成分
+    来自 ``StructureModel.composition()``（已做对称展开 + 占位），晶胞体积取
+    精修后的值。结构拿不到时才退回原始位点表，并记明口径。
+    """
+    from polyxrd.refinement import linear_mu_from_composition, linear_mu_from_sites
+
+    out: list = []
+    for i, ph in enumerate(phases):
+        st = None
+        if blocks is not None and i < len(blocks):
+            st = getattr(blocks[i], "structure", None)
+        mu = None
+        if st is not None:
+            try:
+                mu = linear_mu_from_composition(
+                    st.composition(), float(st.cell.volume()))
+            except Exception:  # noqa: BLE001 - 算不出就让下面兜底
+                mu = None
+        if mu is None:
+            mu = linear_mu_from_sites(
+                getattr(ph, "atomic_sites", None) or (),
+                float(ph.lattice.volume) if getattr(ph, "lattice", None) else 0.0)
+        out.append(mu)
+    return out
+
+
 def _v5_diagnostics(report, *, limit: int = 4):
     """把 ``FitReport`` 拆成「界面收的 ``diagnostics``」+「全量 ``v5_findings``」。
 
@@ -1226,6 +1270,18 @@ class RietveldRefiner:
     #: 后者多花的 20 倍算力买不到可读的精度。
     V5_CUTOFF_FWHM = 12.0
 
+    #: 微吸收"没启用"时做敏感度探针用的颗粒半径（µm）。
+    #:
+    #: ``microabsorption=True`` 只在**同时给了** ``grain_radius_um > 0`` 时才真正
+    #: 生效（τ 需要 R）；只给开关时整段静默跳过，而 τ 既不进拟合向量、也不改
+    #: Rwp —— 于是"没做修正"在结果里**完全看不出来**，这是很贵的静默项：
+    #: 实测 2-1（ZnO / CaCO3 各 50 wt%）默认给 47.96/52.04（偏 2.04 pp），
+    #: 给 5 µm 后 49.81/50.19。所以未启用时按 5 µm 探一次，位移超过
+    #: ``MICROABS_SENSITIVITY_PP`` 就明确点出来。
+    MICROABS_PROBE_RADIUS_UM: ClassVar[float] = 5.0
+    #: 微吸收敏感度的报警门限（wt% 百分点）。低于它就是噪声量级，不必打扰用户。
+    MICROABS_SENSITIVITY_PP: ClassVar[float] = 1.0
+
     def _refine_v5(
         self,
         data: XRDData,
@@ -1447,15 +1503,7 @@ class RietveldRefiner:
         _ma_on = bool(kwargs.get("microabsorption", False))
         if _ma_on and _mu_linear is None and _grain_r > 0.0:
             try:
-                from polyxrd.refinement import linear_mu_from_sites
-
-                _mu_linear = [
-                    linear_mu_from_sites(
-                        getattr(ph, "atomic_sites", None) or (),
-                        float(ph.lattice.volume) if getattr(ph, "lattice", None)
-                        else 0.0)
-                    for ph in phases
-                ]
+                _mu_linear = _phase_linear_mu(blocks, phases)
             except Exception as e:  # noqa: BLE001 - 算不出就退化成不做修正
                 log(f"[v5] microabsorption skipped: {type(e).__name__}: {e}")
                 _mu_linear = None
@@ -1658,6 +1706,56 @@ class RietveldRefiner:
                 log(_line)
         except Exception as e:  # noqa: BLE001
             log(f"[v5] report skipped: {type(e).__name__}: {e}")
+
+        # ── 微吸收「没启用」的定量敏感度（v5.3, P0-E）────────────────
+        # τ 不进拟合向量、也不改变 Rwp —— 所以「没做微吸收修正」在结果里
+        # **完全看不出来**，而它对 μ 反差大的组合是 1–3 pp 级的系统偏差
+        # （实测 2-1：ZnO/CaCO3 各 50 wt%，默认 47.96/52.04，5 µm 后
+        # 49.81/50.19）。这里按探针半径估一次「若做修正会移动多少」，
+        # 超过门限就点名 —— 宁可多一条提示，也不让用户拿着带偏的 wt% 走。
+        _ma_applied = bool(getattr(_quant, "tau", ()) or ()) if _quant is not None else False
+        if not _ma_applied and _quant is not None and len(phases) > 1:
+            try:
+                from polyxrd.refinement import hill_howard
+
+                _mus = _phase_linear_mu(prob.phases, phases)
+                if all(v is not None for v in _mus) and min(_mus) > 0.0:
+                    _alt = hill_howard(
+                        [b.label for b in prob.phases],
+                        [float(v) for v in _quant.scales],
+                        [b.structure for b in prob.phases],
+                        mu=_mus, radius_um=self.MICROABS_PROBE_RADIUS_UM)
+                    _shift = max(abs(a - b) for a, b in
+                                 zip(_alt.fractions, _quant.fractions)) * 100.0
+                    _ratio = max(_mus) / min(_mus)
+                    if _shift >= self.MICROABS_SENSITIVITY_PP:
+                        from polyxrd.refinement.report import Finding
+
+                        _rad = float(_grain_r)
+                        _why = ("microabsorption 已开但 grain_radius_um=0，整段被跳过"
+                                if (_ma_on and _rad <= 0.0) else "未启用微吸收修正")
+                        _f = Finding(
+                            "MICROABSORPTION_OFF", "warn",
+                            f"各相线吸收系数差 {_ratio:.1f}×（{_why}）——"
+                            f"按 {self.MICROABS_PROBE_RADIUS_UM:.0f} µm 颗粒估算，"
+                            f"wt% 可能整体偏 {_shift:.1f} pp",
+                            "给 grain_radius_um（SEM / 激光粒度 / 沉降法）后重跑；"
+                            "μ 反差大的组合（碳酸盐+氧化物、含 Fe/Ba 相）不修正会"
+                            "系统性偏 1~3 pp，而 Rwp 对此完全没有反应",
+                            {"mu_ratio": float(_ratio),
+                             "shift_pp": float(_shift),
+                             "radius_um": self.MICROABS_PROBE_RADIUS_UM})
+                        v5_findings.append(_f.as_dict())
+                        # 定量的口径问题优先于"改也改不动"的峰形提示
+                        diagnostics.insert(0, {
+                            "code": f"diag.refinement.{_f.code.lower()}",
+                            "params": {k: float(v) for k, v in _f.evidence.items()},
+                        })
+                        del diagnostics[4:]
+                        log(f"[v5] MICROABSORPTION_OFF mu_ratio={_ratio:.2f} "
+                            f"shift={_shift:.2f}pp radius={self.MICROABS_PROBE_RADIUS_UM:.1f}um")
+            except Exception as e:  # noqa: BLE001 - 探针失败不该影响精修
+                log(f"[v5] microabsorption probe skipped: {type(e).__name__}: {e}")
 
         # ── 回填物相：晶胞 + 质量分数（不改入参，deecopy 后写）───────
         import copy as _copy

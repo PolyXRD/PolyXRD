@@ -42,6 +42,8 @@ ALL_CODES = [
      {"mu_bar": 603.0, "n_clamped": 2.0}),
     ("diag.refinement.microabsorption_applied",
      {"mu_bar": 272.0, "tau_min": 0.99, "tau_max": 1.25}),
+    ("diag.refinement.microabsorption_off",
+     {"mu_ratio": 6.4, "shift_pp": 2.04, "radius_um": 5.0}),
     ("diag.refinement.scale_correlated",
      {"phase_a": "Quartz low", "phase_b": "Kaolinite", "rho": -0.98}),
     ("diag.refinement.phase_unsupported",
