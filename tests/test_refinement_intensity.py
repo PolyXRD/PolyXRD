@@ -711,17 +711,41 @@ class TestScaleCorrelationDiagnostics:
         return {f.code: f for f in audit(tt, y, y, np.ones_like(tt),
                                          quant=quant, scale_corr=corr)}
 
-    def test_high_correlation_warns(self):
+    def test_negative_correlation_warns(self):
+        """ρ=−0.98（此消彼长）→ warn；evidence 带负 ρ 与 σ比。"""
         q = self._quant((0.5, 0.5))
         corr = np.array([[1.0, -0.98], [-0.98, 1.0]])
         f = self._audit(q, corr)
         assert "SCALE_CORRELATED" in f
         assert f["SCALE_CORRELATED"].severity == "warn"
-        assert f["SCALE_CORRELATED"].evidence["rho"] == pytest.approx(0.98, abs=1e-9)
+        assert f["SCALE_CORRELATED"].evidence["rho"] == pytest.approx(-0.98, abs=1e-9)
+        # σ差/σ和 = √((1−ρ)/(1+ρ)) = √99 ≈ 9.95
+        assert f["SCALE_CORRELATED"].evidence["sigma_ratio"] == pytest.approx(
+            np.sqrt(99.0), abs=1e-6)
+
+    def test_at_threshold_warns(self):
+        """ρ=−0.80 恰在阈值上 → 触发（σ差/σ和=3.0 同一判据）。"""
+        q = self._quant((0.5, 0.5))
+        corr = np.array([[1.0, -0.80], [-0.80, 1.0]])
+        f = self._audit(q, corr)
+        assert "SCALE_CORRELATED" in f
+        assert f["SCALE_CORRELATED"].evidence["sigma_ratio"] == pytest.approx(3.0)
+
+    def test_positive_correlation_is_silent(self):
+        """ρ=+0.98 不再触发：正相关不是"此消彼长"，份额各自可辨（P0-E）。"""
+        q = self._quant((0.5, 0.5))
+        corr = np.array([[1.0, 0.98], [0.98, 1.0]])
+        assert "SCALE_CORRELATED" not in self._audit(q, corr)
 
     def test_moderate_correlation_is_silent(self):
         q = self._quant((0.5, 0.5))
-        corr = np.array([[1.0, 0.7], [0.7, 1.0]])
+        corr = np.array([[1.0, -0.7], [-0.7, 1.0]])
+        assert "SCALE_CORRELATED" not in self._audit(q, corr)
+
+    def test_4_1_case_is_silent(self):
+        """评估报告 §9 的 4-1 组：ρ=−0.624 定量 2.12 pp 达标 → 不许误报。"""
+        q = self._quant((0.5, 0.5))
+        corr = np.array([[1.0, -0.624], [-0.624, 1.0]])
         assert "SCALE_CORRELATED" not in self._audit(q, corr)
 
     def test_trace_phase_is_ignored(self):

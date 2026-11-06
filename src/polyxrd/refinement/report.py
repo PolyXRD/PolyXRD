@@ -694,9 +694,13 @@ def audit(
                  "tau_min": float(min(taus)), "tau_max": float(max(taus))}))
 
     # ── 11. 两相份额是否根本不可分辨（v5.2, 5-3 定量重排的答案）──────
-    # Rwp 与各自 σ 都看不出来：两相标度高度负相关时，份额在它们之间互换而
-    # 总谱几乎不变。此时"wt% 精确到小数点后两位"是**表面精度**，物理上无意义。
-    # 只看 |ρ| 与两相含量（<1% 的相本来就是检出限问题，另有规则管）。
+    # Rwp 与各自 σ 都看不出来：两相标度高度**负**相关时，份额在它们之间互换
+    # （一个涨另一个跌）而总谱几乎不变。此时"wt% 精确到小数点后两位"是
+    # **表面精度**，物理上无意义。
+    # 只判负相关（P0-E）：正相关的两相不是"此消彼长"，份额各自可辨，
+    # |ρ| 大不构成不可分辨证据 —— 5-3 组最大 |ρ|=0.705 定量照样达标，
+    # 7-1 组 ρ=−0.91 才是真病态（评估报告 §9）。
+    # 阈值 ρ ≤ −0.80 ≡ σ差/σ和 = √((1−ρ)/(1+ρ)) ≥ 3.0（同一判据的两种写法）。
     if scale_corr is not None and quant is not None and len(quant.labels) > 1:
         corr = np.asarray(scale_corr, dtype=float)
         n_lab = len(quant.labels)
@@ -708,20 +712,23 @@ def audit(
                     if (fracs[i] < min_phase_fraction
                             or fracs[j] < min_phase_fraction):
                         continue
-                    rho = abs(float(corr[i, j]))
-                    if worst is None or rho > worst[0]:
+                    rho = float(corr[i, j])
+                    if worst is None or rho < worst[0]:
                         worst = (rho, i, j)
-            if worst is not None and worst[0] >= 0.95:
+            if worst is not None and worst[0] <= -0.80:
                 rho, i, j = worst
+                sigma_ratio = float(np.sqrt((1.0 - rho) / (1.0 + rho)))
                 out.append(Finding(
                     "SCALE_CORRELATED", "warn",
                     f"{quant.labels[i]} 与 {quant.labels[j]} 的相标度相关系数 "
-                    f"|ρ|={rho:.2f}（>0.95）—— 两相份额可在彼此之间互换而总谱"
-                    f"几乎不变，这两个 wt% 只能当一个区间读，不是两个独立数",
+                    f"ρ={rho:.2f}（≤−0.80）—— 两相份额可在彼此之间互换（此消"
+                    f"彼长，σ差/σ和={sigma_ratio:.1f}）而总谱几乎不变，这两个 "
+                    f"wt% 只能当一个区间读，不是两个独立数",
                     "要真正分开：延长扫描/换靶提高分辨率、加一条只属于其中一相"
                     "的孤立强线、或先修好该相的择优取向与占位（模型越准，相关"
                     "越低）；在此之前不要用这两个 wt% 比较版本优劣",
                     {"rho": rho,
+                     "sigma_ratio": sigma_ratio,
                      "phase_a": str(quant.labels[i]),
                      "phase_b": str(quant.labels[j])}))
 

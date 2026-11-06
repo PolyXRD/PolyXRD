@@ -1238,7 +1238,7 @@ translations = {
             "microabsorption_clamped": "微吸收颗粒半径超出 Brindley 表的适用范围：wt% 只能定性参考。请确认实际粒度（SEM / 激光粒度），或把半径减小到 |(μ−μ̄)·R| ≤ 0.5",
             "microabsorption_applied": "已施加 Brindley 微吸收修正：wt% 按 W∝S/τ 搬运；Rwp 不受影响（τ 只改份额），所以 Rwp 变差说明半径给错了",
             "microabsorption_off": "各相线吸收系数相差 {mu_ratio:.1f} 倍，但没有做微吸收修正（按 5 µm 颗粒估算，wt% 最多会偏 {shift_pp:.1f} pp）。给 grain_radius_um（SEM / 激光粒度 / 沉降法）后重跑。μ 反差大的组合会系统性偏 1~3 pp，而 Rwp 对此完全没有反应",
-            "scale_correlated": "两相份额不可分辨：{phase_a} 与 {phase_b} 的标度相关系数 |ρ|={rho:.2f}（>0.95）。份额可在两相之间互换而总谱几乎不变——wt% 的小数位不代表精度。要真正分开：延长扫描或换靶提高分辨率、加一条只属于其中一相的孤立强线，或先修好该相的择优取向/占位",
+            "scale_correlated": "两相份额不可分辨：{phase_a} 与 {phase_b} 的标度相关系数 ρ={rho:.2f}（≤−0.80，σ差/σ和={sigma_ratio:.1f}）。份额可在两相之间此消彼长而总谱几乎不变——wt% 的小数位不代表精度。要真正分开：延长扫描或换靶提高分辨率、加一条只属于其中一相的孤立强线，或先修好该相的择优取向/占位",
             "phase_unsupported": "{phase} 被定量到 {fraction:.2f} wt%，但它的 {n_unique_strong:.0f} 条唯一强线（该相 I/Imax≥30%）在实测中一条都没出现（最强 {strongest_2theta:.2f}° 应有 I/Imax={strongest_rel:.2f}）——这个份额没有谱线支撑。份额非零不等于该相存在：多出来的强度会被峰宽/背景自由度吸收，Rwp 反而更低。先确认该线是否在扫描窗口内、是否被择优取向压低；都不是就删掉该相重拟合",
             "phase_fraction_unverifiable": "{phase} 被定量到 {fraction:.2f} wt%，但它的 {n_strong:.0f} 条强线（该相 I/Imax≥30%）全部与其它相重合（最小间距 {min_gap:.2f}°）——这个份额完全由峰宽/背景自由度决定，数据没有独立约束它。补一条属于该相、且与主相分开 0.3 度以上的线（换靶/延长扫描/更高分辨率）再定量；否则只报检出、不报数字。份额非零不等于该相存在",
         },
