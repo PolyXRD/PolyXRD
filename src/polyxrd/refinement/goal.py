@@ -206,9 +206,14 @@ def fraction_sigmas(
     z = np.asarray(quant.factor, dtype=float)
     w = np.asarray(quant.fractions, dtype=float)
 
+    # 逐相半径优先（P0-G）：全相同值时 QuantResult.radius_um_per_phase 为空、
+    # radius_um 是标量 —— 两种表示在这里收拢成一个入口
+    rad = getattr(quant, "radius_um_per_phase", ()) or ()
+    if not rad:
+        rad = (float(getattr(quant, "radius_um", 0.0) or 0.0),)
     if getattr(quant, "tau", ()) and getattr(quant, "mu", ()) \
-            and float(getattr(quant, "radius_um", 0.0)) > 0.0:
-        jac = _microabsorption_jacobian(s, z, quant.mu, quant.radius_um)
+            and float(np.max(np.asarray(rad, dtype=float), initial=0.0)) > 0.0:
+        jac = _microabsorption_jacobian(s, z, quant.mu, rad)
         var = np.sum((jac ** 2) * (np.maximum(sig, 0.0) ** 2)[None, :], axis=1)
         return tuple(math.sqrt(max(float(v), 0.0)) for v in var)
 
@@ -226,7 +231,7 @@ def _microabsorption_jacobian(
     scales: np.ndarray,
     factors: np.ndarray,
     mu: Sequence[float],
-    radius_um: float,
+    radius_um,
     *,
     iterations: int = 3,
 ) -> np.ndarray:
@@ -235,7 +240,8 @@ def _microabsorption_jacobian(
     差分步长取 ``max(|S_q|, 该相最小正标度)·1e-4``：标度本身可以有 1e8 的量级
     差（弱相 vs 强相），固定步长会让弱相的列全是噪声。负数侧被 ``base`` 的
     ``max(·, 0)`` 夹住，所以用**中心差分 + 退化时回退单侧**，避免在 0 附近
-    出现假的非线性。
+    出现假的非线性。``radius_um`` 标量或逐相序列均可（透传给
+    :func:`apply_microabsorption`）。
     """
     from .intensity import apply_microabsorption
 
@@ -248,7 +254,7 @@ def _microabsorption_jacobian(
     def weights(vec: np.ndarray) -> np.ndarray:
         base = np.maximum(vec, 0.0) * f
         fracs, _tau, _mu_bar, _clamped = apply_microabsorption(
-            base, mu, float(radius_um), iterations=iterations)
+            base, mu, radius_um, iterations=iterations)
         return np.asarray(fracs, dtype=float)
 
     jac = np.zeros((n, n))

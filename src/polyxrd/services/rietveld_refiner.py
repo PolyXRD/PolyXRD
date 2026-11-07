@@ -1499,9 +1499,32 @@ class RietveldRefiner:
         # 任一行算不出（含 Z>30 未收录元素）就整条放弃并记一条日志 —— 微吸收是
         # 定量修正，宁可不做也不能拿错的 μ 硬算。
         _grain_r = float(kwargs.get("grain_radius_um", 0.0) or 0.0)
+        # 逐相颗粒半径（P0-G）：`grain_radii_um` 接受 {相序号: µm} 或长度 = 相数的
+        # 序列；没给到的相回退全局缺省 `_grain_r`。与 `_po_directions` 同一套约定。
+        _grain_radii_raw = kwargs.get("grain_radii_um")
+        _grain_radii: "list | None" = None
+        if _grain_radii_raw:
+            try:
+                _n_ph = len(phases)
+                if isinstance(_grain_radii_raw, dict):
+                    _tmp = [_grain_r] * _n_ph
+                    for k, v in _grain_radii_raw.items():
+                        _tmp[int(k)] = float(v)
+                else:
+                    _tmp = [float(v) for v in _grain_radii_raw]
+                if len(_tmp) != _n_ph:
+                    raise ValueError(
+                        f"grain_radii_um 长度 {len(_tmp)} != 相数 {_n_ph}")
+                if any((not np.isfinite(v)) or v < 0.0 for v in _tmp):
+                    raise ValueError("grain_radii_um 必须是非负有限值")
+                _grain_radii = _tmp
+            except Exception as e:  # noqa: BLE001 - 参数非法就整体退回全局半径
+                log(f"[v5] grain_radii_um ignored: {type(e).__name__}: {e}")
+                _grain_radii = None
+        _radius_any = _grain_r > 0.0 or bool(_grain_radii and max(_grain_radii) > 0.0)
         _mu_linear = kwargs.get("mu_linear")
         _ma_on = bool(kwargs.get("microabsorption", False))
-        if _ma_on and _mu_linear is None and _grain_r > 0.0:
+        if _ma_on and _mu_linear is None and _radius_any:
             try:
                 _mu_linear = _phase_linear_mu(blocks, phases)
             except Exception as e:  # noqa: BLE001 - 算不出就退化成不做修正
@@ -1526,10 +1549,10 @@ class RietveldRefiner:
             weights=1.0 / np.maximum(intensity, 1.0),
             cutoff_fwhm=self.V5_CUTOFF_FWHM,
             roughness_model=_rough_model,
-            # 微吸收（Brindley）：逐相 μ（1/cm）+ 颗粒半径（µm）。都给了才生效，
-            # 且**只影响定量**（τ 在强度上会被标度吸收），不改变 Rwp。
+            # 微吸收（Brindley）：逐相 μ（1/cm）+ 颗粒半径（µm，标量或逐相）。
+            # 都给了才生效，且**只影响定量**（τ 在强度上会被标度吸收），不改变 Rwp。
             mu_linear=_mu_linear,
-            grain_radius_um=_grain_r,
+            grain_radius_um=(_grain_radii if _grain_radii is not None else _grain_r),
         )
 
         # ── 参数掩码：用户在向导里取消勾选的自由度要真的钉住 ────────
@@ -1828,6 +1851,10 @@ class RietveldRefiner:
                 # 微吸收（v5.2）：逐相 μ + 颗粒半径 + 实际用上的 τ。τ 全 1 且
                 # mu_bar=0 表示"没启用"，GUI/报告据此区分"修正过"与"没修正"。
                 "grain_radius_um": _grain_r,
+                # P0-G：逐相半径（空 = 全相共用 grain_radius_um；否则与相同序，
+                # 未给到的相 = 回退的全局缺省值）
+                "grain_radii_um": ([float(v) for v in _grain_radii]
+                                   if _grain_radii is not None else []),
                 "mu_linear": ([float(v) for v in _mu_linear]
                               if _mu_linear is not None else []),
                 "microabsorption_tau": ([float(v) for v in _quant.tau]

@@ -31,7 +31,9 @@ import math
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
-from .intensity import apply_microabsorption
+import numpy as np
+
+from .intensity import apply_microabsorption, radius_per_phase
 
 __all__ = [
     "ATOMIC_MASS",
@@ -130,7 +132,12 @@ class QuantResult:
         （> 0.5）—— 此时 τ 已按边界值截断，定量结果只能定性参考
     :param mu: 各相线吸收系数（1/cm，未启用时为空）—— 误差棒要把 τ 的
         依赖一起传播，而 τ 只由 ``mu`` / ``radius_um`` 决定，所以必须存下来
-    :param radius_um: 施加微吸收时用的颗粒半径（µm，未启用时 0）
+    :param radius_um: 施加微吸收时用的颗粒半径（µm，未启用时 0）。
+        **逐相半径不相等时为 0**（此时看 ``radius_um_per_phase``）——
+        不给一个"平均值"是故意的：τ 对 R 是分段线性而非线性，平均半径
+        算出的 τ 与逐相 τ 没有对应关系，硬塞一个数只会误导下游
+    :param radius_um_per_phase: 逐相颗粒半径（µm，与 ``labels`` 同序）。
+        空 = 全相共用一个 ``radius_um``；有值时 ``radius_um`` 为 0
     """
 
     labels: Tuple[str, ...]
@@ -146,6 +153,7 @@ class QuantResult:
     mu_clamped: bool = False
     mu: Tuple[float, ...] = ()            # 各相线吸收系数（空 = 未启用微吸收）
     radius_um: float = 0.0
+    radius_um_per_phase: Tuple[float, ...] = ()
 
     def percent(self) -> Tuple[float, ...]:
         return tuple(100.0 * f for f in self.fractions)
@@ -206,7 +214,7 @@ def hill_howard(
     *,
     min_fraction: float = 0.0,
     mu: Optional[Sequence[float]] = None,
-    radius_um: float = 0.0,
+    radius_um: "float | Sequence[float]" = 0.0,
     mu_iterations: int = 3,
 ) -> QuantResult:
     """Hill–Howard 重量分数。
@@ -215,9 +223,12 @@ def hill_howard(
     :param scales: **同一轮**线性层解出的标度（不同轮的不可比）
     :param structures: 各相 ``StructureModel``（取位点、占位、胞体积）
     :param min_fraction: 低于该重量分数的相标记为"不可检出"
-    :param mu: 各相线吸收系数（1/cm）。给齐且 ``radius_um > 0`` 时施加
+    :param mu: 各相线吸收系数（1/cm）。给齐且 ``radius_um`` 有正值时施加
         Brindley 微吸收修正（见 :mod:`polyxrd.refinement.intensity`）
-    :param radius_um: 颗粒半径（µm），只对微吸收有意义
+    :param radius_um: 颗粒半径（µm），只对微吸收有意义。**标量或逐相序列**
+        均可 —— 混合样各相粒度可以差一个量级（IUCr CPD：刚玉 28 µm vs
+        锌矿 1.4 µm），用同一个 R 套所有相等于把大颗粒相的吸收偏差按
+        小颗粒相算，方向都可能反；某相给 0 表示该相不修正
     :param mu_iterations: μ̄ ↔ W 的不动点迭代轮数
 
     三步：
@@ -255,12 +266,25 @@ def hill_howard(
     taus: Tuple[float, ...] = ()
     mu_bar = 0.0
     mu_clamped = False
-    if mu is not None and len(mu) == len(labels) and float(radius_um) > 0.0:
-        fracs_arr, tau_arr, mu_bar, mu_clamped = apply_microabsorption(
-            base, mu, float(radius_um), iterations=mu_iterations)
-        fracs = [float(v) for v in fracs_arr]
-        taus = tuple(float(v) for v in tau_arr)
-    else:
+    radii_applied: Tuple[float, ...] = ()
+    if mu is not None and len(mu) == len(labels):
+        rad = radius_per_phase(radius_um, len(labels))
+        if float(np.max(rad, initial=0.0)) > 0.0:
+            fracs_arr, tau_arr, mu_bar, mu_clamped = apply_microabsorption(
+                base, mu, rad, iterations=mu_iterations)
+            fracs = [float(v) for v in fracs_arr]
+            taus = tuple(float(v) for v in tau_arr)
+            # 全相同值时退化成标量口径（radius_um 有值 / per_phase 留空），
+            # 与历史行为逐位一致；逐相不同才走 per_phase 字段
+            if len(set(rad.tolist())) == 1:
+                radii_applied = ()
+                radius_um = float(rad[0])
+            else:
+                radii_applied = tuple(float(v) for v in rad)
+                radius_um = 0.0
+    if not taus:
+        radius_um = 0.0 if isinstance(radius_um, (list, tuple, np.ndarray)) \
+            else float(radius_um or 0.0)
         total = float(sum(base))
         if total <= 0.0:
             n = len(labels)
@@ -278,4 +302,5 @@ def hill_howard(
         tau=taus, mu_bar=float(mu_bar), mu_clamped=bool(mu_clamped),
         mu=(tuple(float(v) for v in mu) if applied else ()),
         radius_um=(float(radius_um) if applied else 0.0),
+        radius_um_per_phase=radii_applied,
     )

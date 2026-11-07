@@ -251,20 +251,44 @@ def mean_linear_mu(mu: Sequence[float] | np.ndarray,
     return float((m * f).sum() / tot)
 
 
+def radius_per_phase(radius_um, n: int) -> np.ndarray:
+    """把颗粒半径规范成**逐相**数组（标量按 n 广播）。
+
+    逐相半径不是"更精细的旋钮"，是物理上必需：一个研磨过的混合样里各相的
+    粒度可以差一个数量级（IUCr CPD round-robin 的刚玉 28 µm vs 锌矿 1.4 µm），
+    而 Brindley τ 的自变量是 ``(μ_j − μ̄)·R_j`` —— 用同一个 R 套所有相，
+    等于把大颗粒相的吸收偏差按小颗粒相算，方向都可能反过来。
+
+    :param radius_um: 标量（全相共用）或长度 n 的序列（µm，0 = 该相不修正）
+    :param n: 相数
+    :return: ``float64[n]``；非法长度 / 负值 → ``ValueError``
+    """
+    r = np.asarray(radius_um, dtype=float).reshape(-1)
+    if r.size == 1:
+        r = np.full(n, float(r[0]))
+    if r.size != n:
+        raise ValueError(f"radius_um 长度 {r.size} 与相数 {n} 不符")
+    if not np.all(np.isfinite(r)) or np.any(r < 0.0):
+        raise ValueError("radius_um 必须是非负有限值")
+    return r
+
+
 def microabsorption_taus(mu: Sequence[float], fractions: Sequence[float],
-                         radius_um: float) -> Tuple[np.ndarray, float, bool]:
+                         radius_um) -> Tuple[np.ndarray, float, bool]:
     """由 μ 与重量分数算各相 τ。
 
     :param mu: 各相线吸收系数（1/cm）
     :param fractions: 各相重量分数（内部归一，允许未归一的权重）
-    :param radius_um: 颗粒半径 R（µm）
+    :param radius_um: 颗粒半径 R（µm）。**标量或逐相序列**均可
+        （逐相见 :func:`radius_per_phase`；某相给 0 表示该相不修正，
+        此时 ``x=0`` → ``τ=1``）
     :return: ``(tau, mu_bar, clamped)`` —— ``clamped`` 表示有 |x| 超过 0.5
 
     单位换算：R 由 µm → cm 乘 1e-4；μ 用 cm⁻¹，故 ``x = Δμ·R`` 无量纲。
     """
     m = np.asarray(mu, dtype=float).reshape(-1)
     f = np.asarray(fractions, dtype=float).reshape(-1)
-    r_cm = float(radius_um) * 1e-4
+    r_cm = radius_per_phase(radius_um, m.size) * 1e-4
     mu_bar = mean_linear_mu(m, f)
     x = (m - mu_bar) * r_cm
     clamped = bool(np.any(np.abs(x) > BRINDLEY_X_LIMIT + 1e-12))
@@ -274,7 +298,7 @@ def microabsorption_taus(mu: Sequence[float], fractions: Sequence[float],
 def apply_microabsorption(
     base_weights: Sequence[float],
     mu: Sequence[float],
-    radius_um: float,
+    radius_um,
     *,
     iterations: int = 3,
 ) -> Tuple[np.ndarray, np.ndarray, float, bool]:

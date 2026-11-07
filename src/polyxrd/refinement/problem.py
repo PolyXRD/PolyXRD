@@ -25,7 +25,7 @@ import numpy as np
 
 from .background import BackgroundParams, background_basis
 from .diagnostics import Diagnostics, diagnose
-from .intensity import Roughness, apply_microabsorption
+from .intensity import Roughness, apply_microabsorption, radius_per_phase
 from .linear import LinearSolve, design_stack, solve_linear
 from .optimize import FitResult, minimize_residual
 from .parameters import Parameter, ParameterSet
@@ -247,8 +247,12 @@ class PatternProblem:
     :param roughness_model: 表面粗糙度模型名（``none`` / ``sidey`` / ``suortti``
         / ``sparks``）；实际幅度由参数 ``inst.rough`` 给出
     :param mu_linear: 各相线吸收系数（1/cm，与 ``phases`` 同序）。给齐且
-        ``grain_radius_um > 0`` 时定量会做 Brindley 微吸收修正
-    :param grain_radius_um: 微吸收用的颗粒半径（µm）
+        ``grain_radius_um`` 有正值时定量会做 Brindley 微吸收修正
+    :param grain_radius_um: 微吸收用的颗粒半径（µm）。**标量（全相共用）或
+        逐相序列**均可；序列长度必须与相数一致（不符直接 ``ValueError``，
+        fail fast 优于静默错位）。逐相半径是物理必需：混合样各相粒度可以
+        差一个量级（IUCr CPD：刚玉 28 µm vs 锌矿 1.4 µm），τ 的自变量是
+        ``(μ_j − μ̄)·R_j``，拿一个 R 套所有相方向都可能反
     """
 
     def __init__(
@@ -266,7 +270,7 @@ class PatternProblem:
         params: Optional[ParameterSet] = None,
         roughness_model: str = "none",
         mu_linear: Optional[Sequence[float]] = None,
-        grain_radius_um: float = 0.0,
+        grain_radius_um: "float | Sequence[float]" = 0.0,
     ) -> None:
         self.two_theta = np.asarray(two_theta, dtype=float)
         self.y_obs = np.asarray(y_obs, dtype=float)
@@ -294,9 +298,21 @@ class PatternProblem:
         # 表面粗糙度（整样品）：由 ``inst.rough`` + 模型名决定，关闭时零开销
         self.rough_model = str(roughness_model or "none")
         self.roughness = Roughness(model=self.rough_model)
-        # 微吸收（Brindley）：逐相 μ（1/cm）+ 颗粒半径（µm），只进定量不进拟合
+        # 微吸收（Brindley）：逐相 μ（1/cm）+ 颗粒半径（µm），只进定量不进拟合。
+        # 半径两种形态：标量 → grain_radius_um（历史口径）；序列 → grain_radii_um
+        # （P0-G 逐相）。全相同值的序列折回标量，保证与历史行为逐位一致。
         self.mu_linear: Tuple[float, ...] = tuple(float(v) for v in (mu_linear or ()))
-        self.grain_radius_um = float(grain_radius_um or 0.0)
+        if isinstance(grain_radius_um, (list, tuple, np.ndarray)):
+            rad = radius_per_phase(grain_radius_um, len(self.phases))
+            if len(set(rad.tolist())) == 1:
+                self.grain_radius_um = float(rad[0])
+                self.grain_radii_um: Tuple[float, ...] = ()
+            else:
+                self.grain_radius_um = 0.0
+                self.grain_radii_um = tuple(float(v) for v in rad)
+        else:
+            self.grain_radius_um = float(grain_radius_um or 0.0)
+            self.grain_radii_um = ()
         self._atom_map: Dict[int, _AtomMap] = {}
         self.params = params if params is not None else self.build_parameters()
         if not self._atom_map:
@@ -856,19 +872,21 @@ class PatternProblem:
     def quantitative(self, *, min_fraction: float = 0.0) -> QuantResult:
         """Hill–Howard 重量分数（用当前线性层解出的标度）。
 
-        给了 ``mu_linear`` 且 ``grain_radius_um > 0`` 时，额外施加 Brindley
+        给了 ``mu_linear`` 且颗粒半径有正值时，额外施加 Brindley
         微吸收修正（``W ∝ S·f/τ``）。**这一步不改变 Rwp** —— τ 作用在强度上
         时会被标度吸收；它只在把标度翻译成重量分数时起作用（详见
-        ``refinement/intensity.py`` 模块讨论）。
+        ``refinement/intensity.py`` 模块讨论）。半径可以是逐相序列
+        （``grain_radii_um``，P0-G），全相同值时退化为标量口径。
         """
         if self.last_linear is None:
             self.residual(None)
         scales = [float(v) for v in self.last_linear.scales]
         mu = self.mu_linear if len(self.mu_linear) == len(self.phases) else None
+        radius = self.grain_radii_um or self.grain_radius_um
         return hill_howard([ph.label for ph in self.phases], scales,
                            [ph.structure for ph in self.phases],
                            min_fraction=min_fraction,
-                           mu=mu, radius_um=self.grain_radius_um)
+                           mu=mu, radius_um=radius)
 
     # ── 拟合 ───────────────────────────────────────────────────
     def fit(
