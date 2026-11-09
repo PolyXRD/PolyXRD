@@ -277,7 +277,7 @@ def _libreoffice_env(soffice: Path) -> dict:
     env.pop("PYTHONPATH", None)
     env.pop("PYTHONHOME", None)
     if not env.get("APPDATA"):
-        up = env.get("USERPROFILE") or env.get("HOME") or r"C:\Users\Administrator"
+        up = env.get("USERPROFILE") or env.get("HOME") or str(Path.home())
         env["APPDATA"] = os.path.join(up, "AppData", "Roaming")
     env["MSYS_NO_PATHCONV"] = "1"
     # 指向 LO 自带 python-core, 避免脚本框架初始化失败

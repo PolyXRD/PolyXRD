@@ -29,7 +29,10 @@ class StructureSimulator:
 
     def __init__(self) -> None:
         self._cached_structures: dict[str, object] = {}
-        self._reference_cache: dict[str, dict] = {}
+        self._reference_cache: dict = {}
+        # 内置参考库 JSON 的 (路径, mtime_ns, 字节数)。文件变了就重载，
+        # 避免开发期换库 / 打包后更新数据库仍吃到进程内的旧缓存。
+        self._reference_cache_stamp: Optional[tuple[str, int, int]] = None
 
     def simulate(
         self,
@@ -146,15 +149,25 @@ class StructureSimulator:
         return [p.get("name", p.get("key", "")) for p in ref_db.get("phases", [])]
 
     def _load_reference_database(self) -> dict:
-        if self._reference_cache:
-            return self._reference_cache
-
         db_path = get_resource_path("database/xrd_reference_database.json")
-        if db_path and Path(db_path).exists():
+        path = Path(db_path) if db_path else None
+        stamp: Optional[tuple[str, int, int]] = None
+        if path is not None and path.exists():
             try:
-                with open(db_path, "r", encoding="utf-8") as f:
+                st = path.stat()
+                stamp = (str(path), st.st_mtime_ns, st.st_size)
+            except OSError:
+                stamp = None
+
+        # 同一份文件才复用缓存；内容/时间戳变了就重新读
+        if self._reference_cache and stamp == self._reference_cache_stamp:
+            return self._reference_cache
+        if path is not None and path.exists():
+            try:
+                with open(path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 self._reference_cache = data
+                self._reference_cache_stamp = stamp
                 return data
             except Exception:
                 pass

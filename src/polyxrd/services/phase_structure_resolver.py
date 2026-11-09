@@ -28,6 +28,8 @@ v4.2 变更
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from pathlib import Path
 from typing import Callable, Optional
@@ -118,16 +120,41 @@ def _candidate_score(cand: dict, phase: Phase) -> float:
     return score
 
 
+def _structure_fingerprint(phase: Phase) -> str:
+    """结构指纹：区分同名同式的不同多型 / 不同库条目。
+
+    ``(name, formula)`` 不足以当缓存键 —— COD 里同名多型（如 TiO2 的
+    金红石 / 锐钛矿 / 板钛矿）晶胞、空间群、位点都不同，旧键会让后一个相
+    命中前一个相的解析结果。这里把决定结构的字段压成 16 位摘要，连同
+    ``resolve()`` 的波长与 2θ 范围一起进键。
+    """
+    lat = getattr(phase, "lattice", None)
+    cell = None
+    if lat is not None:
+        cell = tuple(round(float(getattr(lat, k, 0.0)), 6)
+                     for k in ("a", "b", "c", "alpha", "beta", "gamma"))
+    payload = {
+        "space_group": str(getattr(phase, "space_group", "") or ""),
+        "cell": cell,
+        "cif_path": str(getattr(phase, "cif_path", "") or ""),
+        "db_id": str(getattr(phase, "db_id", "") or ""),
+        "sites": repr(getattr(phase, "atomic_sites", None) or []),
+        "peaks": repr(getattr(phase, "reference_peaks", None) or []),
+    }
+    blob = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
+    return hashlib.sha1(blob.encode("utf-8", "replace")).hexdigest()[:16]
+
+
 class PhaseStructureResolver:
     """把检索得到的物相批量匹配到 COD 库 CIF 的解析器。
 
-    实例持有 (name, formula) → 解析结果缓存, 供 ``MainViewModel`` 复用
-    —— 同一物相第二次精修不再重复生成 CIF 落盘。
+    实例持有 ``(name, formula, 结构指纹, 波长, 2θ 范围)`` → 解析结果缓存，
+    供 ``MainViewModel`` 复用；指纹保证同名多型不会互相串缓存。
     """
 
     def __init__(self) -> None:
-        # (name, formula) → 解析结果；同一物相第二次精修不再重复落盘
-        self._cache: dict[tuple[str, str], Phase] = {}
+        # 键含结构指纹与解析口径；同一物相第二次精修不再重复落盘
+        self._cache: dict[tuple, Phase] = {}
         # polyDB 只读句柄（惰性）与本实例的"补齐不可用"标记
         self._db = None
         self._augment_off = False
@@ -184,7 +211,10 @@ class PhaseStructureResolver:
         if getattr(phase, "atomic_sites", None) and cif_path and Path(cif_path).exists():
             return phase, f"{name}: 已有结构, 跳过 ({Path(cif_path).name})"
 
-        key = (name, formula)
+        # 同名同式的多型（不同晶胞/空间群/位点）必须落在不同键上；
+        # 波长与 2θ 范围会改变位点补齐的选峰口径，也一并进键。
+        key = (name, formula, _structure_fingerprint(phase),
+               float(wavelength), tuple(float(v) for v in two_theta_range))
 
         # 0.4) 无位点 → 按 化学式+空间群+晶胞 从 polyDB 取同一条目的全胞位点
         #      （v5.0.1）。检索直通场景（内置矿物表 / PDF2 / 部分用户库）就

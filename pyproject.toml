@@ -88,6 +88,12 @@ polyxrd = ["i18n/**/*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+# 注册自定义 mark，消除 PytestUnknownMarkWarning（CI 与本地同口径）。
+# tests/test_quality_checks.py::test_pytest_marks_are_registered 会校验此处；
+# 新增自定义 mark 时同步在下面登记，不要靠 KNOWN_UNREGISTERED_MARKS 白名单绕过。
+markers = [
+    "slow: 耗时/需外部依赖的长用例（当前仅 tests/test_maud_par_builder.py:298）",
+]
 
 [tool.coverage.run]
 source = ["polyxrd"]

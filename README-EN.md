@@ -92,7 +92,7 @@ trustworthy" from invisible into an explicit on-screen warning (details in Chine
 
 ## 🆕 Latest Version v4.4.0 (2026-10-27 · pending release)
 
-**Rebuilt "find a structure in the reference library" panel + one-shot legacy config cleanup** — closes the v4.2 leftovers P4.2/P4.3 (details in Chinese: [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.4.0 and [docs/RELEASE-NOTES-v4.4.0.md](docs/RELEASE-NOTES-v4.4.0.md)):
+**Rebuilt "find a structure in the reference library" panel + one-shot legacy config cleanup** — closes the v4.2 leftovers P4.2/P4.3 (details in Chinese: [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.4.0 and [docs/RELEASE-NOTES-v4.4.0.md](docs/archive/RELEASE-NOTES-v4.4.0.md)):
 
 - **New first tab "Reference Library (polyDB)" in the refinement wizard**: search by formula / mineral name / space group / ID, or **match the strongest peaks** of the current pattern with Hanawalt d-I scoring. Added phases come with cell and atomic sites (sites expanded to the full cell by space group), ready to refine.
 - **One-shot legacy config cleanup**: on startup it detects the old `cod_*` keys in `user_db_paths.json` and entries of removed engines in `db_mounts.json`, then offers to clean them — **settings only, never library files**; a folder that turns out to be a polyDB is re-mounted instead of being dropped.
@@ -112,7 +112,7 @@ trustworthy" from invisible into an explicit on-screen warning (details in Chine
 
 ## Previous Release v4.3.0 (2026-10-27 · released)
 
-**polyDB d-spacing search returns to MCP** — closes the v4.2.1 leftover (details in Chinese: [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.3.0 and [docs/RELEASE-NOTES-v4.3.0.md](docs/RELEASE-NOTES-v4.3.0.md)):
+**polyDB d-spacing search returns to MCP** — closes the v4.2.1 leftover (details in Chinese: [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.3.0 and [docs/RELEASE-NOTES-v4.3.0.md](docs/archive/RELEASE-NOTES-v4.3.0.md)):
 
 - **New MCP tool `search_phases_by_d_peaks`**: Hanawalt search from measured d-spacings/intensities with `tolerance`/`tolerance_rel`/`min_match`/`limit`/`elements`/`max_ref_peaks`, backed by the polyDB bitmap inverted index + exact scoring.
 - **Legacy `search_cod_by_d_peaks` works again**: keeps its old signature and forwards to polyDB; no more `deprecated`; adds `display_id`/`ref_id` compatibility fields and `mounted` state.
@@ -150,7 +150,7 @@ trustworthy" from invisible into an explicit on-screen warning (details in Chine
 
 ## 📚 Previous Release v4.2.0 (2026-10-26 · released)
 
-**Structural cleanup: the legacy COD sqlite runtime is retired** (details in Chinese: [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.2.0 and [docs/RELEASE-NOTES-v4.2.0.md](docs/RELEASE-NOTES-v4.2.0.md)):
+**Structural cleanup: the legacy COD sqlite runtime is retired** (details in Chinese: [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.2.0 and [docs/RELEASE-NOTES-v4.2.0.md](docs/archive/RELEASE-NOTES-v4.2.0.md)):
 
 - **Legacy runtime removed**: `services/cif_database.py` (2,421 lines) and `services/cod_local.py` (2,410 lines) are gone, together with `cod_db_path` / `cod_index_db_path` / `cod_svn_path` and six getters/setters in `config`. Only **polyDB + PDF2 + user-built libraries** remain at runtime.
 - **Three pure modules extracted**: `cif_utils` (CIF parsing / sites / element checks), `phase_search` (Hanawalt scoring + pre-screening), `cif_minerals` (12 built-in mineral CIFs). None imports `sqlite3` or `PySide6`, none reads config paths (AST-asserted), so all are directly unit-testable.
@@ -198,7 +198,7 @@ trustworthy" from invisible into an explicit on-screen warning (details in Chine
 
 ## 📚 Previous Release v3.2.0 (2026-10-20)
 
-**Large-database usability fixes** — makes 20-30 GB external phase databases actually usable. Full details (Chinese): [docs/CHANGELOG.md](docs/CHANGELOG.md) §3.2.0 and [docs/3COD数据库验收报告-20261020.md](docs/3COD数据库验收报告-20261020.md).
+**Large-database usability fixes** — makes 20-30 GB external phase databases actually usable. Full details (Chinese): [docs/CHANGELOG.md](docs/CHANGELOG.md) §3.2.0 and [docs/3COD数据库验收报告-20261020.md](docs/archive/3COD数据库验收报告-20261020.md).
 
 - **A mounted database was silently ignored**: index-path resolution assumed the index always sat next to the COD directory and never looked at the path the user had imported — the manager showed "mounted" while searches kept reading the old database (or reported "not ready"). Read paths now prefer the user-imported file; the index builder deliberately does not, so an external library can never become a write target.
 - **Read-only connections for retrieval**: every query used to open the index writable and re-run schema/DDL. On a 28 GB library that took **65 s** for `is_ready()` (returning False) and made `stats()` raise `database is locked`. Now **0.013 s / 0.125 s**, with the connection reused and no leak on error.
@@ -210,7 +210,7 @@ trustworthy" from invisible into an explicit on-screen warning (details in Chine
 
 ## 📚 Earlier Release v2.5.0 (2026-10-01)
 
-**Search-chain enhancements + combination-strategy tuning + residual-peak search** (validated on a 13-sample benchmark; see [docs/基准报告-物相检索-v1.md](docs/基准报告-物相检索-v1.md) and [docs/基准报告-物相组合-v1.md](docs/基准报告-物相组合-v1.md), Chinese):
+**Search-chain enhancements + combination-strategy tuning + residual-peak search** (validated on a 13-sample benchmark; see [docs/基准报告-物相检索-v1.md](docs/archive/基准报告-物相检索-v1.md) and [docs/基准报告-物相组合-v1.md](docs/archive/基准报告-物相组合-v1.md), Chinese):
 
 | Metric | v2.4.0 | v2.5.0 |
 |---|---|---|

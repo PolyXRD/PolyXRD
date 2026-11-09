@@ -61,6 +61,7 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -107,8 +108,12 @@ _SUBSCRIPT = str.maketrans("₀₁₂₃₄₅₆₇₈₉", "0123456789")
 #: 规范符号表缓存（首次调用时建，约 230 条）
 _SYMBOLS: Optional[Tuple[str, ...]] = None
 
-#: 空间群对象缓存（原写法 → ``SpaceGroup`` 或 ``None``）
-_SG_CACHE: Dict[str, object] = {}
+#: 空间群对象缓存（原写法 → ``SpaceGroup`` 或 ``None``）。
+#: OrderedDict 做 LRU：CIF 里可能出现任意自定义符号，长会话下若无限增长会
+#: 白占内存（SpaceGroup 内含对称操作矩阵）。上限 256 足够覆盖 230 个标准群
+#: 加常见替代设置，超出时淘汰最久未用的一条。
+_SG_CACHE: "OrderedDict[str, object]" = OrderedDict()
+_SG_CACHE_MAX = 256
 
 
 def _symbol_table() -> Tuple[str, ...]:
@@ -213,6 +218,7 @@ def _load_space_group(symbol: str):
     """
     key = str(symbol or "")
     if key in _SG_CACHE:
+        _SG_CACHE.move_to_end(key)
         return _SG_CACHE[key]
     sg = None
     for cand in (resolve_space_group_symbol(symbol), _clean_symbol(symbol)):
@@ -226,6 +232,8 @@ def _load_space_group(symbol: str):
         except Exception:  # noqa: BLE001 - 这个候选不行，试下一个
             continue
     _SG_CACHE[key] = sg
+    while len(_SG_CACHE) > _SG_CACHE_MAX:
+        _SG_CACHE.popitem(last=False)
     return sg
 
 

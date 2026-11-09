@@ -35,16 +35,16 @@
 
 > 📋 **版本变更记录**：见 [docs/CHANGELOG.md](docs/CHANGELOG.md)。
 > ✅ **v5.2.0 发布检查清单（构建/产物/验收记录）**：见 [docs/发布检查清单-v5.2.0.md](docs/发布检查清单-v5.2.0.md)。
-> 🏗️ **v5.1.0 发布检查清单（收口未单独发布，内容已并入 v5.2.0）**：见 [docs/发布检查清单-v5.1.0.md](docs/发布检查清单-v5.1.0.md)。
-> ✅ **v4.7.0 发布检查清单（构建/产物/验收记录）**：见 [docs/发布检查清单-v4.7.0.md](docs/发布检查清单-v4.7.0.md)。
-> ⏳ **v4.4.0 发布检查清单（构建/产物/验收记录，待发布）**：见 [docs/发布检查清单-v4.4.0.md](docs/发布检查清单-v4.4.0.md)。
-> ✅ **v4.3.0 发布检查清单**：见 [docs/发布检查清单-v4.3.0.md](docs/发布检查清单-v4.3.0.md)。
-> ✅ **v4.2.0 发布检查清单（构建/产物/验收记录）**：见 [docs/发布检查清单-v4.2.0.md](docs/发布检查清单-v4.2.0.md)。
-> ✅ v4.1.1 发布检查清单：见 [docs/发布检查清单-v4.1.1.md](docs/发布检查清单-v4.1.1.md)。
-> ✅ v4.1.0 发布检查清单：见 [docs/发布检查清单-v4.1.0.md](docs/发布检查清单-v4.1.0.md)。
-> ✅ v4.0.0 发布检查清单：见 [docs/发布检查清单-v4.0.0.md](docs/发布检查清单-v4.0.0.md)。
+> 🏗️ **v5.1.0 发布检查清单（收口未单独发布，内容已并入 v5.2.0）**：见 [docs/发布检查清单-v5.1.0.md](docs/archive/发布检查清单-v5.1.0.md)。
+> ✅ **v4.7.0 发布检查清单（构建/产物/验收记录）**：见 [docs/发布检查清单-v4.7.0.md](docs/archive/发布检查清单-v4.7.0.md)。
+> ⏳ **v4.4.0 发布检查清单（构建/产物/验收记录，待发布）**：见 [docs/发布检查清单-v4.4.0.md](docs/archive/发布检查清单-v4.4.0.md)。
+> ✅ **v4.3.0 发布检查清单**：见 [docs/发布检查清单-v4.3.0.md](docs/archive/发布检查清单-v4.3.0.md)。
+> ✅ **v4.2.0 发布检查清单（构建/产物/验收记录）**：见 [docs/发布检查清单-v4.2.0.md](docs/archive/发布检查清单-v4.2.0.md)。
+> ✅ v4.1.1 发布检查清单：见 [docs/发布检查清单-v4.1.1.md](docs/archive/发布检查清单-v4.1.1.md)。
+> ✅ v4.1.0 发布检查清单：见 [docs/发布检查清单-v4.1.0.md](docs/archive/发布检查清单-v4.1.0.md)。
+> ✅ v4.0.0 发布检查清单：见 [docs/发布检查清单-v4.0.0.md](docs/archive/发布检查清单-v4.0.0.md)。
 > 🏗️ **代码结构与分层说明**：见 [docs/代码结构说明.md](docs/代码结构说明.md)。
-> ✅ **v4.2 结构清理（旧 COD sqlite 运行时退役）已执行完毕**：设计依据 [docs/v4.2-结构清理方案.md](docs/v4.2-结构清理方案.md)，执行记录/验收数据 [docs/下一步执行计划-v4.2.md](docs/下一步执行计划-v4.2.md)。
+> ✅ **v4.2 结构清理（旧 COD sqlite 运行时退役）已执行完毕**：设计依据 [docs/v4.2-结构清理方案.md](docs/archive/v4.2-结构清理方案.md)，执行记录/验收数据 [docs/下一步执行计划-v4.2.md](docs/archive/下一步执行计划-v4.2.md)。
 
 ---
 
@@ -121,7 +121,7 @@ v5.2 处理剩下的两类**系统性强度误差**，并把"定量结果不可�
 
 ## 上一版 v4.4.0（2026-10-27）
 
-**精修向导重建「从检索库找结构」+ 旧库配置一次性清理** —— 兑现 v4.2 遗留的 P4.2/P4.3（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.4.0 与 [docs/RELEASE-NOTES-v4.4.0.md](docs/RELEASE-NOTES-v4.4.0.md)）：
+**精修向导重建「从检索库找结构」+ 旧库配置一次性清理** —— 兑现 v4.2 遗留的 P4.2/P4.3（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.4.0 与 [docs/RELEASE-NOTES-v4.4.0.md](docs/archive/RELEASE-NOTES-v4.4.0.md)）：
 
 - **向导新增首个页签「检索库（polyDB）」**：可输化学式 / 矿物名 / 空间群 / 编号查，也可**按当前图谱最强峰**做 Hanawalt d-I 匹配；加入的物相自带晶胞与原子位点，位点按空间群展开成全胞，可直接进精修。
 - **旧库配置一次性清理**：启动时检测 `user_db_paths.json` 里的旧 `cod_*` 键与 `db_mounts.json` 里已删除引擎的条目，一键清理——**只删配置、不删任何库文件**；旧路径若其实是 polyDB 目录会顺手挂回。
@@ -141,7 +141,7 @@ v5.2 处理剩下的两类**系统性强度误差**，并把"定量结果不可�
 
 ## 上一版 v4.3.0（2026-10-27 · 已发布）
 
-**polyDB d 峰检索回到 MCP** —— 兑现 v4.2.1 遗留项（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.3.0 与 [docs/RELEASE-NOTES-v4.3.0.md](docs/RELEASE-NOTES-v4.3.0.md)）：
+**polyDB d 峰检索回到 MCP** —— 兑现 v4.2.1 遗留项（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.3.0 与 [docs/RELEASE-NOTES-v4.3.0.md](docs/archive/RELEASE-NOTES-v4.3.0.md)）：
 
 - **新增 MCP 工具 `search_phases_by_d_peaks`**：按实测 d 值 / 强度做 Hanawalt 检索，支持 `tolerance`/`tolerance_rel`/`min_match`/`limit`/`elements`/`max_ref_peaks`，底层为 polyDB 位图倒排 + 精确打分。
 - **旧名 `search_cod_by_d_peaks` 恢复功能**：保留旧签名转调 polyDB，不再返回 `deprecated`；补 `display_id`/`ref_id` 兼容字段与 `mounted` 状态。
@@ -160,7 +160,7 @@ v5.2 处理剩下的两类**系统性强度误差**，并把"定量结果不可�
 
 ## 上一版 v4.2.1（2026-10-26 · 已发布）
 
-**v4.2.0 验收修复版** —— 4 项 P1 兼容/UX 修复 + 文档事实修正 + 构建/验收加固（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.2.1 与 [docs/验收报告-v4.2.0.md](docs/验收报告-v4.2.0.md)）：
+**v4.2.0 验收修复版** —— 4 项 P1 兼容/UX 修复 + 文档事实修正 + 构建/验收加固（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.2.1 与 [docs/验收报告-v4.2.0.md](docs/archive/验收报告-v4.2.0.md)）：
 
 - **MCP 旧名兼容恢复**：`search_cod_phases` 支持 `97-1011097`/`96-101-1097` 编号并回填 `ref_id`/`display_id`；`SiO2` 等化学式先规范化（→`O2 Si`）、空间群忽略空格（`Fd-3m`）；`get_cod_phase_details(cod_id)` 保留旧参数名；`search_cod_online` 网络异常返回 JSON 且 `timeout` 生效。
 - **精修向导死 UI 清理**：删除已下线的 CIF 搜索框/按钮与死链路、三语死键；内置 12 矿物 + 外部 CIF 导入、COD 在线搜索、polyDB/PDF2/用户库候选结构补齐均保留。
@@ -179,7 +179,7 @@ v5.2 处理剩下的两类**系统性强度误差**，并把"定量结果不可�
 
 ## 上一版 v4.2.0（2026-10-26 · 已发布）
 
-**结构清理：旧 COD sqlite 运行时退役**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.2.0 与 [docs/RELEASE-NOTES-v4.2.0.md](docs/RELEASE-NOTES-v4.2.0.md)）：
+**结构清理：旧 COD sqlite 运行时退役**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.2.0 与 [docs/RELEASE-NOTES-v4.2.0.md](docs/archive/RELEASE-NOTES-v4.2.0.md)）：
 
 - **旧运行时删除**：`services/cif_database.py`（2,421 行）与 `services/cod_local.py`（2,410 行）删除，`config` 的 `cod_db_path`/`cod_index_db_path`/`cod_svn_path` 字段与 6 个 getter/setter 一并移除。运行期只保留 **polyDB + PDF2 + 用户自建库**。
 - **抽出三个纯模块**：`cif_utils`（CIF 解析/位点/元素判定）、`phase_search`（Hanawalt 打分 + 预筛）、`cif_minerals`（12 种内置矿物库）。三者不 import `sqlite3`/`PySide6`、不读配置路径（AST 断言），可直接单测。
@@ -201,7 +201,7 @@ v5.2 处理剩下的两类**系统性强度误差**，并把"定量结果不可�
 
 ## 更早版本 v4.1.1（2026-10-24 · 已发布）
 
-**hotfix：默认库精修正确性 + 干净安装外部引擎 + 构建可复现 + 发布政策收口**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.1.1 与 [docs/代码评估-v4.1.0.md](docs/代码评估-v4.1.0.md)）：
+**hotfix：默认库精修正确性 + 干净安装外部引擎 + 构建可复现 + 发布政策收口**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.1.1 与 [docs/代码评估-v4.1.0.md](docs/archive/代码评估-v4.1.0.md)）：
 
 - **修复默认库精修模拟峰错误（P1）**：polyDB 侧车存的是**非对称单位**位点，v4.1.0 当全胞直构 → 高对称相出现假峰。v4.1.1 在出口按空间群展开（幂等）并在精修侧兜底；Corundum 实测由「6.8°/100% 假峰」恢复为 **57.49/43.34/35.14** 真主峰。
 - **干净安装也能用 GSAS-II / MAUD（P1）**：只有内置 polyDB、没有 CIF 文件时，resolver 现从原子位点反生成 CIF 落盘并回填 `cif_path`（实测 1.3 ms → 4 ms，`structure match 1/1`）；CIF 导出同样支持位点回退。
@@ -260,7 +260,7 @@ v5.2 处理剩下的两类**系统性强度误差**，并把"定量结果不可�
 > 📦 数据库仍为外挂，不随分发；PDF2-2004 为 ICDD 版权库，永不出现在 Release 里。
 
 👉 **已发布**：[Release v4.0.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v4.1.2) —— 3 个附件（Setup 249.1 MB / Portable 389.0 MB / SHA256）已上传并核验（远端 digest 与本地逐件一致）；**数据库不在本仓库发布**，统一由 [PolyXRD-DataBase](https://github.com/PolyXRD/PolyXRD-DataBase) 仓库的 Releases 分发。
-> 完整构建/产物/验收记录：[docs/发布检查清单-v4.0.0.md](docs/发布检查清单-v4.0.0.md)。
+> 完整构建/产物/验收记录：[docs/发布检查清单-v4.0.0.md](docs/archive/发布检查清单-v4.0.0.md)。
 
 | 产物 | 体积 | SHA-256（前 16 位） |
 |---|---|---|
@@ -276,7 +276,7 @@ v5.2 处理剩下的两类**系统性强度误差**，并把"定量结果不可�
 
 ## 📚 上一版 v3.2.0（2026-10-20）
 
-**大库可用性修复：让 20~30 GB 级的外挂物相库真正能用**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §3.2.0 与 [docs/3COD数据库验收报告-20261020.md](docs/3COD数据库验收报告-20261020.md)）：
+**大库可用性修复：让 20~30 GB 级的外挂物相库真正能用**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §3.2.0 与 [docs/3COD数据库验收报告-20261020.md](docs/archive/3COD数据库验收报告-20261020.md)）：
 
 - **修掉「挂了库却用不上」**：全库索引的路径解析一度只认"索引就在 COD 目录旁边"，**从不看**用户导入的路径 —— 「外挂数据库管理…」显示已挂载，检索却还在读旧库、或恒定判为不可用。现在读路径优先用户导入，写路径（重建索引）则明确不认，避免把外挂库当自家索引写。
 - **检索改用只读连接**：旧实现每次查询都以**可写**方式打开索引并跑一遍建表/迁移 DDL。在 28 GB 的库上，`is_ready()` 要 **65 s** 且返回 False，`stats()` 直接报 `database is locked`。修后分别是 **0.013 s / 0.125 s**，连接复用且异常不再泄漏（"第一次超时、第二次报锁"的根因）。
@@ -290,7 +290,7 @@ v5.2 处理剩下的两类**系统性强度误差**，并把"定量结果不可�
 
 ## 📚 v3.1.0（2026-10-18）
 
-**XinMatch 格式库支持 + 任意位置挂载 + 全量 review 修正**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §3.1.0 与 [docs/code-review-2026-10-18.md](docs/code-review-2026-10-18.md)）：
+**XinMatch 格式库支持 + 任意位置挂载 + 全量 review 修正**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §3.1.0 与 [docs/code-review-2026-10-18.md](docs/archive/code-review-2026-10-18.md)）：
 
 - **XinMatch 格式库**：Data source 下拉新增第 7 项，可直接挂载第三方 `entries` / `peaks` / `elements` / `element_combo` 四表结构的库文件（实测 71,206 / 112,734 条目），**无需转换**。检索口径与 COD 无机物库逐项一致 —— 同一套 Hanawalt 度量 + 同一套 FOM 排序；单测用同数据造 PolyXRD `phases` 库做双实现比对，14 个度量字段（`abs=1e-12`）与排序完全一致。
 - **速度**：没有照直觉在 `peaks.d` 上做 SQL 区间扫描 —— 该库 d 轴极密，±0.02 Å 窗口约 2.5 万条峰，20 个测量峰实测 **9 s**，比现有链路还慢。改为一次建「每相最强 12 峰」索引（约 3 秒，缓存到 `~/.polyxrd/cache/`，键 = 路径 + size + mtime），之后**每次检索 0.37~0.57 s**（COD 无机库链路 0.8~5.5 s）。
