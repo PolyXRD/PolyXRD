@@ -889,7 +889,16 @@ translations = {
             "export_img_btn": "Export Image",
             "y_scale_hint_tip": "Left-click the Y-axis area to cycle modes; right-click anywhere in the plot to open the selection menu.\nTick labels still show real intensity under log / sqrt scales.",
             "export_img_dlg_title": "Export Image",
-            "export_img_filter": "Image files (*.png *.pdf *.svg *.eps)"
+            "export_img_filter": "Image files (*.png *.pdf *.svg *.eps)",
+            "tool_reset": "Reset view",
+            "tool_zoom_x": "Zoom X by drag",
+            "tool_zoom_y": "Zoom Y by drag",
+            "tool_zoom_rect": "Zoom region by drag",
+            "tool_pan_left": "Pan left",
+            "tool_pan_right": "Pan right",
+            "tool_zoom_in": "Zoom in",
+            "tool_zoom_out": "Zoom out",
+            "tool_crosshair": "Crosshair readout (follows the mouse, shows 2θ and intensity)"
         },
         "pattern_display": {
             "y_scale_hint_tip": "Left-click the Y-axis area to cycle modes; right-click anywhere in the plot to open the selection menu.\nTick labels still show real intensity under log / sqrt scales.",

@@ -885,7 +885,16 @@ translations = {
             "export_img_btn": "导出图片",
             "y_scale_hint_tip": "左键点击 Y 轴区域循环切换; 右键点击图内任意位置弹出选择菜单。\n对数 / 方根刻度下刻度标签仍是真实强度值。",
             "export_img_dlg_title": "导出图片",
-            "export_img_filter": "图片文件 (*.png *.pdf *.svg *.eps)"
+            "export_img_filter": "图片文件 (*.png *.pdf *.svg *.eps)",
+            "tool_reset": "复位视图",
+            "tool_zoom_x": "横向框选缩放",
+            "tool_zoom_y": "纵向框选缩放",
+            "tool_zoom_rect": "区域框选缩放",
+            "tool_pan_left": "视场左移",
+            "tool_pan_right": "视场右移",
+            "tool_zoom_in": "放大",
+            "tool_zoom_out": "缩小",
+            "tool_crosshair": "十字线读数（跟随鼠标显示 2θ 与强度）"
         },
         "pattern_display": {
             "y_scale_hint_tip": "左键点击 Y 轴区域循环切换; 右键点击图内任意位置弹出选择菜单。\n对数 / 方根刻度下刻度标签仍是真实强度值。",

@@ -7,7 +7,7 @@
     峰检测 &nbsp;·&nbsp; 多物相定性检索 &nbsp;·&nbsp; Rietveld 结构精修 &nbsp;·&nbsp; Le Bail 晶胞精修 &nbsp;·&nbsp; 指标化 &nbsp;·&nbsp; 3D 结构可视化 &nbsp;·&nbsp; 内置 COD 无机物库 (polyDB) + 多库外挂检索
   </p>
   <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v5.3.0-blue?style=flat-square" /></a>
+    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v5.4.0-blue?style=flat-square" /></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
     &nbsp;
@@ -15,7 +15,7 @@
     &nbsp;
     <img src="https://img.shields.io/badge/UI-PySide6%20(Qt6)-41cd52?style=flat-square" />
     &nbsp;
-    <img src="https://img.shields.io/badge/Tests-2717%20passed-brightgreen?style=flat-square" />
+    <img src="https://img.shields.io/badge/Tests-2728%20passed-brightgreen?style=flat-square" />
   </p>
   <p><i>🌐 English documentation: [README-EN.md](README-EN.md)</i></p>
 </div>
@@ -34,6 +34,7 @@
 - **UI 与算法分层** — MVVM 架构，`services/` 层是纯算法、不依赖 Qt，可独立单元测试。
 
 > 📋 **版本变更记录**：见 [docs/CHANGELOG.md](docs/CHANGELOG.md)。
+> ✅ **v5.4.0 发布检查清单（构建/产物/验收记录）**：见 [docs/发布检查清单-v5.4.0.md](docs/发布检查清单-v5.4.0.md)。
 > ✅ **v5.3.0 发布检查清单（构建/产物/验收记录）**：见 [docs/发布检查清单-v5.3.0.md](docs/发布检查清单-v5.3.0.md)。
 > ✅ **v5.2.0 发布检查清单（构建/产物/验收记录）**：见 [docs/发布检查清单-v5.2.0.md](docs/发布检查清单-v5.2.0.md)。
 > 🏗️ **v5.1.0 发布检查清单（收口未单独发布，内容已并入 v5.2.0）**：见 [docs/发布检查清单-v5.1.0.md](docs/archive/发布检查清单-v5.1.0.md)。
@@ -49,7 +50,11 @@
 
 ---
 
-## 🆕 最新版本 v5.3.0（2026-11-10）
+## 🆕 最新版本 v5.4.0（2026-11-11）
+
+**谱图操作工具行换成彩色图标** —— 参照 XinRefinement 的**程序化绘制**方案（零素材，QPainter 32×32 设计坐标、多尺寸位图，高 DPI 清晰），把原来「添加峰 / 重置 / 导出」三个文字按钮换成一条**彩色图标工具行**（复位 / 横向框选 / 纵向框选 / 区域框选 / 左移 / 右移 / 放大 / 缩小 / 十字线共 9 个），matplotlib 导航条 8 个默认动作也按品牌色重新着色 + 浅色圆角底衬；十字线跟随读数，导出改由导航条 save 图标触发。测试：新增 `tests/test_v54_plot_toolbar.py`（11 条）；相关回归 72 项通过。详见 [docs/RELEASE-NOTES-v5.4.0.md](docs/RELEASE-NOTES-v5.4.0.md)。
+
+## 上一版 v5.3.0（2026-11-10 · 已发布）
 
 **峰形剩下的两类不对称补齐，定量从"点值"改成"区间"** —— v5.2 把强度误差模型补完，
 v5.3 处理**各向异性展宽**与**低角拖尾**，并给"这个 wt% 能不能用"一个量化边界。

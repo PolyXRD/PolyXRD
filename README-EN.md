@@ -7,7 +7,7 @@
     Peak detection &nbsp;·&nbsp; Multi-phase qualitative search &nbsp;·&nbsp; Rietveld structure refinement &nbsp;·&nbsp; Le Bail cell refinement &nbsp;·&nbsp; Indexing &nbsp;·&nbsp; 3D structure visualization &nbsp;·&nbsp; Bundled COD-Inorg polyDB default library + external COD-Full / PDF2-2004
   </p>
   <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v5.3.0-blue?style=flat-square" /></a>
+    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v5.4.0-blue?style=flat-square" /></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
     &nbsp;
@@ -15,7 +15,7 @@
     &nbsp;
     <img src="https://img.shields.io/badge/UI-PySide6%20(Qt6)-41cd52?style=flat-square" />
     &nbsp;
-    <img src="https://img.shields.io/badge/Tests-2717%20passed-brightgreen?style=flat-square" />
+    <img src="https://img.shields.io/badge/Tests-2728%20passed-brightgreen?style=flat-square" />
   </p>
   <p><i>🌐 简体中文文档：[README.md](README.md)</i></p>
 </div>
@@ -38,7 +38,11 @@ Core design philosophy:
 
 ---
 
-## 🆕 Latest version v5.3.0 (2026-11-10)
+## 🆕 Latest version v5.4.0 (2026-11-11)
+
+**The plot toolbar gets colourful icons** — following XinRefinement's **programmatic drawing** approach (zero assets, QPainter 32×32 design coordinates, multi-size bitmaps, crisp on HiDPI), the old "Add Peak / Reset / Export" text buttons are replaced by a **colour-icon toolbar** (Reset / Zoom-X / Zoom-Y / Zoom-Rect / Pan-Left / Pan-Right / Zoom-In / Zoom-Out / Crosshair, 9 icons), and the matplotlib navigation bar's 8 default actions are recoloured in the brand palette with a light rounded backing. The crosshair follows the cursor and reads out coordinates; Export now triggers from the navigation bar's save icon. Tests: new `tests/test_v54_plot_toolbar.py` (11 cases); 72 related regression cases pass. See [docs/RELEASE-NOTES-v5.4.0.md](docs/RELEASE-NOTES-v5.4.0.md).
+
+## Previous release v5.3.0 (2026-11-10 · released)
 
 **The last two classes of profile asymmetry, and quantification delivered as an interval instead of a point** —
 v5.2 finished the intensity-error model; v5.3 adds **anisotropic broadening** and a **low-angle tail**, and puts a

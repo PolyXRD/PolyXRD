@@ -15,17 +15,27 @@ import numpy as np
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib.figure import Figure
 from matplotlib.widgets import SpanSelector
-from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel
 
 from polyxrd.i18n import tr
 from polyxrd.models.peak import Peak
 from polyxrd.models.xrd_data import XRDData
 from polyxrd.utils.mpl_font import ensure_cjk_font
-from polyxrd.views.widgets.y_scale import YScaleController, hint_text
+from polyxrd.views.widgets.plot_toolbar import PlotToolBar
+from polyxrd.views.widgets.toolbar_icons import colorize_nav_toolbar
+from polyxrd.views.widgets.y_scale import (
+    Y_SCALE_LOG,
+    Y_SCALE_SQRT,
+    YScaleController,
+    hint_text,
+)
 
 # 图上标题/图例含中文 → 建图前先插系统中文字体, 否则画成豆腐块。
 ensure_cjk_font()
+
+#: 可激活的谱图操作工具（与 PlotToolBar.MODE_TOOLS 对应）
+_PLOT_TOOLS = ("zoom_x", "zoom_y", "zoom_rect", "crosshair")
 
 
 class PlotWidget(QWidget):
@@ -48,6 +58,7 @@ class PlotWidget(QWidget):
 
     peak_clicked = Signal(object)
     range_selected = Signal(float, float)
+    cursor_info = Signal(str)
 
     # M22: X 轴交互参数
     _X_MARGIN_RATIO = 0.01   # 首屏边距 (数据宽度的 1%)
@@ -57,6 +68,13 @@ class PlotWidget(QWidget):
     def __init__(self, parent: Optional[QWidget] = None, *, compact: bool = False) -> None:
         super().__init__(parent)
         self._ylabel_base = "Intensity"
+        # v5.4.0: 谱图操作工具状态（复位/框选缩放/平移/步进缩放/十字线）
+        self._tool: Optional[str] = None
+        self._band = None                     # 拖拽中的橡皮筋 (matplotlib Rectangle)
+        self._band_start: Optional[tuple[float, float]] = None
+        self._cursor_line = None              # 十字线竖线 artist
+        self._cursor_text = None              # 角度标注 artist
+        self._cursor_x: Optional[float] = None
         # v2.6.0: compact 模式 —— 无工具栏/按钮行/标题的扁条形图,
         # 供精修页残差条使用 (GSAS-II/MAUD 风格: 主图下一条残差, 不独立成区)
         self._compact = compact
@@ -110,38 +128,27 @@ class PlotWidget(QWidget):
             self._canvas.setMaximumHeight(130)
             return
 
-        # Toolbar
+        # 导航工具条（matplotlib 原生，换彩色图标）
         self._toolbar = NavigationToolbar2QT(self._canvas, self)
+        colorize_nav_toolbar(self._toolbar, chip=30)
 
-        # 操作按钮
-        btn_layout = QHBoxLayout()
+        # 谱图操作行（v5.4.0：复位 / 框选缩放 / 平移 / 步进缩放 / 十字线）
+        self._plot_toolbar = PlotToolBar(self, self)
+        self.cursor_info.connect(self._on_cursor_info)
 
-        self._btn_add_peak = QPushButton(tr("vw.plot_widget.add_peak_btn"))
-        self._btn_add_peak.clicked.connect(self._on_add_peak_mode)
-        btn_layout.addWidget(self._btn_add_peak)
-
-        self._btn_reset = QPushButton(tr("vw.plot_widget.reset_view_btn"))
-        self._btn_reset.clicked.connect(self.reset_view)
-        btn_layout.addWidget(self._btn_reset)
-
-        self._btn_export = QPushButton(tr("vw.plot_widget.export_img_btn"))
-        self._btn_export.clicked.connect(self._on_export)
-        btn_layout.addWidget(self._btn_export)
-
-        # 纵坐标模式提示 (随切换实时更新)
+        # 纵坐标模式提示 (随切换实时更新，保持在谱图下方一行)
         self._y_scale_hint = QLabel()
         self._y_scale_hint.setStyleSheet("QLabel { color: #555; font-size: 11px; }")
         self._y_scale_hint.setToolTip(tr("vw.plot_widget.y_scale_hint_tip"))
-        btn_layout.addWidget(self._y_scale_hint)
-
-        btn_layout.addStretch()
 
         layout.addWidget(self._toolbar)
+        layout.addWidget(self._plot_toolbar)
         layout.addWidget(self._canvas)
 
-        btn_widget = QWidget()
-        btn_widget.setLayout(btn_layout)
-        layout.addWidget(btn_widget)
+        hint_row = QHBoxLayout()
+        hint_row.addWidget(self._y_scale_hint)
+        hint_row.addStretch()
+        layout.addLayout(hint_row)
 
         # 初始空白图
         self._axes = self._figure.add_subplot(111)
@@ -159,9 +166,8 @@ class PlotWidget(QWidget):
 
     def retranslate(self) -> None:
         """切语言时重设本控件的静态文案 (纵坐标提示的正文也跟着刷)。"""
-        self._btn_add_peak.setText(tr("vw.plot_widget.add_peak_btn"))
-        self._btn_reset.setText(tr("vw.plot_widget.reset_view_btn"))
-        self._btn_export.setText(tr("vw.plot_widget.export_img_btn"))
+        if getattr(self, "_plot_toolbar", None) is not None:
+            self._plot_toolbar.retranslate()
         self._y_scale_hint.setToolTip(tr("vw.plot_widget.y_scale_hint_tip"))
         # 提示正文由 hint_text() 生成, 换语言不会自动重算 → 这里按当前模式重设一次
         self._on_y_scale_changed(self._y_scale.mode())
@@ -208,6 +214,9 @@ class PlotWidget(QWidget):
         self.fit_x_to_data()
         # 对数/方根模式下重新按新数据取正数据范围 (autoscale 已对 y 失效)
         self._y_scale.set_mode(self._y_scale.mode(), refit=True)
+        # v5.4.0: 十字线工具激活时把竖线贴回新视场
+        if self._tool == "crosshair" and self._cursor_x is not None:
+            self._update_cursor(self._cursor_x)
         self._canvas.draw_idle()
 
     def clear_plot(self) -> None:
@@ -219,6 +228,7 @@ class PlotWidget(QWidget):
         self._peaks.clear()
         self._peak_artists.clear()
         self._data_xlim = None  # M22: 数据没了, 缩放基准一并失效
+        self._hide_cursor()     # v5.4.0: 十字线 artist 随 clear() 失效
         for artist in getattr(self, '_match_artists', []):
             artist.remove()
         self._match_artists = []
@@ -333,10 +343,220 @@ class PlotWidget(QWidget):
 
         M22: X 回到数据实际范围而非 matplotlib 默认边距。
         """
+        self._cancel_nav_mode()
+        self._hide_cursor()
         self._axes.relim()
         self._axes.autoscale_view()
         self.fit_x_to_data()
         self._y_scale.set_mode(self._y_scale.mode(), refit=True)
+        self._canvas.draw_idle()
+
+    # ------------------------------------------------------------------
+    # v5.4.0: 谱图操作工具（复位 / 框选缩放 / 平移 / 步进缩放 / 十字线）
+    # ------------------------------------------------------------------
+
+    def set_plot_tool(self, tool: Optional[str]) -> None:
+        """切换谱图操作工具；``None`` = 恢复默认点击语义。
+
+        与导航工具条的平移/框选互斥：开工具前先关掉它们，避免两套拖拽
+        同时抢鼠标事件。
+        """
+        if tool is not None and tool not in _PLOT_TOOLS:
+            return
+        if tool is not None:
+            self._cancel_nav_mode()
+        self._tool = tool
+        self._band = None
+        self._band_start = None
+        if tool == "crosshair":
+            self._canvas.setCursor(Qt.CursorShape.CrossCursor)
+        else:
+            self._canvas.unsetCursor()
+            self._hide_cursor()
+            pb = getattr(self, "_plot_toolbar", None)
+            if pb is not None:
+                pb.set_hint("")
+        self._canvas.draw_idle()
+
+    def _cancel_nav_mode(self) -> None:
+        """关掉导航工具条已激活的平移/框选。"""
+        tb = getattr(self, "_toolbar", None)
+        if tb is None:
+            return
+        acts = getattr(tb, "_actions", {})
+        for key in ("pan", "zoom"):
+            act = acts.get(key)
+            if act is not None and act.isChecked():
+                try:
+                    getattr(tb, key)()
+                except Exception:  # noqa: BLE001
+                    act.setChecked(False)
+
+    def pan_x(self, frac: float) -> None:
+        """整体水平平移（``frac > 0`` 向右移，即视场往大角度走）。"""
+        if not self._data_list:
+            return
+        lo, hi = sorted(self._axes.get_xlim())
+        shift = (hi - lo) * float(frac)
+        nl, nr = self._clamp_xlim(lo + shift, hi + shift)
+        self._axes.set_xlim(nl, nr)
+        self._scale_y_to_view()
+        self._canvas.draw_idle()
+
+    def zoom_scale(self, factor: float) -> None:
+        """以视场中心为锚点整体缩放（``factor < 1`` 放大）。"""
+        if not self._data_list or factor is None or factor <= 0:
+            return
+        lo, hi = sorted(self._axes.get_xlim())
+        centre = 0.5 * (lo + hi)
+        half = 0.5 * (hi - lo) * float(factor)
+        nl, nr = self._clamp_xlim(centre - half, centre + half)
+        self._axes.set_xlim(nl, nr)
+        self._scale_y_to_view()
+        self._canvas.draw_idle()
+
+    def _scale_y_to_view(self) -> None:
+        """按当前横向视场内的数据重设 y 范围（放大/平移后不留空屏）。"""
+        if not self._data_list:
+            return
+        lo, hi = sorted(self._axes.get_xlim())
+        ys = []
+        for d in self._data_list:
+            x = np.asarray(d.two_theta, dtype=float)
+            y = np.asarray(d.intensity, dtype=float)
+            m = (x >= lo) & (x <= hi) & np.isfinite(y)
+            if m.any():
+                ys.append(y[m])
+        if not ys:
+            return
+        allv = np.concatenate(ys)
+        mode = self._y_scale.mode()
+        if mode == Y_SCALE_LOG:
+            pos = allv[allv > 0]
+            if pos.size == 0:
+                return
+            bottom = max(float(pos.min()) * 0.5, 1e-12)
+            top = float(pos.max()) * 1.6
+        elif mode == Y_SCALE_SQRT:
+            bottom = 0.0
+            top = float(np.clip(allv, 0.0, None).max()) * 1.15
+            if top <= bottom:
+                top = bottom + 1.0
+        else:
+            vmax = float(allv.max())
+            bottom = min(0.0, float(allv.min()))
+            top = vmax * 1.08 if vmax > 0 else 1.0
+        try:
+            self._axes.set_ylim(bottom, top)
+        except (ValueError, TypeError):  # pragma: no cover - 极端数据兜底
+            pass
+
+    def _make_band(self, x: float, y: float):
+        """创建/重置拖拽橡皮筋矩形。"""
+        from matplotlib.patches import Rectangle
+
+        if self._band is not None:
+            try:
+                self._band.remove()
+            except Exception:  # noqa: BLE001
+                pass
+        self._band = Rectangle(
+            (x, y), 0.0, 0.0, facecolor="#d32f2f", alpha=0.12,
+            edgecolor="#d32f2f", lw=1.0, ls="--", zorder=6,
+        )
+        self._axes.add_patch(self._band)
+        return self._band
+
+    def _apply_band(self, x0, y0, x1, y1) -> None:
+        """按工具语义把框选范围变成新的视场。"""
+        span_x = abs(x1 - x0)
+        span_y = abs(y1 - y0)
+        cur_x = abs(self._axes.get_xlim()[1] - self._axes.get_xlim()[0])
+        cur_y = abs(self._axes.get_ylim()[1] - self._axes.get_ylim()[0])
+        if self._tool == "zoom_x":
+            if span_x <= cur_x * 0.02:
+                return
+            lo, hi = sorted((x0, x1))
+            nl, nr = self._clamp_xlim(lo, hi)
+            self._axes.set_xlim(nl, nr)
+            self._scale_y_to_view()
+        elif self._tool == "zoom_y":
+            if span_y <= cur_y * 0.02:
+                return
+            lo, hi = sorted((y0, y1))
+            self._axes.set_ylim(lo, hi)
+        elif self._tool == "zoom_rect":
+            if span_x <= cur_x * 0.02 and span_y <= cur_y * 0.02:
+                return
+            if span_x > cur_x * 0.02:
+                lo, hi = sorted((x0, x1))
+                nl, nr = self._clamp_xlim(lo, hi)
+                self._axes.set_xlim(nl, nr)
+            if span_y > cur_y * 0.02:
+                lo, hi = sorted((y0, y1))
+                self._axes.set_ylim(lo, hi)
+
+    def _update_cursor(self, x: float) -> None:
+        """把红色十字竖线定位到 ``x`` 并报角度/强度。"""
+        self._cursor_x = float(x)
+        for a in (self._cursor_line, self._cursor_text):
+            if a is not None:
+                try:
+                    a.remove()
+                except Exception:  # noqa: BLE001
+                    pass
+        self._cursor_line = self._axes.axvline(
+            x, color="#d32f2f", lw=1.0, ls="--", alpha=0.85, zorder=5,
+        )
+        self._cursor_text = self._axes.text(
+            x, 0.98, f"{x:.3f}°", transform=self._axes.get_xaxis_transform(),
+            ha="center", va="top", fontsize=8, color="#d32f2f", zorder=5,
+        )
+        intensity = 0.0
+        if self._data_list:
+            try:
+                d = self._data_list[-1]
+                idx = int(np.argmin(abs(np.asarray(d.two_theta, float) - x)))
+                intensity = float(d.intensity[idx])
+            except (IndexError, ValueError, TypeError):
+                pass
+        self.cursor_info.emit(f"2θ={x:.3f}°  I={intensity:.1f}")
+        self._canvas.draw_idle()
+
+    def _hide_cursor(self) -> None:
+        """移除十字竖线与标注。"""
+        for a in (self._cursor_line, self._cursor_text):
+            if a is not None:
+                try:
+                    a.remove()
+                except Exception:  # noqa: BLE001
+                    pass
+        self._cursor_line = None
+        self._cursor_text = None
+        self._cursor_x = None
+
+    def _on_cursor_info(self, text: str) -> None:
+        """十字线读数 → 操作行右侧提示（仅十字线工具激活时显示）。"""
+        pb = getattr(self, "_plot_toolbar", None)
+        if pb is not None:
+            pb.set_hint(text if self._tool == "crosshair" else "")
+
+    def _tool_press(self, event) -> None:
+        """当前谱图操作工具下的按下动作。
+
+        - ``crosshair``：左键定位竖线；
+        - ``zoom_x`` / ``zoom_y`` / ``zoom_rect``：左键起拖画橡皮筋。
+        """
+        if self._tool == "crosshair":
+            if event.button == 1 and event.xdata is not None:
+                self._update_cursor(float(event.xdata))
+            return
+        if event.button != 1:
+            return
+        if event.xdata is None or event.ydata is None:
+            return
+        self._band_start = (float(event.xdata), float(event.ydata))
+        self._make_band(*self._band_start)
         self._canvas.draw_idle()
 
     def export_image(self, path: str, dpi: int = 300) -> None:
@@ -389,6 +609,14 @@ class PlotWidget(QWidget):
             except (RuntimeError, TypeError):  # noqa: BLE001
                 pass
             home_action.triggered.connect(self.reset_view)
+        # save_figure 默认弹 mpl 保存框；改接到本控件的导出（带自定义对话框）
+        save_action = getattr(self._toolbar, "_actions", {}).get("save_figure")
+        if save_action is not None:
+            try:
+                save_action.triggered.disconnect()
+            except (RuntimeError, TypeError):  # noqa: BLE001
+                pass
+            save_action.triggered.connect(self._on_export)
 
     def _x_bounds(self) -> Optional[tuple[float, float]]:
         """允许的 xlim 硬边界: 数据范围外扩 20% (clamp)。"""
@@ -455,6 +683,11 @@ class PlotWidget(QWidget):
         if getattr(self._toolbar, "mode", ""):  # 工具栏 zoom/pan 模式下不插手
             return
 
+        # v5.4.0: 谱图操作工具优先（框选缩放 / 十字线）
+        if self._tool is not None:
+            self._tool_press(event)
+            return
+
         # 检查是否点击了峰 (暂存, 释放时未拖动才发射)
         if self._peaks and event.xdata is not None:
             for peak in self._peaks:
@@ -471,6 +704,21 @@ class PlotWidget(QWidget):
 
     def _on_mouse_move(self, event) -> None:
         """鼠标移动: 坐标读数 + 左键拖动 X 平移 (M22)。"""
+        # v5.4.0: 框选拖拽中 → 只更新橡皮筋
+        if self._band is not None and self._band_start is not None:
+            if (event.inaxes == self._axes and event.xdata is not None
+                    and event.ydata is not None):
+                x0, y0 = self._band_start
+                self._band.set_width(float(event.xdata) - x0)
+                self._band.set_height(float(event.ydata) - y0)
+                self._canvas.draw_idle()
+            return
+        # v5.4.0: 十字线工具 → 跟随鼠标并报读数
+        if self._tool == "crosshair" and event.inaxes == self._axes:
+            if event.xdata is not None:
+                self._update_cursor(float(event.xdata))
+            return
+
         pan = self._pan_state
         if (
             pan is not None
@@ -503,6 +751,21 @@ class PlotWidget(QWidget):
 
     def _on_mouse_release(self, event) -> None:
         """鼠标释放: 未拖动 (<3px) 且按下时命中峰 → 发射 peak_clicked (M22)。"""
+        # v5.4.0: 结束框选，按工具语义应用新视场
+        if self._band_start is not None:
+            x0, y0 = self._band_start
+            self._band_start = None
+            band, self._band = self._band, None
+            if band is not None:
+                try:
+                    band.remove()
+                except Exception:  # noqa: BLE001
+                    pass
+            if event.xdata is not None and event.ydata is not None:
+                self._apply_band(x0, y0, float(event.xdata), float(event.ydata))
+            self._canvas.draw_idle()
+            return
+
         pan = self._pan_state
         self._pan_state = None
         peak = self._pending_peak

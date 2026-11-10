@@ -888,7 +888,16 @@ translations = {
             "export_img_btn": "画像をエクスポート",
             "y_scale_hint_tip": "Y軸領域を左クリックでモード切替; 図内の任意の場所を右クリックで選択メニューを表示。\n対数 / 平方根軸でも目盛ラベルは実強度のまま。",
             "export_img_dlg_title": "画像のエクスポート",
-            "export_img_filter": "画像ファイル (*.png *.pdf *.svg *.eps)"
+            "export_img_filter": "画像ファイル (*.png *.pdf *.svg *.eps)",
+            "tool_reset": "ビューをリセット",
+            "tool_zoom_x": "横方向のドラッグでズーム",
+            "tool_zoom_y": "縦方向のドラッグでズーム",
+            "tool_zoom_rect": "矩形ドラッグでズーム",
+            "tool_pan_left": "視野を左へ",
+            "tool_pan_right": "視野を右へ",
+            "tool_zoom_in": "拡大",
+            "tool_zoom_out": "縮小",
+            "tool_crosshair": "十字線の読み取り（マウス追従で 2θ と強度を表示）"
         },
         "pattern_display": {
             "y_scale_hint_tip": "Y軸領域を左クリックでモード切替; 図内の任意の場所を右クリックで選択メニューを表示。\n対数 / 平方根軸でも目盛ラベルは実強度のまま。",
