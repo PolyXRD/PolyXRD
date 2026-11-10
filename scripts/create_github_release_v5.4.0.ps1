@@ -188,7 +188,7 @@ if (-not $curlExe) {
   if (Test-Path $fallback) { $curlExe = $fallback } else { throw 'curl.exe 不存在; 无法上传附件' }
 }
 
-function Upload-Asset([string]$filePath, [string]$assetName, [string]$contentType, [int]$retries = 6) {
+function Upload-Asset([string]$filePath, [string]$assetName, [string]$contentType, [int]$retries = 2) {
   Assert-NotBanned $filePath
   Assert-NotBanned $assetName
   if (-not (Test-Path $filePath)) { throw "附件不存在: $filePath" }
@@ -222,6 +222,10 @@ function Upload-Asset([string]$filePath, [string]$assetName, [string]$contentTyp
       '-H', "User-Agent: PolyXRD-upload/2.0",
       '-H', "Content-Type: $contentType",
       '-H', 'Expect:',
+      '--max-time', '540',
+      '--retry', '5',
+      '--retry-delay', '10',
+      '--retry-all-errors',
       '--data-binary', "@$filePath",
       $uri
     )
