@@ -23,9 +23,64 @@
 """
 from __future__ import annotations
 
+import os
+import shutil
+import stat
+from pathlib import Path
+
 import pytest
 
 _LANGUAGE_KEY = "language"
+
+#: 测试会在**仓库根目录**留下临时产物：GSAS-II 工程目录 ``maud_engine_*``、
+#: v5 探针的 ``polyxrd_g2_*`` / ``polyxrd_gsas_*``、``tmp*``，以及 pytest 自己
+#: 的 ``pytest-of-*``。它们都在 ``.gitignore`` 里，但一次全量回归能积到 200+
+#: 个目录、几百 MB —— 之前是需要人工清理的。这里在会话结束时统一收尾。
+_TEMP_PREFIXES = ("maud_engine", "polyxrd_g2_", "polyxrd_gsas_", "tmp",
+                  "pytest-of-")
+
+_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _force_writable(func, path, exc_info):
+    """``rmtree`` 的兜底：Windows 上只读/被短暂占用的文件先改属性再删一次。
+
+    ``ignore_errors=True`` 会把失败**完全吞掉**，实测 LibreOffice 导出的
+    ``.~lock.*#`` 残留就是这样活下来的（soffice 刚退出、句柄还没释放）。
+    """
+    try:
+        os.chmod(path, stat.S_IWRITE)
+        func(path)
+    except OSError:
+        return
+
+
+def _remove_temp_artifacts() -> None:
+    """删除仓库根目录下匹配 ``_TEMP_PREFIXES`` 的条目（失败不致命）。"""
+    for entry in _ROOT.iterdir():
+        if not entry.name.startswith(_TEMP_PREFIXES):
+            continue
+        try:
+            if entry.is_dir() and not entry.is_symlink():
+                shutil.rmtree(entry, onerror=_force_writable)
+            else:
+                entry.unlink(missing_ok=True)
+        except OSError:  # noqa: BLE001 - 仍被占用就留给下次会话
+            continue
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _purge_temp_artifacts():
+    """整个测试会话结束后清理根目录临时产物。"""
+    yield
+    _remove_temp_artifacts()
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_sessionfinish(session, exitstatus):
+    """再清一次：pytest 的 ``tmp_path_factory`` 在本夹具收尾之后会重建
+    ``pytest-of-<user>`` 的骨架目录（数十 KB），这里补刀。"""
+    _remove_temp_artifacts()
 
 
 @pytest.fixture(autouse=True)

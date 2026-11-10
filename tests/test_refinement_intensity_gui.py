@@ -113,6 +113,40 @@ class TestIntensityControls:
         assert p["roughness_model"] == "none"
         assert p["microabsorption"] is False
 
+    def test_per_phase_radii_follow_global_switch(self, wizard):
+        assert not wizard._edit_grain_radii.isEnabled()
+        wizard._chk_microabsorption.setChecked(True)
+        assert wizard._edit_grain_radii.isEnabled()
+
+        wizard._selected_phases = [object(), object()]
+        wizard._edit_grain_radii.setText("12, 8")
+        assert _params(wizard)["grain_radii_um"] == [12.0, 8.0]
+
+        # 数量与已选相不一致 → 整体退回全局半径，不静默半套用
+        wizard._edit_grain_radii.setText("12, 8, 3")
+        assert "grain_radii_um" not in _params(wizard)
+
+
+class TestParseGrainRadii:
+    def test_blank_is_none(self):
+        from polyxrd.models.refinement_options import parse_grain_radii
+
+        assert parse_grain_radii("") is None
+        assert parse_grain_radii("   ") is None
+
+    def test_accepts_ascii_and_cjk_separators(self):
+        from polyxrd.models.refinement_options import parse_grain_radii
+
+        assert parse_grain_radii("12, 8;15，6") == [12.0, 8.0, 15.0, 6.0]
+
+    def test_rejects_non_positive(self):
+        from polyxrd.models.refinement_options import parse_grain_radii
+
+        with pytest.raises(ValueError):
+            parse_grain_radii("12, 0")
+        with pytest.raises(ValueError):
+            parse_grain_radii("12, abc")
+
 
 class TestClampedWarning:
     def _result(self, **fit_params) -> RefinementResult:
@@ -141,6 +175,20 @@ class TestClampedWarning:
         wizard._update_microabsorption_note(self._result(
             roughness_model="sidey", roughness_s=0.123))
         assert "0.123" in wizard._label_microabsorption.text()
+
+    def test_per_phase_radius_lines_are_appended(self, wizard):
+        """P0-G：逐相敏感度/等效半径只追加在状态文案里，不改 wt% 口径。"""
+        wizard._update_microabsorption_note(self._result(
+            microabsorption_per_phase=[
+                {"phase": "P1", "delta_wt_pp": -0.42,
+                 "sensitivity_pp_per_um": -0.05, "equivalent_radius_um": 18.0},
+                {"phase": "P2", "delta_wt_pp": 0.10,
+                 "sensitivity_pp_per_um": 0.01, "equivalent_radius_um": None},
+            ]))
+        text = wizard._label_microabsorption.text()
+        assert text.splitlines()[0] == tr("intensity_note.off")
+        assert "P1" in text and "P2" in text
+        assert "18" in text
 
 
 # ----------------------------------------------------------------------
@@ -215,6 +263,19 @@ class TestMainPageControls:
         assert seen["microabsorption"] is True
         assert seen["grain_radius_um"] == pytest.approx(15.0)
         assert seen["roughness_model"] == "none"
+
+    def test_per_phase_radii_match_selected_count(self, refine_view):
+        refine_view._chk_microabsorption.setChecked(True)
+        assert refine_view._edit_grain_radii.isEnabled()
+        refine_view._selected_phase_list.clear()
+        refine_view._selected_phase_list.addItem("A")
+        refine_view._selected_phase_list.addItem("B")
+
+        refine_view._edit_grain_radii.setText("12, 8")
+        assert refine_view._intensity_params()["grain_radii_um"] == [12.0, 8.0]
+
+        refine_view._edit_grain_radii.setText("12, 8, 3")
+        assert "grain_radii_um" not in refine_view._intensity_params()
 
 
 class TestMainPageClampedAlert:

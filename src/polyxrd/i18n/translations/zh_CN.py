@@ -569,6 +569,7 @@ translations = {
             "log_save_failed": "日志保存失败: {error}",
             "col_phase": "物相",
             "col_weight": "质量分数(%)",
+            "col_shape": "各向异性(P2/P4)",
             "col_a": "a(Å)",
             "col_b": "b(Å)",
             "col_c": "c(Å)",
@@ -652,6 +653,13 @@ translations = {
             "抛光早停。实测 5 相合成谱 1.97 s → 0.34 s（5.8×），wR 完全一致。"
             "追求最终数值时可取消勾选回到精确档。仅内置引擎生效，"
             "外部引擎（GSAS-II / MAUD / PowerXRD）忽略此项。"
+        ),
+        "axial_tail": "低角拖尾（轴向发散）",
+        "axial_tail_tip": (
+            "在 split-PV 之外再加一个面积守恒的低角拖尾分量（左移 0.25×FWHM、"
+            "宽 3.2× 的洛伦兹）。IUCr 单相标准谱 7/8 组 Rwp 下降（平均 0.33 pp，"
+            "最大 1.21 pp），但轮廓计算约 ×2，故默认关闭。"
+            "低角残差明显（轴向发散/样品透明）时勾选。"
         ),
         "bgm_snip": "SNIP",
         "bgm_als": "ALS",
@@ -768,6 +776,9 @@ translations = {
             "roughness_refine": "精修粗糙度幅度 s",
             "microabsorption": "微吸收修正（Brindley）",
             "grain_radius": "颗粒半径",
+            "grain_radii": "逐相半径 (µm)",
+            "grain_radii_placeholder": "留空=全局；按已选相序，如 12, 8, 15",
+            "grain_radii_hint": "按『已勾选物相』的顺序填各相半径，逗号分隔；数量必须与勾选相数一致，否则整体退回全局半径。只在你对各相粒径有实测把握时填写",
             "intensity_hint": "半径须实测（SEM / 激光粒度 / 沉降法）；未知请不要勾选 —— 半径猜错会把本来定量对的样品打偏 5 pp 以上（基准报告 §22.6）",
         },
         "preview": {
@@ -1034,7 +1045,8 @@ translations = {
             "cif_filter": "CIF 文件 (*.cif)",
             "export_cif_warn_title": "导出 CIF",
             "export_cif_write_failed": "写盘失败: {exc}",
-            "fullprof_busy": "FullProf 外部精修"
+            "fullprof_busy": "FullProf 外部精修",
+            "grain_radii_count_mismatch": "逐相半径给了 {n_given} 个，但已勾选 {n_expected} 个相——本次退回全局半径"
         },
         "external_engines_group": {
             "title": "外部精修程序",
@@ -1241,6 +1253,8 @@ translations = {
             "scale_correlated": "两相份额不可分辨：{phase_a} 与 {phase_b} 的标度相关系数 ρ={rho:.2f}（≤−0.80，σ差/σ和={sigma_ratio:.1f}）。份额可在两相之间此消彼长而总谱几乎不变——wt% 的小数位不代表精度。要真正分开：延长扫描或换靶提高分辨率、加一条只属于其中一相的孤立强线，或先修好该相的择优取向/占位",
             "phase_unsupported": "{phase} 被定量到 {fraction:.2f} wt%，但它的 {n_unique_strong:.0f} 条唯一强线（该相 I/Imax≥30%）在实测中一条都没出现（最强 {strongest_2theta:.2f}° 应有 I/Imax={strongest_rel:.2f}）——这个份额没有谱线支撑。份额非零不等于该相存在：多出来的强度会被峰宽/背景自由度吸收，Rwp 反而更低。先确认该线是否在扫描窗口内、是否被择优取向压低；都不是就删掉该相重拟合",
             "phase_fraction_unverifiable": "{phase} 被定量到 {fraction:.2f} wt%，但它的 {n_strong:.0f} 条强线（该相 I/Imax≥30%）全部与其它相重合（最小间距 {min_gap:.2f}°）——这个份额完全由峰宽/背景自由度决定，数据没有独立约束它。补一条属于该相、且与主相分开 0.3 度以上的线（换靶/延长扫描/更高分辨率）再定量；否则只报检出、不报数字。份额非零不等于该相存在",
+            "phase_near_degenerate": "{phase} 被定量到 {fraction_pct:.2f} wt%，但其最强独立线 {strongest_2theta:.2f}° 的净积分只占全谱 {share_pct:.1f}%（判据 <15%）：把该相 wt% 推 {delta_wt_pp:.1f} pp 只需 Rwp 变 {delta_rwp_pp:.2f} pp（{ratio:.0f} pp/% > 50），份额与拟合质量近乎脱钩。这个 wt% 只能当区间读：不要当点值、不要用它判定两版算法优劣。要更可信：补一条该相孤立强线（换靶/扩角/提高分辨率），或先用化学分析、热重、光学显微等谱外手段把该相含量定住并作为先验",
+            "po_disabled_suspect": "PO 被显式关闭且未给逐相 _po_directions：{phase} 最强线 {two_theta:.2f}° 的计算/实测净积分比 {ratio:.2f}（偏离 {dev_pct:.0f}% > 30%）——强织构下相对线强被压平成随机取向，份额会被系统性带偏，而 Rwp 往往只差零点几个百分点。请打开 auto_preferred_orientation（默认即开），或给该相明确的 (hkl) 与 r（_po_directions）；若试样确实无织构，可忽略本条",
         },
         "engine_fallback": "请求引擎 {requested} → 实际使用 {used} (原因: {reason})",
         "ka2_detected": "检测到 Kα2 双线未剥离 (最强峰 {center:.2f}°, Δ≈{delta:.3f}°, 高角侧残差 ≈{ratio:.0f}% 峰高): 建议先剥离 Kα2 (数据处理 → Kα2 剥离) 或后续启用 Kα2 建模",
@@ -1257,6 +1271,9 @@ translations = {
         "off": "未启用",
         "roughness_only": "粗糙度 {model} 已启用：s={s:.3f}（SR 只改峰强比；基准上 s 趋 0 即说明没抓到系统偏差）",
         "applied": "已启用：μ̄ {mu_bar:.0f} cm⁻¹，τ {tau_min:.2f}~{tau_max:.2f}（只改 wt%，不影响 Rwp）",
-        "clamped": "⚠ 半径超出 Brindley 表范围（|(μ−μ̄)·R| > 0.5）：wt% 只能定性参考"
+        "clamped": "⚠ 半径超出 Brindley 表范围（|(μ−μ̄)·R| > 0.5）：wt% 只能定性参考",
+        "per_phase": "逐相 {phase}：当前修正 {delta:+.2f} pp（每 +1 µm {sens:+.3f} pp），{req}",
+        "per_phase_req": "达 1 pp 需 R≈{r:.0f} µm",
+        "per_phase_no_req": "R≤50 µm 内不足 1 pp"
     }
 }

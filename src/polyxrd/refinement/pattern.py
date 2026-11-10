@@ -70,6 +70,12 @@ class PhaseSpec:
     po_r: float = 1.0
     po_c: Tuple[float, ...] = ()
     b_overall: float = 0.0
+    #: P0-B″：各向异性展宽的 P₂/P₄ 系数（对 cosφ = 法向与 c* 轴夹角）：
+    #: ``FWHM_hkl = FWHM_iso·(1 + c2·P₂(cosφ) + c4·P₄(cosφ))``。
+    #: 全零 = 关闭（逐位保持旧行为）。P₂(1)=1、P₂(0)=−0.5，故 c2>0 表示
+    #: 00l 更宽（片状晶粒沿 c 薄）；c2<0 表示 hk0 更宽（针状）。
+    aniso_c2: float = 0.0
+    aniso_c4: float = 0.0
 
     @property
     def n_reflections(self) -> int:
@@ -274,7 +280,44 @@ def phase_pattern(
     lam = float(wavelength)
     fwhm, eta = tch_widths(centers, lam, p_eff)
 
-    y = _accumulate(tt, centers, areas, fwhm, eta, p_eff, cutoff_fwhm)
+    # ── P0-B″ 各向异性展宽 ─────────────────────────────────────
+    # FWHM_hkl = FWHM_iso·(1 + c2·P₂(cosφ) + c4·P₄(cosφ))，cosφ 为峰法向与
+    # c* 轴的余弦（表里已算好）。只影响**宽度**，面积由积分守恒保留。
+    if (abs(float(spec.aniso_c2)) > 1e-12
+            or abs(float(spec.aniso_c4)) > 1e-12):
+        cos_phi = getattr(spec.table, "cos_phi_c", None)
+        if cos_phi is not None:
+            n_ref = len(spec.table)
+            if centers.size == 2 * n_ref:
+                cos_phi = np.repeat(np.asarray(cos_phi, dtype=float), 2)
+            elif centers.size == n_ref:
+                cos_phi = np.asarray(cos_phi, dtype=float)
+            else:                       # 形状对不上：宁可不修正
+                cos_phi = None
+            if cos_phi is not None:
+                x = np.asarray(cos_phi, dtype=float)
+                p2 = 0.5 * (3.0 * x * x - 1.0)
+                p4 = (35.0 * x ** 4 - 30.0 * x * x + 3.0) / 8.0
+                fac = (1.0 + float(spec.aniso_c2) * p2
+                       + float(spec.aniso_c4) * p4)
+                fwhm = fwhm * np.clip(fac, 0.2, 5.0)
+
+    # ── P0-C 低角拖尾（轴向发散/样品透明的等效）───────────────
+    # 主峰保留 (1−t) 面积；另加 t 面积、左移 0.25·FWHM、宽 3.2 倍的洛伦兹分量。
+    # 与 split-PV 的区别：split 只改左右**宽度**，改不了"峰心左侧多出一块
+    # 慢衰减尾巴"的形状（§8.1 的 tail 臂正是靠这一点让定量偏 0.15~0.43 pp）。
+    t_tail = float(np.clip(getattr(p_eff, "tail", 0.0), 0.0, 0.5))
+    if t_tail > 1e-6:
+        y = _accumulate(tt, centers, areas * (1.0 - t_tail), fwhm, eta,
+                        p_eff, cutoff_fwhm)
+        w_tail = np.maximum(fwhm, 1e-9)
+        # 拖尾分量宽 3.2×，若仍用 50×FWHM 的窗宽，计算量是主峰的 3.2 倍纯浪费：
+        # 洛伦兹在 8×自身宽度处只剩 ~4%，再乘 0.18 的面额占比可忽略。
+        _cut_tail = None if cutoff_fwhm is None else min(float(cutoff_fwhm), 8.0)
+        y += _accumulate(tt, centers - 0.25 * w_tail, areas * t_tail,
+                         w_tail * 3.2, np.ones_like(eta), p_eff, _cut_tail)
+    else:
+        y = _accumulate(tt, centers, areas, fwhm, eta, p_eff, cutoff_fwhm)
 
     if not return_detail:
         return y

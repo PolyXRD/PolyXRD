@@ -1,0 +1,40 @@
+{
+  "_note": "7 组 ShiJK 基准（2026-11-08 出厂默认：precise + 两段式各向异性展宽，tail 关）。CI 门限：Rwp <= 1.5x MAUD，且逐相 wt 与基线差 <= 2.0 pp。",
+  "samples": {
+    "ShiJiKong1": {
+      "maud_rwp": 10.820095,
+      "rwp": 14.1246,
+      "wt": {"mag": 38.08, "calcite": 24.34, "dolomite": 22.84, "quartz": 9.09, "cristobalite": 5.66}
+    },
+    "ShiJiKong2": {
+      "maud_rwp": 6.3401866,
+      "rwp": 7.9814,
+      "wt": {"quartz": 33.48, "anatase": 25.89, "corundum": 21.55, "rutile": 19.07}
+    },
+    "ShiJiKong3": {
+      "maud_rwp": 10.286999,
+      "rwp": 9.9425,
+      "wt": {"fluorite": 32.51, "quartz": 25.05, "anatase": 17.94, "corundum": 15.56, "rutile": 8.94}
+    },
+    "ShiJiKong4b": {
+      "maud_rwp": 9.963013,
+      "rwp": 9.2089,
+      "wt": {"cristobalite": 17.83, "hematite": 14.70, "calcite": 10.70, "quartz": 5.67, "muscovite": 51.10}
+    },
+    "ShiJiKong5b": {
+      "maud_rwp": 14.86578,
+      "rwp": 11.763,
+      "wt": {"kaolinite": 54.30, "goethite": 17.74, "apatite": 10.59, "quartz": 7.28, "gehlenite": 10.09}
+    },
+    "ShiJiKong6b": {
+      "maud_rwp": 15.008931,
+      "rwp": 8.979,
+      "wt": {"kaolinite": 51.75, "quartz": 25.10, "dolomite": 11.29, "cristobalite": 11.87}
+    },
+    "ShiJiKong7": {
+      "maud_rwp": 11.30329,
+      "rwp": 14.3607,
+      "wt": {"kaolinite": 32.91, "fluorite": 28.40, "quartz": 21.05, "dolomite": 12.93, "cristobalite": 4.71}
+    }
+  }
+}

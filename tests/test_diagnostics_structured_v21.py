@@ -53,6 +53,12 @@ ALL_CODES = [
     ("diag.refinement.phase_fraction_unverifiable",
      {"phase": "W20O58", "fraction": 0.156, "n_strong": 5.0,
       "min_gap": 0.03, "zero_shift": 0.02}),
+    ("diag.refinement.phase_near_degenerate",
+     {"phase": "Muscovite 2M1", "fraction_pct": 44.73, "strongest_2theta": 8.87,
+      "share_pct": 1.1, "ratio": 109.0, "delta_wt_pp": 10.9,
+      "delta_rwp_pp": 0.10}),
+    ("diag.refinement.po_disabled_suspect",
+     {"phase": "Corundum", "two_theta": 35.15, "ratio": 1.42, "dev_pct": 42.0}),
 ]
 
 

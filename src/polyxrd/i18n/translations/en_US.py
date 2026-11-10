@@ -570,6 +570,7 @@ translations = {
             "log_save_failed": "Failed to save log: {error}",
             "col_phase": "Phase",
             "col_weight": "Weight Fraction(%)",
+            "col_shape": "Anisotropy(P2/P4)",
             "col_a": "a(Å)",
             "col_b": "b(Å)",
             "col_c": "c(Å)",
@@ -655,6 +656,14 @@ translations = {
             "(5.8×) with an identical wR. Uncheck for final numbers. "
             "Built-in engine only — external engines (GSAS-II / MAUD / "
             "PowerXRD) ignore this option."
+        ),
+        "axial_tail": "Low-angle tail (axial divergence)",
+        "axial_tail_tip": (
+            "Adds an area-conserving low-angle tail component on top of split-PV "
+            "(shift −0.25×FWHM, width 3.2×, Lorentzian). On IUCr single-phase "
+            "standards 7/8 cases improve (mean 0.33 pp, up to 1.21 pp), at ~2× "
+            "profile cost — off by default. Enable when low-angle residuals "
+            "(axial divergence / sample transparency) are visible."
         ),
         "bgm_snip": "SNIP",
         "bgm_als": "ALS",
@@ -771,6 +780,9 @@ translations = {
             "roughness_refine": "Refine roughness amplitude s",
             "microabsorption": "Microabsorption (Brindley)",
             "grain_radius": "Grain radius",
+            "grain_radii": "Per-phase radii (um)",
+            "grain_radii_placeholder": "blank = global; in selected-phase order, e.g. 12, 8, 15",
+            "grain_radii_hint": "Enter one radius per selected phase, in order, comma-separated. The count must equal the number of selected phases, otherwise the global radius is used. Fill this only when you have measured particle sizes for each phase",
             "intensity_hint": "Radius must be measured (SEM / laser diffraction / sedimentation). Leave it off when unknown - a wrong radius shifts an otherwise correct wt% by more than 5 pp (report §22.6)",
         },
         "preview": {
@@ -1037,7 +1049,8 @@ translations = {
             "cif_filter": "CIF Files (*.cif)",
             "export_cif_warn_title": "Export CIF",
             "export_cif_write_failed": "Write failed: {exc}",
-            "fullprof_busy": "FullProf External Refinement"
+            "fullprof_busy": "FullProf External Refinement",
+            "grain_radii_count_mismatch": "{n_given} per-phase radii given but {n_expected} phases selected - falling back to the global radius"
         },
         "external_engines_group": {
             "title": "External Refinement Programs",
@@ -1244,6 +1257,8 @@ translations = {
             "scale_correlated": "Phase fractions are not separable: scale correlation between {phase_a} and {phase_b} is rho={rho:.2f} (<= -0.80, sigma-ratio={sigma_ratio:.1f}). The two fractions can be traded against each other with almost no change in the total pattern, so extra digits in wt% do not mean precision. To separate them: extend the scan or change the target for better resolution, add an isolated strong line belonging to only one of them, or fix that phase's preferred orientation / occupancies first",
             "phase_unsupported": "{phase} was quantified at {fraction:.2f} wt%, yet none of its {n_unique_strong:.0f} unique strong lines (I/Imax >= 30% for that phase) appears in the measured pattern (strongest expected at {strongest_2theta:.2f} deg with I/Imax={strongest_rel:.2f}). This fraction has no line support. A non-zero fraction does not prove the phase is present: the extra intensity gets absorbed by profile-width / background freedom and Rwp even improves. First check whether that line lies inside the scan range or is suppressed by preferred orientation; if neither, remove the phase and refine again",
             "phase_fraction_unverifiable": "{phase} was quantified at {fraction:.2f} wt%, but all {n_strong:.0f} of its strong lines (I/Imax >= 30% for that phase) coincide with lines of other phases (minimum gap {min_gap:.2f} deg). This fraction is decided entirely by profile-width / background freedom; the data do not constrain it. Add a line belonging to this phase and separated from the main phase by more than 0.3 deg (change target, extend the scan, higher resolution) before quantifying; otherwise report detection only, not a number. A non-zero fraction does not prove the phase is present",
+            "phase_near_degenerate": "{phase} was quantified at {fraction_pct:.2f} wt%, but the net integral of its strongest independent line at {strongest_2theta:.2f} deg is only {share_pct:.1f}% of the whole pattern (criterion < 15%): pushing this phase's fraction by {delta_wt_pp:.1f} pp costs only {delta_rwp_pp:.2f} pp of Rwp ({ratio:.0f} pp/% > 50), so the fraction is almost decoupled from fit quality. Read this wt% as an interval, not a point value, and do not use it to rank two algorithm versions. To make it trustworthy: add an isolated strong line of this phase (change target / extend the scan / higher resolution), or pin the phase content by an off-pattern method (chemical analysis, TGA, optical microscopy) and use it as a prior",
+            "po_disabled_suspect": "PO was explicitly disabled and no per-phase _po_directions were given: for {phase}, the calc/observed net-integral ratio at the strongest line {two_theta:.2f} deg is {ratio:.2f} (deviation {dev_pct:.0f}% > 30%). Under strong texture the relative line intensities are flattened to random orientation, biasing the fractions systematically, while Rwp often changes by only a few tenths of a percent. Enable auto_preferred_orientation (on by default), or give this phase explicit (hkl) and r (_po_directions); if the sample is truly untextured, ignore this",
         },
         "engine_fallback": "Requested engine {requested} → actually used {used} (reason: {reason})",
         "ka2_detected": "Kα2 doublet detected but not stripped (strongest peak {center:.2f}°, Δ≈{delta:.3f}°, high-angle residual ≈{ratio:.0f}% of peak height): strip Kα2 first (Data processing → Kα2 stripping) or enable Kα2 modeling later",
@@ -1260,6 +1275,9 @@ translations = {
         "off": "Not enabled",
         "roughness_only": "Roughness {model} enabled: s={s:.3f} (SR moves peak intensity ratios only; s→0 on the benchmark means it caught no systematic bias)",
         "applied": "Enabled: mu_bar {mu_bar:.0f} 1/cm, tau {tau_min:.2f}~{tau_max:.2f} (moves wt% only, Rwp unaffected)",
-        "clamped": "WARNING: radius outside the Brindley table range (|(mu-mu_bar)*R| > 0.5) - wt% is qualitative only"
+        "clamped": "WARNING: radius outside the Brindley table range (|(mu-mu_bar)*R| > 0.5) - wt% is qualitative only",
+        "per_phase": "{phase}: current shift {delta:+.2f} pp ({sens:+.3f} pp per +1 um), {req}",
+        "per_phase_req": "R~{r:.0f} um for 1 pp",
+        "per_phase_no_req": "under 1 pp within R<=50 um"
     }
 }

@@ -248,6 +248,15 @@ class StructureModel:
 # ---------------------------------------------------------------------------
 # 反射枚举与归并
 # ---------------------------------------------------------------------------
+#: hkl 枚举缓存（P0 提速，2026-11-08）：``build_reflections`` 在结构精修
+#: （stage 6）里被**每个原子参数扰动**各调一次，而此时的**晶胞没变** ——
+#: 网格枚举（(2H+1)³ 个点 + 倒易距筛选）纯属重复劳动。实测 S2：4212 次
+#: 建表里绝大多数是原子扰动，缓存命中率 >90%。键 = 晶胞（9 位小数）+ 窗口
+#: + 波长；晶胞一变自然失效（晶胞扰动本来就该重算）。
+_HKL_CACHE: dict = {}
+_HKL_CACHE_MAX = 128
+
+
 def enumerate_hkl(cell: Cell, two_theta_range: Sequence[float],
                   wavelengths: Sequence[float]) -> np.ndarray:
     """枚举落在 2θ 窗口内的全部 hkl（含等价反射，即自动含多重性）。
@@ -261,6 +270,17 @@ def enumerate_hkl(cell: Cell, two_theta_range: Sequence[float],
     lams = [float(w) for w in wavelengths if float(w) > 0]
     if not lams or tmax <= 0:
         return np.zeros((0, 3), dtype=int)
+
+    key = (round(float(cell.a), 9), round(float(cell.b), 9),
+           round(float(cell.c), 9), round(float(cell.alpha), 9),
+           round(float(cell.beta), 9), round(float(cell.gamma), 9),
+           round(tmin, 9), round(tmax, 9), tuple(sorted(lams)))
+    hit = _HKL_CACHE.get(key)
+    if hit is not None:
+        # 返回副本：调用方若原地修改 hkl 数组（如逐反射重加权时临时改值），
+        # 会污染缓存里供 stage 6 后续数千次复用的同一份数组。
+        return hit.copy()
+
     max_g = 2.0 * np.sin(np.radians(max(tmax, 0.0)) / 2.0) / min(lams)
     min_g = 2.0 * np.sin(np.radians(max(tmin, 0.0)) / 2.0) / max(lams)
 
@@ -275,7 +295,11 @@ def enumerate_hkl(cell: Cell, two_theta_range: Sequence[float],
     grid = np.stack(np.meshgrid(h, k, l, indexing="ij"), axis=-1).reshape(-1, 3)
     g_all = reciprocal_magnitudes(grid, cell)
     mask = (g_all >= min_g * 0.999) & (g_all <= max_g * 1.001) & (g_all > 1e-12)
-    return grid[mask]
+    out = grid[mask]
+    if len(_HKL_CACHE) >= _HKL_CACHE_MAX:
+        _HKL_CACHE.clear()
+    _HKL_CACHE[key] = out
+    return out.copy()
 
 
 @dataclass
@@ -298,6 +322,10 @@ class ReflectionTable:
     f_ref_sq: float
     po_detail: Optional[tuple] = None    # (values, cos_alpha, offsets)
     wavelength_tag: float = 0.0
+    #: 逐峰法向与 **c\* 轴**的余弦（P0-B″ 各向异性展宽用）：``cos(φ)``。
+    #: 1 = 00l（法向沿 c\*）、0 = hk0。与择优取向的 ``cosα`` 同一几何量，
+    #: 但用途不同：PO 改**强度**，这里改**峰宽**。空 = 未计算（老调用方）。
+    cos_phi_c: Optional[np.ndarray] = None
 
     def __len__(self) -> int:
         return int(self.two_theta.shape[0])
@@ -553,6 +581,12 @@ def build_reflections(
         po_detail = (int_s.astype(float), cos_a.astype(float),
                      np.append(starts, keys.size).astype(int))
 
+    # P0-B″：逐峰法向与 c* 轴的余弦（各向异性展宽用）。与 PO 分开算：
+    # PO 的 cosα 依用户给的惯习面，这里是**固定 c\*** 的形状/应变各向异性。
+    cos_phi_c = cell_angle_cosines(
+        hkl_merged, po_direction_from_hkl((0.0, 0.0, 1.0), structure.cell),
+        structure.cell)
+
     return ReflectionTable(
         hkl=hkl_merged,
         d=d_merged,
@@ -562,6 +596,7 @@ def build_reflections(
         f_ref_sq=f_ref_sq,
         po_detail=po_detail,
         wavelength_tag=float(comps[0][0]),
+        cos_phi_c=np.asarray(cos_phi_c, dtype=float),
     )
 
 

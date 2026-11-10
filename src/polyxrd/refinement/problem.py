@@ -36,6 +36,12 @@ from .quantitative import QuantResult, hill_howard
 from .structure import AtomSite, Cell, ReflectionTable, StructureModel, build_reflections
 from .symmetry import apply_cell_ties, orbit_decomposition
 
+#: 弱相晶胞冻结阈值：初始反射表强度份额（Σ|F|²·多重度·LP / 全谱）低于它
+#: 就认为"没有足够的独立强线支撑晶胞"，把该相 6 个晶胞参数固定到 CIF 值。
+#: 2% 是本轮 GRANODIO 实测（Hornblende 0.23%、Zircon 0.51%）与正常相
+#: （≥10%）之间的安全分界。
+WEAK_PHASE_CELL_SHARE = 0.02
+
 __all__ = [
     "PhaseBlock",
     "PatternProblem",
@@ -104,9 +110,18 @@ class PhaseBlock:
     #: 长度决定放开几个自由度，是"模型开关"而不是"结果"
     po_c: Tuple[float, ...] = ()
     b_overall: float = 0.0
+    #: P0-B″ 各向异性展宽（P₂/P₄ 系数）+ 开关。``aniso_on=False`` 时参数仍进
+    #: 参数册但固定为 0，PhaseSpec 收到 0 → 逐位保持旧行为（opt-in）。
+    aniso_on: bool = False
+    aniso_c2: float = 0.0
+    aniso_c4: float = 0.0
     scale: float = 1.0
     table: Optional[ReflectionTable] = None
     _table_key: tuple = field(default=(), repr=False)
+    #: 上一次 ``_sites_from_params`` 用过的原子参数指纹（P0 提速）：数值雅可比
+    #: 每次只扰动一个参数，其余相的原子值不变 → 直接复用位点表，省掉重复的
+    #: ``replace``/``einsum``（S2 实测 3.3 s / 55 s）。
+    _site_key: tuple = field(default=(), repr=False)
 
     @property
     def prefix(self) -> str:
@@ -271,6 +286,7 @@ class PatternProblem:
         roughness_model: str = "none",
         mu_linear: Optional[Sequence[float]] = None,
         grain_radius_um: "float | Sequence[float]" = 0.0,
+        tail_on: bool = False,
     ) -> None:
         self.two_theta = np.asarray(two_theta, dtype=float)
         self.y_obs = np.asarray(y_obs, dtype=float)
@@ -284,6 +300,8 @@ class PatternProblem:
         self.wavelength = float(wavelength)
         self.kalph2 = kalph2
         self.cutoff_fwhm = cutoff_fwhm
+        #: P0-C 低角拖尾开关（opt-in；关闭时 inst.tail 固定为 0，逐位不变）
+        self.tail_on = bool(tail_on)
 
         if weights is None:
             self.weights = 1.0 / np.maximum(self.y_obs, 1.0)
@@ -369,6 +387,12 @@ class PatternProblem:
                          label="样品位移 cosθ 项 (°)"))
         ps.add(Parameter("inst.asym", float(self.profile.asymmetry), 0.0, 0.4,
                          stage=st["asym"], label="低角不对称"))
+        # P0-C：低角拖尾面积占比（0~0.4）。与 split-PV 不共线（一个是宽度、
+        # 一个是"主峰之外多出的一块面积"），但两者都吃低角残差，一起放开
+        # 可能互相抵消 —— 因此 opt-in，且与 asym 同阶段。
+        ps.add(Parameter("inst.tail", float(self.profile.tail), 0.0, 0.4,
+                         stage=st["asym"], fixed=not self.tail_on,
+                         label="低角拖尾占比"))
         # 表面粗糙度（Sidey 单参数）：S_R = (θ/90)^(s/θ)，θ 用度。
         # 与"择优取向"的分野：PO 逐相、依赖 hkl；SR 整样品、只依赖 2θ。
         # 界 0~2：s=0.5 已能把 2θ=10° 压掉 ~26%（实测粗粉量级），2.0 是
@@ -402,6 +426,24 @@ class PatternProblem:
             ps.add(Parameter(f"inst.{tag}", float(val), lo, hi,
                              stage=st["profile"], label=f"Caglioti/Lorentz {tag.upper()}"))
 
+        # 弱相晶胞冻结（2026-11-08，GRANODIO 暴露）：按**初始反射表**的
+        # Σ|F|²·多重度·LP 份额判断"这一相有没有足够强的独立线支撑晶胞"。
+        # < WEAK_PHASE_CELL_SHARE 的相（例：GRANODIO 的 Hornblende 0.23%、
+        # Zircon 0.51%）晶胞参数直接**固定**在 CIF 值上，不进入拟合向量 ——
+        # 否则它们会被噪声推动（曾出现 b=2.37 Å / c=33.8 Å 的非物理解）。
+        # 注意：份额用初始表（与最终 wt 无关），因此判据在参数构建时就可算出，
+        # 不需要二次精修；真正含量高的相不受影响。
+        _int_shares: dict = {}
+        try:
+            _tot = sum(float(np.sum(np.asarray(b.table.intensity, float)))
+                       for b in self.phases if b.table is not None)
+            for b in self.phases:
+                _s = (float(np.sum(np.asarray(b.table.intensity, float)))
+                      if b.table is not None else 0.0)
+                _int_shares[b.index] = (_s / _tot if _tot > 0.0 else 1.0)
+        except Exception:  # noqa: BLE001 - 算不出就不冻结（行为不劣化）
+            _int_shares = {}
+
         for ph in self.phases:
             p = ph.prefix
             # 标度与背景系数**不进非线性向量**：它们由线性层每轮闭式解出
@@ -412,15 +454,27 @@ class PatternProblem:
                              fixed=True, stage=st["scale"],
                              label=f"{ph.label} 标度（线性层）"))
             c = ph.structure.cell
-            for tag, val, lo, hi in (
-                ("a", c.a, 0.0, np.inf), ("b", c.b, 0.0, np.inf),
-                ("c", c.c, 0.0, np.inf),
-                ("alpha", c.alpha, 1e-3, 180.0 - 1e-3),
-                ("beta", c.beta, 1e-3, 180.0 - 1e-3),
-                ("gamma", c.gamma, 1e-3, 180.0 - 1e-3),
+            # 晶胞边界：起点来自 CIF，正常情况下精修移动 <1%；给边长 ±20%
+            # 的宽松护栏即可。没有界时**弱相晶胞会跑飞**：GRANODIO 七相里
+            # Hornblende(0.23%) 被推到 b=2.37 Å / beta=131°、Zircon(0.51%) 推到
+            # c=33.8 Å —— 都是非物理解，且会污染同组其它相（2026-11-07 实测）。
+            def _cell_bounds(v: float, is_angle: bool) -> tuple:
+                v = float(v)
+                if is_angle:
+                    # 角度**不收紧**：空间群约束/笛卡尔 tie 会把 γ=90°（脏 CIF）
+                    # 拉到 120°，收紧的界会把 tie 结果夹回去（对称性单测已抓到这个
+                    # 反例）。角度的非物理漂移留给"弱相冻结"专项处理。
+                    return (1e-3, 180.0 - 1e-3)
+                return (max(1e-3, 0.8 * v), 1.2 * v)
+
+            for tag, val in (
+                ("a", c.a), ("b", c.b), ("c", c.c),
+                ("alpha", c.alpha), ("beta", c.beta), ("gamma", c.gamma),
             ):
+                lo, hi = _cell_bounds(val, tag in ("alpha", "beta", "gamma"))
+                _weak_cell = _int_shares.get(ph.index, 1.0) < WEAK_PHASE_CELL_SHARE
                 ps.add(Parameter(f"{p}.cell.{tag}", float(val), lo, hi,
-                                 stage=st["cell"],
+                                 stage=st["cell"], fixed=_weak_cell,
                                  label=f"{ph.label} {tag}"))
             # 样品展宽：**尺寸用洛伦兹系数参数化，不用 D(nm)**。
             # β_size = Kλ/(D cosθ) 与 inst.y 是同一个函数形状，而且 dβ/dD ∝ 1/D²
@@ -435,6 +489,16 @@ class PatternProblem:
                              label=f"{ph.label} 晶粒展宽 1/cosθ (度)"))
             ps.add(Parameter(f"{p}.strain", float(ph.strain), 0.0, 0.2,
                              stage=st["sample"], label=f"{ph.label} 应变 ε"))
+            # P0-B″：各向异性展宽 P₂/P₄（cosφ = 法向与 c* 轴的夹角）。
+            # 界 ±0.8：P₂(1)=1、P₂(0)=−1/2 ⇒ 因子落在 [0.2, 1.8]（裁剪 0.2~5），
+            # 足以覆盖 MAUD 那种 hk0 2× 展宽，又不会把峰宽翻到背景量级。
+            # opt-in：未开启时固定为 0，不占自由度、数值逐位不变。
+            ps.add(Parameter(f"{p}.aniso.c2", float(ph.aniso_c2), -0.8, 0.8,
+                             stage=st["sample"], fixed=not ph.aniso_on,
+                             label=f"{ph.label} 各向异性 P2"))
+            ps.add(Parameter(f"{p}.aniso.c4", float(ph.aniso_c4), -0.8, 0.8,
+                             stage=st["sample"], fixed=not ph.aniso_on,
+                             label=f"{ph.label} 各向异性 P4"))
             # 择优取向：**没给惯习面就不放这个自由度**。``po_hkl is None`` 时
             # March–Dollase 权重恒为 1（``build_reflections`` 不写 cosα），
             # 这一列雅可比全零 —— 放出来白占一个自由度、还让 rank 检查报亏。
@@ -602,6 +666,7 @@ class PatternProblem:
             z=float(g("inst.z", self.profile.z) or 0.0),
             eta=float(g("inst.eta", self.profile.eta) or 0.0),
             asymmetry=float(g("inst.asym", self.profile.asymmetry) or 0.0),
+            tail=float(g("inst.tail", self.profile.tail) or 0.0),
             # 钉住模式：否则 x/y 一旦从 0 变非 0，η 就从"用户值"跳成"TCH 导出值"
             use_tch=True,
         )
@@ -626,6 +691,8 @@ class PatternProblem:
                 ph.po_c = tuple(float(g(f"{p}.po.c{2 * (k + 1)}", v) or 0.0)
                                 for k, v in enumerate(ph.po_c))
             ph.b_overall = float(g(f"{p}.bovr", ph.b_overall) or 0.0)
+            ph.aniso_c2 = float(g(f"{p}.aniso.c2", ph.aniso_c2) or 0.0)
+            ph.aniso_c4 = float(g(f"{p}.aniso.c4", ph.aniso_c4) or 0.0)
             ph.scale = float(g(f"{p}.scale", ph.scale) or 0.0)
 
     def freeze_instrument_lorentz(self) -> List[str]:
@@ -668,6 +735,13 @@ class PatternProblem:
         if f"{p}.atom0.x" not in self.params:
             return list(ph.structure.sites)
 
+        # 指纹命中 → 这一相的原子参数没变（雅可比扰动的是别的参数/别的相），
+        # 直接复用现有位点表。注意：晶胞变了不影响分数坐标，所以仍可命中。
+        ckey = tuple(round(float(self.params.get(n, 0.0) or 0.0), 10)
+                     for n in self.params.names() if n.startswith(p + ".atom"))
+        if ckey and ckey == ph._site_key:
+            return list(ph.structure.sites)
+
         amap = self._atom_map.get(ph.index)
         if amap is None:
             amap = self._build_atom_maps()[ph.index]
@@ -686,6 +760,7 @@ class PatternProblem:
                     occupancy=float(g(f"{p}.atom{k}.occ", site.occupancy)),
                     b_iso=float(g(f"{p}.atom{k}.biso", site.b_iso)),
                 ))
+            ph._site_key = ckey
             return out
 
         k_rep = len(amap.reps)
@@ -708,6 +783,7 @@ class PatternProblem:
         over = (xyz < 0.0) | (xyz >= 1.0)
         if bool(over.any()):
             xyz = np.where(over, xyz - np.floor(xyz), xyz)
+        ph._site_key = ckey
         return [replace(site, x=float(xyz[i, 0]), y=float(xyz[i, 1]),
                         z=float(xyz[i, 2]),
                         occupancy=float(occ[slot[i]]), b_iso=float(bis[slot[i]]))
@@ -718,7 +794,7 @@ class PatternProblem:
         """影响**所有列**的量。变了 → 全部列重算；不变 → 只重算变了的相。"""
         prof = (self.profile.u, self.profile.v, self.profile.w, self.profile.x,
                 self.profile.y, self.profile.z, self.profile.eta,
-                self.profile.asymmetry)
+                self.profile.asymmetry, self.profile.tail)
         ka = self.kalph2
         ka_key = ((ka.wavelength, ka.ratio, ka.separation)
                   if ka is not None else None)
@@ -734,7 +810,7 @@ class PatternProblem:
         """单列的完整输入：结构键 + 样品层标量。"""
         return ph.structure_key() + (ph.size_nm, ph.strain, ph.po_r,
                                      tuple(round(float(c), 10) for c in ph.po_c),
-                                     ph.b_overall)
+                                     ph.b_overall, ph.aniso_c2, ph.aniso_c4)
 
     def design(self) -> Tuple[np.ndarray, np.ndarray]:
         """返回 ``(相基 (N,n_phase), 背景基 (N,n_bg))``。
@@ -770,7 +846,8 @@ class PatternProblem:
             ph.ensure_table((tmin, tmax), (self.wavelength,))
             spec = PhaseSpec(table=ph.table, size_nm=ph.size_nm,
                              strain=ph.strain, po_r=ph.po_r, po_c=ph.po_c,
-                             b_overall=ph.b_overall)
+                             b_overall=ph.b_overall,
+                             aniso_c2=ph.aniso_c2, aniso_c4=ph.aniso_c4)
             self._basis[:, i] = phase_pattern(
                 self.two_theta, spec, self.profile,
                 wavelength=self.wavelength, kalph2=self.kalph2,
@@ -788,10 +865,10 @@ class PatternProblem:
         cells = tuple(ph.structure_key() for ph in self.phases)
         prof = (self.profile.u, self.profile.v, self.profile.w, self.profile.x,
                 self.profile.y, self.profile.z, self.profile.eta,
-                self.profile.asymmetry)
+                self.profile.asymmetry, self.profile.tail)
         sample = tuple((ph.size_nm, ph.strain, ph.po_r,
                         tuple(round(float(c), 10) for c in ph.po_c),
-                        ph.b_overall)
+                        ph.b_overall, ph.aniso_c2, ph.aniso_c4)
                        for ph in self.phases)
         return cells + prof + sample + (self.shift, self.disp,
                                        self.roughness.key())
@@ -813,7 +890,7 @@ class PatternProblem:
         self.apply()
         basis, bgb = self.design()
         lin = solve_linear(basis, self.y_obs, weights=self.weights,
-                           bg_basis=bgb)
+                           bg_basis=bgb, diagnose=False)
         self.last_linear = lin
         self._sync_linear(lin)
         return lin.resid
@@ -840,7 +917,7 @@ class PatternProblem:
         """
         basis, bgb = self.design()
         lin = solve_linear(basis, self.y_obs, weights=self.weights,
-                           bg_basis=bgb)
+                           bg_basis=bgb, diagnose=False)
         self.last_linear = lin
         self._sync_linear(lin)
         return lin.y_calc

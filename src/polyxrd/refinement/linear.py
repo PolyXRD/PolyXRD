@@ -119,6 +119,7 @@ def solve_linear(
     bg_basis: Optional[np.ndarray] = None,
     nonneg_scales: bool = True,
     nonneg_bg: bool = False,
+    diagnose: bool = True,
 ) -> LinearSolve:
     """加权最小二乘解 ``β = [scales, bg_coefs]``。
 
@@ -164,13 +165,20 @@ def solve_linear(
     y_calc = A @ coef
     resid = (y - y_calc) * w_lin
 
-    # 条件数（诊断"背景阶数太高 / 相基几乎共线"）
-    try:
-        sv = np.linalg.svd(A * w_lin[:, None], compute_uv=False)
-        cond = float(sv[0] / sv[-1]) if sv.size and sv[-1] > 0 else float("inf")
-        rank = int(np.sum(sv > sv[0] * 1e-12)) if sv.size else 0
-    except np.linalg.LinAlgError:  # pragma: no cover - 极端数值问题
-        cond, rank = float("inf"), 0
+    # 条件数（诊断"背景阶数太高 / 相基几乎共线"）。
+    # ``diagnose=False`` 给**优化器内循环**用：这里每次 residual 都要解一次
+    # 线性层，而 rank/cond 在整个 v5 流程里**没有任何消费者**（诊断用的是
+    # 雅可比 SVD，不是这里的线性层）。实测 S2：5564 次 residual → SVD 3.4 s，
+    # 占全程 6%。只在直连调用（测试 / 报告）保留默认 True。
+    if diagnose:
+        try:
+            sv = np.linalg.svd(A * w_lin[:, None], compute_uv=False)
+            cond = float(sv[0] / sv[-1]) if sv.size and sv[-1] > 0 else float("inf")
+            rank = int(np.sum(sv > sv[0] * 1e-12)) if sv.size else 0
+        except np.linalg.LinAlgError:  # pragma: no cover - 极端数值问题
+            cond, rank = float("inf"), 0
+    else:
+        cond, rank = float("inf"), -1
 
     return LinearSolve(
         scales=np.asarray(coef[:n_ph], dtype=float),

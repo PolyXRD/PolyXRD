@@ -317,7 +317,11 @@ def expand_sites_by_symmetry(sites: list[dict], space_group: object,
     # 纯 Python 热点, 实测 4-1 样品 Fluorite 大胞候选卡死 >12min。
     if len(out_sites) * len(ops) > 500_000:  # 病态输入保险丝
         return None if strict else out_sites
-    tol = 1e-3
+    # 特殊位置去重容差。CIF 常用 0.667 这样的三位小数代替 2/3，旋转一次后
+    # 误差被放大到 ~1.3e-3 —— 原来的 1e-3 判不出重复，萤石/磷灰石 Ca 位
+    # 会从 4 个炸成 12 个（S5b 实测胞内 Ca 18 而非 10，定量全错）。
+    # 真实晶体中同种原子的最近邻分数距离 ≥0.02，5e-3 不会误并。
+    tol = 5e-3
     mat_by_elem: dict[str, "np.ndarray"] = {}
     for s in out_sites:
         try:
@@ -374,7 +378,7 @@ def _site_element(site: dict) -> str:
 
 
 def reduce_sites_to_asymmetric(
-    sites: list[dict], space_group: object, tol: float = 1e-3
+    sites: list[dict], space_group: object, tol: float = 5e-3
 ) -> Optional[list[tuple[dict, int]]]:
     """完整晶胞位点 → 非对称单位 ``[(site, 多重度)]``；归并不可信时返回 ``None``。
 
@@ -445,7 +449,7 @@ def reduce_sites_to_asymmetric(
     return out
 
 
-def _same_site_set(a: list[dict], b: list[dict], tol: float = 1e-3) -> bool:
+def _same_site_set(a: list[dict], b: list[dict], tol: float = 5e-3) -> bool:
     """两个位点集合是否逐元素一一对应 (周期性距离, 贪心配对)。"""
     if a is None or b is None or len(a) != len(b):
         return False
@@ -613,7 +617,7 @@ def phase_to_cif_text(phase: Phase) -> str:
                     q = q - np.floor(q)
                     d = np.abs(q - p)
                     d = np.minimum(d, 1.0 - d)
-                    if bool(np.all(d < 1e-3)):
+                    if bool(np.all(d < 5e-3)):
                         return u
             return 0.005
 
@@ -766,13 +770,23 @@ def cif_to_phase(cif_text: str, fallback_name: str = "phase") -> Phase:
             except (ValueError, IndexError):
                 pass
 
-    # 非标准设置（符号查不到标准操作 / 要剥尾部 setting 记号才认）时，
-    # 必须用 CIF 自带的显式对称操作，否则轨道多重度会错：
-    # 石英 ``P 32 2 1 S`` 按标准 P3221 展开会得到 6 个 Si（应为 3 个）→ 胞内
-    # 原子数翻倍 → 结构因子与定量全错。标准设置下不启用（保持既有行为不变）。
+    # CIF 自带的显式对称操作才是**与坐标同一套设置**的权威来源，能用就必须用：
+    # - 非标准设置（符号查不到标准操作 / 要剥尾部 setting 记号才认）：石英
+    #   ``P 32 2 1 S`` 按标准 P3221 展开会得到 6 个 Si（应为 3 个）。
+    # - **符号是标准的、但原点选择与 pymatgen 默认不同**：高温方石英
+    #   ``F d -3 m`` 的 CIF 用原点选择 2（Si 8a = (1/8,1/8,1/8)），pymatgen
+    #   默认 choice 1 把它展开成 16 个 Si（应 8 个）→ 胞内 Si 翻倍、化学式从
+    #   SiO2 变成 SiO，结构因子与定量全错（2026-11-07 交叉核对发现）。
+    # 保险：显式操作条数与标准群不同（CIF 只列了生成元 / 残缺）时不用，
+    # 避免把"展不开"当全胞。
     explicit_ops: Optional[list] = None
-    if space_group and not _symbol_is_standard(space_group):
-        explicit_ops = _parse_symop_xyz(cif_text)
+    if space_group:
+        _parsed = _parse_symop_xyz(cif_text)
+        if _parsed:
+            _std = space_group_ops(space_group)
+            if (not _symbol_is_standard(space_group)
+                    or _std is None or len(_parsed) == len(_std)):
+                explicit_ops = _parsed
 
     return Phase(
         name=name,

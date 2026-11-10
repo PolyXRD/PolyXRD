@@ -136,10 +136,19 @@ class RefinementWizardDialog(QDialog):
         # 起点剪枝 + 抛光早停），但全仓除引擎自身外零调用点 —— 用户永远跑精确档。
         # 这里提供一个勾选（默认开），并受 P3「结果回显档位」约束:
         # 引擎已把实际档位写进 fit_params["perf_profile"]。
+        # 2026-11-08：精确档已含"各向异性展宽（P₂/P₄，两段式）"，这是对标
+        # MAUD 的关键项（7 组均值 11.66→10.91）。默认改为**不勾**（精确档），
+        # 想要极致速度的用户再勾选快速档。
         self._perf_fast_check = QCheckBox(tr("params.perf_profile_fast"))
-        self._perf_fast_check.setChecked(True)
+        self._perf_fast_check.setChecked(False)
         self._perf_fast_check.setToolTip(tr("params.perf_profile_fast_tip"))
         form.addRow("", self._perf_fast_check)
+
+        # P0-C 低角拖尾（opt-in）：只在低角不对称明显的数据上开，见报告 §7.5
+        self._axial_tail_check = QCheckBox(tr("params.axial_tail"))
+        self._axial_tail_check.setChecked(False)
+        self._axial_tail_check.setToolTip(tr("params.axial_tail_tip"))
+        form.addRow("", self._axial_tail_check)
 
         self._wavelength_spin = QDoubleSpinBox()
         self._wavelength_spin.setRange(0.1, 10.0)
@@ -234,6 +243,8 @@ class RefinementWizardDialog(QDialog):
             "two_theta_max": self._two_theta_max.value(),
             # "" = 精确档 (引擎按 falsy 处理); "fast" = 性能档
             "perf_profile": "fast" if self._perf_fast_check.isChecked() else "",
+            # P0-C：低角拖尾（opt-in，默认关）
+            "axial_tail": bool(self._axial_tail_check.isChecked()),
         }
 
 
@@ -1943,6 +1954,7 @@ class MainWindow(QMainWindow):
                     wavelength=params["wavelength"],
                     two_theta_range=(params["two_theta_min"], params["two_theta_max"]),
                     perf_profile=params["perf_profile"],
+                    axial_tail=params.get("axial_tail", False),
                     progress_cb=BusyIndicator.progress_tick,
                 )
 

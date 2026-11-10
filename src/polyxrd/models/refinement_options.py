@@ -8,6 +8,26 @@ from dataclasses import dataclass
 from typing import Optional
 
 
+def parse_grain_radii(text: str) -> Optional[list[float]]:
+    """解析 GUI 的「逐相颗粒半径」输入（P0-G）。
+
+    支持英文/中文逗号与分号分隔；留空返回 ``None``（= 全部用全局缺省）。
+    非法或非正值拋 ``ValueError``，由调用方决定是拦下还是退回全局半径。
+    """
+    if not text or not text.strip():
+        return None
+    vals: list[float] = []
+    for part in text.replace("，", ",").replace(";", ",").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        val = float(part)
+        if not (val > 0.0) or val != val or val in (float("inf"), float("-inf")):
+            raise ValueError(f"颗粒半径必须是有限正值: {part}")
+        vals.append(val)
+    return vals or None
+
+
 @dataclass
 class RefineOptions:
     """Rietveld 精修选项。
@@ -43,6 +63,9 @@ class RefineOptions:
     # （基准报告 §22.6）。microabsorption=False 或 radius<=0 → 不修正。
     microabsorption: bool = False
     grain_radius_um: float = 0.0
+    #: 逐相颗粒半径（P0-G）：与 ``phases`` 等长的 µm 序列；None → 全部用
+    #: ``grain_radius_um``。单一半径的 Brindley 自由度不够（评估报告 §12.4）。
+    grain_radii_um: Optional[list[float]] = None
 
     def to_dict(self) -> dict:
         return {
@@ -57,4 +80,7 @@ class RefineOptions:
             "refine_roughness": self.refine_roughness,
             "microabsorption": self.microabsorption,
             "grain_radius_um": self.grain_radius_um,
+            "grain_radii_um": (
+                list(self.grain_radii_um) if self.grain_radii_um else None
+            ),
         }

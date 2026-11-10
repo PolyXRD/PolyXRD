@@ -570,6 +570,7 @@ translations = {
             "log_save_failed": "ログの保存に失敗しました: {error}",
             "col_phase": "相",
             "col_weight": "質量分率(%)",
+            "col_shape": "異方性(P2/P4)",
             "col_a": "a(Å)",
             "col_b": "b(Å)",
             "col_c": "c(Å)",
@@ -651,6 +652,13 @@ translations = {
             "最終値を求める場合はチェックを外すと精密プロファイルに戻ります。"
             "内蔵エンジンのみ有効で、外部エンジン（GSAS-II / MAUD / "
             "PowerXRD）では無視されます。"
+        ),
+        "axial_tail": "低角テール（軸発散）",
+        "axial_tail_tip": (
+            "split-PV に加えて面積保存の低角テール成分（−0.25×FWHM シフト、"
+            "3.2× 幅のローレンツ）を追加します。IUCr 単相標準では 7/8 組で "
+            "Rwp が改善（平均 0.33 pp、最大 1.21 pp）。ただし輪郭計算が約 2 倍に"
+            "なるため既定はオフ。低角残差が目立つ場合に有効化してください。"
         ),
         "bgm_snip": "SNIP",
         "bgm_als": "ALS",
@@ -771,6 +779,9 @@ translations = {
             "roughness_refine": "粗さ振幅 s を精修",
             "microabsorption": "マイクロ吸収補正（Brindley）",
             "grain_radius": "粒子半径",
+            "grain_radii": "相ごとの半径 (µm)",
+            "grain_radii_placeholder": "空欄=全体；選択した相の順に 12, 8, 15",
+            "grain_radii_hint": "選択した相の順に、カンマ区切りで半径を入力します。個数は選択相の数と一致する必要があり、一致しない場合は全体の半径に戻ります。各相の粒径を実測できている場合のみ入力してください",
             "intensity_hint": "半径は実測値が必要（SEM / レーザー回折 / 沈降法）。不明ならチェックしないでください — 半径を誤ると、正しく定量できていた試料が 5 pp 以上ずれます（基準報告 §22.6）",
         },
         "preview": {
@@ -1037,7 +1048,8 @@ translations = {
             "cif_filter": "CIF ファイル (*.cif)",
             "export_cif_warn_title": "CIF 書き出し",
             "export_cif_write_failed": "書き込み失敗: {exc}",
-            "fullprof_busy": "FullProf 外部リファインメント"
+            "fullprof_busy": "FullProf 外部リファインメント",
+            "grain_radii_count_mismatch": "相ごとの半径が {n_given} 個ありますが、選択相は {n_expected} 個です — 今回は全体の半径を使用します"
         },
         "external_engines_group": {
             "title": "外部リファイン・プログラム",
@@ -1244,6 +1256,8 @@ translations = {
             "scale_correlated": "2 相の割合が分離できません：{phase_a} と {phase_b} のスケール相関は rho={rho:.2f}（<= -0.80、sigma 比={sigma_ratio:.1f}）。両相の割合は互いにトレードオフしても全体パターンがほとんど変わらないため、wt% の小数桁は精度を意味しません。分離するには：走査範囲を延ばす／ターゲットを変えて分解能を上げる、片方の相だけに属する孤立した強線を加える、またはその相の配向優先・占有率を先に修正してください",
             "phase_unsupported": "{phase} は {fraction:.2f} wt% と定量されましたが、この相の固有強線 {n_unique_strong:.0f} 本（I/Imax≥30%）が実測に 1 本も現れていません（最強線は {strongest_2theta:.2f} 度に I/Imax={strongest_rel:.2f} のはず）。この割合には回折線の裏付けがありません。割合がゼロでないことは存在の証拠になりません：余分な強度はピーク幅・バックグラウンドの自由度に吸収され、Rwp はむしろ良くなります。まずその線が走査範囲内か、配向優先で抑えられていないかを確認し、どちらでもなければその相を削除して再精密化してください",
             "phase_fraction_unverifiable": "{phase} は {fraction:.2f} wt% と定量されましたが、この相の固有強線 {n_strong:.0f} 本（I/Imax≥30%）がすべて他相の線と重なっています（最小間隔 {min_gap:.2f} 度）。この割合はピーク幅・バックグラウンドの自由度だけで決まっており、データによる独立な拘束がありません。この相に属し主相と 0.3 度以上離れた線を加えて（ターゲット変更・走査延長・高分解能化）から定量してください。それまでは検出のみを報告し、数値は出さないでください。割合がゼロでないことは存在の証拠になりません",
+            "phase_near_degenerate": "{phase} は {fraction_pct:.2f} wt% と定量されましたが、この相の最強独立線 {strongest_2theta:.2f} 度の正味積分は全パターンの {share_pct:.1f}% にすぎません（基準 <15%）：この相の wt% を {delta_wt_pp:.1f} pp 動かすのに Rwp は {delta_rwp_pp:.2f} pp しか変わりません（{ratio:.0f} pp/% > 50）。つまり割合はフィット品質からほぼ切り離されています。この wt% は点値ではなく区間として読んでください。アルゴリズム版の優劣判定にも使わないでください。信頼性を上げるには、この相の孤立強線を追加する（ターゲット変更・走査延長・高分解能化）、または化学分析・熱重量・光学顕微鏡などパターン外の方法で含有量を決めて事前情報として固定してください",
+            "po_disabled_suspect": "PO が明示的に無効化され、相ごとの _po_directions も指定されていません：{phase} の最強線 {two_theta:.2f} 度における計算/実測の正味積分比は {ratio:.2f}（偏差 {dev_pct:.0f}% > 30%）。強い配向があると相対線強度がランダム配向に平坦化され、割合が系統的にずれますが、Rwp はしばしば 0.数% しか変わりません。auto_preferred_orientation を有効にする（既定で有効）、またはこの相に明示的な (hkl) と r（_po_directions）を与えてください。試料に配向が本当にない場合はこの項目を無視して構いません",
         },
         "engine_fallback": "要求エンジン {requested} → 実際に使用 {used} (理由: {reason})",
         "ka2_detected": "Kα2 二重線が未除去と検出 (最強ピーク {center:.2f}°, Δ≈{delta:.3f}°, 高角側の残差 ≈{ratio:.0f}% ピーク高): 先に Kα2 を除去 (データ処理 → Kα2 除去) するか、後続の Kα2 モデリングを有効にしてください",
@@ -1260,6 +1274,9 @@ translations = {
         "off": "未使用",
         "roughness_only": "粗さモデル {model} 有効：s={s:.3f}（SR はピーク強度比のみ変化。基準で s→0 なら系統偏差を捉えていない）",
         "applied": "有効：μ̄ {mu_bar:.0f} cm⁻¹、τ {tau_min:.2f}~{tau_max:.2f}（wt% のみ、Rwp は不変）",
-        "clamped": "⚠ 半径が Brindley 表の範囲外（|(μ−μ̄)·R| > 0.5）：wt% は定性的のみ"
+        "clamped": "⚠ 半径が Brindley 表の範囲外（|(μ−μ̄)·R| > 0.5）：wt% は定性的のみ",
+        "per_phase": "{phase}：現在の補正 {delta:+.2f} pp（+1 µm あたり {sens:+.3f} pp）、{req}",
+        "per_phase_req": "1 pp には R≈{r:.0f} µm",
+        "per_phase_no_req": "R≤50 µm では 1 pp 未満"
     }
 }

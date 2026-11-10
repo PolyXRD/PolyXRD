@@ -12,8 +12,12 @@ from __future__ import annotations
 import json
 import os
 
+import numpy as np
+
 from polyxrd.models.phase import LatticeParams, Phase
+from polyxrd.refinement import structure as struct_mod
 from polyxrd.refinement import symmetry
+from polyxrd.refinement.cell import Cell
 from polyxrd.services import structure_simulator as sim_mod
 from polyxrd.services.phase_structure_resolver import (
     PhaseStructureResolver,
@@ -133,6 +137,50 @@ def test_sg_cache_hit_refreshes_lru_order():
         assert list(cache)[-1] == "P1", "命中未刷新 LRU 位置"
     finally:
         cache.clear()
+
+
+# ── 4. 引擎侧缓存（2026-11-10 续） ─────────────────────────────
+
+def test_hkl_cache_returns_defensive_copy():
+    """调用方原地改 hkl 数组不得污染 stage 6 复用的缓存。"""
+    struct_mod._HKL_CACHE.clear()
+    try:
+        cell = Cell(a=4.2, b=4.2, c=4.2)
+        first = struct_mod.enumerate_hkl(cell, (10.0, 60.0), [1.5406])
+        assert len(first) > 0
+        pristine = first.copy()
+        first[:] = 999
+        second = struct_mod.enumerate_hkl(cell, (10.0, 60.0), [1.5406])
+        assert np.array_equal(second, pristine), "缓存 hkl 被调用方原地改污染"
+    finally:
+        struct_mod._HKL_CACHE.clear()
+
+
+def test_cif_peak_cache_uses_nanosecond_stamp_and_uniform_value(tmp_path):
+    """同秒改写 CIF 必须失效；缓存值不得再是 list / "fail" 混存。"""
+    from polyxrd.services.rietveld_refiner import RietveldRefiner
+
+    cif = tmp_path / "x.cif"
+    cif.write_text("data_dummy\n", encoding="utf-8")
+    phase = Phase(name="X", formula="X", cif_path=str(cif))
+    r = RietveldRefiner()
+
+    r._cif_reference_peaks(phase, 1.5406, (10.0, 80.0))
+    assert len(r._cif_peak_cache) == 1
+    assert all(isinstance(v, tuple) and len(v) == 2
+               for v in r._cif_peak_cache.values()), "缓存值仍是 list/字符串混存"
+
+    r._cif_reference_peaks(phase, 1.5406, (10.0, 80.0))
+    assert len(r._cif_peak_cache) == 1, "文件未变却没命中缓存"
+
+    st = cif.stat()
+    rem = st.st_mtime_ns % 1_000_000_000
+    new_rem = 1_000_000 if rem != 1_000_000 else 2_000_000
+    same_second_ns = st.st_mtime_ns - rem + new_rem
+    cif.write_text("data_dummy_v2\n", encoding="utf-8")
+    os.utime(cif, ns=(st.st_atime_ns, same_second_ns))
+    r._cif_reference_peaks(phase, 1.5406, (10.0, 80.0))
+    assert len(r._cif_peak_cache) == 2, "同秒改写未让缓存失效（秒级 mtime 老问题）"
 
 
 if __name__ == "__main__":  # pragma: no cover

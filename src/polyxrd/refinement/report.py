@@ -59,9 +59,13 @@ HIGH_VALUE_CODES = frozenset({
     "PHASE_NOT_DETECTED",
     "PHASE_UNSUPPORTED",
     "PHASE_FRACTION_UNVERIFIABLE",
+    "PHASE_NEAR_DEGENERATE",
     "AT_BOUND",
     "SCALE_CORRELATED",
     "MICROABSORPTION_CLAMPED",
+    # P0-J：显式关 PO 时 wt% 可被带偏数倍而 Rwp 只差 1 pp —— 界面只挂 4 条时必须
+    # 优先露出，否则会被 AT_BOUND/BACKGROUND_TREND 之类"改了也看不出"的 warn 挤掉
+    "PO_DISABLED_SUSPECT",
 })
 
 #: 「份额有没有谱线支撑」的判据（P2-10）—— 该相自身 I/Imax 到多少算强线
@@ -74,6 +78,20 @@ UNSUPPORTED_OVERLAP_TOL = 0.30
 UNSUPPORTED_BURY_RATIO = 2.0
 #: 观测峰与模型峰位的容差（模型反射表是 Bragg 位置、不含仪器零点，故另估偏移）
 UNSUPPORTED_OBS_TOL = 0.20
+
+# ── P0-E′：定量「近简并」判据（评估报告 §13.8 第 3 条）────────────
+#: 该相**最强独立线**的观测净积分占全谱净积分低于该值 → 约束太弱
+NEAR_DEGENERATE_SHARE = 0.15
+#: 把该相 wt% 推 ``NEAR_DEGENERATE_TARGET_PP`` 个百分点所需的 Rwp 代价
+#: 超过该比值 → 「wt% 与 Rwp 脱钩」，只能给区间不能给点值
+NEAR_DEGENERATE_WT_PER_RWP = 50.0
+#: 探针把该相 wt% 推动多少个**百分点**（与 Rwp 变化量的单位同为 pp）
+NEAR_DEGENERATE_TARGET_PP = 10.0
+#: 最强独立线的净积分窗口半宽（度）。S4b 白云母 002 用 ±1.0° 得 1.1%，
+#: 与 ``peak_share.py`` 的 8.0–10.2° 窗口同口径
+NEAR_DEGENERATE_WINDOW_DEG = 1.0
+
+
 
 
 def prioritise(findings: Sequence[Finding], limit: int = 4,
@@ -264,6 +282,23 @@ def noise_scale(y_obs, resid_sigma: float) -> float:
     return max(float(resid_sigma), poisson)
 
 
+def _reflection_shift(obs_positions, calc_centers) -> float:
+    """观测峰 ↔ 计算峰位的中位偏移（度）。
+
+    反射表是 Bragg 位置、不含仪器零点；不先对齐的话，一个 0.3° 的零点就会把
+    所有相都判成"无支撑"。只采纳 ``|δ| ≤ 0.5°`` 的配对，少于 3 对不判（返回 0）。
+    """
+    if calc_centers is None or not np.size(calc_centers) or not len(obs_positions):
+        return 0.0
+    cal = np.sort(np.asarray(calc_centers, dtype=float).ravel())
+    offs = []
+    for t in obs_positions:
+        d = float(t - cal[int(np.argmin(np.abs(cal - t)))])
+        if abs(d) <= 0.5:
+            offs.append(d)
+    return float(np.median(offs)) if len(offs) >= 3 else 0.0
+
+
 def _phase_support(
     x: np.ndarray,
     y: np.ndarray,
@@ -329,16 +364,7 @@ def _phase_support(
 
     # 反射表是 Bragg 位置（不含仪器零点），用"观测峰 ↔ 计算峰位"的中位偏移对齐；
     # 不先对齐的话，一个 0.3° 的零点就会把所有相都判成"无支撑"
-    shift = 0.0
-    if calc_centers is not None and np.size(calc_centers):
-        cal = np.sort(np.asarray(calc_centers, dtype=float).ravel())
-        offs = []
-        for t in o:
-            d = float(t - cal[int(np.argmin(np.abs(cal - t)))])
-            if abs(d) <= 0.5:
-                offs.append(d)
-        if len(offs) >= 3:
-            shift = float(np.median(offs))
+    shift = _reflection_shift(o, calc_centers)
 
     out: List[Finding] = []
     for i, (lab, tt, ii) in enumerate(tabs):
@@ -423,6 +449,181 @@ def _phase_support(
     return out
 
 
+def net_area_above_baseline(
+    x: np.ndarray, y: np.ndarray,
+    lo: Optional[float] = None, hi: Optional[float] = None,
+    edge: int = 5,
+) -> float:
+    """窗口内（两端均值连线基线以上的）净积分。
+
+    用于「某条线的净面积」和「全谱净面积」的同一口径比值；不依赖拟合背景，
+    所以不会因为背景自由度把份额稀释掉。
+    """
+    sel = np.ones(x.size, dtype=bool)
+    if lo is not None:
+        sel &= x >= lo
+    if hi is not None:
+        sel &= x <= hi
+    if np.count_nonzero(sel) < 5:
+        return 0.0
+    xs = np.asarray(x[sel], dtype=float)
+    ys = np.asarray(y[sel], dtype=float)
+    n = max(1, min(int(edge), xs.size // 2))
+    base = np.interp(xs, [xs[0], xs[-1]],
+                     [float(ys[:n].mean()), float(ys[-n:].mean())])
+    return float(np.trapezoid(np.maximum(ys - base, 0.0), xs))
+
+
+def _near_degenerate(
+    x: np.ndarray,
+    y: np.ndarray,
+    phase_peaks,
+    quant: Optional[QuantResult],
+    calc_centers,
+    *,
+    wt_rwp_probe: Optional[Dict[str, Tuple[float, float, float]]] = None,
+    min_fraction: float = 0.01,
+) -> List[Finding]:
+    """P0-E′：判某相 wt% 是否「近简并」——有强线、但线太弱，wt 与 Rwp 脱钩。
+
+    两条判据同时成立才报（评估报告 §13.8）：
+
+    1. 该相**最强独立线**的观测净积分占全谱净积分 ``< NEAR_DEGENERATE_SHARE``；
+    2. 把该相 wt% 推 ``NEAR_DEGENERATE_TARGET_PP`` 个百分点，Rwp 只变
+       ``< target / NEAR_DEGENERATE_WT_PER_RWP``（即 Δwt/ΔRwp > 50 pp/%）。
+
+    "独立线"= 该相最强反射且不被别的相的同位置强线压过（复用 P2-10 的埋葬判据）。
+    找不到独立线时**不报**——那属于 ``PHASE_FRACTION_UNVERIFIABLE`` 的范畴。
+    """
+    if quant is None or not getattr(quant, "labels", None) or len(quant.labels) < 2:
+        return []
+    if wt_rwp_probe is None or not wt_rwp_probe:
+        return []
+    tabs = []
+    for ph in phase_peaks or ():
+        try:
+            lab, tt, ii = ph
+        except (TypeError, ValueError):
+            continue
+        tt = np.asarray(tt, dtype=float).ravel()
+        ii = np.asarray(ii, dtype=float).ravel()
+        if tt.size == 0 or ii.size != tt.size:
+            continue
+        tabs.append((str(lab), tt, ii))
+    if not tabs:
+        return []
+
+    fracs = {str(l): float(f) for l, f in zip(quant.labels, quant.fractions)}
+    obs = observed_peaks(x, y)
+    shift = _reflection_shift([t for t, _ in obs], calc_centers)
+    total = net_area_above_baseline(x, y)
+    if total <= 0.0:
+        return []
+
+    out: List[Finding] = []
+    for i, (lab, tt, ii) in enumerate(tabs):
+        frac = fracs.get(lab)
+        if frac is None or frac < min_fraction:
+            continue
+        probe = wt_rwp_probe.get(lab)
+        if not probe:
+            continue
+        imax = float(ii.max())
+        if imax <= 0.0:
+            continue
+        rel = ii / imax
+        idx = int(np.argmax(ii))
+        pos = tt[idx] + shift
+        if pos < float(x[0]) or pos > float(x[-1]):
+            continue
+        # 埋葬判据：别的相在同位置上的加权强度比本相高 2 倍 → 这条最强线不是
+        # "本相独立证据"，不能用它衡量约束力
+        w_self = float(rel[idx]) * frac
+        buried = 0.0
+        for j, (lab2, tt2, ii2) in enumerate(tabs):
+            if j == i:
+                continue
+            f2 = fracs.get(lab2)
+            if f2 is None or f2 < min_fraction:
+                continue
+            m2 = float(ii2.max())
+            if m2 <= 0.0:
+                continue
+            near = np.abs(tt2 - tt[idx]) <= UNSUPPORTED_OVERLAP_TOL
+            if np.any(near):
+                buried = max(buried, float(np.max(ii2[near] / m2 * f2)))
+        if buried >= UNSUPPORTED_BURY_RATIO * w_self:
+            continue
+
+        area = net_area_above_baseline(
+            x, y, pos - NEAR_DEGENERATE_WINDOW_DEG, pos + NEAR_DEGENERATE_WINDOW_DEG)
+        if area <= 0.0:
+            continue
+        share = area / total
+        try:
+            import os
+            if os.environ.get("POLYXRD_DEBUG_P0E"):
+                print(f"[P0E] {lab} strongest={pos:.2f}° "
+                      f"share={100 * share:.2f}% probe={probe}", flush=True)
+        except Exception:  # noqa: BLE001
+            pass
+        if share >= NEAR_DEGENERATE_SHARE:
+            continue
+
+        ratio, d_wt, d_rwp = probe
+        if ratio < NEAR_DEGENERATE_WT_PER_RWP:
+            continue
+        out.append(Finding(
+            "PHASE_NEAR_DEGENERATE", "warn",
+            f"{lab} 被定量到 {100 * frac:.2f} wt%，但其最强独立线 {pos:.2f}° 的"
+            f"净积分只占全谱 {100 * share:.1f}%（判据 <"
+            f"{100 * NEAR_DEGENERATE_SHARE:.0f}%）：把该相 wt% 推 {d_wt:.1f} pp"
+            f" 只需 Rwp 变 {d_rwp:.2f} pp（{ratio:.0f} pp/% > "
+            f"{NEAR_DEGENERATE_WT_PER_RWP:.0f}）——份额与拟合质量近乎脱钩",
+            "这个 wt% 只能当区间读：不要当点值、不要用它判定两版算法优劣。"
+            "要更可信：补一条该相孤立强线（换靶/扩角/提高分辨率），或先用化学"
+            "分析、热重、光学显微等谱外手段把该相含量定住并作为先验；若只能就谱"
+            "论谱，请在报告里给出 wt% 的 Rwp 摆动区间（按 ±0.2 pp Rwp 折算）",
+            {"phase": lab,
+             "fraction_pct": float(100 * frac),
+             "strongest_2theta": float(pos),
+             "share_pct": float(100 * share),
+             "ratio": float(ratio),
+             "delta_wt_pp": float(d_wt),
+             "delta_rwp_pp": float(d_rwp)}))
+    return out
+
+
+def wt_ranges_from_findings(
+    findings,
+    *,
+    rwp_step_pp: float = 0.2,
+) -> Dict[str, List[float]]:
+    """P0-E′ 产品化：近简并相 → wt% 区间（``{相名: [lo, hi]}``，单位 wt%）。
+
+    只收 ``PHASE_NEAR_DEGENERATE`` 的 finding。区间按"Rwp 摆动
+    ``rwp_step_pp`` 个百分点"折算：``half = ratio·rwp_step_pp``。
+    ratio 是 probe 直接量到的 ``Δwt(pp)/ΔRwp(pp)``，对近简并相 > 50，
+    所以 ±0.2 pp 的 Rwp 噪声就能换来 ±10 pp 以上的份额摆动 —— 这正是
+    "不要给点值"的量化依据。下限保护 ``half ≥ 0.5``（避免数值噪声给出
+    一个看似精确的窄区间）。
+    """
+    out: Dict[str, List[float]] = {}
+    for f in findings or ():
+        if getattr(f, "code", "") != "PHASE_NEAR_DEGENERATE":
+            continue
+        ev = getattr(f, "evidence", None) or {}
+        try:
+            lab = str(ev["phase"])
+            frac = float(ev["fraction_pct"])
+            ratio = float(ev["ratio"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        half = max(0.5, ratio * float(rwp_step_pp))
+        out[lab] = [max(0.0, frac - half), min(100.0, frac + half)]
+    return out
+
+
 def audit(
     two_theta,
     y_obs,
@@ -447,6 +648,7 @@ def audit(
     unmatched_tol: float = 0.35,
     min_phase_fraction: float = 0.01,
     scale_corr=None,
+    wt_rwp_probe: Optional[Dict[str, Tuple[float, float, float]]] = None,
 ) -> List[Finding]:
     """跑完整诊断规则，返回按严重度排序的 ``Finding`` 列表。
 
@@ -738,6 +940,9 @@ def audit(
     if phase_peaks:
         out.extend(_phase_support(x, y, phase_peaks, quant, calc_centers,
                                   min_fraction=min_phase_fraction))
+        out.extend(_near_degenerate(x, y, phase_peaks, quant, calc_centers,
+                                    wt_rwp_probe=wt_rwp_probe,
+                                    min_fraction=min_phase_fraction))
 
     out.sort(key=lambda f: (SEVERITY_RANK.get(f.severity, 9), f.code))
     return out
@@ -852,6 +1057,82 @@ def _scale_correlations(problem, summary):
         return None
 
 
+def _wt_rwp_probe(
+    problem,
+    quant: Optional[QuantResult],
+) -> Dict[str, Tuple[float, float, float]]:
+    """P0-E′ 的定量探针：把一相 wt% 推 10 pp，看 Rwp 要付多少代价。
+
+    做法（线性层是闭式解，代价只有两次小最小二乘/相）：
+    固定该相标度到 ``k·s0``（由 Hill–Howard 归一化反解出恰好 ±10 pp 的 k），
+    其余相标度 + 背景重解，算约束后的 Rwp。比值
+    ``Δwt(pp) / ΔRwp(pp)`` 越大，说明这条 wt% 与拟合质量越"脱钩"。
+
+    返回 ``{label: (ratio, delta_wt_pp, delta_rwp_pp)}``；失败或单相返回 ``{}``。
+    """
+    if quant is None or len(getattr(quant, "labels", ())) < 2:
+        return {}
+    try:
+        from .linear import design_stack, solve_linear
+
+        basis, bgb = problem.design()
+        A = design_stack(basis, bgb)
+        y = np.asarray(problem.y_obs, dtype=float).reshape(-1)
+        w = problem.weights
+        base = solve_linear(basis, y, weights=w, bg_basis=bgb)
+        rwp0 = float(pattern_metrics(y, base.y_calc, w)["Rwp"])
+        labels = [str(x) for x in quant.labels]
+        f0 = np.asarray(quant.fractions, dtype=float).reshape(-1)
+        s0 = np.asarray(base.scales, dtype=float).reshape(-1)
+    except Exception:  # noqa: BLE001 - 加分项诊断，失败静默
+        return {}
+    n_ph = int(basis.shape[1])
+    n_tot = int(A.shape[1])
+    if min(len(labels), f0.size, s0.size, n_ph) < 2:
+        return {}
+    target = NEAR_DEGENERATE_TARGET_PP / 100.0
+    probe: Dict[str, Tuple[float, float, float]] = {}
+    for i in range(min(len(labels), n_ph)):
+        fi = float(f0[i])
+        if fi < 0.01:
+            continue
+        best: Optional[Tuple[float, float, float]] = None
+        for ft in (min(fi + target, 0.98), max(fi - target, 0.002)):
+            if abs(ft - fi) < 1e-4:
+                continue
+            # 只改一相标度时 Hill–Howard 份额的闭式关系
+            k = ft * (1.0 - fi) / max(fi * (1.0 - ft), 1e-12)
+            y_adj = y - basis[:, i] * (s0[i] * k)
+            keep_ph = [j for j in range(n_ph) if j != i]
+            lin = solve_linear(basis[:, keep_ph], y_adj, weights=w, bg_basis=bgb)
+            coef = np.concatenate([lin.scales, lin.bg_coefs])
+            idx = keep_ph + list(range(n_ph, n_tot))
+            # 固定相那一条**必须**加回计算谱：只解其余相得到的 y 里没有它，
+            # 若直接拿来算 Rwp，等于把该相从模型里删掉 —— ΔRwp 被系统性放大，
+            # 比值永远到不了 50，P0-E′ 会恒定漏报。
+            y_fixed = A[:, idx] @ coef + basis[:, i] * (s0[i] * k)
+            rwp2 = float(pattern_metrics(y, y_fixed, w)["Rwp"])
+            drwp = float(rwp2 - rwp0)
+            if drwp < -1e-6:
+                continue
+            dwt = float(100.0 * (ft - fi))
+            ratio = abs(dwt) / max(drwp, 1e-9)
+            cand = (ratio, dwt, drwp)
+            if best is None or cand[0] > best[0]:
+                best = cand
+        if best is not None:
+            probe[labels[i]] = best
+            try:
+                import os
+                if os.environ.get("POLYXRD_DEBUG_P0E"):
+                    print(f"[P0E] {labels[i]} f={fi:.3f} "
+                          f"ratio={best[0]:.1f} dwt={best[1]:.2f} "
+                          f"drwp={best[2]:.3f}", flush=True)
+            except Exception:  # noqa: BLE001
+                pass
+    return probe
+
+
 def build_report(
     problem,
     summary=None,
@@ -913,7 +1194,8 @@ def build_report(
         phase_peaks=phase_peaks,
         kalph2_modeled=bool(kalph2_modeled),
         po_freed=po_freed, sample_freed=sample_freed, atoms_freed=atoms_freed,
-        scale_corr=_scale_correlations(problem, summary))
+        scale_corr=_scale_correlations(problem, summary),
+        wt_rwp_probe=_wt_rwp_probe(problem, quant))
 
     return FitReport(
         metrics=metrics, findings=findings,

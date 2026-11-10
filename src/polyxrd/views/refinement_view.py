@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QListWidget,
     QListWidgetItem,
+    QLineEdit,
     QMenu,
     QFileDialog,
     QMessageBox,
@@ -46,6 +47,7 @@ from polyxrd.i18n.diag_texts import (
     microabsorption_note,
     render_diagnostics,
 )
+from polyxrd.models.refinement_options import parse_grain_radii
 from polyxrd.services.refinement_templates import RefinementTemplateManager
 from polyxrd.viewmodels.main_vm import MainViewModel
 from polyxrd.views.widgets.busy_indicator import BusyIndicator, busy
@@ -228,6 +230,19 @@ class RefinementView(QWidget):
             tr("wizard.params_page.grain_radius"), self._spin_grain_radius
         )
 
+        # 逐相半径（P0-G）：留空 = 全部用上面的全局缺省；按已选相序逗号分隔。
+        # 单一半径的 Brindley 自由度不够（评估报告 §12.4：真实需要锌矿/刚玉/
+        # 萤石各一个 τ），逐相输入是能力补齐，不是自动修正。
+        self._edit_grain_radii = QLineEdit()
+        self._edit_grain_radii.setPlaceholderText(
+            tr("wizard.params_page.grain_radii_placeholder"))
+        self._edit_grain_radii.setEnabled(False)
+        self._edit_grain_radii.setToolTip(
+            tr("wizard.params_page.grain_radii_hint"))
+        ctrl_layout.addRow(
+            tr("wizard.params_page.grain_radii"), self._edit_grain_radii
+        )
+
         self._btn_refine = QPushButton(tr("view.refinement.btn_start_refine"))
         self._btn_refine.clicked.connect(self._on_refine)
         ctrl_layout.addRow(self._btn_refine)
@@ -292,7 +307,7 @@ class RefinementView(QWidget):
         self._group_phases = QGroupBox(tr("view.refinement.group_phases"))
         phase_layout = QVBoxLayout()
 
-        self._phase_table = QTableWidget(0, 5)
+        self._phase_table = QTableWidget(0, 6)
         self._phase_table.setHorizontalHeaderLabels(
             [
                 tr("view.refinement.col_phase"),
@@ -300,6 +315,7 @@ class RefinementView(QWidget):
                 tr("view.refinement.col_a"),
                 tr("view.refinement.col_b"),
                 tr("view.refinement.col_c"),
+                tr("view.refinement.col_shape"),
             ]
         )
         self._phase_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
@@ -469,6 +485,7 @@ class RefinementView(QWidget):
             tr("view.refinement.col_a"),
             tr("view.refinement.col_b"),
             tr("view.refinement.col_c"),
+            tr("view.refinement.col_shape"),
         ])
 
     # ------------------------------------------------------------------
@@ -589,7 +606,9 @@ class RefinementView(QWidget):
     def _on_intensity_toggled(self, *_args) -> None:
         """父开关联动子控件 (与精修向导同一套联动规则)。"""
         self._chk_roughness_refine.setEnabled(self._chk_roughness.isChecked())
-        self._spin_grain_radius.setEnabled(self._chk_microabsorption.isChecked())
+        ma_on = self._chk_microabsorption.isChecked()
+        self._spin_grain_radius.setEnabled(ma_on)
+        self._edit_grain_radii.setEnabled(ma_on)
 
     def _intensity_params(self) -> dict:
         """控件 → 引擎 kwargs (键名与 ``refine()`` 一致)。
@@ -599,7 +618,7 @@ class RefinementView(QWidget):
         """
         rough_on = self._chk_roughness.isChecked()
         ma_on = self._chk_microabsorption.isChecked()
-        return {
+        params = {
             "roughness_model": "sidey" if rough_on else "none",
             "refine_roughness": bool(
                 rough_on and self._chk_roughness_refine.isChecked()
@@ -609,6 +628,23 @@ class RefinementView(QWidget):
                 float(self._spin_grain_radius.value()) if ma_on else 0.0
             ),
         }
+        # 逐相半径：留空走全局缺省；长度必须等于已选相数（引擎会整体退回
+        # 全局半径，静默发生用户看不出来，所以这里先拦下并要求校准相序）。
+        try:
+            radii = parse_grain_radii(self._edit_grain_radii.text())
+        except ValueError as e:
+            self._append_log(str(e))
+            radii = None
+        if ma_on and radii:
+            expected = self._selected_phase_list.count()
+            if 0 < expected == len(radii):
+                params["grain_radii_um"] = radii
+            elif expected:
+                self._append_log(
+                    tr("vw.refinement_view.grain_radii_count_mismatch").format(
+                        n_given=len(radii), n_expected=expected)
+                )
+        return params
 
     # ------------------------------------------------------------------
     # 日志
@@ -836,14 +872,35 @@ class RefinementView(QWidget):
         self._append_log(tr("view.refinement.log_done"))
 
         # 更新物相表
+        _fp = getattr(result, "fit_params", None) or {}
+        _aniso = _fp.get("v5_aniso") or {}
+        _wt_ranges = _fp.get("wt_ranges") or {}
+        if _fp.get("v5_tail"):
+            self._phase_table.horizontalHeaderItem(5).setToolTip(
+                f"tail = {float(_fp['v5_tail']):.3f}（低角拖尾面积占比）"
+            )
         self._phase_table.setRowCount(0)
         for phase in result.phases:
             row = self._phase_table.rowCount()
             self._phase_table.insertRow(row)
             self._phase_table.setItem(row, 0, QTableWidgetItem(phase.name))
-            self._phase_table.setItem(
-                row, 1, QTableWidgetItem(f"{phase.weight_fraction:.2f}")
-            )
+            # P0-E′：近简并相给区间（±0.2 pp Rwp 折算），不再只给点值
+            _rng = _wt_ranges.get(phase.name)
+            if _rng:
+                _half = 0.5 * (float(_rng[1]) - float(_rng[0]))
+                _w_item = QTableWidgetItem(
+                    f"{phase.weight_fraction:.2f} ±{_half:.1f}")
+                _w_item.setToolTip(
+                    "近简并：该相最强独立线占比过低，wt% 与 Rwp 近乎脱钩；"
+                    f"区间 = ±0.2 pp Rwp 折算（{float(_rng[0]):.1f}~"
+                    f"{float(_rng[1]):.1f} wt%）")
+            else:
+                _w_item = QTableWidgetItem(f"{phase.weight_fraction:.2f}")
+            self._phase_table.setItem(row, 1, _w_item)
+            _a = _aniso.get(phase.name)
+            _shape = (f"{float(_a[0]):+.2f} / {float(_a[1]):+.2f}"
+                      if _a else "")
+            self._phase_table.setItem(row, 5, QTableWidgetItem(_shape))
             lat = phase.lattice
             a_val = f"{lat.a:.4f}" if lat is not None else "-"
             b_val = f"{lat.b:.4f}" if lat is not None else "-"

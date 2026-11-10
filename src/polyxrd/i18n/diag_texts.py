@@ -82,11 +82,34 @@ def microabsorption_note(fit_params: Any) -> tuple[str, bool]:
     mu_bar = float(fp.get("microabsorption_mu_bar") or 0.0)
     if fp.get("microabsorption_clamped"):
         return tr("intensity_note.clamped"), True
+
+    def _with_per_phase(text: str) -> str:
+        """P0-G：逐相"偏多少 / 多敏感 / 多大 R 才偏 1 pp"（只展示）。"""
+        lines = []
+        for item in fp.get("microabsorption_per_phase") or []:
+            try:
+                req = item.get("equivalent_radius_um")
+                req_txt = (
+                    tr("intensity_note.per_phase_req", r=float(req))
+                    if req is not None
+                    else tr("intensity_note.per_phase_no_req"))
+                lines.append(tr(
+                    "intensity_note.per_phase",
+                    phase=str(item.get("phase")),
+                    delta=float(item.get("delta_wt_pp") or 0.0),
+                    sens=float(item.get("sensitivity_pp_per_um") or 0.0),
+                    req=req_txt))
+            except (TypeError, ValueError):
+                continue
+        return "\n".join([text] + lines)
+
     if tau:
-        return tr("intensity_note.applied",
-                  mu_bar=mu_bar, tau_min=min(tau), tau_max=max(tau)), False
+        return _with_per_phase(tr(
+            "intensity_note.applied",
+            mu_bar=mu_bar, tau_min=min(tau), tau_max=max(tau))), False
     model = str(fp.get("roughness_model") or "none").strip().lower()
     if model in ("", "none", "off", "0"):
-        return tr("intensity_note.off"), False
-    return tr("intensity_note.roughness_only",
-              model=model, s=float(fp.get("roughness_s") or 0.0)), False
+        return _with_per_phase(tr("intensity_note.off")), False
+    return _with_per_phase(tr(
+        "intensity_note.roughness_only",
+        model=model, s=float(fp.get("roughness_s") or 0.0))), False

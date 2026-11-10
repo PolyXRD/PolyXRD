@@ -123,6 +123,11 @@ class ProfileParams:
     eta: float = 0.5
     kind: str = "pseudo-voigt"
     asymmetry: float = 0.0
+    #: P0-C：低角"拖尾"面积占比 t（0 = 关闭）。峰面积按 ``(1−t)`` 主峰 +
+    #: ``t`` 个**左移 0.25·FWHM、宽 3.2 倍**的洛伦兹分量分配（面积守恒）。
+    #: 这是轴向发散/样品透明在实测谱里的粗粒度等效 —— split-PV 只能改左右
+    #: **宽度**，改不了"峰心左侧多出一块慢衰减尾巴"的形状。
+    tail: float = 0.0
     use_tch: Optional[bool] = None
 
     def __post_init__(self) -> None:
@@ -166,7 +171,7 @@ class ProfileParams:
             "size_nm": self.size_nm, "strain": self.strain,
             "k_size": self.k_size, "fwhm": self.fwhm, "eta": self.eta,
             "kind": self.kind, "asymmetry": self.asymmetry,
-            "use_tch": self.use_tch,
+            "tail": self.tail, "use_tch": self.use_tch,
         }
 
 

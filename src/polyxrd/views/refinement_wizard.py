@@ -59,6 +59,7 @@ from polyxrd.i18n.diag_texts import (
 )
 from polyxrd.models.phase import Phase
 from polyxrd.models.refinement import RefinementResult
+from polyxrd.models.refinement_options import parse_grain_radii
 from polyxrd.models.xrd_data import XRDData
 from polyxrd.services.cif_minerals import CifMineralLibrary
 from polyxrd.services.cod_searcher import CODSearcher, CODEntry
@@ -508,6 +509,17 @@ class RefinementWizard(QWidget):
         intensity_layout.addRow(tr("wizard.params_page.grain_radius"),
                                 self._spin_grain_radius)
 
+        # 逐相半径（P0-G）：留空 = 全部用上面的全局缺省；按已选相序逗号分隔。
+        self._edit_grain_radii = QLineEdit()
+        self._edit_grain_radii.setPlaceholderText(
+            tr("wizard.params_page.grain_radii_placeholder"))
+        self._edit_grain_radii.setEnabled(False)
+        self._edit_grain_radii.setToolTip(
+            tr("wizard.params_page.grain_radii_hint"))
+        self._edit_grain_radii.textChanged.connect(self._on_param_changed)
+        intensity_layout.addRow(tr("wizard.params_page.grain_radii"),
+                                self._edit_grain_radii)
+
         hint = QLabel(tr("wizard.params_page.intensity_hint"))
         hint.setWordWrap(True)
         hint.setStyleSheet("color: gray;")
@@ -526,13 +538,14 @@ class RefinementWizard(QWidget):
         ma_on = self._chk_microabsorption.isChecked()
         self._chk_roughness_refine.setEnabled(rough_on)
         self._spin_grain_radius.setEnabled(ma_on)
+        self._edit_grain_radii.setEnabled(ma_on)
         self._on_param_changed()
 
     def _intensity_params(self) -> dict:
         """控件 → 引擎 kwargs（与 ``refine()`` 的键名一致）。"""
         rough_on = self._chk_roughness.isChecked()
         ma_on = self._chk_microabsorption.isChecked()
-        return {
+        params = {
             "roughness_model": "sidey" if rough_on else "none",
             "refine_roughness": bool(rough_on
                                      and self._chk_roughness_refine.isChecked()),
@@ -541,13 +554,22 @@ class RefinementWizard(QWidget):
             "grain_radius_um": (float(self._spin_grain_radius.value())
                                 if ma_on else 0.0),
         }
+        # 逐相半径：留空走全局；长度必须等于已选相数，否则引擎会整体退回全局
+        try:
+            radii = parse_grain_radii(self._edit_grain_radii.text())
+        except ValueError:
+            radii = None
+        if ma_on and radii and len(radii) == len(self._selected_phases):
+            params["grain_radii_um"] = radii
+        return params
 
     def _load_intensity_params(self, params: dict) -> None:
         """模板 / 工程文件 → 控件。blockSignals 防抖成"每次 setChecked 都同步"。"""
         p = dict(params or {})
         rm = str(p.get("roughness_model", "none") or "none").strip().lower()
         widgets = (self._chk_roughness, self._chk_roughness_refine,
-                   self._chk_microabsorption, self._spin_grain_radius)
+                   self._chk_microabsorption, self._spin_grain_radius,
+                   self._edit_grain_radii)
         for w in widgets:
             w.blockSignals(True)
         try:
@@ -560,6 +582,12 @@ class RefinementWizard(QWidget):
             if radius > 0.0:
                 self._spin_grain_radius.setValue(
                     min(radius, self._spin_grain_radius.maximum()))
+            radii = p.get("grain_radii_um")
+            if radii:
+                self._edit_grain_radii.setText(
+                    ", ".join(f"{float(v):g}" for v in radii))
+            else:
+                self._edit_grain_radii.clear()
         finally:
             for w in widgets:
                 w.blockSignals(False)
@@ -1378,7 +1406,12 @@ class RefinementWizard(QWidget):
         # params 里既有模板带来的其它键（quick_scan / refine_lattice…），也有
         # 本页控件管的四个强度误差键 —— 用 update 合并，别整体替换。
         params = dict(self._refinement_config.get("params") or {})
-        params.update(self._intensity_params())
+        intensity = self._intensity_params()
+        params.update(intensity)
+        # 逐相半径失效（清空/数量不符）时必须显式删键：update 只会覆盖，
+        # 残留的旧列表会让引擎继续按上一次的相序套半径。
+        if "grain_radii_um" not in intensity:
+            params.pop("grain_radii_um", None)
         self._refinement_config["params"] = params
 
     def _on_save_as_template(self) -> None:

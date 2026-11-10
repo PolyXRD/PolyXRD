@@ -132,6 +132,116 @@ def _finding_log_lines(v5_findings) -> list[str]:
     return out
 
 
+def _radius_sweep_table(
+    prob,
+    quant,
+    mu,
+    radii,
+    *,
+    target_pp: float = 1.0,
+    r_max: float = 50.0,
+) -> list[dict]:
+    """P0-G：逐相微吸收敏感度 + "份额变化 target_pp 所需等效半径"（只展示）。
+
+    τ 作用在强度上会被标度吸收，**不进拟合向量**，所以颗粒半径无法从单张
+    谱反解 —— 换一个 R 可以拟合出同样好的 Rwp、却给出不同的 wt%。这里固定
+    当前线性层标度，只把某一相的半径扫一遍（含 μ̄ 不动点），回答两个问题：
+
+    * 在当前 R 下，该相份额相对"不修正"偏了多少 pp、每加 1 µm 还会再偏多少；
+    * 要让该相份额偏 ``target_pp``，需要多大的等效半径（表端点内达不到则 None）。
+
+    结果只进 ``fit_params`` 供界面展示，**绝不写回 wt%**。
+    """
+    from polyxrd.refinement import hill_howard
+    from polyxrd.refinement.intensity import BRINDLEY_X_LIMIT, mean_linear_mu
+
+    n = len(prob.phases)
+    if n < 2 or not mu or len(mu) != n or quant is None:
+        return []
+    try:
+        labels = [b.label for b in prob.phases]
+        scales = [float(v) for v in quant.scales]
+        structs = [b.structure for b in prob.phases]
+        cur = [float(r) for r in (radii if radii else [0.0] * n)]
+        if len(cur) != n:
+            return []
+
+        def _w(radius_vec):
+            q = hill_howard(labels, scales, structs, mu=mu,
+                            radius_um=list(radius_vec))
+            return [100.0 * f for f in q.fractions]
+
+        w0 = _w([0.0] * n)
+        w_cur = _w(cur)
+        mu_bar = mean_linear_mu([float(v) for v in mu],
+                                [float(v) for v in quant.fractions])
+    except Exception:  # noqa: BLE001 - 展示用，失败就当没有
+        return []
+
+    out: list[dict] = []
+    for j in range(n):
+        # 表内半径上限：x = (μ_j − μ̄)·R_j ≤ 0.5 ⇒ R_j ≤ 0.5/|Δμ_j|（µm 需 ×1e4）。
+        # 越界后 τ 被截到表端点（常数），此时"等效半径"给出的点值只是区间里
+        # 的任意一个 —— 所以搜索上界必须收到表内，并把"被表限住了"如实标出。
+        dmu = abs(float(mu[j]) - mu_bar)
+        limit = (BRINDLEY_X_LIMIT * 1e4 / dmu) if dmu > 1e-12 else float("inf")
+        cap = min(float(r_max), limit)
+        limited = bool(limit < float(r_max))
+        try:
+            h = 0.5
+            rp = list(cur)
+            rp[j] += h
+            rm = list(cur)
+            rm[j] = max(0.0, rm[j] - h)
+            wp = _w(rp)[j]
+            wm = _w(rm)[j]
+            span = rp[j] - rm[j]
+            sens = (wp - wm) / span if span > 0.0 else 0.0
+
+            def _delta(r: float) -> float:
+                rr = list(cur)
+                rr[j] = float(r)
+                return abs(_w(rr)[j] - w0[j])
+
+            # 表内能搬动的最大份额：这就是"反推只能给区间"的那条区间宽度
+            delta_at_cap = 0.0
+            if np.isfinite(cap) and cap > 0.0:
+                rc = list(cur)
+                rc[j] = float(cap)
+                delta_at_cap = _w(rc)[j] - w0[j]
+
+            need = None
+            if np.isfinite(cap) and cap > 0.0 and _delta(cap) >= target_pp:
+                lo, hi = 0.0, float(cap)
+                for _ in range(24):
+                    mid = 0.5 * (lo + hi)
+                    if _delta(mid) >= target_pp:
+                        hi = mid
+                    else:
+                        lo = mid
+                need = hi
+        except Exception:  # noqa: BLE001
+            continue
+
+        delta_pp = w_cur[j] - w0[j]
+        if abs(delta_pp) < 0.05 and abs(sens) < 0.01:
+            continue
+        out.append({
+            "phase": str(getattr(prob.phases[j], "label", labels[j])),
+            "mu": float(mu[j]),
+            "radius_um": float(cur[j]),
+            "delta_wt_pp": float(delta_pp),
+            "sensitivity_pp_per_um": float(sens),
+            "equivalent_radius_um": (float(need) if need is not None else None),
+            # 表内上限（µm）与"该相在表内最多能被搬运多少 pp"：等效半径只在
+            # 这个区间里有意义，越界的"解"是截断出来的假精度。
+            "radius_limit_um": (float(limit) if np.isfinite(limit) else None),
+            "limited_by_table": limited,
+            "delta_wt_at_limit_pp": float(delta_at_cap),
+        })
+    return out
+
+
 class RietveldRefiner:
     """Rietveld结构精修服务
 
@@ -1281,6 +1391,10 @@ class RietveldRefiner:
     MICROABS_PROBE_RADIUS_UM: ClassVar[float] = 5.0
     #: 微吸收敏感度的报警门限（wt% 百分点）。低于它就是噪声量级，不必打扰用户。
     MICROABS_SENSITIVITY_PP: ClassVar[float] = 1.0
+    #: P0-J：PO 显式关闭时，最强线"计算/实测净积分"允许的相对偏离。
+    #: 强织构试样的相对线强被压平成随机取向，超过 30% 就说明份额已被带偏
+    #: （实测 S3 刚玉/石英会触发，S2 无织构不触发）。
+    PO_DISABLED_TOL: ClassVar[float] = 0.30
 
     def _refine_v5(
         self,
@@ -1540,6 +1654,28 @@ class RietveldRefiner:
                 log("[v5] microabsorption mu (1/cm): "
                     + ", ".join(f"{v:.1f}" for v in _mu_linear))
 
+        # P0-B″ 各向异性展宽（P₂/P₄，逐相 2 个自由度）：opt-in。
+        # **两段式热启动**：第一段先按"无各向异性"完整收敛（参数固定=0），
+        # 第二段再把 P₂/P₄ 放开、只重跑 stage 5/6。理由：把 2·n_phase 个新
+        # 自由度从一开始就放进去，优化器会走另一个局部极小 —— S4b 实测
+        # Rwp 9.38→10.15（连续两次同值，是可复现的路径问题，不是噪声）。
+        # 热启动后若仍更差，回滚到第一段结果，保证"开启 aniso 不会变坏"。
+        # 默认档位：**precise 开、fast 关**（2026-11-08）。两段式闸门保证
+        # "开不变坏"，所以精密档直接默认启用；fast 档连 stage 5 都不跑，
+        # 放开也只会白加自由度。显式 kwargs 仍然优先（可强制关/开）。
+        _aniso_kw = kwargs.get("anisotropic_broadening")
+        _aniso_on = ((_tier != "fast") if _aniso_kw is None
+                     else bool(_aniso_kw))
+        for _b in blocks:
+            _b.aniso_on = False
+        if _aniso_on:
+            log("[v5] anisotropic broadening: two-pass warm start"
+                + (" (default)" if _aniso_kw is None else " (requested)"))
+        # P0-C 低角拖尾（整样品 1 个自由度）：opt-in。
+        _tail_on = bool(kwargs.get("axial_tail", False))
+        if _tail_on:
+            log("[v5] axial tail: low-angle component (opt-in)")
+
         prob = PatternProblem(
             two_theta, intensity, blocks,
             profile=ProfileParams(w=max(1e-4, fwhm0 ** 2)),
@@ -1553,6 +1689,7 @@ class RietveldRefiner:
             # 都给了才生效，且**只影响定量**（τ 在强度上会被标度吸收），不改变 Rwp。
             mu_linear=_mu_linear,
             grain_radius_um=(_grain_radii if _grain_radii is not None else _grain_r),
+            tail_on=_tail_on,
         )
 
         # ── 参数掩码：用户在向导里取消勾选的自由度要真的钉住 ────────
@@ -1561,6 +1698,9 @@ class RietveldRefiner:
             frozen += [n for n in prob.params.names() if ".cell." in n]
         if not mask.get("profile", True):
             frozen += [f"inst.{t}" for t in ("u", "v", "w", "x", "y", "z")]
+            # 峰形被用户关掉时，各向异性展宽/拖尾也一并钉住（同属轮廓自由度）
+            frozen += [n for n in prob.params.names()
+                       if ".aniso." in n or n == "inst.tail"]
         if not mask.get("zero_shift", True):
             frozen += ["inst.zero"]
         # v5.1：样品位移（Δ2θ = disp·cosθ）**默认冻结**，与 builtin 的 W16 同口径
@@ -1593,6 +1733,25 @@ class RietveldRefiner:
         for name in frozen:
             if name in prob.params:
                 prob.params.fix(name, True)
+
+        # 弱相晶胞冻结名单（GRANODIO 暴露）：与 problem.py 的判据同一口径，
+        # 只用于回显"这些相的晶胞没有参与精修"。
+        _weak_cells: list[str] = []
+        try:
+            from polyxrd.refinement.problem import WEAK_PHASE_CELL_SHARE
+
+            _tot_i = sum(float(np.sum(np.asarray(b.table.intensity, float)))
+                         for b in prob.phases if b.table is not None)
+            for b in prob.phases:
+                if b.table is None or _tot_i <= 0.0:
+                    continue
+                _s_i = float(np.sum(np.asarray(b.table.intensity, float)))
+                if _s_i / _tot_i < WEAK_PHASE_CELL_SHARE:
+                    _weak_cells.append(b.label)
+        except Exception as e:  # noqa: BLE001
+            log(f"[v5] weak-cell scan skipped: {type(e).__name__}: {e}")
+        if _weak_cells:
+            log("[v5] weak-phase cell frozen: " + ", ".join(_weak_cells))
 
         zs_init = kwargs.get("zero_shift")
         if zs_init is not None and abs(float(zs_init)) > 1e-12:
@@ -1685,6 +1844,45 @@ class RietveldRefiner:
             return self._fallback_v5(data, phases, strategy, max_cycles, kwargs,
                                      f"{type(e).__name__}: {e}")
 
+        # ── P0-B″ 第二段（热启动）：放开 P₂/P₄，只重跑 stage 5/6 ─────
+        # 第一段是在 aniso=0 下收敛的完整解；从这里再放开各向异性，
+        # 相当于"以已收敛的几何/峰形为起点做一次局部精修"。若更差则回滚，
+        # 因此 **开启 aniso 永远不会让 Rwp 变坏**（与 opt-in 的语义一致）。
+        if _aniso_on:
+            _aniso_names = [n for n in prob.params.names() if ".aniso." in n]
+            for _n in _aniso_names:
+                prob.params[_n].fixed = False
+            # 第二段只做"局部收尾"：迭代预算减半（默认 80→40），
+            # 实测 S7/S4b 的收敛在 30~40 步内完成，减半几乎不影响 Rwp。
+            _p2 = [StageSpec(s.stage, max_iter=max(10, int(s.max_iter) // 2))
+                   for s in protocol if s.stage >= 5]
+            if _aniso_names and _p2:
+                _snap2 = prob.params.snapshot()
+                _rwp1 = float(summary.metrics.get("Rwp", float("inf")))
+                log("[v5] aniso pass 2: " + ", ".join(_aniso_names))
+                try:
+                    _summary2 = run_protocol(prob, protocol=_p2,
+                                             converge_tol=1e-4, patience=2)
+                    _rwp2 = float(_summary2.metrics.get("Rwp", float("inf")))
+                    if _rwp2 + 1e-9 < _rwp1:
+                        summary.stages.extend(_summary2.stages)
+                        summary = _summary2
+                        log(f"[v5] aniso pass 2 accepted: "
+                            f"Rwp {_rwp1:.3f} → {_rwp2:.3f}")
+                    else:
+                        prob.params.restore(_snap2)
+                        prob.apply()
+                        prob.invalidate()
+                        prob.residual(None)
+                        log(f"[v5] aniso pass 2 rejected: "
+                            f"Rwp {_rwp1:.3f} vs {_rwp2:.3f} (kept pass 1)")
+                except Exception as e:  # noqa: BLE001
+                    prob.params.restore(_snap2)
+                    prob.apply()
+                    prob.invalidate()
+                    prob.residual(None)
+                    log(f"[v5] aniso pass 2 skipped: {type(e).__name__}: {e}")
+
         last_stage = max((int(s.get("stage", 0)) for s in summary.stages), default=5)
         metrics = prob.metrics(stage=last_stage)
         wR = float(metrics["Rwp"])
@@ -1715,11 +1913,30 @@ class RietveldRefiner:
             except Exception:  # noqa: BLE001
                 _quant = None
 
+        # ── P0-G：逐相微吸收敏感度 / 等效半径（只展示，不写回 wt%）────
+        _ma_table: list[dict] = []
+        if _quant is not None and len(phases) > 1:
+            try:
+                _mu_diag = _mu_linear
+                if _mu_diag is None:
+                    _mu_diag = _phase_linear_mu(prob.phases, phases)
+                    if any(v is None for v in _mu_diag):
+                        _mu_diag = None
+                if _mu_diag is not None:
+                    _ma_table = _radius_sweep_table(
+                        prob, _quant, _mu_diag,
+                        (_grain_radii if _grain_radii is not None
+                         else [_grain_r] * len(phases)))
+            except Exception as e:  # noqa: BLE001 - 展示用探针失败不影响结果
+                log(f"[v5] radius sweep skipped: {type(e).__name__}: {e}")
+
         # ── 诊断（结构化，最多 4 条，避免刷屏）──────────────────────
         diagnostics: list[dict] = []
         v5_findings: list[dict] = []
+        _report = None
         try:
-            diagnostics, v5_findings = _v5_diagnostics(build_report(prob, summary))
+            _report = build_report(prob, summary)
+            diagnostics, v5_findings = _v5_diagnostics(_report)
             # 界面只挂 4 条（多了刷屏），但**被截掉的不能凭空消失**：全量
             # 逐条落到执行日志。日志按模块约定只写技术符号+数值（服务层不
             # 依赖 i18n），码名与 `render_diagnostics` 用同一套，能对上界面
@@ -1729,6 +1946,17 @@ class RietveldRefiner:
                 log(_line)
         except Exception as e:  # noqa: BLE001
             log(f"[v5] report skipped: {type(e).__name__}: {e}")
+
+        # P0-E′ 产品化：把 PHASE_NEAR_DEGENERATE 的 finding 折算成 wt% 区间。
+        # 只对**被判定为近简并**的相给区间；其余相仍给点值（界面上带 tooltip）。
+        _wt_ranges: dict[str, list[float]] = {}
+        try:
+            from polyxrd.refinement.report import wt_ranges_from_findings
+
+            _wt_ranges = wt_ranges_from_findings(
+                getattr(_report, "findings", None) or ())
+        except Exception as e:  # noqa: BLE001
+            log(f"[v5] wt range skipped: {type(e).__name__}: {e}")
 
         # ── 微吸收「没启用」的定量敏感度（v5.3, P0-E）────────────────
         # τ 不进拟合向量、也不改变 Rwp —— 所以「没做微吸收修正」在结果里
@@ -1779,6 +2007,106 @@ class RietveldRefiner:
                             f"shift={_shift:.2f}pp radius={self.MICROABS_PROBE_RADIUS_UM:.1f}um")
             except Exception as e:  # noqa: BLE001 - 探针失败不该影响精修
                 log(f"[v5] microabsorption probe skipped: {type(e).__name__}: {e}")
+
+        # ── PO 关闭护栏（P0-J）────────────────────────────────────
+        # 显式关掉 auto PO 又不给逐相 _po_directions 时，强织构试样的相对线强
+        # 被压平成随机取向——份额会被系统性带偏，但 Rwp 常常只差零点几个
+        # 百分点，用户在拟合曲线上看不出来。用最强线的"计算/实测净积分比"
+        # 直接点名（S3 必报、S2 不误报）。
+        if (kwargs.get("auto_preferred_orientation", True) is False
+                and not kwargs.get("_po_directions") and len(phases) > 1):
+            try:
+                from polyxrd.refinement.report import (
+                    Finding, net_area_above_baseline)
+
+                _yt = getattr(summary, "y_calc", None)
+                if _yt is None:
+                    _yt = prob.calc_pattern()
+                _x = np.asarray(prob.two_theta, dtype=float)
+                _yc = np.asarray(_yt, dtype=float)
+                _yobs = np.asarray(prob.y_obs, dtype=float)
+                # 只看**该相自己**的贡献：总计算谱里别的相在该窗口的峰会把
+                # 比值的偏离抹平（S3 实测：萤石 wt 32.8→68.1，但窗口总净
+                # 积分比只有 0.886 ⇒ 原口径对 5 倍份额漂移完全不敏感）。
+                _basis, _ = prob.design()
+                _scales = getattr(getattr(prob, "last_linear", None), "scales", None)
+                _hits: list[tuple[str, float, float]] = []
+                for _i, _b in enumerate(prob.phases):
+                    if _scales is None or _i >= len(_scales):
+                        continue
+                    try:
+                        _b.ensure_table((float(_x[0]), float(_x[-1])),
+                                        (prob.wavelength,))
+                        _tt = np.asarray(_b.table.two_theta, dtype=float)
+                        _ii = np.asarray(_b.table.intensity, dtype=float)
+                    except Exception:  # noqa: BLE001 - 反射表不可用就跳过该相
+                        continue
+                    if _tt.size == 0:
+                        continue
+                    _own = _basis[:, _i] * float(_scales[_i])
+                    _top = np.argsort(-_ii)[:5]
+                    _areas = []
+                    for _j in _top:
+                        _pos = float(_tt[_j])
+                        _a_obs_j = net_area_above_baseline(
+                            _x, _yobs - (_yc - _own), _pos - 0.3, _pos + 0.3)
+                        _a_calc_j = net_area_above_baseline(
+                            _x, _own, _pos - 0.3, _pos + 0.3)
+                        _areas.append((_pos, float(_a_obs_j), float(_a_calc_j)))
+                    if not _areas:
+                        continue
+                    _a_max = max(a for _, a, _ in _areas)
+                    if _a_max <= 0.0:
+                        continue
+                    # 只看"够强的线"：余相遮盖/噪声会把弱线比值拉飞
+                    _dev = 0.0
+                    _worst = _areas[0]
+                    for _pos, _a_o, _a_c in _areas:
+                        if _a_o < 0.15 * _a_max or _a_o <= 0.0:
+                            continue
+                        _r_j = _a_c / _a_o
+                        if abs(_r_j - 1.0) > _dev:
+                            _dev = abs(_r_j - 1.0)
+                            _worst = (_pos, _a_o, _r_j)
+                    _p, _a_obs, _ratio = _worst
+                    try:
+                        import os as _os
+                        if _os.environ.get("POLYXRD_DEBUG_P0J"):
+                            _msg = " ".join(f"{p:.2f}:{c / max(o, 1e-9):.2f}"
+                                            for p, o, c in _areas)
+                            print(f"[P0J] {_b.label} top5 {_msg} | "
+                                  f"worst {_p:.2f}° ratio={_ratio:.3f}", flush=True)
+                    except Exception:  # noqa: BLE001
+                        pass
+                    if abs(_ratio - 1.0) < self.PO_DISABLED_TOL:
+                        continue
+                    _hits.append((str(_b.label), _p, _ratio))
+                for _lab, _p, _ratio in _hits:
+                    _f = Finding(
+                        "PO_DISABLED_SUSPECT", "warn",
+                        f"PO 被显式关闭且未给逐相 _po_directions：{_lab} 最强线 "
+                        f"{_p:.2f}° 的计算/实测净积分比 {_ratio:.2f}"
+                        f"（偏离 {abs(_ratio - 1) * 100:.0f}% > "
+                        f"{self.PO_DISABLED_TOL * 100:.0f}%）——强织构下相对线强被"
+                        "压平成随机取向，份额会被系统性带偏，而 Rwp 往往只差零点"
+                        "几个百分点",
+                        "打开 auto_preferred_orientation（默认即开），或给该相明确"
+                        "的 (hkl) 与 r（_po_directions）；若试样确实无织构，可忽略本条",
+                        {"phase": _lab, "two_theta": float(_p),
+                         "ratio": float(_ratio),
+                         "dev_pct": float(abs(_ratio - 1.0) * 100)})
+                    v5_findings.append(_f.as_dict())
+                    diagnostics.insert(0, {
+                        "code": f"diag.refinement.{_f.code.lower()}",
+                        "params": {k: (float(v) if isinstance(v, (int, float))
+                                       else str(v))
+                                   for k, v in _f.evidence.items()},
+                    })
+                    del diagnostics[4:]
+                    log(f"[v5] PO_DISABLED_SUSPECT phase={_lab} "
+                        f"2theta={_p:.2f} ratio={_ratio:.2f}")
+            except Exception as e:  # noqa: BLE001 - 探针失败不该影响精修
+                log(f"[v5] po-disabled probe skipped: {type(e).__name__}: {e}")
 
         # ── 回填物相：晶胞 + 质量分数（不改入参，deecopy 后写）───────
         import copy as _copy
@@ -1863,6 +2191,9 @@ class RietveldRefiner:
                     (_quant.mu_bar if _quant is not None else 0.0) or 0.0),
                 "microabsorption_clamped": bool(
                     _quant.mu_clamped if _quant is not None else False),
+                # P0-G：逐相"份额对半径有多敏感 / 达到 1 pp 需要多大等效半径"。
+                # 单张谱无法反解 R（τ 被标度吸收），这里只给可对照的区间。
+                "microabsorption_per_phase": _ma_table,
                 # 择优取向（v5.1）：显式给的方向 or 自动挑的惯习面
                 "po_hkl": [list(b.po_hkl) if b.po_hkl else None for b in prob.phases],
                 "po_r": [float(prob.params.get(f"phase{i}.po.r", 1.0) or 1.0)
@@ -1885,6 +2216,9 @@ class RietveldRefiner:
                 ],
                 "v5_cells": cells,
                 "v5_weight_pct": [float(f) for f in fracs],
+                # P0-E′：近简并相的 wt% **区间**（±0.2 pp Rwp 折算）。
+                # 键 = 相名，值 = [lo, hi]（wt%）。空 dict = 没有近简并相。
+                "wt_ranges": _wt_ranges,
                 # 定量口径说明：与 builtin 的"相对定量"不同，这里是密度口径
                 "v5_weight_basis_note": "Hill–Howard: W ∝ S·M_cell/V",
                 "v5_findings": v5_findings,
@@ -1901,6 +2235,16 @@ class RietveldRefiner:
                                                  0.0) or 0.0), 5)
                      for k in range(len(b.po_c))]
                     for i, b in enumerate(prob.phases)],
+                # P0-B″：逐相各向异性展宽系数（opt-in 未开启时 None）
+                "v5_aniso": (
+                    {b.label: [round(float(b.aniso_c2), 4),
+                               round(float(b.aniso_c4), 4)]
+                     for b in prob.phases} if _aniso_on else None),
+                # P0-C：整样品低角拖尾面积占比（未开启时 0.0）
+                "v5_tail": (round(float(prob.profile.tail), 4)
+                            if _tail_on else 0.0),
+                # 弱相晶胞冻结（强度份额 <2%）：这些相的晶胞保持 CIF 原值
+                "weak_phase_cells_frozen": list(_weak_cells),
                 # 结构层（stage 6）实际放开的自由参数个数：0 = 未启用
                 # （快档 / 检出关掉 / 无独立位点 / 超上限），报告侧据此说明
                 # "晶胞与结构有没有真的精修过"。
@@ -1966,8 +2310,11 @@ class RietveldRefiner:
             if p.exists():
                 try:
                     cif_text = p.read_text(encoding="utf-8", errors="ignore")
+                    st = p.stat()
+                    # 秒级 mtime 会让同一秒内被改写的 CIF 命中旧峰表；
+                    # 改用纳秒戳 + 文件字节数，失效粒度与文本臂的内容摘要对齐。
                     cache_key = (
-                        "file", str(p), int(p.stat().st_mtime),
+                        "file", str(p), st.st_mtime_ns, st.st_size,
                         round(float(wavelength), 5),
                         round(tth_range[0], 3), round(tth_range[1], 3),
                     )
@@ -1991,9 +2338,11 @@ class RietveldRefiner:
                 round(tth_range[0], 3), round(tth_range[1], 3),
             )
 
+        # 统一存 (是否有峰表, 峰表或 None)：不再把 list 与字符串 "fail"
+        # 哨兵混存后靠 != 比较（数组/自定义类型会让比较语义漂移）。
         cached = self._cif_peak_cache.get(cache_key)
         if cached is not None:
-            return cached if cached != "fail" else None
+            return cached[1]
 
         peaks: Optional[list] = None
         _struct_used = None   # v2.0.0 (W23): 留出实际用到的 pymatgen 结构, 供强度标尺/ZMV
@@ -2074,7 +2423,7 @@ class RietveldRefiner:
         except Exception:  # noqa: BLE001 - CIF 解析/模拟失败一律回退旧峰表
             peaks = None
 
-        self._cif_peak_cache[cache_key] = peaks if peaks is not None else "fail"
+        self._cif_peak_cache[cache_key] = (peaks is not None, peaks)
         # ── v2.0.0 (W23): 记录"强度标尺"与 ZMV ────────────────────────────
         # 定量需要把"相对峰强"还原到物理标度:
         #   k   = 未归一化 Σ|F(hkl)|²·m·LP 的最大值 (pymatgen scaled=False)
