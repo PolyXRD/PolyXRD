@@ -15,7 +15,7 @@
     &nbsp;
     <img src="https://img.shields.io/badge/UI-PySide6%20(Qt6)-41cd52?style=flat-square" />
     &nbsp;
-    <img src="https://img.shields.io/badge/Tests-2348%20passed-brightgreen?style=flat-square" />
+    <img src="https://img.shields.io/badge/Tests-2717%20passed-brightgreen?style=flat-square" />
   </p>
   <p><i>🌐 简体中文文档：[README.md](README.md)</i></p>
 </div>
@@ -38,30 +38,39 @@ Core design philosophy:
 
 ---
 
-## 🆕 Latest version v5.2.0 (2026-11-05)
+## 🆕 Latest version v5.3.0 (2026-11-10)
 
-**After "getting the numbers right", now "getting the intensities right"** — v5.1 fixed peak
-positions, broadening, preferred orientation and structure refinement; v5.2 handles the two
-remaining classes of **systematic intensity error** and turns "this quantification is not
-trustworthy" from invisible into an explicit on-screen warning (details in Chinese:
-[docs/CHANGELOG.md](docs/CHANGELOG.md) §v5.2 and
-[docs/RELEASE-NOTES-v5.2.0.md](docs/RELEASE-NOTES-v5.2.0.md)):
+**The last two classes of profile asymmetry, and quantification delivered as an interval instead of a point** —
+v5.2 finished the intensity-error model; v5.3 adds **anisotropic broadening** and a **low-angle tail**, and puts a
+quantitative boundary on "can this wt% be used at all". Over the 7-sample MAUD benchmark the mean Rwp drops from
+**11.66 % to 10.91 %** (reference implementation 11.23 %) — the **first overall win** (details, in Chinese:
+[docs/CHANGELOG.md](docs/CHANGELOG.md) §v5.3 and [docs/RELEASE-NOTES-v5.3.0.md](docs/RELEASE-NOTES-v5.3.0.md)):
 
 | # | Item | Key result |
 |---|---|---|
-| 1 | **Surface roughness SR** (opt-in) | three models (Sidey / Suortti / Sparks), the multiplier enters the forward model (2θ-dependent, so the scale factor cannot absorb it). A/B on 4 samples: s converges to ~0 → stays opt-in |
-| 2 | **Microabsorption MA** (opt-in) | Brindley τ enters Hill–Howard quantification **only, never the fit vector** (a per-phase constant would be absorbed by the scale factor). A/B shows Rwp bit-identical — the hard check that the wiring is right. **R must come from the user**; a wrong R is worse than none |
-| 3 | **μ table rebuilt from NIST** | H…U (Z=1…92) at the 8.000 keV column, **no fitting by Z** (2.5× cliff at the L edges). Also fixes six transcription errors: Fe 325→306, Mg 47→40.6 |
-| 4 | **Uncertainties include τ propagation** | the closed-form propagation of `W = S·f/ΣS·f` breaks with microabsorption (τ depends on W again) → numerical Jacobian; R→0 degenerates back to the closed form within 1e-9 |
-| 5 | **Discriminating-peak guard** | a large-cell phase brings its own width parameters and can flatten the mismatch away → 15.6 wt% for a phase that is not there, with Rwp improving. Two new codes `PHASE_UNSUPPORTED` / `PHASE_FRACTION_UNVERIFIABLE`, **report only, never auto-delete a phase** |
-| 6 | **Which diagnostics reach the UI** | previously the top 4 were cut in alphabetical order, so three noisy hints crowded out "can this wt% be used at all". Now conclusion-grade codes win within the same severity, and everything beyond the 4th goes to the execution log |
-| 7 | **Built-in R-3c coordinates fixed** | calcite/corundum O sites were missing `z=1/4` → 48 expanded sites instead of 30, breaking multi-phase quantification. Now **0.0% difference** against pymatgen peak-by-peak, main peaks back at the literature positions |
-| 8 | **GSAS-II bridge, three fixes** | phase-count-adaptive timeout; new sample-displacement and preferred-orientation inputs; **GOF is no longer 0** (15.727 on sample 2-1, previously hard-coded 0.00) |
-| 9 | **PDF2-2004 repacked as polyDB** | the legacy sqlite channel (214 MB) is retired → polyDB **154 MB**, 163,834 phases, sharing the COD reader / bitmap prefilter / scoring |
+| 1 | **Anisotropic broadening** (default on) | `FWHM_hkl = FWHM_iso·(1 + c2·P₂(cosφ) + c4·P₄(cosφ))`; width only, area conserved by construction → **quantification untouched**. Two-stage warm start (isotropic first, then P₂/P₄). **6 of 7 samples improve**, S7 gap 4.9 → 3.1 pp; cost is 2–2.4× on multi-phase samples (`fast` presets skip aniso) |
+| 2 | **Low-angle tail** (opt-in) | main peak `(1−t)` plus a Lorentzian `t` shifted left by 0.25·FWHM and 3.2× wider, area conserving. 5/7 improve, S3/S7 slightly worse → stays opt-in; `inst.tail=0` is bit-identical to v5.2 |
+| 3 | **Near-degenerate phases get an interval** | strongest **independent** line < 15 % of the pattern **and** Δwt/ΔRwp > 50 pp/% ⇒ `PHASE_NEAR_DEGENERATE`; the UI shows `[lo, hi]` with a tooltip instead of fake decimals |
+| 4 | **Two new credibility guards** | `PO_DISABLED_SUSPECT`: preferred orientation switched off while some phase's strongest line shows a > 30 % systematic deficit — the diagnostic names the phase; `WEAK_PHASE_CELL_SHARE`: a weak phase's cell is unidentifiable → frozen, so a runaway cell cannot pollute wt% through `M/V` |
+| 5 | **Per-phase particle size and domain limits** | microabsorption radius can be given per phase; the equivalent-radius inversion now respects the Brindley table limit (`\|x\| ≤ 0.5`) and reports `limited_by_table` + `delta_wt_at_limit_pp` instead of fake precision outside it |
+| 6 | **Cache correctness** | structure fingerprint in the cache key, reference libraries invalidated by `(mtime_ns, size)`, LRU cap on the space-group cache, hkl cache returns copies |
+| 7 | **Four benchmark experiments closed** | full-resolution `sub=1` vs `sub=3` differ by **0.136 pp** (13.988 % / 14.125 %); cpd4 microabsorption calibrated per phase to **5.88 pp** (22.8 / 5.0 / 25.1 µm, all inside the table); S6b dolomite obs/model **1.037** — the reference implementation's 19.18 wt% would need its strong line 43 % higher |
 
-- **Three-engine cross-check (13 samples, idle machine)**: refinement median Rwp **17.46 %**, best **7/13**.
-- **Tests**: full regression **2567 passed / 4 skipped / 0 failed**.
-- **This release also contains all seven items of v5.1** (v5.1.0 was closed but never shipped separately).
+- **Quality**: full regression **2717 passed / 4 skipped / 0 failed** (998 s); `ruff` F821/F601/RUF012 clean.
+- **Frozen binary check**: the v5.3.0 build started 20/20 times on this machine (including the default-render path), zero AV.
+- **Known boundaries**: Rwp and quantification are two separate ledgers (aniso lowers mean Rwp by 0.75 pp while quantitative MAD rises 3.57 → 3.84; the authoritative referee is still the IUCr weighed sample at 1.90 pp); the startup AV (P0-1) is **not** fixed — this release ships the observation tooling only.
+- **This release also contains all nine items of v5.2.**
+
+---
+
+## Previous release v5.2.0 (2026-11-05 · released)
+
+**After "getting the numbers right", now "getting the intensities right"** — two systematic intensity-error
+models (surface roughness SR and microabsorption MA, where τ enters Hill–Howard quantification only, never the
+fit vector), a μ table rebuilt from NIST per element (no fitting by Z), uncertainties including τ propagation,
+the discriminating-peak guard (`PHASE_UNSUPPORTED` / `PHASE_FRACTION_UNVERIFIABLE`), conclusion-first diagnostic
+ordering, fixed built-in R-3c coordinates, and three GSAS-II bridge fixes. Nine items in
+[docs/RELEASE-NOTES-v5.2.0.md](docs/RELEASE-NOTES-v5.2.0.md); 2567 passed.
 
 ---
 
