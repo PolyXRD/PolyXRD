@@ -6,7 +6,7 @@ set PYTHONUTF8=1
 set PYTHONIOENCODING=utf-8
 
 REM APPVER 是版本号唯一真源（标题 / banner / 输出名 / 安装包名都跟随）
-set APPVER=5.2.0
+set APPVER=5.3.0
 
 title PolyXRD v%APPVER% 打包构建器
 echo ========================================
