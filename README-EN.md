@@ -1,23 +1,23 @@
 <div align="center">
-  <img src="src/polyxrd/resources/app-icon.png" alt="PolyXRD Logo" width="120" />
-  <h1>PolyXRD</h1>
-  <p>
-    <b>Comprehensive Analysis Suite for Polycrystalline X-ray Diffraction (XRD) Patterns</b>
-    <br />
-    Peak detection &nbsp;·&nbsp; Multi-phase qualitative search &nbsp;·&nbsp; Rietveld structure refinement &nbsp;·&nbsp; Le Bail cell refinement &nbsp;·&nbsp; Indexing &nbsp;·&nbsp; 3D structure visualization &nbsp;·&nbsp; Bundled COD-Inorg polyDB default library + external COD-Full / PDF2-2004
-  </p>
-  <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v5.4.0-blue?style=flat-square" /></a>
-    &nbsp;
-    <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
-    &nbsp;
-    <img src="https://img.shields.io/badge/Python-3.10%2B-yellow?style=flat-square" />
-    &nbsp;
-    <img src="https://img.shields.io/badge/UI-PySide6%20(Qt6)-41cd52?style=flat-square" />
-    &nbsp;
-    <img src="https://img.shields.io/badge/Tests-2728%20passed-brightgreen?style=flat-square" />
-  </p>
-  <p><i>🌐 简体中文文档：[README.md](README.md)</i></p>
+ <img src="src/polyxrd/resources/app-icon.png" alt="PolyXRD Logo" width="120" />
+ <h1>PolyXRD</h1>
+ <p>
+ <b>Comprehensive Analysis Suite for Polycrystalline X-ray Diffraction (XRD) Patterns</b>
+ <br />
+ Peak detection &nbsp;·&nbsp; Multi-phase qualitative search &nbsp;·&nbsp; Rietveld structure refinement &nbsp;·&nbsp; Le Bail cell refinement &nbsp;·&nbsp; Indexing &nbsp;·&nbsp; 3D structure visualization &nbsp;·&nbsp; Bundled COD-Inorg polyDB default library + external COD-Full / PDF2-2004
+ </p>
+ <p>
+ <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v5.4.0-blue?style=flat-square" /></a>
+ &nbsp;
+ <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
+ &nbsp;
+ <img src="https://img.shields.io/badge/Python-3.10%2B-yellow?style=flat-square" />
+ &nbsp;
+ <img src="https://img.shields.io/badge/UI-PySide6%20(Qt6)-41cd52?style=flat-square" />
+ &nbsp;
+ <img src="https://img.shields.io/badge/Tests-2728%20passed-brightgreen?style=flat-square" />
+ </p>
+ <p><i>🌐 简体中文文档：[README.md](README.md)</i></p>
 </div>
 
 ---
@@ -33,14 +33,12 @@ Core design philosophy:
 - **Controllable algorithms + reproducible results** — every preprocessing/fitting step is parameterized, saveable, and replayable; project files (`.polyxrd` JSON) are fully serialized.
 - **UI / algorithm layering** — MVVM architecture; the `services/` layer is pure algorithm code with no Qt dependency and can be unit-tested independently.
 
-> 📋 **Changelog**: see [docs/CHANGELOG.md](docs/CHANGELOG.md) (Chinese).
-> 🏗️ **Code structure & layering**: see [docs/代码结构说明.md](docs/代码结构说明.md) (Chinese).
 
 ---
 
 ## 🆕 Latest version v5.4.0 (2026-11-11)
 
-**The plot toolbar gets colourful icons** — following XinRefinement's **programmatic drawing** approach (zero assets, QPainter 32×32 design coordinates, multi-size bitmaps, crisp on HiDPI), the old "Add Peak / Reset / Export" text buttons are replaced by a **colour-icon toolbar** (Reset / Zoom-X / Zoom-Y / Zoom-Rect / Pan-Left / Pan-Right / Zoom-In / Zoom-Out / Crosshair, 9 icons), and the matplotlib navigation bar's 8 default actions are recoloured in the brand palette with a light rounded backing. The crosshair follows the cursor and reads out coordinates; Export now triggers from the navigation bar's save icon. Tests: new `tests/test_v54_plot_toolbar.py` (11 cases); 72 related regression cases pass. See [docs/RELEASE-NOTES-v5.4.0.md](docs/RELEASE-NOTES-v5.4.0.md).
+**The plot toolbar gets colourful icons** — following XinRefinement's **programmatic drawing** approach (zero assets, QPainter 32×32 design coordinates, multi-size bitmaps, crisp on HiDPI), the old "Add Peak / Reset / Export" text buttons are replaced by a **colour-icon toolbar** (Reset / Zoom-X / Zoom-Y / Zoom-Rect / Pan-Left / Pan-Right / Zoom-In / Zoom-Out / Crosshair, 9 icons), and the matplotlib navigation bar's 8 default actions are recoloured in the brand palette with a light rounded backing. The crosshair follows the cursor and reads out coordinates; Export now triggers from the navigation bar's save icon. Tests: new `tests/test_v54_plot_toolbar.py` (11 cases); 72 related regression cases pass. See docs/RELEASE-NOTES-v5.4.0.md.
 
 ## Previous release v5.3.0 (2026-11-10 · released)
 
@@ -48,7 +46,7 @@ Core design philosophy:
 v5.2 finished the intensity-error model; v5.3 adds **anisotropic broadening** and a **low-angle tail**, and puts a
 quantitative boundary on "can this wt% be used at all". Over the 7-sample MAUD benchmark the mean Rwp drops from
 **11.66 % to 10.91 %** (reference implementation 11.23 %) — the **first overall win** (details, in Chinese:
-[docs/CHANGELOG.md](docs/CHANGELOG.md) §v5.3 and [docs/RELEASE-NOTES-v5.3.0.md](docs/RELEASE-NOTES-v5.3.0.md)):
+docs/CHANGELOG.md §v5.3 and docs/RELEASE-NOTES-v5.3.0.md):
 
 | # | Item | Key result |
 |---|---|---|
@@ -74,13 +72,13 @@ models (surface roughness SR and microabsorption MA, where τ enters Hill–Howa
 fit vector), a μ table rebuilt from NIST per element (no fitting by Z), uncertainties including τ propagation,
 the discriminating-peak guard (`PHASE_UNSUPPORTED` / `PHASE_FRACTION_UNVERIFIABLE`), conclusion-first diagnostic
 ordering, fixed built-in R-3c coordinates, and three GSAS-II bridge fixes. Nine items in
-[docs/RELEASE-NOTES-v5.2.0.md](docs/RELEASE-NOTES-v5.2.0.md); 2567 passed.
+docs/RELEASE-NOTES-v5.2.0.md; 2567 passed.
 
 ---
 
 ## Previous release v4.7.0 (2026-10-31 · released)
 
-**Sequential multi-phase identification: confirm a phase → re-search the residual peaks → confirm the next** (see [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.7.0 and [docs/序贯多相鉴定-v4.7.0.md](docs/序贯多相鉴定-v4.7.0.md)):
+**Sequential multi-phase identification: confirm a phase → re-search the residual peaks → confirm the next** (see docs/CHANGELOG.md §4.7.0 and docs/序贯多相鉴定-v4.7.0.md):
 
 - **Confirm from the candidate list to advance**: highlight a row and press “Confirm & Search Next”, or simply double-click it → the peaks that phase explains leave the problem → the remaining unexplained peaks are searched again → candidates for the next phase are listed. The loop runs until no peak is left, with every phase confirmed by the user.
 - **Intensity residual bookkeeping** (`services/sequential.py`, following the layering of XinMatch `core/search/sequential.py`, reimplemented on this project's models): per-phase scale factor by least squares in count space, then peak-by-peak subtraction `I_obs − Σ scale·r`. A peak counts as explained only when its residual drops below 5 % of its own intensity; partially explained peaks stay in the residual set with their leftover intensity (overlaps are real physics). Lines weaker than 1 % of the strongest peak are neither searched nor counted in the coverage denominator.
@@ -92,7 +90,7 @@ ordering, fixed built-in R-3c coordinates, and three GSAS-II bridge fixes. Nine 
 
 ## 🚧 In Development v4.6.0 (2026-10-31 · unreleased)
 
-**External databases: unlimited count, multiple types, selected database drives every search** (details in Chinese: [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.6.0 and [docs/外挂数据库-多库挂载与选中检索-v4.6.0.md](docs/外挂数据库-多库挂载与选中检索-v4.6.0.md)):
+**External databases: unlimited count, multiple types, selected database drives every search** (details in Chinese: docs/CHANGELOG.md §4.6.0 and docs/外挂数据库-多库挂载与选中检索-v4.6.0.md):
 
 - **Mount-type registry**: polyDB / PDF2 / user library become seed types; a new format registered via `register_kind()` automatically gets detection, probing, list rendering and search dispatch — no more if/elif edits in the mount module.
 - **No mount-count limit**: the same type can be mounted any number of times (internal disk + portable drive + custom subset + a colleague's export); list, dropdown and persistence have no cap (a 60-mount stress test passes).
@@ -105,7 +103,7 @@ ordering, fixed built-in R-3c coordinates, and three GSAS-II bridge fixes. Nine 
 
 ## 🆕 Latest Version v4.4.0 (2026-10-27 · pending release)
 
-**Rebuilt "find a structure in the reference library" panel + one-shot legacy config cleanup** — closes the v4.2 leftovers P4.2/P4.3 (details in Chinese: [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.4.0 and [docs/RELEASE-NOTES-v4.4.0.md](docs/archive/RELEASE-NOTES-v4.4.0.md)):
+**Rebuilt "find a structure in the reference library" panel + one-shot legacy config cleanup** — closes the v4.2 leftovers P4.2/P4.3 (details in Chinese: docs/CHANGELOG.md §4.4.0 and docs/RELEASE-NOTES-v4.4.0.md):
 
 - **New first tab "Reference Library (polyDB)" in the refinement wizard**: search by formula / mineral name / space group / ID, or **match the strongest peaks** of the current pattern with Hanawalt d-I scoring. Added phases come with cell and atomic sites (sites expanded to the full cell by space group), ready to refine.
 - **One-shot legacy config cleanup**: on startup it detects the old `cod_*` keys in `user_db_paths.json` and entries of removed engines in `db_mounts.json`, then offers to clean them — **settings only, never library files**; a folder that turns out to be a polyDB is re-mounted instead of being dropped.
@@ -125,7 +123,7 @@ ordering, fixed built-in R-3c coordinates, and three GSAS-II bridge fixes. Nine 
 
 ## Previous Release v4.3.0 (2026-10-27 · released)
 
-**polyDB d-spacing search returns to MCP** — closes the v4.2.1 leftover (details in Chinese: [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.3.0 and [docs/RELEASE-NOTES-v4.3.0.md](docs/archive/RELEASE-NOTES-v4.3.0.md)):
+**polyDB d-spacing search returns to MCP** — closes the v4.2.1 leftover (details in Chinese: docs/CHANGELOG.md §4.3.0 and docs/RELEASE-NOTES-v4.3.0.md):
 
 - **New MCP tool `search_phases_by_d_peaks`**: Hanawalt search from measured d-spacings/intensities with `tolerance`/`tolerance_rel`/`min_match`/`limit`/`elements`/`max_ref_peaks`, backed by the polyDB bitmap inverted index + exact scoring.
 - **Legacy `search_cod_by_d_peaks` works again**: keeps its old signature and forwards to polyDB; no more `deprecated`; adds `display_id`/`ref_id` compatibility fields and `mounted` state.
@@ -144,7 +142,7 @@ ordering, fixed built-in R-3c coordinates, and three GSAS-II bridge fixes. Nine 
 
 ## 📚 Previous Release v4.2.1 (2026-10-26 · released)
 
-**Acceptance-fix release for v4.2.0** — 4 P1 compatibility/UX fixes + documentation corrections + build/verification hardening (details in Chinese: [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.2.1):
+**Acceptance-fix release for v4.2.0** — 4 P1 compatibility/UX fixes + documentation corrections + build/verification hardening (details in Chinese: docs/CHANGELOG.md §4.2.1):
 
 - **MCP old-name compatibility restored**: `search_cod_phases` accepts `97-1011097` / `96-101-1097` and restores `ref_id` / `display_id`; formulas are normalized (`SiO2` → `O2 Si`) and space groups ignore spaces (`Fd-3m`); `get_cod_phase_details(cod_id)` keeps the legacy argument name; `search_cod_online` returns JSON on network errors and honours `timeout`.
 - **Wizard dead UI removed**: the retired local-CIF search box/button and its dead chain/i18n keys are gone; built-in 12 minerals + external CIF import, COD online search, and polyDB/PDF2/user-database structure auto-fill remain.
@@ -163,7 +161,7 @@ ordering, fixed built-in R-3c coordinates, and three GSAS-II bridge fixes. Nine 
 
 ## 📚 Previous Release v4.2.0 (2026-10-26 · released)
 
-**Structural cleanup: the legacy COD sqlite runtime is retired** (details in Chinese: [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.2.0 and [docs/RELEASE-NOTES-v4.2.0.md](docs/archive/RELEASE-NOTES-v4.2.0.md)):
+**Structural cleanup: the legacy COD sqlite runtime is retired** (details in Chinese: docs/CHANGELOG.md §4.2.0 and docs/RELEASE-NOTES-v4.2.0.md):
 
 - **Legacy runtime removed**: `services/cif_database.py` (2,421 lines) and `services/cod_local.py` (2,410 lines) are gone, together with `cod_db_path` / `cod_index_db_path` / `cod_svn_path` and six getters/setters in `config`. Only **polyDB + PDF2 + user-built libraries** remain at runtime.
 - **Three pure modules extracted**: `cif_utils` (CIF parsing / sites / element checks), `phase_search` (Hanawalt scoring + pre-screening), `cif_minerals` (12 built-in mineral CIFs). None imports `sqlite3` or `PySide6`, none reads config paths (AST-asserted), so all are directly unit-testable.
@@ -179,7 +177,6 @@ ordering, fixed built-in R-3c coordinates, and three GSAS-II bridge fixes. Nine 
 
 👉 **Released**: [Release v4.2.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v4.2.0) — 3 assets, no databases (remote digests match the local manifest asset by asset).
 
-> Previous release v4.1.2 (out-of-the-box search / discovery priority / legacy migration hints / minimal builds) — see [CHANGELOG §4.1.2](docs/CHANGELOG.md).
 
 ## 📚 Earlier Release v4.1.1 (2026-10-24 · released)
 
@@ -187,7 +184,7 @@ ordering, fixed built-in R-3c coordinates, and three GSAS-II bridge fixes. Nine 
 
 **Hotfix: default-library refinement correctness + external engines on a clean install + reproducible build + release-policy cleanup**
 
-**Hotfix: default-library refinement correctness + external engines on a clean install + reproducible build + release-policy cleanup** (details in Chinese: [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.1.1):
+**Hotfix: default-library refinement correctness + external engines on a clean install + reproducible build + release-policy cleanup** (details in Chinese: docs/CHANGELOG.md §4.1.1):
 
 - **Fixed wrong simulated peaks from the bundled default library (P1)**: polyDB's `sites.bin` stores **asymmetric-unit** sites, but v4.1.0 fed them to the refiner as a full cell — high-symmetry phases got fake peaks (Corundum measured a 6.8° fake peak at 100% while the true 35.14/43.34 peaks were lost). v4.1.1 expands sites by space group at the polyDB exit (idempotent) and adds a defensive expansion in the refiner; Corundum now gives **57.49/43.34/35.14**.
 - **GSAS-II / MAUD available on a clean install (P1)**: when only the bundled polyDB is present (no CIF file), the resolver now synthesizes a CIF from atomic sites into the CIF cache and back-fills `cif_path` (1.3 ms → 4 ms, `structure match 1/1`); CIF export has the same fallback.
@@ -207,11 +204,11 @@ ordering, fixed built-in R-3c coordinates, and three GSAS-II bridge fixes. Nine 
 
 ## 📚 Previous Release v4.0.0 (2026-10-23 · released)
 
-**polyDB — a purpose-built external phase-database format** (sites expanded, 77,500-phase inorganics library; details in [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.0.0). This repository releases program artifacts only; databases live in [PolyXRD-DataBase](https://github.com/PolyXRD/PolyXRD-DataBase).
+**polyDB — a purpose-built external phase-database format** (sites expanded, 77,500-phase inorganics library; details in docs/CHANGELOG.md §4.0.0). This repository releases program artifacts only; databases live in [PolyXRD-DataBase](https://github.com/PolyXRD/PolyXRD-DataBase).
 
 ## 📚 Previous Release v3.2.0 (2026-10-20)
 
-**Large-database usability fixes** — makes 20-30 GB external phase databases actually usable. Full details (Chinese): [docs/CHANGELOG.md](docs/CHANGELOG.md) §3.2.0 and [docs/3COD数据库验收报告-20261020.md](docs/archive/3COD数据库验收报告-20261020.md).
+**Large-database usability fixes** — makes 20-30 GB external phase databases actually usable. Full details (Chinese): docs/CHANGELOG.md §3.2.0 and docs/.
 
 - **A mounted database was silently ignored**: index-path resolution assumed the index always sat next to the COD directory and never looked at the path the user had imported — the manager showed "mounted" while searches kept reading the old database (or reported "not ready"). Read paths now prefer the user-imported file; the index builder deliberately does not, so an external library can never become a write target.
 - **Read-only connections for retrieval**: every query used to open the index writable and re-run schema/DDL. On a 28 GB library that took **65 s** for `is_ready()` (returning False) and made `stats()` raise `database is locked`. Now **0.013 s / 0.125 s**, with the connection reused and no leak on error.
@@ -223,7 +220,7 @@ ordering, fixed built-in R-3c coordinates, and three GSAS-II bridge fixes. Nine 
 
 ## 📚 Earlier Release v2.5.0 (2026-10-01)
 
-**Search-chain enhancements + combination-strategy tuning + residual-peak search** (validated on a 13-sample benchmark; see [docs/基准报告-物相检索-v1.md](docs/archive/基准报告-物相检索-v1.md) and [docs/基准报告-物相组合-v1.md](docs/archive/基准报告-物相组合-v1.md), Chinese):
+**Search-chain enhancements + combination-strategy tuning + residual-peak search** (validated on a 13-sample benchmark; see docs/基准报告-物相检索-v1.md and docs/基准报告-物相组合-v1.md, Chinese):
 
 | Metric | v2.4.0 | v2.5.0 |
 |---|---|---|
@@ -267,30 +264,30 @@ ordering, fixed built-in R-3c coordinates, and three GSAS-II bridge fixes. Nine 
 
 ### ③ Crystal phases & crystallography
 - **Structure refinement (tiered engine capability)**:
-  - **True Rietveld** (structural degrees of freedom: coordinates/occupancies/ADPs + `S·ZMV` quantification) → **GSAS-II / FullProf / MAUD**;
-  - **Built-in engine `builtin` (default for the short path)** = **structure-free whole-pattern fitting (Le Bail grade, fast)**: uses CIF `|F|²` reference peaks + per-phase isotropic cell scaling
-    + March-Dollase texture + Chebyshev background + statistical weights; yields usable wR/Rp without installing external programs;
-    it does **not** refine atomic coordinates/occupancies/ADPs, so its wt% values are **relative quantification**, not strict mass fractions.
-  - **v5.0.0 new engine `polyxrd.refinement` (wired to the GUI: pick `refinement` in the engine dropdown)**: a complete forward model —
-    Cromer–Mann scattering factors, `I ∝ m|F|²·LP/V²` intensity convention, Kα2 doublet separation, TCH profile synthesis,
-    crystallite/strain broadening, Poisson weights `w=1/max(y,1)`; solved by **variable projection** (scales + background
-    closed-form least squares each iteration) with a staged protocol (positions → profile → preferred orientation → sample
-    broadening → structure), per-stage rollback and early convergence; quantification uses Hill–Howard with the **density
-    convention** (`W ∝ S·M_cell/V`) plus scale-error propagation; ships GSAS-II-style diagnostics (rank deficiency, condition
-    number, parameter correlation, unexplained residual peaks) and applies space-group cell constraints automatically
-    (constants fixed, `b=a`-style ties placed in the constraint system).
-    Validation on real samples: [docs/基准报告-精修-v5.0.0.md](docs/基准报告-精修-v5.0.0.md) — four-phase sample total
-    absolute deviation **7.16 pp** (legacy engine 21.40 pp), two-phase 50/50 standard **±2.00 pp**.
-    ⚠️ Intensities come from **structure factors**, so **every phase must carry atomic sites**. When phases come
-    straight from search results (built-in mineral table / PDF2 / some user-library entries carry reference peaks only),
-    sites are **filled automatically**: formula + space group + cell are matched against polyDB and that entry's
-    full-cell sites are copied (`services/structure_augment.py`, log line `[cif] <phase>: 补齐位点 ← polyDB COD xxx`).
-    Only phases that still cannot be resolved fall back to the built-in engine, with an explicit "engine fallback"
-    diagnostic (never a silent swap). Measured on sample 2-1, two phases straight from search:
-    Rwp 21.12%, wt% 47.99/52.01 (true 50/50).
-  - Sequential / automatic / manual refinement strategies apply to all engines above.
-  - ⚠️ Metric convention: `Rwp/Rexp/GOF` are always based on **statistical weights** (`stat_weights="poisson"`).
-    If unit weights (`"none"`) are explicitly selected, `Rexp/GOF` lose physical meaning and the UI shows "not interpretable".
+ - **True Rietveld** (structural degrees of freedom: coordinates/occupancies/ADPs + `S·ZMV` quantification) → **GSAS-II / FullProf / MAUD**;
+ - **Built-in engine `builtin` (default for the short path)** = **structure-free whole-pattern fitting (Le Bail grade, fast)**: uses CIF `|F|²` reference peaks + per-phase isotropic cell scaling
+ + March-Dollase texture + Chebyshev background + statistical weights; yields usable wR/Rp without installing external programs;
+ it does **not** refine atomic coordinates/occupancies/ADPs, so its wt% values are **relative quantification**, not strict mass fractions.
+ - **v5.0.0 new engine `polyxrd.refinement` (wired to the GUI: pick `refinement` in the engine dropdown)**: a complete forward model —
+ Cromer–Mann scattering factors, `I ∝ m|F|²·LP/V²` intensity convention, Kα2 doublet separation, TCH profile synthesis,
+ crystallite/strain broadening, Poisson weights `w=1/max(y,1)`; solved by **variable projection** (scales + background
+ closed-form least squares each iteration) with a staged protocol (positions → profile → preferred orientation → sample
+ broadening → structure), per-stage rollback and early convergence; quantification uses Hill–Howard with the **density
+ convention** (`W ∝ S·M_cell/V`) plus scale-error propagation; ships GSAS-II-style diagnostics (rank deficiency, condition
+ number, parameter correlation, unexplained residual peaks) and applies space-group cell constraints automatically
+ (constants fixed, `b=a`-style ties placed in the constraint system).
+ Validation on real samples: docs/基准报告-精修-v5.0.0.md — four-phase sample total
+ absolute deviation **7.16 pp** (legacy engine 21.40 pp), two-phase 50/50 standard **±2.00 pp**.
+ ⚠️ Intensities come from **structure factors**, so **every phase must carry atomic sites**. When phases come
+ straight from search results (built-in mineral table / PDF2 / some user-library entries carry reference peaks only),
+ sites are **filled automatically**: formula + space group + cell are matched against polyDB and that entry's
+ full-cell sites are copied (`services/structure_augment.py`, log line `[cif] <phase>: 补齐位点 ← polyDB COD xxx`).
+ Only phases that still cannot be resolved fall back to the built-in engine, with an explicit "engine fallback"
+ diagnostic (never a silent swap). Measured on sample 2-1, two phases straight from search:
+ Rwp 21.12%, wt% 47.99/52.01 (true 50/50).
+ - Sequential / automatic / manual refinement strategies apply to all engines above.
+ - ⚠️ Metric convention: `Rwp/Rexp/GOF` are always based on **statistical weights** (`stat_weights="poisson"`).
+ If unit weights (`"none"`) are explicitly selected, `Rexp/GOF` lose physical meaning and the UI shows "not interpretable".
 - **Le Bail cell-parameter refinement**: refines only a/b/c/α/β/γ, no atom occupancies needed — suited to cell determination of unknown structures
 - **Indexing (M15)**: built-in indexing for cubic / tetragonal / hexagonal systems (`services/indexing.py`; acceptance: cubic Si → a≈5.43 Å); hooks reserved for external Treor / Dicvol
 - **3D crystal-structure visualization (M17)**: 3D unit cell + atomic-sphere view embedded in the CIF browser, automatically **expanding the asymmetric unit** by space group (`services/structure_viz.py`)
@@ -336,16 +333,16 @@ ordering, fixed built-in R-3c coordinates, and three GSAS-II bridge fixes. Nine 
 
 ```
 ① Download PolyXRD-Setup-vX.Y.Z.exe (Windows x64) or the Portable package (unzip and run)
-   ↓
+ ↓
 ② Install (default C:\Program Files\PolyXRD\) and run PolyXRD.exe
-   ↓
+ ↓
 ③ Download database packages as needed — each is independent; take only what you need
-   Extract to any directory (must be truly extracted to disk, not opened inside the archive)
-   ↓
+ Extract to any directory (must be truly extracted to disk, not opened inside the archive)
+ ↓
 ④ Launch PolyXRD → menu "Database ▸ External Database Manager…"
-   Each slot states "download package: … → extracts to …"; match it and click "Import…" on that row
-   → effective immediately, no restart
-   ↓
+ Each slot states "download package: … → extracts to …"; match it and click "Import…" on that row
+ → effective immediately, no restart
+ ↓
 ⑤ Start using it!
 ```
 
@@ -374,8 +371,8 @@ cd PolyXRD
 
 # 2. Create a virtual environment (Python 3.10+)
 python -m venv venv
-venv\Scripts\activate        # Windows
-# source venv/bin/activate   # Linux/macOS
+venv\Scripts\activate # Windows
+# source venv/bin/activate # Linux/macOS
 
 # 3. Install dependencies
 pip install -r requirements.txt
@@ -422,9 +419,9 @@ Inno Setup installer compilation → portable package → three independent data
 ② Preprocessing panel: SNIP-40 background → SG w=11 p=3 smoothing → Max normalization
 ③ Peak detection: automatic threshold → Search
 ④ Phase search: check "COD Inorganics" → must-have elements [Mg, Al, O] → Search
-   → Top candidate: MgAl₂O₄ Spinel ✅
+ → Top candidate: MgAl₂O₄ Spinel ✅
 ⑤ Rietveld refinement: select coexisting phases → refinement wizard → built-in engine → sequential strategy
-   → refinement done; inspect wR and the residual plot
+ → refinement done; inspect wR and the residual plot
 ⑥ When needed: CIF browser for the 3D cell / indexing for cell parameters / export report (CSV/PDF)
 ```
 
@@ -452,7 +449,7 @@ PolyXRD is built on many high-quality open-source projects — Python / PySide6 
 
 ## 📦 Release
 
-For the latest version and the full changelog, see [docs/CHANGELOG.md](docs/CHANGELOG.md) (Chinese). **Program artifacts** (Setup installer + Portable package + SHA256) are available on the [👉 Releases page](https://github.com/PolyXRD/PolyXRD/releases/tag/v4.0.0); **database packages** are published separately in [PolyXRD-DataBase Releases](https://github.com/PolyXRD/PolyXRD-DataBase/releases). SHA-256 checksums are published alongside each release.
+For the latest version and the full changelog, see docs/CHANGELOG.md (Chinese). **Program artifacts** (Setup installer + Portable package + SHA256) are available on the [👉 Releases page](https://github.com/PolyXRD/PolyXRD/releases/tag/v4.0.0); **database packages** are published separately in [PolyXRD-DataBase Releases](https://github.com/PolyXRD/PolyXRD-DataBase/releases). SHA-256 checksums are published alongside each release.
 
 ---
 
@@ -479,5 +476,5 @@ When using this software, also comply with third-party license terms of upstream
 ---
 
 <div align="right">
-  <i>PolyXRD Team · 2025 — 2026 · doc version 2.5.0 (2026-10-01) · contact: sshztx@outlook.com</i>
+ <i>PolyXRD Team · 2025 — 2026 · doc version 2.5.0 (2026-10-01) · contact: sshztx@outlook.com</i>
 </div>

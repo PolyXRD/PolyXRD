@@ -1,23 +1,23 @@
 <div align="center">
-  <img src="src/polyxrd/resources/app-icon.png" alt="PolyXRD Logo" width="120" />
-  <h1>PolyXRD</h1>
-  <p>
-    <b>多晶 X 射线衍射 (XRD) 图谱综合分析套件</b>
-    <br />
-    峰检测 &nbsp;·&nbsp; 多物相定性检索 &nbsp;·&nbsp; Rietveld 结构精修 &nbsp;·&nbsp; Le Bail 晶胞精修 &nbsp;·&nbsp; 指标化 &nbsp;·&nbsp; 3D 结构可视化 &nbsp;·&nbsp; 内置 COD 无机物库 (polyDB) + 多库外挂检索
-  </p>
-  <p>
-    <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v5.4.0-blue?style=flat-square" /></a>
-    &nbsp;
-    <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
-    &nbsp;
-    <img src="https://img.shields.io/badge/Python-3.10%2B-yellow?style=flat-square" />
-    &nbsp;
-    <img src="https://img.shields.io/badge/UI-PySide6%20(Qt6)-41cd52?style=flat-square" />
-    &nbsp;
-    <img src="https://img.shields.io/badge/Tests-2728%20passed-brightgreen?style=flat-square" />
-  </p>
-  <p><i>🌐 English documentation: [README-EN.md](README-EN.md)</i></p>
+ <img src="src/polyxrd/resources/app-icon.png" alt="PolyXRD Logo" width="120" />
+ <h1>PolyXRD</h1>
+ <p>
+ <b>多晶 X 射线衍射 (XRD) 图谱综合分析套件</b>
+ <br />
+ 峰检测 &nbsp;·&nbsp; 多物相定性检索 &nbsp;·&nbsp; Rietveld 结构精修 &nbsp;·&nbsp; Le Bail 晶胞精修 &nbsp;·&nbsp; 指标化 &nbsp;·&nbsp; 3D 结构可视化 &nbsp;·&nbsp; 内置 COD 无机物库 (polyDB) + 多库外挂检索
+ </p>
+ <p>
+ <a href="https://github.com/PolyXRD/PolyXRD/releases"><img src="https://img.shields.io/badge/Release-v5.4.0-blue?style=flat-square" /></a>
+ &nbsp;
+ <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey?style=flat-square" />
+ &nbsp;
+ <img src="https://img.shields.io/badge/Python-3.10%2B-yellow?style=flat-square" />
+ &nbsp;
+ <img src="https://img.shields.io/badge/UI-PySide6%20(Qt6)-41cd52?style=flat-square" />
+ &nbsp;
+ <img src="https://img.shields.io/badge/Tests-2728%20passed-brightgreen?style=flat-square" />
+ </p>
+ <p><i>🌐 English documentation: [README-EN.md](README-EN.md)</i></p>
 </div>
 
 ---
@@ -33,34 +33,20 @@
 - **算法可控 + 结果可复现** — 预处理/拟合的每一步参数可保存、可回放，项目文件 (`.polyxrd` JSON) 全序列化。
 - **UI 与算法分层** — MVVM 架构，`services/` 层是纯算法、不依赖 Qt，可独立单元测试。
 
-> 📋 **版本变更记录**：见 [docs/CHANGELOG.md](docs/CHANGELOG.md)。
-> ✅ **v5.4.0 发布检查清单（构建/产物/验收记录）**：见 [docs/发布检查清单-v5.4.0.md](docs/发布检查清单-v5.4.0.md)。
-> ✅ **v5.3.0 发布检查清单（构建/产物/验收记录）**：见 [docs/发布检查清单-v5.3.0.md](docs/发布检查清单-v5.3.0.md)。
-> ✅ **v5.2.0 发布检查清单（构建/产物/验收记录）**：见 [docs/发布检查清单-v5.2.0.md](docs/发布检查清单-v5.2.0.md)。
-> 🏗️ **v5.1.0 发布检查清单（收口未单独发布，内容已并入 v5.2.0）**：见 [docs/发布检查清单-v5.1.0.md](docs/archive/发布检查清单-v5.1.0.md)。
-> ✅ **v4.7.0 发布检查清单（构建/产物/验收记录）**：见 [docs/发布检查清单-v4.7.0.md](docs/archive/发布检查清单-v4.7.0.md)。
-> ⏳ **v4.4.0 发布检查清单（构建/产物/验收记录，待发布）**：见 [docs/发布检查清单-v4.4.0.md](docs/archive/发布检查清单-v4.4.0.md)。
-> ✅ **v4.3.0 发布检查清单**：见 [docs/发布检查清单-v4.3.0.md](docs/archive/发布检查清单-v4.3.0.md)。
-> ✅ **v4.2.0 发布检查清单（构建/产物/验收记录）**：见 [docs/发布检查清单-v4.2.0.md](docs/archive/发布检查清单-v4.2.0.md)。
-> ✅ v4.1.1 发布检查清单：见 [docs/发布检查清单-v4.1.1.md](docs/archive/发布检查清单-v4.1.1.md)。
-> ✅ v4.1.0 发布检查清单：见 [docs/发布检查清单-v4.1.0.md](docs/archive/发布检查清单-v4.1.0.md)。
-> ✅ v4.0.0 发布检查清单：见 [docs/发布检查清单-v4.0.0.md](docs/archive/发布检查清单-v4.0.0.md)。
-> 🏗️ **代码结构与分层说明**：见 [docs/代码结构说明.md](docs/代码结构说明.md)。
-> ✅ **v4.2 结构清理（旧 COD sqlite 运行时退役）已执行完毕**：设计依据 [docs/v4.2-结构清理方案.md](docs/archive/v4.2-结构清理方案.md)，执行记录/验收数据 [docs/下一步执行计划-v4.2.md](docs/archive/下一步执行计划-v4.2.md)。
 
 ---
 
 ## 🆕 最新版本 v5.4.0（2026-11-11）
 
-**谱图操作工具行换成彩色图标** —— 参照 XinRefinement 的**程序化绘制**方案（零素材，QPainter 32×32 设计坐标、多尺寸位图，高 DPI 清晰），把原来「添加峰 / 重置 / 导出」三个文字按钮换成一条**彩色图标工具行**（复位 / 横向框选 / 纵向框选 / 区域框选 / 左移 / 右移 / 放大 / 缩小 / 十字线共 9 个），matplotlib 导航条 8 个默认动作也按品牌色重新着色 + 浅色圆角底衬；十字线跟随读数，导出改由导航条 save 图标触发。测试：新增 `tests/test_v54_plot_toolbar.py`（11 条）；相关回归 72 项通过。详见 [docs/RELEASE-NOTES-v5.4.0.md](docs/RELEASE-NOTES-v5.4.0.md)。
+**谱图操作工具行换成彩色图标** —— 参照 XinRefinement 的**程序化绘制**方案（零素材，QPainter 32×32 设计坐标、多尺寸位图，高 DPI 清晰），把原来「添加峰 / 重置 / 导出」三个文字按钮换成一条**彩色图标工具行**（复位 / 横向框选 / 纵向框选 / 区域框选 / 左移 / 右移 / 放大 / 缩小 / 十字线共 9 个），matplotlib 导航条 8 个默认动作也按品牌色重新着色 + 浅色圆角底衬；十字线跟随读数，导出改由导航条 save 图标触发。测试：新增 `tests/test_v54_plot_toolbar.py`（11 条）；相关回归 72 项通过。详见 docs/RELEASE-NOTES-v5.4.0.md。
 
 ## 上一版 v5.3.0（2026-11-10 · 已发布）
 
 **峰形剩下的两类不对称补齐，定量从"点值"改成"区间"** —— v5.2 把强度误差模型补完，
 v5.3 处理**各向异性展宽**与**低角拖尾**，并给"这个 wt% 能不能用"一个量化边界。
 7 组 MAUD 对标基准上 Rwp 均值 **11.66% → 10.91%**（参考实现 11.23%），**首次整体反超**
-（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §v5.3 与
-[docs/RELEASE-NOTES-v5.3.0.md](docs/RELEASE-NOTES-v5.3.0.md)）：
+（详见 docs/CHANGELOG.md §v5.3 与
+docs/RELEASE-NOTES-v5.3.0.md）：
 
 | # | 件 | 关键结果 |
 |---|---|---|
@@ -85,13 +71,13 @@ v5.3 处理**各向异性展宽**与**低角拖尾**，并给"这个 wt% 能不�
 （微吸收 τ 只进 Hill–Howard 定量、不进拟合向量）、μ 表换 NIST 逐元素（不按 Z 外推）、
 误差棒含 τ 传播、定量"判别峰守卫"（`PHASE_UNSUPPORTED` / `PHASE_FRACTION_UNVERIFIABLE`）、
 诊断接口按结论类优先、内置 R-3c 坐标修复、GSAS-II 桥三修。9 件详见
-[docs/RELEASE-NOTES-v5.2.0.md](docs/RELEASE-NOTES-v5.2.0.md)，全量 2567 passed。
+docs/RELEASE-NOTES-v5.2.0.md，全量 2567 passed。
 
 ---
 
 ## 上一版 v4.7.0（2026-10-31 · 已发布）
 
-**序贯多相鉴定：确认一相 → 剩余峰再检索 → 再确认**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.7.0 与 [docs/序贯多相鉴定-v4.7.0.md](docs/序贯多相鉴定-v4.7.0.md)）：
+**序贯多相鉴定：确认一相 → 剩余峰再检索 → 再确认**（详见 docs/CHANGELOG.md §4.7.0 与 docs/序贯多相鉴定-v4.7.0.md）：
 
 - **候选列表确认即推进**：选中一行点「确认并继续检索」或直接双击 → 该相已解释的峰从问题里移除 → 自动对剩余未解释峰再检索 → 给出下一相候选。循环到没有峰可取相为止，每一相都由用户确认。
 - **强度残差账本**（`services/sequential.py`，参考 XinMatch `core/search/sequential.py` 的思路按本项目模型重写）：按 count 空间最小二乘拟合每相比例因子，逐峰扣减 `I_obs − Σ scale·r`；残差降到自身强度 5% 以下才算"已解释"，只解释了一部分的峰带着剩余强度进入下一轮（重叠峰是真实物理）。弱于最强峰 1% 的线不参与检索也不计入覆盖率。
@@ -112,7 +98,7 @@ v5.3 处理**各向异性展宽**与**低角拖尾**，并给"这个 wt% 能不�
 
 ## v4.6.0（2026-10-31 · 随 v4.7.0 一并发布，无独立安装包）
 
-**外挂数据库：不限数量、多种类型、选中即用于检索**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.6.0 与 [docs/外挂数据库-多库挂载与选中检索-v4.6.0.md](docs/外挂数据库-多库挂载与选中检索-v4.6.0.md)）：
+**外挂数据库：不限数量、多种类型、选中即用于检索**（详见 docs/CHANGELOG.md §4.6.0 与 docs/外挂数据库-多库挂载与选中检索-v4.6.0.md）：
 
 - **挂载类型注册表化**：内置 polyDB / PDF2 / 用户库降级为"种子类型"，新格式通过 `register_kind()` 接入后，自动判别、探测、列表展示与检索分发全部自动接上——**不再需要改源码里的 if/elif**。
 - **不限数量**：同一类型可挂任意多份（内置盘 + 移动硬盘 + 自裁子集 + 同事导出的库），列表/下拉/持久化都没有上限；一次挂 60 份库的多库压力测试通过。
@@ -125,7 +111,7 @@ v5.3 处理**各向异性展宽**与**低角拖尾**，并给"这个 wt% 能不�
 
 ## 上一版 v4.5.0（2026-10-29 · 已发布）
 
-**装机可靠性修复 + 元素限定错位（P0）** —— 全部来自 4.4.0 实机使用的现场反馈，无算法口径改动（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.5.0）：
+**装机可靠性修复 + 元素限定错位（P0）** —— 全部来自 4.4.0 实机使用的现场反馈，无算法口径改动（详见 docs/CHANGELOG.md §4.5.0）：
 
 - **装在 `Program Files` 下普通用户起不来（已修）**：`get_config()` 会对安装目录内不存在的 `cod_data/cif_db` 无条件 `mkdir`，普通用户无写权限 → `PermissionError` 抛在 `QApplication` 之前，窗口都出不来。现改为「项目内目录存在才用，否则降到 `~/.polyxrd/cif_db`」+ 目录创建一律容错；版本号也不再为打一行启动日志去提前触发配置单例。
 - **PDF2 外挂库在只读目录/单文件拷贝下读不出（已修）**：只读打开改用转义后的 `file:` URI（路径含空格/`#` 时不再被截断），WAL 模式下自动降级 `immutable=1`；建库收尾改回 `journal_mode=DELETE`，**产物自包含单文件**。附带 `PDF2Database.close()` 与 `last_error`，打开失败不再静默返回 0 条。
@@ -137,7 +123,7 @@ v5.3 处理**各向异性展宽**与**低角拖尾**，并给"这个 wt% 能不�
 
 ## 上一版 v4.4.0（2026-10-27）
 
-**精修向导重建「从检索库找结构」+ 旧库配置一次性清理** —— 兑现 v4.2 遗留的 P4.2/P4.3（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.4.0 与 [docs/RELEASE-NOTES-v4.4.0.md](docs/archive/RELEASE-NOTES-v4.4.0.md)）：
+**精修向导重建「从检索库找结构」+ 旧库配置一次性清理** —— 兑现 v4.2 遗留的 P4.2/P4.3（详见 docs/CHANGELOG.md §4.4.0 与 docs/RELEASE-NOTES-v4.4.0.md）：
 
 - **向导新增首个页签「检索库（polyDB）」**：可输化学式 / 矿物名 / 空间群 / 编号查，也可**按当前图谱最强峰**做 Hanawalt d-I 匹配；加入的物相自带晶胞与原子位点，位点按空间群展开成全胞，可直接进精修。
 - **旧库配置一次性清理**：启动时检测 `user_db_paths.json` 里的旧 `cod_*` 键与 `db_mounts.json` 里已删除引擎的条目，一键清理——**只删配置、不删任何库文件**；旧路径若其实是 polyDB 目录会顺手挂回。
@@ -157,7 +143,7 @@ v5.3 处理**各向异性展宽**与**低角拖尾**，并给"这个 wt% 能不�
 
 ## 上一版 v4.3.0（2026-10-27 · 已发布）
 
-**polyDB d 峰检索回到 MCP** —— 兑现 v4.2.1 遗留项（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.3.0 与 [docs/RELEASE-NOTES-v4.3.0.md](docs/archive/RELEASE-NOTES-v4.3.0.md)）：
+**polyDB d 峰检索回到 MCP** —— 兑现 v4.2.1 遗留项（详见 docs/CHANGELOG.md §4.3.0 与 docs/RELEASE-NOTES-v4.3.0.md）：
 
 - **新增 MCP 工具 `search_phases_by_d_peaks`**：按实测 d 值 / 强度做 Hanawalt 检索，支持 `tolerance`/`tolerance_rel`/`min_match`/`limit`/`elements`/`max_ref_peaks`，底层为 polyDB 位图倒排 + 精确打分。
 - **旧名 `search_cod_by_d_peaks` 恢复功能**：保留旧签名转调 polyDB，不再返回 `deprecated`；补 `display_id`/`ref_id` 兼容字段与 `mounted` 状态。
@@ -176,7 +162,7 @@ v5.3 处理**各向异性展宽**与**低角拖尾**，并给"这个 wt% 能不�
 
 ## 上一版 v4.2.1（2026-10-26 · 已发布）
 
-**v4.2.0 验收修复版** —— 4 项 P1 兼容/UX 修复 + 文档事实修正 + 构建/验收加固（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.2.1 与 [docs/验收报告-v4.2.0.md](docs/archive/验收报告-v4.2.0.md)）：
+**v4.2.0 验收修复版** —— 4 项 P1 兼容/UX 修复 + 文档事实修正 + 构建/验收加固（详见 docs/CHANGELOG.md §4.2.1 与 docs/验收报告-v4.2.0.md）：
 
 - **MCP 旧名兼容恢复**：`search_cod_phases` 支持 `97-1011097`/`96-101-1097` 编号并回填 `ref_id`/`display_id`；`SiO2` 等化学式先规范化（→`O2 Si`）、空间群忽略空格（`Fd-3m`）；`get_cod_phase_details(cod_id)` 保留旧参数名；`search_cod_online` 网络异常返回 JSON 且 `timeout` 生效。
 - **精修向导死 UI 清理**：删除已下线的 CIF 搜索框/按钮与死链路、三语死键；内置 12 矿物 + 外部 CIF 导入、COD 在线搜索、polyDB/PDF2/用户库候选结构补齐均保留。
@@ -195,7 +181,7 @@ v5.3 处理**各向异性展宽**与**低角拖尾**，并给"这个 wt% 能不�
 
 ## 上一版 v4.2.0（2026-10-26 · 已发布）
 
-**结构清理：旧 COD sqlite 运行时退役**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.2.0 与 [docs/RELEASE-NOTES-v4.2.0.md](docs/archive/RELEASE-NOTES-v4.2.0.md)）：
+**结构清理：旧 COD sqlite 运行时退役**（详见 docs/CHANGELOG.md §4.2.0 与 docs/RELEASE-NOTES-v4.2.0.md）：
 
 - **旧运行时删除**：`services/cif_database.py`（2,421 行）与 `services/cod_local.py`（2,410 行）删除，`config` 的 `cod_db_path`/`cod_index_db_path`/`cod_svn_path` 字段与 6 个 getter/setter 一并移除。运行期只保留 **polyDB + PDF2 + 用户自建库**。
 - **抽出三个纯模块**：`cif_utils`（CIF 解析/位点/元素判定）、`phase_search`（Hanawalt 打分 + 预筛）、`cif_minerals`（12 种内置矿物库）。三者不 import `sqlite3`/`PySide6`、不读配置路径（AST 断言），可直接单测。
@@ -211,13 +197,12 @@ v5.3 处理**各向异性展宽**与**低角拖尾**，并给"这个 wt% 能不�
 
 👉 **已发布**：[Release v4.2.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v4.2.0)（3 附件，不含数据库；远端 digest 与本地清单逐件一致）。
 
-> 上一版 v4.1.2（开箱即检索 / 默认库发现优先级 / 旧库迁移提示 / 纯客户端小包验收）详见 [CHANGELOG §4.1.2](docs/CHANGELOG.md)。
 
 ---
 
 ## 更早版本 v4.1.1（2026-10-24 · 已发布）
 
-**hotfix：默认库精修正确性 + 干净安装外部引擎 + 构建可复现 + 发布政策收口**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.1.1 与 [docs/代码评估-v4.1.0.md](docs/archive/代码评估-v4.1.0.md)）：
+**hotfix：默认库精修正确性 + 干净安装外部引擎 + 构建可复现 + 发布政策收口**（详见 docs/CHANGELOG.md §4.1.1 与 docs/代码评估-v4.1.0.md）：
 
 - **修复默认库精修模拟峰错误（P1）**：polyDB 侧车存的是**非对称单位**位点，v4.1.0 当全胞直构 → 高对称相出现假峰。v4.1.1 在出口按空间群展开（幂等）并在精修侧兜底；Corundum 实测由「6.8°/100% 假峰」恢复为 **57.49/43.34/35.14** 真主峰。
 - **干净安装也能用 GSAS-II / MAUD（P1）**：只有内置 polyDB、没有 CIF 文件时，resolver 现从原子位点反生成 CIF 落盘并回填 `cif_path`（实测 1.3 ms → 4 ms，`structure match 1/1`）；CIF 导出同样支持位点回退。
@@ -239,14 +224,14 @@ v5.3 处理**各向异性展宽**与**低角拖尾**，并给"这个 wt% 能不�
 
 ## 上一版 v4.1.0（2026-10-23 · 已发布）
 
-**COD-Inorg 成为唯一内置默认库 + 旧格式运行期代码全部删除**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.1.0）：
+**COD-Inorg 成为唯一内置默认库 + 旧格式运行期代码全部删除**（详见 docs/CHANGELOG.md §4.1.0）：
 
 - **开箱即检索**：便携包与安装包**内置** `COD-Inorg-20261021.polyDB`（77,500 相 / 86 MiB，8 个分段文件），
-  解压/安装后直接检索，不再需要先下载库包再挂载。`POLYXRD_NO_BUNDLE_DB=1` 可退化为"纯客户端小包"。
+ 解压/安装后直接检索，不再需要先下载库包再挂载。`POLYXRD_NO_BUNDLE_DB=1` 可退化为"纯客户端小包"。
 - **旧格式运行期代码删除**：`DB_KINDS` 只剩 `pdf2`；`cod_inorganics` / `cod_index` / `xinmatch` 三个旧槽位与
-  `services/xinmatch_db.py` 一并移除，`phase_identifier` 的 6 个旧入口删除 —— 检索统一走 `identify_with_polydb`。
+ `services/xinmatch_db.py` 一并移除，`phase_identifier` 的 6 个旧入口删除 —— 检索统一走 `identify_with_polydb`。
 - **内部评估版标识**：状态栏最右端用**红色加粗**字显示「内部评估版本」（`#d32f2f` + `font-weight: bold`，
-  挂在控件自身 stylesheet 上，换主题不掉色）。
+ 挂在控件自身 stylesheet 上，换主题不掉色）。
 - **回归**：全量 **1565 passed / 6 skipped**（8m20s）。
 
 | 产物 | 体积 | SHA-256（前 16 位） | 说明 |
@@ -263,7 +248,7 @@ v5.3 处理**各向异性展宽**与**低角拖尾**，并给"这个 wt% 能不�
 
 ## 上一版 v4.0.0（2026-10-23 · 已发布）
 
-**自研外挂物相库格式 polyDB —— 更小、更快、候选剪枝可证**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §4.0.0 与 [docs/外挂库格式规范-polyDB-v4.md](docs/外挂库格式规范-polyDB-v4.md)）：
+**自研外挂物相库格式 polyDB —— 更小、更快、候选剪枝可证**（详见 docs/CHANGELOG.md §4.0.0 与 docs/外挂库格式规范-polyDB-v4.md）：
 
 - **新格式**：`.polyDB` 目录容器 = `meta.json` + `index.sqlite` + 列存二进制（`peaks_d.f32` / `peaks_i.u16`）+ d 分箱位图倒排（`bins.u8`）+ 元素位图（`elem.u8`）+ 位点侧车（`sites.bin` / `sites_off.i64`）。全程只读 mmap 打开、零启动解析，检索链**从不写库**。
 - **两个实测库**：`COD-Inorg-20261021.polyDB` **77,500 相 / 89.9 MB**（旧 sqlite 无机库 1,194.5 MB / 71,199 相 → 体积 **13.9×** 更小、相数还更多）；`COD-Full-20261021.polyDB` **521,361 相 / 1,107.7 MB**。
@@ -276,7 +261,6 @@ v5.3 处理**各向异性展宽**与**低角拖尾**，并给"这个 wt% 能不�
 > 📦 数据库仍为外挂，不随分发；PDF2-2004 为 ICDD 版权库，永不出现在 Release 里。
 
 👉 **已发布**：[Release v4.0.0](https://github.com/PolyXRD/PolyXRD/releases/tag/v4.1.2) —— 3 个附件（Setup 249.1 MB / Portable 389.0 MB / SHA256）已上传并核验（远端 digest 与本地逐件一致）；**数据库不在本仓库发布**，统一由 [PolyXRD-DataBase](https://github.com/PolyXRD/PolyXRD-DataBase) 仓库的 Releases 分发。
-> 完整构建/产物/验收记录：[docs/发布检查清单-v4.0.0.md](docs/archive/发布检查清单-v4.0.0.md)。
 
 | 产物 | 体积 | SHA-256（前 16 位） |
 |---|---|---|
@@ -292,7 +276,7 @@ v5.3 处理**各向异性展宽**与**低角拖尾**，并给"这个 wt% 能不�
 
 ## 📚 上一版 v3.2.0（2026-10-20）
 
-**大库可用性修复：让 20~30 GB 级的外挂物相库真正能用**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §3.2.0 与 [docs/3COD数据库验收报告-20261020.md](docs/archive/3COD数据库验收报告-20261020.md)）：
+**大库可用性修复：让 20~30 GB 级的外挂物相库真正能用**（详见 docs/CHANGELOG.md §3.2.0 与 docs/）：
 
 - **修掉「挂了库却用不上」**：全库索引的路径解析一度只认"索引就在 COD 目录旁边"，**从不看**用户导入的路径 —— 「外挂数据库管理…」显示已挂载，检索却还在读旧库、或恒定判为不可用。现在读路径优先用户导入，写路径（重建索引）则明确不认，避免把外挂库当自家索引写。
 - **检索改用只读连接**：旧实现每次查询都以**可写**方式打开索引并跑一遍建表/迁移 DDL。在 28 GB 的库上，`is_ready()` 要 **65 s** 且返回 False，`stats()` 直接报 `database is locked`。修后分别是 **0.013 s / 0.125 s**，连接复用且异常不再泄漏（"第一次超时、第二次报锁"的根因）。
@@ -306,7 +290,7 @@ v5.3 处理**各向异性展宽**与**低角拖尾**，并给"这个 wt% 能不�
 
 ## 📚 v3.1.0（2026-10-18）
 
-**XinMatch 格式库支持 + 任意位置挂载 + 全量 review 修正**（详见 [docs/CHANGELOG.md](docs/CHANGELOG.md) §3.1.0 与 [docs/code-review-2026-10-18.md](docs/archive/code-review-2026-10-18.md)）：
+**XinMatch 格式库支持 + 任意位置挂载 + 全量 review 修正**（详见 docs/CHANGELOG.md §3.1.0 与 docs/code-review-2026-10-18.md）：
 
 - **XinMatch 格式库**：Data source 下拉新增第 7 项，可直接挂载第三方 `entries` / `peaks` / `elements` / `element_combo` 四表结构的库文件（实测 71,206 / 112,734 条目），**无需转换**。检索口径与 COD 无机物库逐项一致 —— 同一套 Hanawalt 度量 + 同一套 FOM 排序；单测用同数据造 PolyXRD `phases` 库做双实现比对，14 个度量字段（`abs=1e-12`）与排序完全一致。
 - **速度**：没有照直觉在 `peaks.d` 上做 SQL 区间扫描 —— 该库 d 轴极密，±0.02 Å 窗口约 2.5 万条峰，20 个测量峰实测 **9 s**，比现有链路还慢。改为一次建「每相最强 12 峰」索引（约 3 秒，缓存到 `~/.polyxrd/cache/`，键 = 路径 + size + mtime），之后**每次检索 0.37~0.57 s**（COD 无机库链路 0.8~5.5 s）。
@@ -335,9 +319,9 @@ v5.3 处理**各向异性展宽**与**低角拖尾**，并给"这个 wt% 能不�
 **开发方怎么签发**（不随软件分发）
 
 ```bash
-python scripts/make_reg_code.py "某某大学材料学院"        # 单个
-python scripts/make_reg_code.py -f units.txt             # 批量（每行一个单位名）
-python scripts/make_reg_code.py --verify PXRD1-XXXX-...  # 校验并回显单位名
+python scripts/make_reg_code.py "某某大学材料学院" # 单个
+python scripts/make_reg_code.py -f units.txt # 批量（每行一个单位名）
+python scripts/make_reg_code.py --verify PXRD1-XXXX-... # 校验并回显单位名
 ```
 
 **安全级别**：离线混淆级 —— 密钥随软件分发、可被逆向提取，定位是「告知版权 + 自助注册」，而非强反盗版。同一注册码可在同一单位的多台电脑使用（不绑机器码、不需要联网）。需要按机器/按应用强绑定时请联系作者。
@@ -372,26 +356,26 @@ python scripts/make_reg_code.py --verify PXRD1-XXXX-...  # 校验并回显单位
 
 ### ③ 晶相与晶体学
 - **结构精修（引擎能力分层）**：
-  - **真 Rietveld**（结构自由度：坐标/占位/ADP + `S·ZMV` 定量）→ **GSAS-II / FullProf / MAUD**；
-  - **内置引擎 `builtin`（GUI 短路径默认）** = **免结构全谱拟合（Le Bail 级，快）**：用 CIF `|F|²` 参考峰 + 每相各向同性晶胞缩放
-    + March-Dollase 织构 + Chebyshev 背景 + 统计权，无需安装外部程序即可给出可用的 wR/Rp；
-    它**不精修原子坐标/占位/ADP**，因此其 wt% 为**相对定量**而非严格质量分数。
-  - **v5.0.0 新引擎 `polyxrd.refinement`（已接入 GUI，引擎下拉选 `refinement`）**：自带完整前向模型 —— Cromer–Mann 散射因子、
-    `I ∝ m|F|²·LP/V²` 强度口径、Kα2 双线分离、TCH 峰形合成、晶粒/应变展宽、`w=1/max(y,1)` 泊松权；
-    解算走**变量投影**（标度 + 背景每轮闭式最小二乘）+ 分阶段协议（峰位 → 峰形 → 择优 → 样品展宽 → 结构），
-    逐段回滚 + 提前收敛；定量用 Hill–Howard **密度口径**（`W ∝ S·M_cell/V`）并带标度误差传播；
-    自带 GSAS-II 口径的四元诊断（秩亏 / 条件数 / 参数相关 / 残差峰无对应反射），
-    并按空间群自动约束胞参（常量用固定、`b=a` 这类跟随关系进约束表）。
-    真实试样验收见 [docs/基准报告-精修-v5.0.0.md](docs/基准报告-精修-v5.0.0.md)：
-    四相试样定量合计绝对偏差 **7.16 pp**（存量引擎 21.40 pp），两相 50/50 标样 **±2.00 pp**。
-    ⚠️ 该引擎按**结构因子**算强度，因此**每个相都必须带原子位点**。检索直通场景（内置矿物表 / PDF2 /
-    部分用户库条目只有参考峰）会**自动补齐位点**：按 化学式 + 空间群 + 晶胞 三道门到 polyDB 找同一条目，
-    取其全胞位点（`services/structure_augment.py`，日志 `[cif] <相>: 补齐位点 ← polyDB COD xxx`）。
-    仍补不上的相才回退内置引擎，并在结果区给出「引擎回退」诊断（不会静默换引擎）。
-    实测 2-1 两相直通：Rwp 21.12%、wt% 47.99/52.01（真值 50/50）。
-  - 顺序/自动/手动三种精修策略对以上引擎通用。
-  - ⚠️ 指标口径：`Rwp/Rexp/GOF` 一律基于**统计权**（`stat_weights="poisson"`）。
-    显式改用单位权（`"none"`）时 `Rexp/GOF` 无物理意义，界面会显示"不可解读"。
+ - **真 Rietveld**（结构自由度：坐标/占位/ADP + `S·ZMV` 定量）→ **GSAS-II / FullProf / MAUD**；
+ - **内置引擎 `builtin`（GUI 短路径默认）** = **免结构全谱拟合（Le Bail 级，快）**：用 CIF `|F|²` 参考峰 + 每相各向同性晶胞缩放
+ + March-Dollase 织构 + Chebyshev 背景 + 统计权，无需安装外部程序即可给出可用的 wR/Rp；
+ 它**不精修原子坐标/占位/ADP**，因此其 wt% 为**相对定量**而非严格质量分数。
+ - **v5.0.0 新引擎 `polyxrd.refinement`（已接入 GUI，引擎下拉选 `refinement`）**：自带完整前向模型 —— Cromer–Mann 散射因子、
+ `I ∝ m|F|²·LP/V²` 强度口径、Kα2 双线分离、TCH 峰形合成、晶粒/应变展宽、`w=1/max(y,1)` 泊松权；
+ 解算走**变量投影**（标度 + 背景每轮闭式最小二乘）+ 分阶段协议（峰位 → 峰形 → 择优 → 样品展宽 → 结构），
+ 逐段回滚 + 提前收敛；定量用 Hill–Howard **密度口径**（`W ∝ S·M_cell/V`）并带标度误差传播；
+ 自带 GSAS-II 口径的四元诊断（秩亏 / 条件数 / 参数相关 / 残差峰无对应反射），
+ 并按空间群自动约束胞参（常量用固定、`b=a` 这类跟随关系进约束表）。
+ 真实试样验收见 docs/基准报告-精修-v5.0.0.md：
+ 四相试样定量合计绝对偏差 **7.16 pp**（存量引擎 21.40 pp），两相 50/50 标样 **±2.00 pp**。
+ ⚠️ 该引擎按**结构因子**算强度，因此**每个相都必须带原子位点**。检索直通场景（内置矿物表 / PDF2 /
+ 部分用户库条目只有参考峰）会**自动补齐位点**：按 化学式 + 空间群 + 晶胞 三道门到 polyDB 找同一条目，
+ 取其全胞位点（`services/structure_augment.py`，日志 `[cif] <相>: 补齐位点 ← polyDB COD xxx`）。
+ 仍补不上的相才回退内置引擎，并在结果区给出「引擎回退」诊断（不会静默换引擎）。
+ 实测 2-1 两相直通：Rwp 21.12%、wt% 47.99/52.01（真值 50/50）。
+ - 顺序/自动/手动三种精修策略对以上引擎通用。
+ - ⚠️ 指标口径：`Rwp/Rexp/GOF` 一律基于**统计权**（`stat_weights="poisson"`）。
+ 显式改用单位权（`"none"`）时 `Rexp/GOF` 无物理意义，界面会显示"不可解读"。
 - **Le Bail 晶胞参数精修**：仅精修 a/b/c/α/β/γ，无需原子占位，适用于未知结构的晶胞测定
 - **指标化（M15）**：内置立方 / 四方 / 六方三系指标化（`services/indexing.py`，验收：立方 Si → a≈5.43 Å）；外部 Treor / Dicvol 留接口
 - **3D 晶体结构可视化（M17）**：CIF 浏览器内嵌 3D 晶胞 + 原子球视图，自动按空间群**展开非对称单元**（`services/structure_viz.py`）
@@ -439,17 +423,17 @@ python scripts/make_reg_code.py --verify PXRD1-XXXX-...  # 校验并回显单位
 
 ```
 ① 下载 PolyXRD-Setup-vX.Y.Z.exe (Windows x64) 或 Portable 便携包（解压即用）
-   ↓
+ ↓
 ② 安装 (默认 C:\Program Files\PolyXRD\) 后直接运行 PolyXRD.exe
-   ↓
+ ↓
 ③ 按需下载数据库包 —— 到 PolyXRD-DataBase 仓库的 Releases 下载（各库独立）
-   https://github.com/PolyXRD/PolyXRD-DataBase/releases
-   解压到任意目录（必须真正解压到磁盘，不要直接在压缩包里打开）
-   ↓
+ https://github.com/PolyXRD/PolyXRD-DataBase/releases
+ 解压到任意目录（必须真正解压到磁盘，不要直接在压缩包里打开）
+ ↓
 ④ 启动 PolyXRD → 菜单「数据库 ▸ 外挂数据库管理…」→「挂载文件夹…」指向解压出的
-   `.polyDB` 目录 → 选中该行点「设为当前」
-   → 立即生效，无需重启
-   ↓
+ `.polyDB` 目录 → 选中该行点「设为当前」
+ → 立即生效，无需重启
+ ↓
 ⑤ 开始使用!
 ```
 
@@ -478,8 +462,8 @@ cd PolyXRD
 
 # 2. 创建虚拟环境 (Python 3.10+)
 python -m venv venv
-venv\Scripts\activate        # Windows
-# source venv/bin/activate   # Linux/macOS
+venv\Scripts\activate # Windows
+# source venv/bin/activate # Linux/macOS
 
 # 3. 安装依赖
 pip install -r requirements.txt
@@ -526,9 +510,9 @@ Inno Setup 编译安装包 → 打便携包 → **本地**生成并校验两个 
 ② 预处理面板: SNIP-40 扣背景 → SG w=11 p=3 平滑 → Max 归一化
 ③ 峰检测: 自动阈值 → 搜索
 ④ 物相检索: 勾选「COD 无机物库」→ 必有元素 [Mg, Al, O] → 搜索
-   → Top 候选: MgAl₂O₄ Spinel ✅
+ → Top 候选: MgAl₂O₄ Spinel ✅
 ⑤ Rietveld 精修: 选中共存相 → 精修向导 → 内置引擎 → 顺序策略
-   → 精修完成, 查看 wR 与残差图
+ → 精修完成, 查看 wR 与残差图
 ⑥ 需要时: CIF 浏览器看 3D 晶胞 / 指标化求晶胞参数 / 导出报告 (CSV/PDF)
 ```
 
@@ -556,7 +540,7 @@ PolyXRD 基于众多高质量开源项目构建 —— Python / PySide6 (Qt6) / 
 
 ## 📦 Release
 
-最新版本与全部变更记录见 [docs/CHANGELOG.md](docs/CHANGELOG.md)；**程序产物**（Setup 安装包 + Portable + SHA256）前往 [👉 Releases 页面](https://github.com/PolyXRD/PolyXRD/releases/tag/v4.0.0) 下载。**数据库产物统一在独立仓库** [PolyXRD-DataBase Releases](https://github.com/PolyXRD/PolyXRD-DataBase/releases) 发布（本仓库 Release 不含数据库）。SHA-256 校验值随各自 Release 发布，下载后建议核对。
+最新版本与全部变更记录见 docs/CHANGELOG.md；**程序产物**（Setup 安装包 + Portable + SHA256）前往 [👉 Releases 页面](https://github.com/PolyXRD/PolyXRD/releases/tag/v4.0.0) 下载。**数据库产物统一在独立仓库** [PolyXRD-DataBase Releases](https://github.com/PolyXRD/PolyXRD-DataBase/releases) 发布（本仓库 Release 不含数据库）。SHA-256 校验值随各自 Release 发布，下载后建议核对。
 
 ---
 
@@ -592,5 +576,5 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
 ---
 
 <div align="right">
-  <i>PolyXRD Team · 2025 — 2026 · 文档版本 2.2.0 (2026-09-26) · 联系：sshztx@outlook.com</i>
+ <i>PolyXRD Team · 2025 — 2026 · 文档版本 2.2.0 (2026-09-26) · 联系：sshztx@outlook.com</i>
 </div>
