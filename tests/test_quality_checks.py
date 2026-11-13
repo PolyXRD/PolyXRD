@@ -73,30 +73,22 @@ def test_version_is_consistent_across_five_release_points():
 
 
 def test_release_script_matches_current_version():
-    """本版发版资产与版本自洽，且仍带"禁库"守卫。
+    """本版发版脚本与版本自洽，且仍带"禁库"守卫（脚本存在时）。
 
     v4.4.0 验收补：脚本名/``$tag``/``$version`` 三处与 ``__init__.__version__``
     脱钩过一次（版号收口时漏改脚本），发布时才会在 ``gh release create`` 那一步
     才炸。这里做静态对齐，早发现。
 
-    2026-11-12 远端 main 移除了整个内部 ``docs/`` 目录，而版本号会**先于**
-    发版材料进入开发态（发版脚本 / RELEASE-NOTES / 发布检查清单在发版流程里
-    才补齐）。原实现无条件要求本版三件套存在，在 5.4.0 基线上就把 CI 染红。
-    现在：三件套一件都没出现 → 明确 skip（开发态，不假装通过）；
-    只要出现任何一件 → 立刻恢复全部强校验，缺一件就失败。
+    2026-11-13 约定：**内部文档永不上传 GitHub**，因此 RELEASE-NOTES / 发布检查清单
+    不再是仓库门禁条件；发版说明以英文写在 Release 页面与 ``changelog.md``。
+    本版没有 ``.ps1`` 脚本（改用 gh CLI 发版）时明确 skip；一旦补脚本即恢复强校验。
     """
     ver = _version_tuple(_read("src/polyxrd/__init__.py"))
-    docs = ROOT / "docs"
     script = ROOT / "scripts" / f"create_github_release_v{ver}.ps1"
-    notes = docs / f"RELEASE-NOTES-v{ver}.md"
-    checklist = docs / f"发布检查清单-v{ver}.md"
-    assets = (script, notes, checklist)
-    if not any(p.is_file() for p in assets):
+    if not script.is_file():
         pytest.skip(
-            f"v{ver} 处于开发态：本版发版脚本 / RELEASE-NOTES / 检查清单均未补齐；"
-            f"发版流程补齐任一件后本用例自动恢复强校验")
-    for path in assets:
-        assert path.is_file(), f"发版资产缺失: {path.relative_to(ROOT)}"
+            f"v{ver} 未提供 .ps1 发版脚本（走 gh CLI）；"
+            f"补脚本后本用例自动恢复强校验")
     text = script.read_text(encoding="utf-8", errors="replace")
     assert re.search(rf"\$tag\s*=\s*['\"]v{re.escape(ver)}['\"]", text), \
         f"脚本 $tag 与版本 {ver} 不符"
@@ -104,6 +96,20 @@ def test_release_script_matches_current_version():
         f"脚本 $version 与版本 {ver} 不符"
     assert "$BANNED" in text and "PDF2" in text, \
         "脚本缺少 PDF2 / Databases- 禁传守卫"
+
+
+def test_release_docs_track_current_version():
+    """发版约定（2026-11-13）：README.md 与 changelog.md 必须同步到当前版本。
+
+    README 只留当前版本 + 链接，历史版本说明放 changelog.md；每次 bump / 发版
+    两处都要动，漏一处就在这里卡住（而不是等 Release 发出去才发现）。
+    """
+    ver = _version_tuple(_read("src/polyxrd/__init__.py"))
+    readme = _read("README.md")
+    changelog = _read("changelog.md")
+    assert f"v{ver}" in readme, f"README.md 未同步到 v{ver}"
+    assert re.search(rf"^##\s+v{re.escape(ver)}\b", changelog, re.M), \
+        f"changelog.md 缺少 v{ver} 小节"
 
 
 def test_config_app_version_is_derived_not_duplicated():
