@@ -344,9 +344,9 @@ if ($SkipHash) {
         (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
     }
     $lines = @(
-        "PolyXRD v$Version 发布产物校验值 (SHA-256)",
-        "生成时间: $stamp",
-        '单位说明: MB = 1,048,576 字节 (资源管理器口径)',
+        "PolyXRD v$Version release checksums (SHA-256)",
+        "Generated: $stamp",
+        'Sizes: MB = 1,048,576 bytes',
         ''
     )
     $targets = @((Join-Path $outDir "PolyXRD-Setup-v$Version.exe"), $portable) + $builtPkgs
