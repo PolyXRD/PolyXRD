@@ -27,6 +27,13 @@
     print(build_report(problem, summary).text())
 """
 
+from polyxrd.refinement.amorphous_fit import (
+    AmorphousDecomposition,
+    HumpSpec,
+    absolute_amorphous_from_standard,
+    decompose,
+    hump_columns,
+)
 from polyxrd.refinement.background import (
     BACKGROUND_KINDS,
     DEFAULT_TENT_NODES,
@@ -75,8 +82,10 @@ from polyxrd.refinement.linear import (
     LinearSolve,
     design_stack,
     full_covariance,
+    linear_block_slices,
     linear_covariance,
     linear_sigmas,
+    scale_correlations,
     solve_linear,
 )
 from polyxrd.refinement.optimize import (
@@ -303,6 +312,7 @@ __all__ = [
     "ka2_wavelength",
     "levenberg_marquardt",
     "linear_covariance",
+    "linear_block_slices",
     "linear_sigmas",
     "linear_mu_from_composition",
     "linear_mu_from_formula",
@@ -347,6 +357,7 @@ __all__ = [
     "SITE_TOL",
     "site_displacement_matrix",
     "site_from_dict",
+    "scale_correlations",
     "snip_baseline",
     "solve_linear",
     "split_asymmetry_factor",
@@ -359,4 +370,10 @@ __all__ = [
     "tier_note",
     "two_theta_from_d",
     "two_theta_from_g",
+    # v5.5 非晶宽隆（opt-in，见 ``amorphous_fit`` 的"已知边界"）
+    "AmorphousDecomposition",
+    "HumpSpec",
+    "absolute_amorphous_from_standard",
+    "decompose",
+    "hump_columns",
 ]

@@ -4,6 +4,7 @@ M14 定量 Rietveld 增强测试 (Sprint 2)
 覆盖: March-Dollase 择优取向 / DoC / 内标定量 / refine options 前处理。
 """
 import numpy as np
+import pytest
 
 from polyxrd.models.phase import Phase
 from polyxrd.models.refinement_options import RefineOptions
@@ -118,6 +119,11 @@ class TestInternalStandard:
             "内标份额应>0 可定标 (Std 组峰最强)"
         assert "Std" not in names
         assert all(0 <= p.weight_fraction <= 100 for p in r.phases)
+        # 未建模量 = 100 − ΣW_晶相 − W_内标：内标必须被扣掉，否则非晶量会
+        # 系统性高估一个内标量（合成掺标样实测 +14.7 pp）
+        want = 100.0 - sum(float(p.weight_fraction or 0.0) for p in r.phases) \
+            - 25.0
+        assert fp["unmodelled_wt_pct"] == pytest.approx(want, abs=2e-3)
 
 
 class TestRefineOptionsSmoke:

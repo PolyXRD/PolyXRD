@@ -295,6 +295,13 @@ class PatternProblem:
         if not phases:
             raise ValueError("至少需要一相")
         self.phases: List[PhaseBlock] = list(phases)
+        #: 非晶宽隆（v5.5）：空 = 不建模非晶，行为与历史逐位一致。给值后
+        #: 这些列以**单位面积**并入线性层（``residual`` 一侧），于是宽隆幅度
+        #: 与相标度同层求解 —— 晶体相不再被迫吸收非晶包络。
+        #: 不进 ``design()``（那里只给晶体相基），所以 Hill–Howard、协方差、
+        #: 逐对相关这些消费者完全不受影响。
+        self.amorphous_humps: tuple = ()
+        self._amorphous_cols = None
         self.profile = profile or ProfileParams()
         self.bg = bg or BackgroundParams()
         self.wavelength = float(wavelength)
@@ -861,6 +868,37 @@ class PatternProblem:
             self._bg_basis = background_basis(self.two_theta, self.bg)
         return self._basis, self._bg_basis
 
+    def set_amorphous_humps(self, humps) -> None:
+        """设置非晶宽隆（v5.5）；``()`` = 关闭。
+
+        只影响 ``residual``/``calc_pattern``/``metrics`` 用的线性层，不动
+        ``design()`` —— Hill–Howard（``quantitative``）、相标度协方差
+        （``report._scale_correlations``）、``_wt_rwp_probe`` 都只看晶体相基，
+        因此扩列不会污染它们。``last_linear.scales`` 的前 ``len(phases)`` 个
+        仍是晶体相（宽隆列追加在后）。
+        """
+        self.amorphous_humps = tuple(humps or ())
+        self._amorphous_cols = None
+
+    def _amorphous_columns(self) -> Optional[np.ndarray]:
+        """单位面积宽隆列（按 humps 缓存；没设就是 ``None``）。"""
+        if not self.amorphous_humps:
+            return None
+        if self._amorphous_cols is None:
+            from .amorphous_fit import hump_columns
+
+            self._amorphous_cols = hump_columns(self.two_theta,
+                                                self.amorphous_humps)
+        return self._amorphous_cols
+
+    def _linear_basis(self) -> Tuple[np.ndarray, np.ndarray]:
+        """线性层实际用的 ``(基, 背景基)`` —— 晶体相列 + 非晶宽隆列。"""
+        basis, bgb = self.design()
+        cols = self._amorphous_columns()
+        if cols is None:
+            return basis, bgb
+        return np.hstack([basis, cols]), bgb
+
     def _make_design_key(self) -> tuple:
         cells = tuple(ph.structure_key() for ph in self.phases)
         prof = (self.profile.u, self.profile.v, self.profile.w, self.profile.x,
@@ -888,7 +926,7 @@ class PatternProblem:
         if x is not None:
             self.params.assign(x, stage)
         self.apply()
-        basis, bgb = self.design()
+        basis, bgb = self._linear_basis()
         lin = solve_linear(basis, self.y_obs, weights=self.weights,
                            bg_basis=bgb, diagnose=False)
         self.last_linear = lin
@@ -915,7 +953,7 @@ class PatternProblem:
         返回。实测踩过：改 ``inst.u`` 后计算谱一个点都不变，误判成"峰宽参数
         没接进模型"，白查半天。
         """
-        basis, bgb = self.design()
+        basis, bgb = self._linear_basis()
         lin = solve_linear(basis, self.y_obs, weights=self.weights,
                            bg_basis=bgb, diagnose=False)
         self.last_linear = lin
@@ -937,7 +975,7 @@ class PatternProblem:
         从 0 拖到 500 nm，Rwp 一位小数都不变"，看代码又查不出所以然。
         重解是一次 ``lstsq``（列数 = 相数 + 背景阶数），代价可忽略。
         """
-        basis, bgb = self.design()
+        basis, bgb = self._linear_basis()
         lin = solve_linear(basis, self.y_obs, weights=self.weights, bg_basis=bgb)
         self.last_linear = lin
         self._sync_linear(lin)
@@ -957,7 +995,9 @@ class PatternProblem:
         """
         if self.last_linear is None:
             self.residual(None)
-        scales = [float(v) for v in self.last_linear.scales]
+        # 宽隆列追加在晶体相之后：Hill–Howard 只认晶体相的标度
+        scales = [float(v) for v in
+                  np.asarray(self.last_linear.scales, float)[:len(self.phases)]]
         mu = self.mu_linear if len(self.mu_linear) == len(self.phases) else None
         radius = self.grain_radii_um or self.grain_radius_um
         return hill_howard([ph.label for ph in self.phases], scales,

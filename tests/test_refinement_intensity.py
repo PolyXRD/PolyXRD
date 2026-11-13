@@ -731,6 +731,21 @@ class TestScaleCorrelationDiagnostics:
         assert "SCALE_CORRELATED" in f
         assert f["SCALE_CORRELATED"].evidence["sigma_ratio"] == pytest.approx(3.0)
 
+    def test_perfect_anticorrelation_does_not_raise(self):
+        """ρ=−1.000（相标度子块近奇异）→ 不许抛 ZeroDivision。
+
+        真实数据会摸到 ρ=−1.000：此时 σ差/σ和=√((1−ρ)/(1+ρ)) 除零，异常
+        被 ``build_report`` 的调用方吞掉后**整份 findings 全丢**（实测
+        ShiJK-7 只剩一条 fallback 的 MICROABSORPTION_OFF）。这里锁住"仍能
+        给出有限比值"的行为。
+        """
+        q = self._quant((0.5, 0.5))
+        corr = np.array([[1.0, -1.0], [-1.0, 1.0]])
+        f = self._audit(q, corr)
+        assert "SCALE_CORRELATED" in f
+        ratio = f["SCALE_CORRELATED"].evidence["sigma_ratio"]
+        assert np.isfinite(ratio) and ratio > 1e4
+
     def test_positive_correlation_is_silent(self):
         """ρ=+0.98 不再触发：正相关不是"此消彼长"，份额各自可辨（P0-E）。"""
         q = self._quant((0.5, 0.5))

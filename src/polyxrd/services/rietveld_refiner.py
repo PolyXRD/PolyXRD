@@ -386,7 +386,13 @@ class RietveldRefiner:
             strategy: 精修策略
             engine: 精修引擎
             max_cycles: 最大精修循环数
-            **kwargs: 其他参数
+            **kwargs: 其他参数。含 ``model_amorphous=True``（v5.5：把
+                ``amorphous_humps`` 给出的非晶包络并进精修，结果进
+                ``fit_params["amorphous"]``，并给一条
+                ``diag.refinement.amorphous_hump``；默认关闭，不改变既有
+                精修链路的任何数字）。``amorphous_humps=[HumpSpec(...)]``
+                是**必填**的物理输入；``amorphous_auto=True`` 才允许拟合器
+                自己找包络 —— 实测全晶对照会被它"找出" 5~39% 非晶，默认禁用）
 
         Returns:
             RefinementResult
@@ -1553,7 +1559,20 @@ class RietveldRefiner:
                 log(f"[v5] ka2 detect skipped: {type(e).__name__}: {e}")
         else:
             model_ka2 = bool(_ka2_opt)
-        n_bg = max(6, int(round(float(two_theta[-1] - two_theta[0]) / tier["bg_deg"])))
+        # 背景项数：默认按档位表折算（每 bg_deg 一个 tent 节点，下限 6）。
+        # ``bg_deg`` 允许按次覆盖 —— 实测 ShiJK 的 6/7 个试样在 14±1° 长出同一条
+        # 5~6° 宽的"假包络"，把 tent 项从 14 加到 20/30 后它单调收敛（S1
+        # Rwp 14.905→12.870，12~18° 区间面积 −138.7→+12.5），说明那是**低角
+        # 背景欠拟合**，不是仪器散射或样品非晶。要处理它就把这里的 bg_deg 调小
+        # （项数变多），不要改档位表的默认值 —— 那会让所有既有对标数字失效。
+        _bg_deg = kwargs.get("bg_deg")
+        _span = float(two_theta[-1] - two_theta[0])
+        if _bg_deg is None:
+            n_bg = max(6, int(round(_span / float(tier["bg_deg"]))))
+        else:
+            n_bg = max(6, int(round(_span / float(_bg_deg))))
+            log(f"[v5] bg_deg override {tier['bg_deg']} -> {_bg_deg} "
+                f"(n_bg={n_bg})")
         mask = dict(kwargs.get("_param_mask") or {})
         bg = BackgroundParams("tent" if mask.get("background", True) else "none", n_bg)
 
@@ -1666,6 +1685,19 @@ class RietveldRefiner:
         _aniso_kw = kwargs.get("anisotropic_broadening")
         _aniso_on = ((_tier != "fast") if _aniso_kw is None
                      else bool(_aniso_kw))
+        # 非晶宽隆（v5.5）：**默认关闭**。开了就多跑一段尾段精修，且会让晶体
+        # wt% 从"把非晶摊进晶体"变成"晶体归一化"，与历史结果不可直接比 ——
+        # 所以是 opt-in，不随档位自动开。
+        #
+        # **自动搜索默认不允许**（amorphous_auto=False）：实测 ShiJK 的 3 个
+        # 全晶对照（1/4/5，真值无任何非晶）用贪心搜索分别"检出" 23.4% / 5.1% /
+        # 38.7% 非晶 —— 晶体模型的系统失配（峰形、低角背底）足以撑起一个宽隆。
+        # 所以默认只接受**用户显式给定**的包络（amorphous_humps），这是物理判断，
+        # 不该由拟合器代劳。
+        _amor_on = bool(kwargs.get("model_amorphous", False))
+        _amor_humps = list(kwargs.get("amorphous_humps") or ())
+        _amor_auto = bool(kwargs.get("amorphous_auto", False))
+        _amor_max = int(kwargs.get("amorphous_max_humps", 2))
         for _b in blocks:
             _b.aniso_on = False
         if _aniso_on:
@@ -1883,6 +1915,59 @@ class RietveldRefiner:
                     prob.residual(None)
                     log(f"[v5] aniso pass 2 skipped: {type(e).__name__}: {e}")
 
+        # ── 非晶第二段（v5.5，opt-in model_amorphous）──────────────
+        # 为什么必须**并进精修**而不只是事后分解：玻璃包络常常正好落在某晶相
+        # 主峰上（ShiJK-6 的沉淀法 SiO₂ 包络 22° 与方石英 21.9° 重合）。事后
+        # 分解时晶体相早已把这块强度吃进标度里，剩下的残余已经不含它 —— 实测
+        # S6 事后分解只在 14.0° 找出一条 FWHM 4.7° 的假包络。并进线性层后，
+        # 晶体标度与包络幅度同层竞争，包络才拿得到属于自己的面积。
+        if _amor_on:
+            try:
+                from polyxrd.refinement.amorphous_fit import decompose
+
+                _b_a, _g_a = prob.design()
+                _d_a = decompose(prob.two_theta, prob.y_obs, _b_a,
+                                 bg_basis=_g_a, weights=prob.weights,
+                                 max_humps=_amor_max if _amor_auto else 0,
+                                 humps=_amor_humps or None)
+                if _d_a.humps:
+                    _snap3 = prob.params.snapshot()
+                    _rwp_before_a = float(summary.metrics.get("Rwp", float("inf")))
+                    prob.set_amorphous_humps(_d_a.humps)
+                    prob.invalidate()
+                    _p3 = [StageSpec(s.stage, max_iter=max(10, int(s.max_iter) // 2))
+                           for s in protocol if s.stage >= 4] or \
+                          [StageSpec(protocol[-1].stage)]
+                    log("[v5] amorphous pass 2: "
+                        + ", ".join(f"{h.center:.1f}°/{h.fwhm:.1f}°"
+                                    for h in _d_a.humps))
+                    _summary3 = run_protocol(prob, protocol=_p3,
+                                             converge_tol=1e-4, patience=2)
+                    _rwp_after_a = float(_summary3.metrics.get("Rwp", float("inf")))
+                    if _rwp_after_a + 1e-6 < _rwp_before_a:
+                        summary.stages.extend(_summary3.stages)
+                        summary = _summary3
+                        log(f"[v5] amorphous pass 2 accepted: "
+                            f"Rwp {_rwp_before_a:.3f} → {_rwp_after_a:.3f}")
+                    else:
+                        # 包络没换来任何改善 → 数据不需要它，别留在模型里
+                        # （留下会让晶体标度被无端压低，wt% 整体漂移）
+                        prob.set_amorphous_humps(())
+                        prob.params.restore(_snap3)
+                        prob.apply()
+                        prob.invalidate()
+                        prob.residual(None)
+                        log(f"[v5] amorphous pass 2 rejected: "
+                            f"Rwp {_rwp_before_a:.3f} vs {_rwp_after_a:.3f}")
+            except Exception as e:  # noqa: BLE001 - 第二段失败保留第一段结果
+                try:
+                    prob.set_amorphous_humps(())
+                    prob.invalidate()
+                    prob.residual(None)
+                except Exception:  # noqa: BLE001
+                    pass
+                log(f"[v5] amorphous pass 2 skipped: {type(e).__name__}: {e}")
+
         last_stage = max((int(s.get("stage", 0)) for s in summary.stages), default=5)
         metrics = prob.metrics(stage=last_stage)
         wR = float(metrics["Rwp"])
@@ -2007,6 +2092,78 @@ class RietveldRefiner:
                             f"shift={_shift:.2f}pp radius={self.MICROABS_PROBE_RADIUS_UM:.1f}um")
             except Exception as e:  # noqa: BLE001 - 探针失败不该影响精修
                 log(f"[v5] microabsorption probe skipped: {type(e).__name__}: {e}")
+
+        # ── 非晶宽隆分解（v5.5，opt-in ``model_amorphous=True``）──────
+        # 引擎的相标度是线性层自由度，而非晶没有 Bragg 反射、进不了 PhaseSpec
+        # —— 含玻璃/气相 SiO₂ 的试样里，非晶散射只能被晶体峰宽与背景摊掉，
+        # 晶体 wt% 系统性偏高（ShiJK 2/3 含普通玻璃、6/7 含沉淀法气相 SiO₂）。
+        # 这里在收敛模型上做一次**同层线性**的再分解：晶体基列 + 单位面积宽隆
+        # 列 + 原背景基，解出的宽隆系数即积分面积，于是 DoC/面积占比不需要标定。
+        _amor = None
+        if _amor_on:
+            try:
+                from polyxrd.refinement.amorphous_fit import decompose
+
+                _basis_a, _bg_a = prob.design()
+                # 宽隆若已在第二段并进精修，这里必须**沿用同一组**（固定不搜）：
+                # 再贪心搜一次等于在"已含包络的模型"上再叠一层，面积翻倍。
+                _fixed_humps = (list(prob.amorphous_humps)
+                                or _amor_humps or None)
+                _amor = decompose(
+                    prob.two_theta, prob.y_obs, _basis_a,
+                    bg_basis=_bg_a, weights=prob.weights,
+                    crystal_labels=[str(b.label) for b in prob.phases],
+                    max_humps=(0 if _fixed_humps
+                               else (_amor_max if _amor_auto else 0)),
+                    humps=_fixed_humps)
+                log(f"[v5] amorphous doc={_amor.doc_area:.3f} "
+                    f"share={100 * _amor.amorphous_area_share:.1f}% "
+                    f"humps={[h.as_dict() for h in _amor.humps]} "
+                    f"Rwp {_amor.rwp_before:.2f}->{_amor.rwp_after:.2f}")
+                if _amor.humps:
+                    from polyxrd.refinement.report import Finding
+
+                    _h0 = _amor.humps[0]
+                    # 背景敏感性不过关时**不许报 DoC**：宽隆与"背景形状+峰宽"
+                    # 共线，换背景就换答案（S1 实测 98% ↔ 44%）。此时只报
+                    # "检出包络"这个事实，把定量让给内标法。
+                    if _amor.doc_reliable:
+                        _tail = (f"，按面积口径非晶占全谱散射的 "
+                                 f"{100 * _amor.amorphous_area_share:.1f}%"
+                                 f"（结晶度 DoC={100 * _amor.doc_area:.1f}%）")
+                    else:
+                        _tail = (f"，面积口径 DoC 在 "
+                                 f"{' / '.join(f'{100 * v:.0f}%' for v in _amor.doc_sensitivity)}"
+                                 f" 之间摆动（跨 {100 * _amor.doc_spread:.1f} pp，"
+                                 f"取决于所用背景模型），**不能当测量值**")
+                    _f = Finding(
+                        "AMORPHOUS_HUMP", "warn",
+                        f"检出非晶宽隆 {len(_amor.humps)} 个（最强：2θ≈"
+                        f"{_h0.center:.1f}°，FWHM≈{_h0.fwhm:.1f}°）{_tail}"
+                        f"—— 上面这些 wt% 是**晶相内部**的归一化值，不是整个"
+                        f"试样的绝对含量；绝对非晶量要用内标法"
+                        f"（refine_with_internal_standard）",
+                        "面积占比≠质量分数：只有非晶与晶体化学组成相同（如石英↔"
+                        "SiO₂ 玻璃）时才近似相等。要绝对含量：掺已知量内标（刚玉/"
+                        "Si）后取 100−ΣW_晶相；同时确认宽隆位置不是被峰形/背底"
+                        "吸收出来的假包络",
+                        {"doc": float(_amor.doc_area),
+                         "amorphous_share": float(_amor.amorphous_area_share),
+                         "center": float(_h0.center),
+                         "fwhm": float(_h0.fwhm),
+                         "n_humps": float(len(_amor.humps)),
+                         "doc_spread": float(_amor.doc_spread),
+                         "doc_reliable": float(1.0 if _amor.doc_reliable else 0.0),
+                         "rwp_gain_pp": float(_amor.rwp_gain_pp)})
+                    v5_findings.append(_f.as_dict())
+                    diagnostics.insert(0, {
+                        "code": f"diag.refinement.{_f.code.lower()}",
+                        "params": {k: float(v) for k, v in _f.evidence.items()},
+                    })
+                    del diagnostics[4:]
+            except Exception as e:  # noqa: BLE001 - 分解失败不该影响精修结果
+                log(f"[v5] amorphous decomposition skipped: "
+                    f"{type(e).__name__}: {e}")
 
         # ── PO 关闭护栏（P0-J）────────────────────────────────────
         # 显式关掉 auto PO 又不给逐相 _po_directions 时，强织构试样的相对线强
@@ -2222,6 +2379,9 @@ class RietveldRefiner:
                 # 定量口径说明：与 builtin 的"相对定量"不同，这里是密度口径
                 "v5_weight_basis_note": "Hill–Howard: W ∝ S·M_cell/V",
                 "v5_findings": v5_findings,
+                # v5.5：非晶宽隆分解（opt-in model_amorphous）。None = 没跑。
+                # doc 是**面积口径**结晶度；绝对非晶量需内标法定标。
+                "amorphous": (_amor.as_dict() if _amor is not None else None),
                 "v5_seed_notes": list(getattr(seeds, "notes", ()) or ()),
                 # 逐相择优：每相一项（未启用为 None / 1.0）
                 "v5_po_hkl": [list(b.po_hkl) if b.po_hkl else None
@@ -5096,6 +5256,14 @@ class RietveldRefiner:
         流程: phases+内标 一起精修 → 得到内标相对份额 w'_std →
         scale = std_wt_pct / w'_std → 各相绝对含量 (wt% of sample)。
 
+        返回的 ``phases`` 已剔除内标且 wt% 已是**绝对**口径，因此
+        ``100 − ΣW`` 还要再减掉内标本身；这个差值已算好放在
+        ``fit_params["internal_standard"]["unmodelled_wt_pct"]``（= 非晶 +
+        未识别晶相，物相表不全时只能当上界）。若要用
+        ``absolute_amorphous_from_standard`` 自查，必须传
+        ``scale_factor=1.0, standard_wt_pct=<内标绝对 wt%>`` —— 拿这批绝对
+        wt% 再乘一遍 scale 会把非晶高估约一个内标量（合成掺标样实测 +14.7 pp）。
+
         Returns:
             RefinementResult (phases 中不含内标; weight_fraction 为绝对 wt%;
             fit_params["internal_standard"] 记录定标信息)
@@ -5113,11 +5281,13 @@ class RietveldRefiner:
             return result  # 内标份额为 0, 无法定标 (原样返回并交由上层判断)
 
         abs_phases = []
+        total_abs = 0.0
         for p in result.phases:
             if p.name == std_name:
                 continue
             np2 = Phase.from_dict(p.to_dict())
             np2.weight_fraction = round(float(p.weight_fraction or 0.0) * scale, 3)
+            total_abs += float(np2.weight_fraction)
             abs_phases.append(np2)
 
         from dataclasses import replace
@@ -5130,6 +5300,10 @@ class RietveldRefiner:
                     "std_phase": std_name,
                     "std_wt_pct": float(std_wt_pct),
                     "scale": round(scale, 5),
+                    # 100 − ΣW_晶相 − W_内标：**非晶 + 未识别晶相**。物相表不全
+                    # 时这个数会把未识别晶相算进来，所以只作上界用。
+                    "unmodelled_wt_pct": round(
+                        100.0 - total_abs - float(std_wt_pct), 3),
                 },
             },
         )

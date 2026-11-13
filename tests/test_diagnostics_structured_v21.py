@@ -59,6 +59,12 @@ ALL_CODES = [
       "delta_rwp_pp": 0.10}),
     ("diag.refinement.po_disabled_suspect",
      {"phase": "Corundum", "two_theta": 35.15, "ratio": 1.42, "dev_pct": 42.0}),
+    # v5.5: 非晶宽隆分解（opt-in model_amorphous）。参数全为数值，因为
+    # 服务层把它插到 diagnostics 时按 float 收。
+    ("diag.refinement.amorphous_hump",
+     {"doc": 0.65, "amorphous_share": 0.35, "center": 22.0, "fwhm": 9.0,
+      "n_humps": 1.0, "doc_spread": 0.04, "doc_reliable": 1.0,
+      "rwp_gain_pp": 1.20}),
 ]
 
 

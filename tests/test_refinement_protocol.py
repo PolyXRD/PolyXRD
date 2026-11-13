@@ -39,6 +39,7 @@ from polyxrd.refinement import (
     build_report,
     classify_tier,
     design_matrix,
+    design_stack,
     diagnose,
     evaluate_goals,
     find_observed_peaks,
@@ -50,6 +51,7 @@ from polyxrd.refinement import (
     residual_stats,
     resolve_protocol,
     run_protocol,
+    scale_correlations,
     seed_caglioti,
     seed_problem,
     seed_zero,
@@ -253,6 +255,36 @@ def _gauss_pattern(centers, widths, heights, *, bg_scale=200.0, n=3001):
     for c, w, h in zip(centers, widths, heights):
         y = y + h * np.exp(-4.0 * np.log(2.0) * ((x - c) / w) ** 2)
     return x, y, base
+
+
+class TestAmorphousHumps:
+    """非晶宽隆进线性层（v5.5）：只扩 residual 用的基，不污染 design()。"""
+
+    def test_humps_join_only_the_linear_layer(self):
+        from polyxrd.refinement.amorphous_fit import HumpSpec
+
+        prob = _synth_problem()
+        seed_problem(prob, apply=True)
+        rwp0 = prob.metrics()["Rwp"]
+        q0 = prob.quantitative()
+        n0 = prob.design()[0].shape[1]
+
+        prob.set_amorphous_humps([HumpSpec(32.0, 6.0)])
+        basis, _bg = prob._linear_basis()
+        assert basis.shape[1] == n0 + 1
+        # design() 必须还是晶体相 —— 协方差/Hill–Howard 都靠这一条
+        assert prob.design()[0].shape[1] == n0
+        rwp1 = prob.metrics()["Rwp"]
+        assert rwp1 <= rwp0 + 1e-9          # 多一列自由度的最小二乘不会更差
+
+        # 定量只认晶体相标度：宽隆列不能被算成一个"相"
+        q1 = prob.quantitative()
+        assert len(q1.fractions) == len(q0.fractions)
+        assert float(sum(q1.fractions)) == pytest.approx(1.0, abs=1e-6)
+
+        # 关掉后逐位回到原状（opt-in 不能留下任何残迹）
+        prob.set_amorphous_humps(())
+        assert prob.metrics()["Rwp"] == pytest.approx(rwp0, abs=1e-9)
 
 
 class TestPeakFinding:
@@ -663,6 +695,36 @@ class TestLinearUncertainty:
     def test_shape_mismatch_raises(self):
         with pytest.raises(ValueError):
             full_covariance(np.ones((10, 1)), np.ones((20, 1)))
+
+    def test_scale_block_skips_nonlinear_columns(self):
+        """带 jac 时相标度块必须从第 ``P_nonlin`` 列起，不能从第 0 列起。
+
+        构造方式让判据**无容差争议**：把 J 投影到 A 的正交补上（``JᵀW A = 0``），
+        于是 Schur 补 ``(AᵀWA − AᵀWJ(JᵀWJ)⁺JᵀWA)⁻¹`` 恰好等于 ``(AᵀWA)⁻¹`` ——
+        带 jac 与不带 jac 的解必须逐元素相同。旧写法 ``cov[:n]`` 取到的是 J 的
+        前 n 个参数，二者差出数量级（实测 ShiJK-4：0.004 vs 0.192）。
+        """
+        rng = np.random.default_rng(11)
+        m, p, n, nb = 400, 6, 3, 2
+        A = rng.normal(size=(m, n))
+        G = rng.normal(size=(m, nb))
+        w = rng.uniform(0.5, 2.0, m)
+        Aw = design_stack(A, G)
+        sw = np.sqrt(w)[:, None]
+        # J ⟂ 加权后的 A（最小二乘投影残差）
+        J0 = rng.normal(size=(m, p))
+        Aw_w = Aw * sw
+        J = J0 - Aw @ np.linalg.pinv(Aw_w.T @ Aw_w) @ (Aw_w.T @ (J0 * sw))
+        assert np.allclose(J.T @ (Aw * w[:, None]), 0.0, atol=1e-10)
+
+        want, _ = linear_sigmas(None, A, w, bg_basis=G)
+        got, got_bg = linear_sigmas(J, A, w, bg_basis=G)
+        assert np.allclose(got, want, rtol=1e-3, atol=1e-12)
+        assert got_bg.size == nb
+
+        c_none = scale_correlations(None, A, w, bg_basis=G)
+        c_jac = scale_correlations(J, A, w, bg_basis=G)
+        assert np.allclose(c_jac, c_none, rtol=5e-3, atol=5e-3)
 
 
 class TestBuildReport:

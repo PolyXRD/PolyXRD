@@ -624,6 +624,53 @@ def wt_ranges_from_findings(
     return out
 
 
+def _scale_corr_findings(
+    out: List[Finding],
+    scale_corr,
+    quant: QuantResult,
+    min_phase_fraction: float,
+) -> None:
+    """两相份额是否根本不可分辨（负相关 → 此消彼长）。
+
+    单独成函数是为了让 :func:`audit` 能把这段兜在 ``try`` 里：它只是"加分项
+    诊断"，任何数值意外都不该让整份 findings 一起消失（``build_report`` 的
+    调用方是 ``except Exception`` + 一行日志）。
+    """
+    corr = np.asarray(scale_corr, dtype=float)
+    n_lab = len(quant.labels)
+    if corr.shape != (n_lab, n_lab) or not np.all(np.isfinite(corr)):
+        return
+    fracs = np.asarray(quant.fractions, dtype=float)
+    worst = None
+    for i in range(n_lab):
+        for j in range(i + 1, n_lab):
+            if (fracs[i] < min_phase_fraction
+                    or fracs[j] < min_phase_fraction):
+                continue
+            rho = float(corr[i, j])
+            if worst is None or rho < worst[0]:
+                worst = (rho, i, j)
+    if worst is None or worst[0] > -0.80:
+        return
+    rho, i, j = worst
+    # ρ 可能正好是 −1.000（相标度子块近奇异）：σ差/σ和 = √((1−ρ)/(1+ρ)) 除零
+    rho_c = float(np.clip(rho, -1.0 + 1e-9, 1.0 - 1e-9))
+    sigma_ratio = float(np.sqrt((1.0 - rho_c) / (1.0 + rho_c)))
+    out.append(Finding(
+        "SCALE_CORRELATED", "warn",
+        f"{quant.labels[i]} 与 {quant.labels[j]} 的相标度相关系数 "
+        f"ρ={rho:.2f}（≤−0.80）—— 两相份额可在彼此之间互换（此消"
+        f"彼长，σ差/σ和={sigma_ratio:.1f}）而总谱几乎不变，这两个 "
+        f"wt% 只能当一个区间读，不是两个独立数",
+        "要真正分开：延长扫描/换靶提高分辨率、加一条只属于其中一相"
+        "的孤立强线、或先修好该相的择优取向与占位（模型越准，相关"
+        "越低）；在此之前不要用这两个 wt% 比较版本优劣",
+        {"rho": rho,
+         "sigma_ratio": sigma_ratio,
+         "phase_a": str(quant.labels[i]),
+         "phase_b": str(quant.labels[j])}))
+
+
 def audit(
     two_theta,
     y_obs,
@@ -903,36 +950,19 @@ def audit(
     # |ρ| 大不构成不可分辨证据 —— 5-3 组最大 |ρ|=0.705 定量照样达标，
     # 7-1 组 ρ=−0.91 才是真病态（评估报告 §9）。
     # 阈值 ρ ≤ −0.80 ≡ σ差/σ和 = √((1−ρ)/(1+ρ)) ≥ 3.0（同一判据的两种写法）。
+    #
+    # 数值护栏（v5.3）：ρ→−1 时 σ差/σ和 = √((1−ρ)/(1+ρ)) 除零。真实数据里
+    # 会摸到 ρ=−1.000（相标度子块近奇异，份额完全没有约束），一旦 ZeroDivision
+    # 抛出，``build_report`` 的调用方 ``except`` 会**吞掉整份 findings** ——
+    # 实测 ShiJK-7 就只剩一条 fallback 的 MICROABSORPTION_OFF，别的诊断全丢，
+    # 而且日志里只有一行 "report skipped"，看着像"没问题"。这里把 ρ 夹到
+    # ±(1−1e−9) 使比值有限（ρ=−1 时比值 ≈ 4.5e4，语义仍是"完全不可辨"），
+    # 并把本段整体兜住：诊断本身出错不该让别的诊断一起消失。
     if scale_corr is not None and quant is not None and len(quant.labels) > 1:
-        corr = np.asarray(scale_corr, dtype=float)
-        n_lab = len(quant.labels)
-        if corr.shape == (n_lab, n_lab) and np.all(np.isfinite(corr)):
-            fracs = np.asarray(quant.fractions, dtype=float)
-            worst = None
-            for i in range(n_lab):
-                for j in range(i + 1, n_lab):
-                    if (fracs[i] < min_phase_fraction
-                            or fracs[j] < min_phase_fraction):
-                        continue
-                    rho = float(corr[i, j])
-                    if worst is None or rho < worst[0]:
-                        worst = (rho, i, j)
-            if worst is not None and worst[0] <= -0.80:
-                rho, i, j = worst
-                sigma_ratio = float(np.sqrt((1.0 - rho) / (1.0 + rho)))
-                out.append(Finding(
-                    "SCALE_CORRELATED", "warn",
-                    f"{quant.labels[i]} 与 {quant.labels[j]} 的相标度相关系数 "
-                    f"ρ={rho:.2f}（≤−0.80）—— 两相份额可在彼此之间互换（此消"
-                    f"彼长，σ差/σ和={sigma_ratio:.1f}）而总谱几乎不变，这两个 "
-                    f"wt% 只能当一个区间读，不是两个独立数",
-                    "要真正分开：延长扫描/换靶提高分辨率、加一条只属于其中一相"
-                    "的孤立强线、或先修好该相的择优取向与占位（模型越准，相关"
-                    "越低）；在此之前不要用这两个 wt% 比较版本优劣",
-                    {"rho": rho,
-                     "sigma_ratio": sigma_ratio,
-                     "phase_a": str(quant.labels[i]),
-                     "phase_b": str(quant.labels[j])}))
+        try:
+            _scale_corr_findings(out, scale_corr, quant, min_phase_fraction)
+        except Exception:  # noqa: BLE001 - 加分项诊断，失败不影响其余 findings
+            pass
 
     # ── 12. 份额有没有谱线支撑（P2-10，v5.2）────────────────────
     # 份额、Rwp、各相 σ 三者都看不出这件事：大胞相用独立峰宽把失配摊平后，

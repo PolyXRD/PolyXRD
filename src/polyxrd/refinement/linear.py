@@ -39,6 +39,10 @@ __all__ = [
 
 #: 非线性/线性层之间传递的"线性系数个数"下限，防止全 0 设计矩阵
 _MIN_RCOND = 1e-12
+#: ``full_covariance`` 里 M 的奇异值截断（相对最大奇异值）。
+#: 比 lstsq 的 1e-12 略松：这里判的是"这个方向到底有没有被数据约束"，
+#: 留 1e-10 以免把纯舍入噪声当成一个可估方向、给出 1e20 量级的假方差。
+_COV_RCOND = 1e-10
 
 
 @dataclass
@@ -235,6 +239,12 @@ def full_covariance(
 
     :param jac: 加权残差对非线性参数的雅可比 ``(M, P_nonlin)``
     :param basis: 相基 ``(M, n_phase)``；``bg_basis`` 同
+
+    **列序**：``[非线性 P_nonlin | 相标度 n_phase | 背景 n_bg]``。取"标度块"
+    必须从第 ``P_nonlin`` 列起 —— 从第 0 列取得到的是**非线性参数**的块
+    （两者数量级完全不同：实测五相试样 P_nonlin=108、n_phase=5，取错就
+    等于拿前 5 个峰形参数的相关性冒充相分数相关性）。偏移量统一由
+    :func:`linear_block_slices` 给出。
     """
     A = design_stack(basis, bg_basis)
     m = A.shape[0]
@@ -250,11 +260,44 @@ def full_covariance(
         if J.ndim != 2 or J.shape[0] != m:
             raise ValueError(f"雅可比形状 {J.shape} 与基行数 {m} 不符")
         M = np.hstack([J, Aw])
+    # 用 M 的 SVD 求 (MᵀM)⁻¹，**不要**显式拼 MᵀM：这一步把条件数平方
+    # （κ→κ²），五相以上的试样里 κ(M) 已到 1e3~1e4，平方后 1e8 的相对舍入
+    # 足以让"相标度"子块失去半正定性 —— 实测 ShiJK-7 直接从 pinv(MᵀM) 的
+    # 块里算出特征值 −1.385（相关矩阵不可能为负），进而 ρ=±1.000。
+    # V·diag(s⁻²)·Vᵀ 与数学上的 (MᵀM)⁻¹ 等价，且按构造半正定。
     try:
-        cov = np.linalg.pinv(M.T @ M)
+        _u, s, vt = np.linalg.svd(M, full_matrices=False)
     except np.linalg.LinAlgError:  # pragma: no cover
         return np.full((M.shape[1], M.shape[1]), np.nan)
+    keep = s > (s[0] * _COV_RCOND if s.size and s[0] > 0 else 0.0)
+    if not np.any(keep):  # pragma: no cover - 全零矩阵
+        return np.zeros((M.shape[1], M.shape[1]))
+    v = vt[keep].T
+    cov = (v / (s[keep] ** 2)) @ v.T
     return cov * float(max(reduced_chi2, 0.0))
+
+
+def linear_block_slices(
+    jac: Optional[np.ndarray],
+    basis: np.ndarray,
+    bg_basis: Optional[np.ndarray] = None,
+) -> Tuple[slice, slice]:
+    """``full_covariance`` 里「相标度块」「背景块」的切片，``(sl_scale, sl_bg)``。
+
+    为什么要单独一个函数：``full_covariance`` 拼的是 ``[J | A]``，**列序以
+    非线性参数打头**。历史上 ``linear_sigmas`` / ``scale_correlations`` 都写
+    成 ``cov[:n_phase]``，即"假定线性参数排在最前"。``jac`` 为 ``None`` 时
+    恰好成立（此时 ``M = A``），而**真实报告路径永远带 jac** —— 于是界面上的
+    wt% 误差棒与 ``SCALE_CORRELATED`` 一直取的是前 n 个**峰形/占位参数**的
+    方差，与相分数无关。实测 ShiJK-4（P_nonlin=108, n_phase=5）：错误口径
+    σ=[0.004,0.017,0.026,0.032,0.008]、正确口径 σ=[0.192,0.322,0.232,0.088,
+    1.035]；相关性由"p2/p3/p4 近奇异 ρ≈−0.94"变成"最大 |ρ|=0.18"。正确块
+    与 Schur 补 ``(AᵀWA − AᵀWJ(JᵀWJ)⁺JᵀWA)⁻¹`` 逐元素一致（差 ~3e−6）。
+    """
+    n_ph = int(np.asarray(basis).shape[1]) if np.ndim(basis) == 2 else 1
+    n_bg = 0 if bg_basis is None else int(np.asarray(bg_basis).shape[1])
+    p = 0 if jac is None or np.size(jac) == 0 else int(np.asarray(jac).shape[1])
+    return slice(p, p + n_ph), slice(p + n_ph, p + n_ph + n_bg)
 
 
 def linear_sigmas(
@@ -267,16 +310,20 @@ def linear_sigmas(
 ) -> Tuple[np.ndarray, np.ndarray]:
     """线性层（标度 / 背景）的标准不确定度，``(σ_scale, σ_bg)``。
 
-    从 :func:`full_covariance` 的对角块开方取。这是"重量分数带误差棒"的唯一
-    正确来源 —— 标度是线性层的，``diagnose`` 的雅可比里根本没有它们。
+    从 :func:`full_covariance` 的对角块开方取（块位置由
+    :func:`linear_block_slices` 给，**不能**假定线性参数排在最前）。这是
+    "重量分数带误差棒"的唯一正确来源 —— 标度是线性层的，``diagnose`` 的雅可比
+    里根本没有它们。
     """
     n_ph = int(np.asarray(basis).shape[1]) if np.ndim(basis) == 2 else 1
-    n_bg = 0 if bg_basis is None else int(np.asarray(bg_basis).shape[1])
     cov = full_covariance(jac, basis, weights, bg_basis=bg_basis,
                           reduced_chi2=reduced_chi2)
+    sl_s, sl_b = linear_block_slices(jac, basis, bg_basis)
     diag = np.diag(cov)
-    s = np.sqrt(np.clip(diag[:n_ph], 0.0, None))
-    b = np.sqrt(np.clip(diag[n_ph:n_ph + n_bg], 0.0, None))
+    s = np.sqrt(np.clip(diag[sl_s], 0.0, None))
+    b = np.sqrt(np.clip(diag[sl_b], 0.0, None))
+    if s.size != n_ph:  # pragma: no cover - 维度自检
+        raise ValueError(f"相标度块大小 {s.size} 与 n_phase={n_ph} 不符")
     return s, b
 
 
@@ -309,6 +356,9 @@ def scale_correlations(
 
     注意这是"给定当前模型"的条件相关系数：模型（择优/占位/峰形）本身错时，
     相关性只会更高，不会更低 —— 所以它是个下界意义上的"不可分辨"判据。
+
+    块位置走 :func:`linear_block_slices`：带 ``jac`` 时必须跳过前 ``P_nonlin``
+    列，否则取到的是非线性参数块（详见该函数说明）。
     """
     b = np.asarray(basis, dtype=float)
     n = int(b.shape[1]) if b.ndim == 2 else 1
@@ -316,7 +366,8 @@ def scale_correlations(
         return np.ones((n, n))
     cov = full_covariance(jac, b, weights, bg_basis=bg_basis,
                           reduced_chi2=reduced_chi2)
-    blk = np.asarray(cov[:n, :n], dtype=float)
+    sl_s, _sl_b = linear_block_slices(jac, b, bg_basis)
+    blk = np.asarray(cov[sl_s, sl_s], dtype=float)
     if not np.all(np.isfinite(blk)):
         return np.full((n, n), np.nan)
     d = np.sqrt(np.clip(np.diag(blk), 1e-300, None))
