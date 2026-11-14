@@ -17,7 +17,7 @@
  &nbsp;
  <img src="https://img.shields.io/badge/Tests-2728%20passed-brightgreen?style=flat-square" />
  </p>
- <p><i>🌐 English documentation: [README-EN.md](README-EN.md)</i></p>
+ <p><i>🌐 English documentation: [README.md](README.md)</i></p>
 </div>
 
 ---

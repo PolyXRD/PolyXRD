@@ -1,6 +1,6 @@
 # Changelog
 
-All notable PolyXRD releases, newest first. Installers and SHA-256 checksums are published on the [Releases page](https://github.com/PolyXRD/PolyXRD/releases). Historical release notes were migrated here from the previous README; `README.md` now keeps only the current version and links.
+All notable PolyXRD releases, newest first. Installers and SHA-256 checksums are published on the [Releases page](https://github.com/PolyXRD/PolyXRD/releases). Per-release notes live here; `README.md` carries the current version, an overview of the project and the links needed to get started.
 
 This file and `README.md` are updated together for every GitHub release. Databases are distributed in [PolyXRD-DataBase Releases](https://github.com/PolyXRD/PolyXRD-DataBase/releases); ICDD PDF-2 2004 is never redistributed.
 
@@ -82,4 +82,4 @@ Search-chain enhancements, combination-strategy tuning, and residual-peak search
 
 ## Earlier releases (<= v2.4.0)
 
-See the archived [README-EN.md](README-EN.md) and the release notes on the [Releases page](https://github.com/PolyXRD/PolyXRD/releases).
+See the release notes on the [Releases page](https://github.com/PolyXRD/PolyXRD/releases); the Chinese documentation archive is [README-CN.md](README-CN.md).

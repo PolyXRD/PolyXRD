@@ -282,7 +282,7 @@ def test_verify_installer_bundled_lib_is_dynamic():
 
 
 @pytest.mark.parametrize("rel", [
-    "README.md", "README-EN.md",
+    "README.md",
     "docs/RELEASE-NOTES-v4.1.0.md", "scripts/_build_post.py",
 ])
 def test_docs_do_not_claim_wrong_phase_count(rel):

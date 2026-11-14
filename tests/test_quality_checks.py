@@ -99,10 +99,10 @@ def test_release_script_matches_current_version():
 
 
 def test_release_docs_track_current_version():
-    """发版约定（2026-11-13）：README.md 与 changelog.md 必须同步到当前版本。
+    """发版约定（2026-11-13 定，2026-11-14 补充）：README.md 与 changelog.md 必须同步到当前版本。
 
-    README 只留当前版本 + 链接，历史版本说明放 changelog.md；每次 bump / 发版
-    两处都要动，漏一处就在这里卡住（而不是等 Release 发出去才发现）。
+    README 保留必要的项目说明（结构参考 XinMatch README），历史版本说明统一放
+    changelog.md；每次 bump / 发版两处都要动，漏一处就在这里卡住。
     """
     ver = _version_tuple(_read("src/polyxrd/__init__.py"))
     readme = _read("README.md")
